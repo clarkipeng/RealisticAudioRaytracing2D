@@ -1,0 +1,109 @@
+#pragma kernel CSMain
+
+static const float eps = 1e-4;
+static const float inf = 1e8;
+
+float2 sourcePos, listenerPos;
+
+float listenerRadius, speedOfSound;
+int maxBounceCount, numWalls;
+
+uint rngStateOffset;
+
+struct AudioMat{
+    float absorption;
+};
+struct Wall { 
+    float2 a, b, normal; 
+    AudioMat mat;
+};
+struct AcousticHit { 
+    float timeDelay; 
+    float energy; 
+    float2 hitPoint; 
+};
+
+StructuredBuffer<Wall> walls;
+AppendStructuredBuffer<AcousticHit> hits;
+RWStructuredBuffer<float4> debugRays;
+
+float random(inout uint state) {
+    state = state * 747796405 + 2891336453;
+    uint res = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+    return ((res >> 22) ^ res) / 4294967295.0;
+}
+
+float intersectRaySegment(float2 o, float2 d, float2 a, float2 b) {
+    float2 v1 = o - a;
+    float2 v2 = b - a;
+    float2 v3 = float2(-d.y, d.x);
+    float dotP = dot(v2, v3);
+    if (abs(dotP) < eps) return inf;
+    float t1 = (v2.x * v1.y - v2.y * v1.x) / dotP;
+    float t2 = dot(v1, v3) / dotP;
+    return (t1 >= eps && t2 >= 0 && t2 <= 1) ? t1 : inf;
+}
+
+void checkListener(float2 o, float2 d, float len, float totalDist, float rayEnergy) {
+    float2 L = listenerPos - o;
+    float tca = dot(L, d);
+    if (tca < 0 || tca > len) return;
+    float d2 = dot(L, L) - tca * tca;
+    if (d2 > listenerRadius * listenerRadius) return;
+
+    AcousticHit hit;
+    hit.hitPoint = o + d * tca;
+    hit.timeDelay = (totalDist + tca) / speedOfSound;
+    hit.energy = 1.0 / (1.0 + hit.timeDelay);
+    hits.Append(hit);
+}
+
+[numthreads(64,1,1)]
+void CSMain (uint3 id : SV_DispatchThreadID) {
+    uint rng = id.x + rngStateOffset * 719393;
+    float angle = random(rng) * 6.283185;
+    float2 rayDir = float2(cos(angle), sin(angle));
+    float2 rayPos = sourcePos;
+    float totalDist = 0;
+
+    if (id.x < 100) {
+        debugRays[id.x * (maxBounceCount + 1)].xy = rayPos;
+        debugRays[id.x * (maxBounceCount + 1)].z = 0;
+    }
+
+    float rayEnergy = 1;
+    for (int i = 0; i < maxBounceCount; i++) {
+        float closestDist = inf;
+        int hitIndex = -1;
+
+        for (int w = 0; w < numWalls; w++) {
+            float d = intersectRaySegment(rayPos, rayDir, walls[w].a, walls[w].b);
+            if (d < closestDist) { closestDist = d; hitIndex = w; }
+        }
+
+        checkListener(rayPos, rayDir, closestDist, totalDist, rayEnergy);
+
+        if (hitIndex == -1) {
+            if (id.x < 100) 
+            {
+                debugRays[id.x * (maxBounceCount + 1) + (i + 1)].xy = rayPos + rayDir * 20.0;
+                debugRays[id.x * (maxBounceCount + 1) + (i + 1)].z = 0;
+            }
+            break;
+        }
+
+        rayPos += rayDir * closestDist;
+        totalDist += closestDist;
+        
+        float absorption = walls[hitIndex].mat.absorption;
+        rayEnergy *= (1.0 - absorption);
+
+        if (id.x < 100) {
+            debugRays[id.x * (maxBounceCount + 1) + (i + 1)].xy = rayPos;
+            debugRays[id.x * (maxBounceCount + 1) + (i + 1)].z = rayEnergy;
+        }
+
+        rayDir = reflect(rayDir, walls[hitIndex].normal);
+        rayPos += rayDir * eps;
+    }
+}
