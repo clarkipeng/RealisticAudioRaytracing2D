@@ -159,10 +159,10 @@ MonoBehaviour:
   speedOfSound: 343
   dynamicObstacles: 1
   sampleRate: 44100
-  impulseLengthSeconds: 1
   inputClip: {fileID: 8300000, guid: b492a9c86a55f446f8f5bf9a6d1d3024, type: 3}
+  inputGain: 10
   bakeOnSpace: 1
-  reverbDuration: 2
+  reverbDuration: 5
   source: {fileID: 1860376488}
   listener: {fileID: 849675356}
   listenerRadius: 0.5
@@ -1136,7 +1136,7 @@ Transform:
   m_GameObject: {fileID: 1860376486}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.07, y: 87.7, z: 0}
+  m_LocalPosition: {x: 0.07, y: 4.8, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

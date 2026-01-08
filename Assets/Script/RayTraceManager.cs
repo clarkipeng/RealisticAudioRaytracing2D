@@ -37,7 +37,6 @@ public class Acoustic2D : MonoBehaviour
     public Vector2 debugTextureSize = new Vector2(512, 128);
     [Range(1, 100)] public float waveformGain = 50.0f;
 
-
     ComputeBuffer wallBuffer;
     ComputeBuffer hitBuffer;
 
@@ -158,7 +157,6 @@ public class Acoustic2D : MonoBehaviour
         for (int i = 0; i < inputClip.samples; i++)
         {
             float sum = 0;
-            // Average all channels for this sample
             for (int c = 0; c < channels; c++)
             {
                 sum += rawSamples[i * channels + c];
@@ -273,7 +271,7 @@ public class Acoustic2D : MonoBehaviour
 
     void OnDestroy()
     {
-        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, irBuffer, argsBuffer);//, inputAudioBuffer, outputAudioBuffer);
+        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, irBuffer, argsBuffer, inputAudioBuffer, outputAudioBuffer);
         if (irTexture != null) irTexture.Release();
     }
 }
