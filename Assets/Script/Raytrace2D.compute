@@ -92,6 +92,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     
     float accumTime = 0;
     float curSpeed = speedOfSound; 
+    float totalDist = 0;
 
     if (id.x < 100) 
         debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, curEnergy, 0);
@@ -108,7 +109,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             RayInfo info;
             info.hitPoint = rayPos + rayDir * distToListener; 
             info.timeDelay = accumTime + (distToListener / curSpeed);
-            info.energy = curEnergy / (distToListener*distToListener);
+            info.energy = curEnergy / (totalDist+distToListener)*(totalDist*distToListener);
             rayInfoBuffer.Append(info);
         }
         
@@ -120,6 +121,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
 
         rayPos += rayDir * closest;
         accumTime += closest / curSpeed;
+        totalDist += closest;
 
         if (id.x < 100) 
             debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
@@ -132,7 +134,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
             float cosT = max(0, dot(effN, toList / distList));
             
-            float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (distList*distList));
+            float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalDist+distList)*(totalDist+distList));
 
             if (contrib > 1e-5) {
                 RayInfo info;
@@ -143,7 +145,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             }
         }
         
-        curEnergy *= (1.0 - wall.mat.absorption) / (closest*closest);
+        curEnergy *= (1.0 - wall.mat.absorption);
         if (curEnergy < 1e-3) break;
 
         bool back = dot(rayDir, wall.normal) > 0;
