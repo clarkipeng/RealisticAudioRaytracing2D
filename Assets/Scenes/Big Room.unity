@@ -154,13 +154,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   shader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
   rayCount: 15000
-  debugLines: 100
+  debugRayCount: 100
   maxBounces: 5
   speedOfSound: 343
   dynamicObstacles: 1
   sampleRate: 44100
   inputClip: {fileID: 8300000, guid: b492a9c86a55f446f8f5bf9a6d1d3024, type: 3}
-  inputGain: 10
+  inputGain: 100
   bakeOnSpace: 1
   reverbDuration: 5
   source: {fileID: 1860376488}
@@ -173,7 +173,7 @@ MonoBehaviour:
   - {fileID: 690774871}
   showDebugTexture: 1
   debugTextureSize: {x: 512, y: 512}
-  waveformGain: 50
+  waveformGain: 22.5
 --- !u!4 &128884547
 Transform:
   m_ObjectHideFlags: 0
@@ -346,7 +346,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5
+  orthographic size: 10
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -371,7 +371,7 @@ Transform:
   m_GameObject: {fileID: 519420028}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -10}
+  m_LocalPosition: {x: 0, y: 0, z: -15}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -409,6 +409,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   absorption: 0.1
+  scattering: 0.5
+  transmission: 0.1
+  ior: 0.5
 --- !u!61 &636130205
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -553,6 +556,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   absorption: 0.1
+  scattering: 0.5
+  transmission: 0.1
+  ior: 0.5
 --- !u!61 &690774873
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -914,6 +920,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   absorption: 0.1
+  scattering: 0.5
+  transmission: 0.1
+  ior: 0.5
 --- !u!1 &1669129185
 GameObject:
   m_ObjectHideFlags: 0
@@ -946,6 +955,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   absorption: 0.1
+  scattering: 0.5
+  transmission: 0.1
+  ior: 0.5
 --- !u!61 &1669129187
 BoxCollider2D:
   m_ObjectHideFlags: 0

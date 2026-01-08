@@ -8,6 +8,9 @@ using System.Runtime.InteropServices;
 public struct AudioMat
 {
     public float absorption;
+    public float scattering;
+    public float transmission;
+    public float ior;
 }
 [StructLayout(LayoutKind.Sequential)]
 public struct Segment
@@ -99,6 +102,9 @@ public static class SceneToData2D
         var mat = obj.GetComponent<AudioMaterial>();
         AudioMat ret;
         ret.absorption = mat.absorption;
+        ret.scattering = mat.scattering;
+        ret.transmission = mat.transmission;
+        ret.ior = mat.transmission;
         return ret;
     }
 }

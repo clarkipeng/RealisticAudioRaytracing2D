@@ -10,7 +10,7 @@ public class Acoustic2D : MonoBehaviour
     [Header("Simulation Settings")]
     public ComputeShader shader;
     [Range(10, 100000)] public int rayCount = 1000;
-    [Range(5, 100)] public int debugLines = 100;
+    [Range(5, 100)] public int debugRayCount = 100;
     [Range(1, 10)] public int maxBounces = 5;
     public float speedOfSound = 343f;
     public bool dynamicObstacles = false;
@@ -50,6 +50,7 @@ public class Acoustic2D : MonoBehaviour
     RenderTexture irTexture;
 
     List<Segment> activeSegments;
+    private int accumFrames = 0;
 
     struct RayInfo { public float timeDelay; public float energy; public Vector2 hitPoint; };
 
@@ -77,34 +78,42 @@ public class Acoustic2D : MonoBehaviour
         {
             BakeAudio();
         }
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            accumFrames = 0;
+            int irLength = (int)(sampleRate * reverbDuration);
+            int kClear = shader.FindKernel("ClearImpulse");
+            shader.SetInt("ImpulseLength", irLength);
+            shader.SetBuffer(kClear, "ImpulseResponse", irBuffer);
+            shader.SetFloat("inputGain", inputGain);
+            ComputeHelper.Dispatch(shader, irLength, 1, 1, kClear);
+        }
     }
 
     void RunSimulation()
     {
         int irLength = (int)(sampleRate * reverbDuration);
 
-        ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugLines * (maxBounces + 1));
+        ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
         ComputeHelper.CreateStructuredBuffer<float>(ref irBuffer, irLength);
         ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
         if (argsBuffer == null)
             argsBuffer = new ComputeBuffer(1, sizeof(int) * 4, ComputeBufferType.IndirectArguments);
 
-        int kClear = shader.FindKernel("ClearImpulse");
-        shader.SetInt("ImpulseLength", irLength);
-        shader.SetBuffer(kClear, "ImpulseResponse", irBuffer);
-        shader.SetFloat("inputGain", inputGain);
-        ComputeHelper.Dispatch(shader, irLength, 1, 1, kClear);
 
         int kernel = shader.FindKernel("Trace");
         hitBuffer.SetCounterValue(0);
 
-        shader.SetVector("sourcePos", source.position);
-        shader.SetVector("listenerPos", listener.position);
+        shader.SetVector("sourcePos", new Vector2(source.position.x, source.position.y));
+        shader.SetVector("listenerPos", new Vector2(listener.position.x, listener.position.y));
         shader.SetFloat("listenerRadius", listenerRadius);
         shader.SetFloat("speedOfSound", speedOfSound);
         shader.SetInt("maxBounceCount", maxBounces);
         shader.SetInt("rngStateOffset", Time.frameCount);
         shader.SetInt("numWalls", activeSegments.Count);
+        shader.SetInt("rayCount", rayCount);
+        shader.SetInt("debugRayCount", debugRayCount);
+        shader.SetInt("accumFrames", accumFrames);
 
         shader.SetBuffer(kernel, "walls", wallBuffer);
         shader.SetBuffer(kernel, "rayInfoBuffer", hitBuffer);
@@ -120,6 +129,9 @@ public class Acoustic2D : MonoBehaviour
         argsBuffer.GetData(args);
         int hitCount = args[0];
 
+        accumFrames++;
+        shader.SetInt("accumCount", accumFrames);
+
         if (hitCount > 0)
         {
             int kProc = shader.FindKernel("ProcessHits");
@@ -130,7 +142,6 @@ public class Acoustic2D : MonoBehaviour
             shader.SetBuffer(kProc, "ImpulseResponse", irBuffer);
             ComputeHelper.Dispatch(shader, hitCount, 1, 1, kProc);
         }
-
 
         int kDraw = shader.FindKernel("DrawIR");
         shader.SetTexture(kDraw, "DebugTexture", irTexture);
@@ -240,9 +251,9 @@ public class Acoustic2D : MonoBehaviour
         if (debugRayPaths != null)
         {
             int stride = maxBounces + 1;
-            float z = source.position.z;
+            float z = source.position.z - 5.0f;
 
-            for (int i = 0; i < debugLines; i++)
+            for (int i = 0; i < debugRayCount; i++)
             {
                 for (int b = 0; b < maxBounces; b++)
                 {
