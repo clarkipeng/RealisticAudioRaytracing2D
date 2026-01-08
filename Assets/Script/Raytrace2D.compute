@@ -4,6 +4,7 @@ static const float eps = 1e-4;
 static const float inf = 1e8;
 static const float PI = 3.14159265;
 
+float inputGain;
 float2 sourcePos, listenerPos;
 float listenerRadius, speedOfSound;
 int maxBounceCount, numWalls;
@@ -63,7 +64,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     float2 rayPos = sourcePos;
     
     float totalDist = 0;
-    float currentEnergy = 1.0;
+    float currentEnergy = inputGain;
 
     if (id.x < 100) debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, currentEnergy, 0);
 
@@ -179,46 +180,35 @@ void DrawIR(uint3 id : SV_DispatchThreadID)
 }
 
 
-// #pragma kernel CSConvolve
+#pragma kernel AudioConvolve
 
-// StructuredBuffer<float> InputAudio;
-// StructuredBuffer<float> ImpulseResponse;
-// RWStructuredBuffer<float> OutputAudio;
+StructuredBuffer<float> InputAudio;
+RWStructuredBuffer<float> OutputAudio;
 
-// int InputLength;
-// int IRLength;
+int InputLength;
+int IRLength;
 
-// [numthreads(256, 1, 1)]
-// void CSConvolve(uint3 id : SV_DispatchThreadID)
-// {
-//     int n = id.x; 
-//     int outputLength = InputLength + IRLength;
+[numthreads(256, 1, 1)]
+void AudioConvolve(uint3 id : SV_DispatchThreadID)
+{
+    int n = id.x; 
+    int outputLength = InputLength + IRLength;
     
-//     if (n >= outputLength) return;
+    if (n >= outputLength) return;
 
-//     float sum = 0;
+    float sum = 0;
     
-//     // Convolution Sum: y[n] = sum(x[k] * h[n-k])
-//     // We must ensure 'k' is inside InputAudio AND 'n-k' is inside ImpulseResponse
-    
-//     // Bounds for k:
-//     // 1. k >= 0
-//     // 2. k < InputLength
-//     // 3. n - k >= 0        =>  k <= n
-//     // 4. n - k < IRLength  =>  k > n - IRLength
-    
-//     int startK = max(0, n - IRLength + 1);
-//     int endK = min(n, InputLength - 1);
+    int startK = max(0, n - IRLength + 1);
+    int endK = min(n, InputLength - 1);
 
-//     for (int k = startK; k <= endK; k++)
-//     {
-//         // Optimization: Skip silence to save GPU cycles
-//         float val = InputAudio[k];
-//         if (abs(val) > 0.0001) 
-//         {
-//             sum += val * ImpulseResponse[n - k];
-//         }
-//     }
+    for (int k = startK; k <= endK; k++)
+    {
+        float val = InputAudio[k];
+        if (abs(val) > 0.0001) 
+        {
+            sum += val * ImpulseResponse[n - k];
+        }
+    }
     
-//     OutputAudio[n] = sum;
-// }
+    OutputAudio[n] = sum;
+}

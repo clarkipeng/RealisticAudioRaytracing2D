@@ -9,19 +9,21 @@ public class Acoustic2D : MonoBehaviour
 {
     [Header("Simulation Settings")]
     public ComputeShader shader;
-    [Range(10, 5000)] public int rayCount = 1000;
+    [Range(10, 100000)] public int rayCount = 1000;
     [Range(5, 100)] public int debugLines = 100;
     [Range(1, 10)] public int maxBounces = 5;
     public float speedOfSound = 343f;
     public bool dynamicObstacles = false;
 
-    [Header("Audio Accum Settings")]
+    [Header("Accum Settings")]
     public int sampleRate = 44100;
-    public int impulseLengthSeconds = 1;
-    // ComputeBuffer impulseResponseBuffer;
     ComputeBuffer argsBuffer;
-    // float[] audioData;
-    float clipDuration = 0.5f;
+
+    [Header("Audio Settings")]
+    public AudioClip inputClip;
+    public float inputGain = 1.0f;
+    public bool bakeOnSpace = true;
+    [Range(0.1f, 5.0f)] public float reverbDuration = 0.5f;
 
     [Header("Scene Objects")]
     public Transform source;
@@ -29,10 +31,6 @@ public class Acoustic2D : MonoBehaviour
     [Range(0.1f, 5f)] public float listenerRadius = 0.5f;
     public List<GameObject> obstacleObjects;
 
-    // [Header("Audio Baking")]
-    // public AudioClip inputClip;
-    // [Range(0.1f, 5f)] public float reverbDuration = 1.0f;
-    // public bool bakeOnSpace = true;
 
     [Header("Debug Visualization")]
     public bool showDebugTexture = true;
@@ -46,8 +44,8 @@ public class Acoustic2D : MonoBehaviour
     ComputeBuffer debugBuffer;
     ComputeBuffer irBuffer;
 
-    // ComputeBuffer inputAudioBuffer;
-    // ComputeBuffer outputAudioBuffer;
+    ComputeBuffer inputAudioBuffer;
+    ComputeBuffer outputAudioBuffer;
 
     Vector4[] debugRayPaths;
     RenderTexture irTexture;
@@ -58,6 +56,7 @@ public class Acoustic2D : MonoBehaviour
 
     void Start()
     {
+        Assert.IsTrue(sampleRate == inputClip.frequency);
         UpdateGeometry();
         if (irTexture == null)
         {
@@ -75,18 +74,15 @@ public class Acoustic2D : MonoBehaviour
         if (dynamicObstacles) UpdateGeometry();
 
         RunSimulation();
-    }
-
-    void UpdateGeometry()
-    {
-        activeSegments = SceneToData2D.GetSegmentsFromColliders(obstacleObjects);
-        Assert.IsTrue(activeSegments.Count != 0, "MUST HAVE OBJECTS IN SCENE");
-        ComputeHelper.CreateStructuredBuffer(ref wallBuffer, activeSegments);
+        if (bakeOnSpace && Input.GetKeyDown(KeyCode.Space))
+        {
+            BakeAudio();
+        }
     }
 
     void RunSimulation()
     {
-        int irLength = (int)(sampleRate * clipDuration);
+        int irLength = (int)(sampleRate * reverbDuration);
 
         ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugLines * (maxBounces + 1));
         ComputeHelper.CreateStructuredBuffer<float>(ref irBuffer, irLength);
@@ -97,6 +93,7 @@ public class Acoustic2D : MonoBehaviour
         int kClear = shader.FindKernel("ClearImpulse");
         shader.SetInt("ImpulseLength", irLength);
         shader.SetBuffer(kClear, "ImpulseResponse", irBuffer);
+        shader.SetFloat("inputGain", inputGain);
         ComputeHelper.Dispatch(shader, irLength, 1, 1, kClear);
 
         int kernel = shader.FindKernel("Trace");
@@ -145,6 +142,76 @@ public class Acoustic2D : MonoBehaviour
         shader.SetFloat("DebugGain", waveformGain);
 
         ComputeHelper.Dispatch(shader, irTexture.width, irTexture.height, 1, kDraw);
+    }
+
+    void BakeAudio()
+    {
+        if (inputClip == null) { Debug.LogError("Assign an Input Clip!"); return; }
+
+        Debug.Log("Convolving on GPU...");
+
+        float[] rawSamples = new float[inputClip.samples * inputClip.channels];
+        inputClip.GetData(rawSamples, 0);
+
+        float[] monoSamples = new float[inputClip.samples];
+        int channels = inputClip.channels;
+        for (int i = 0; i < inputClip.samples; i++)
+        {
+            float sum = 0;
+            // Average all channels for this sample
+            for (int c = 0; c < channels; c++)
+            {
+                sum += rawSamples[i * channels + c];
+            }
+            monoSamples[i] = sum / channels;
+        }
+
+        ComputeHelper.CreateStructuredBuffer<float>(ref inputAudioBuffer, monoSamples.Length);
+        inputAudioBuffer.SetData(monoSamples);
+
+        int irLen = irBuffer.count;
+        int outputLen = monoSamples.Length + irLen;
+        ComputeHelper.CreateStructuredBuffer<float>(ref outputAudioBuffer, outputLen);
+
+        int kConv = shader.FindKernel("AudioConvolve");
+        shader.SetInt("InputLength", monoSamples.Length);
+        shader.SetInt("IRLength", irLen);
+
+        shader.SetBuffer(kConv, "InputAudio", inputAudioBuffer);
+        shader.SetBuffer(kConv, "ImpulseResponse", irBuffer);
+        shader.SetBuffer(kConv, "OutputAudio", outputAudioBuffer);
+
+        ComputeHelper.Dispatch(shader, outputLen, 1, 1, kConv);
+
+        float[] resultData = new float[outputLen];
+        outputAudioBuffer.GetData(resultData);
+
+        PlayResult(resultData);
+    }
+    void PlayResult(float[] data)
+    {
+        float maxVol = 0f;
+        foreach (float f in data) if (Mathf.Abs(f) > maxVol) maxVol = Mathf.Abs(f);
+        if (maxVol > 0.0001f)
+        {
+            float scaler = 1.0f / maxVol;
+            for (int i = 0; i < data.Length; i++) data[i] *= scaler;
+        }
+
+        AudioClip result = AudioClip.Create("ReverbResult", data.Length, 1, sampleRate, false);
+        result.SetData(data, 0);
+
+        AudioSource source = GetComponent<AudioSource>();
+        source.clip = result;
+        source.Play();
+        Debug.Log("Playing Result!");
+    }
+
+    void UpdateGeometry()
+    {
+        activeSegments = SceneToData2D.GetSegmentsFromColliders(obstacleObjects);
+        Assert.IsTrue(activeSegments.Count != 0, "MUST HAVE OBJECTS IN SCENE");
+        ComputeHelper.CreateStructuredBuffer(ref wallBuffer, activeSegments);
     }
 
     void OnGUI()
