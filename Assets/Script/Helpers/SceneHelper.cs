@@ -74,6 +74,9 @@ public static class SceneToData2D
 
     private static void AddLoopToSegments(Transform trans, Vector2[] localPoints, List<Segment> outSegments, AudioMat material)
     {
+        Vector3 s = trans.lossyScale;
+        float winding = Mathf.Sign(s.x * s.y);
+
         for (int i = 0; i < localPoints.Length; i++)
         {
             Vector2 p1 = localPoints[i];
@@ -84,7 +87,7 @@ public static class SceneToData2D
             seg.end = trans.TransformPoint(p2);
 
             Vector2 dir = (seg.end - seg.start).normalized;
-            seg.normal = new Vector2(-dir.y, dir.x);
+            seg.normal = new Vector2(dir.y, -dir.x) * winding;
             seg.mat = material;
 
             outSegments.Add(seg);

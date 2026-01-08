@@ -1,30 +1,31 @@
-#pragma kernel CSMain
+#pragma kernel Trace
 
 static const float eps = 1e-4;
 static const float inf = 1e8;
+static const float PI = 3.14159265;
 
 float2 sourcePos, listenerPos;
-
 float listenerRadius, speedOfSound;
 int maxBounceCount, numWalls;
-
 uint rngStateOffset;
 
-struct AudioMat{
+struct AudioMat {
     float absorption;
 };
+
 struct Wall { 
     float2 a, b, normal; 
-    AudioMat mat;
+    AudioMat mat; 
 };
-struct AcousticHit { 
+
+struct RayInfo { 
     float timeDelay; 
     float energy; 
     float2 hitPoint; 
 };
 
 StructuredBuffer<Wall> walls;
-AppendStructuredBuffer<AcousticHit> hits;
+AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
 
 float random(inout uint state) {
@@ -44,34 +45,28 @@ float intersectRaySegment(float2 o, float2 d, float2 a, float2 b) {
     return (t1 >= eps && t2 >= 0 && t2 <= 1) ? t1 : inf;
 }
 
-void checkListener(float2 o, float2 d, float len, float totalDist, float rayEnergy) {
-    float2 L = listenerPos - o;
-    float tca = dot(L, d);
-    if (tca < 0 || tca > len) return;
-    float d2 = dot(L, L) - tca * tca;
-    if (d2 > listenerRadius * listenerRadius) return;
-
-    AcousticHit hit;
-    hit.hitPoint = o + d * tca;
-    hit.timeDelay = (totalDist + tca) / speedOfSound;
-    hit.energy = 1.0 / (1.0 + hit.timeDelay);
-    hits.Append(hit);
+bool checkVisibility(float2 start, float2 end, float dist) {
+    float2 dir = (end - start) / dist;
+    for (int w = 0; w < numWalls; w++) {
+        float d = intersectRaySegment(start, dir, walls[w].a, walls[w].b);
+        if (d < dist - 0.1) return false; 
+    }
+    return true;
 }
 
 [numthreads(64,1,1)]
-void CSMain (uint3 id : SV_DispatchThreadID) {
+void Trace (uint3 id : SV_DispatchThreadID) {
     uint rng = id.x + rngStateOffset * 719393;
+    
     float angle = random(rng) * 6.283185;
     float2 rayDir = float2(cos(angle), sin(angle));
     float2 rayPos = sourcePos;
+    
     float totalDist = 0;
+    float currentEnergy = 1.0;
 
-    if (id.x < 100) {
-        debugRays[id.x * (maxBounceCount + 1)].xy = rayPos;
-        debugRays[id.x * (maxBounceCount + 1)].z = 0;
-    }
+    if (id.x < 100) debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, currentEnergy, 0);
 
-    float rayEnergy = 1;
     for (int i = 0; i < maxBounceCount; i++) {
         float closestDist = inf;
         int hitIndex = -1;
@@ -81,29 +76,149 @@ void CSMain (uint3 id : SV_DispatchThreadID) {
             if (d < closestDist) { closestDist = d; hitIndex = w; }
         }
 
-        checkListener(rayPos, rayDir, closestDist, totalDist, rayEnergy);
-
         if (hitIndex == -1) {
-            if (id.x < 100) 
-            {
-                debugRays[id.x * (maxBounceCount + 1) + (i + 1)].xy = rayPos + rayDir * 20.0;
-                debugRays[id.x * (maxBounceCount + 1) + (i + 1)].z = 0;
-            }
-            break;
+            if (id.x < 100) debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);
+            break; 
         }
 
-        rayPos += rayDir * closestDist;
+        float2 hitPoint = rayPos + rayDir * closestDist;
         totalDist += closestDist;
         
-        float absorption = walls[hitIndex].mat.absorption;
-        rayEnergy *= (1.0 - absorption);
+        float2 toListener = listenerPos - hitPoint;
+        float distToListener = length(toListener);
+        float2 dirToListener = toListener / distToListener;
 
-        if (id.x < 100) {
-            debugRays[id.x * (maxBounceCount + 1) + (i + 1)].xy = rayPos;
-            debugRays[id.x * (maxBounceCount + 1) + (i + 1)].z = rayEnergy;
+        Wall wall = walls[hitIndex];
+        
+        bool visible = checkVisibility(hitPoint + wall.normal * eps, listenerPos, distToListener);
+        
+        if (visible) {
+            float cosTheta = max(0, dot(wall.normal, dirToListener));
+            
+            float pdf = cosTheta / PI; 
+            
+            float geometricSpread = 1.0 / max(1.0, distToListener * distToListener);
+            
+            float contribution = currentEnergy * (1.0 - wall.mat.absorption) * pdf * geometricSpread;
+
+            if (contribution > 0.0001) {
+                RayInfo info;
+                info.hitPoint = hitPoint;
+                info.timeDelay = (totalDist + distToListener) / speedOfSound;
+                info.energy = contribution;
+                rayInfoBuffer.Append(info);
+            }
         }
 
-        rayDir = reflect(rayDir, walls[hitIndex].normal);
-        rayPos += rayDir * eps;
+        currentEnergy *= (1.0 - wall.mat.absorption);
+        
+        if (id.x < 100) debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(hitPoint, currentEnergy, 0);
+
+        rayPos = hitPoint + wall.normal * eps;
+        rayDir = reflect(rayDir, wall.normal);
+        
+        if (currentEnergy < 0.001) break;
     }
 }
+
+#pragma kernel ProcessHits
+
+RWStructuredBuffer<float> ImpulseResponse;
+StructuredBuffer<RayInfo> RawHits;
+int SampleRate;
+int ImpulseLength;
+int HitCount;
+
+[numthreads(64, 1, 1)]
+void ProcessHits(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)HitCount) return;
+
+    RayInfo hit = RawHits[id.x];
+
+    int index = (int)(hit.timeDelay * SampleRate);
+
+    if (index < ImpulseLength && index >= 0)
+    {
+        ImpulseResponse[index] = ImpulseResponse[index] + hit.energy; 
+    }
+}
+
+#pragma kernel ClearImpulse
+[numthreads(256, 1, 1)]
+void ClearImpulse(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < (uint)ImpulseLength)
+        ImpulseResponse[id.x] = 0.0;
+}
+
+#pragma kernel DrawIR
+
+RWTexture2D<float4> DebugTexture; 
+int TexWidth, TexHeight;
+float DebugGain;
+
+[numthreads(8, 8, 1)]
+void DrawIR(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+
+    float uvX = id.x / (float)TexWidth;
+    int index = (int)(uvX * ImpulseLength);
+
+    float amp = 0;
+    if (index < ImpulseLength) amp = ImpulseResponse[index];
+
+    float h = (float)TexHeight;
+    float y = (h * 0.5) + (amp * DebugGain * h * 0.5);
+
+    float dist = abs((float)id.y - y);
+    float4 col = dist < 1.5 ? float4(0, 1, 0, 1) : float4(0, 0, 0, 1);
+    
+    DebugTexture[id.xy] = col;
+}
+
+
+// #pragma kernel CSConvolve
+
+// StructuredBuffer<float> InputAudio;
+// StructuredBuffer<float> ImpulseResponse;
+// RWStructuredBuffer<float> OutputAudio;
+
+// int InputLength;
+// int IRLength;
+
+// [numthreads(256, 1, 1)]
+// void CSConvolve(uint3 id : SV_DispatchThreadID)
+// {
+//     int n = id.x; 
+//     int outputLength = InputLength + IRLength;
+    
+//     if (n >= outputLength) return;
+
+//     float sum = 0;
+    
+//     // Convolution Sum: y[n] = sum(x[k] * h[n-k])
+//     // We must ensure 'k' is inside InputAudio AND 'n-k' is inside ImpulseResponse
+    
+//     // Bounds for k:
+//     // 1. k >= 0
+//     // 2. k < InputLength
+//     // 3. n - k >= 0        =>  k <= n
+//     // 4. n - k < IRLength  =>  k > n - IRLength
+    
+//     int startK = max(0, n - IRLength + 1);
+//     int endK = min(n, InputLength - 1);
+
+//     for (int k = startK; k <= endK; k++)
+//     {
+//         // Optimization: Skip silence to save GPU cycles
+//         float val = InputAudio[k];
+//         if (abs(val) > 0.0001) 
+//         {
+//             sum += val * ImpulseResponse[n - k];
+//         }
+//     }
+    
+//     OutputAudio[n] = sum;
+// }
