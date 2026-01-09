@@ -109,7 +109,8 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             RayInfo info;
             info.hitPoint = rayPos + rayDir * distToListener; 
             info.timeDelay = accumTime + (distToListener / curSpeed);
-            info.energy = curEnergy / (totalDist+distToListener)*(totalDist*distToListener);
+            float totalD = totalDist + distToListener;
+            info.energy = curEnergy / max(1.0, totalD * totalD);
             rayInfoBuffer.Append(info);
         }
         
@@ -127,6 +128,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
         
         Wall wall = walls[hitIdx];
+
         float2 toList = listenerPos.xy - rayPos;
         float distList = length(toList);
 
@@ -134,7 +136,8 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
             float cosT = max(0, dot(effN, toList / distList));
             
-            float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalDist+distList)*(totalDist+distList));
+            float totalD = totalDist + distList;
+            float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalD*totalD));
 
             if (contrib > 1e-5) {
                 RayInfo info;
