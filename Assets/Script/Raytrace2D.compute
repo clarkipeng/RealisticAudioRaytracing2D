@@ -89,37 +89,46 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     float2 rayDir = float2(cos(angle), sin(angle));
     float2 rayPos = sourcePos.xy;
     float curEnergy = inputGain;
-    
     float accumTime = 0;
-    float curSpeed = speedOfSound; 
     float totalDist = 0;
+
+    float currentIOR = 1.0; 
+    float curSpeed = speedOfSound; 
+    int wallDepth = 0;
 
     if (id.x < 100) 
         debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, curEnergy, 0);
 
+
     for (int i = 0; i < maxBounceCount; i++) {
         float closest = inf; int hitIdx = -1;
 
+        // get closest wall dist and index
         for (int w = 0; w < numWalls; w++) {
             float d = intersect(rayPos, rayDir, walls[w].a, walls[w].b);
             if (d < closest) { closest = d; hitIdx = w; }
         }
-        float distToListener = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
-        if (distToListener < closest && distToListener < inf) {
-            RayInfo info;
-            info.hitPoint = rayPos + rayDir * distToListener; 
-            info.timeDelay = accumTime + (distToListener / curSpeed);
-            float totalD = totalDist + distToListener;
-            info.energy = curEnergy / max(1.0, totalD * totalD);
-            rayInfoBuffer.Append(info);
+        
+        // check if we are intersecting listener
+        if (wallDepth == 0) {
+            float distToListener = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
+            if (distToListener < closest && distToListener < inf) {
+                RayInfo info;
+                info.hitPoint = rayPos + rayDir * distToListener; 
+                info.timeDelay = accumTime + (distToListener / curSpeed);
+                float totalD = totalDist + distToListener;
+                info.energy = curEnergy / max(1.0, totalD * totalD);
+                rayInfoBuffer.Append(info);
+            }
         }
         
         if (hitIdx == -1) {
             if (id.x < (uint)debugRayCount) 
-                debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, 0.0, 0);
+                debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);
             break;
         }
 
+        // Move Ray
         rayPos += rayDir * closest;
         accumTime += closest / curSpeed;
         totalDist += closest;
@@ -129,55 +138,79 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         
         Wall wall = walls[hitIdx];
 
-        float2 toList = listenerPos.xy - rayPos;
-        float distList = length(toList);
+        // NEE
+        if (wallDepth == 0) {
+            float2 toList = listenerPos.xy - rayPos;
+            float distList = length(toList);
 
-        if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
-            float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
-            float cosT = max(0, dot(effN, toList / distList));
-            
-            float totalD = totalDist + distList;
-            float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalD*totalD));
+            if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
+                float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
+                float cosT = max(0, dot(effN, toList / distList));
+                
+                float totalD = totalDist + distList;
+                float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalD*totalD));
 
-            if (contrib > 1e-5) {
-                RayInfo info;
-                info.hitPoint = rayPos;
-                info.timeDelay = accumTime + (distList / speedOfSound);
-                info.energy = contrib;
-                rayInfoBuffer.Append(info);
+                if (contrib > 1e-5) {
+                    RayInfo info;
+                    info.hitPoint = rayPos;
+                    info.timeDelay = accumTime + (distList / speedOfSound);
+                    info.energy = contrib;
+                    rayInfoBuffer.Append(info);
+                }
             }
         }
         
         curEnergy *= (1.0 - wall.mat.absorption);
         if (curEnergy < 1e-3) break;
 
-        bool back = dot(rayDir, wall.normal) > 0;
-        float2 n = back ? -wall.normal : wall.normal;
-        float eta = back ? wall.mat.ior : 1.0 / wall.mat.ior;
-        
+        // depth tracking
+        bool entering = dot(rayDir, wall.normal) < 0;
+        float2 n = entering ? wall.normal : -wall.normal;
+        float wallSpeed = speedOfSound / wall.mat.ior; // IOR is inverse Speed Multiplier
+        float nextSpeed;
+
+        if (entering) {
+            nextSpeed = wallSpeed;
+        } else {
+            nextSpeed = (wallDepth <= 1) ? speedOfSound : wallSpeed;
+        }
+
+        // snells law
+        float eta = nextSpeed / curSpeed;
         float rngVal = random(rng);
 
         if (rngVal < wall.mat.transmission) {
             float3 refr = Refract(float3(rayDir, 0), float3(n, 0), eta);
+            
             if (length(refr) > 0) {
-                rayDir = refr.xy;
-                curSpeed = back ? speedOfSound : speedOfSound / wall.mat.ior; // Update speed
-                rayPos += rayDir * eps; // Push forward
-                continue; // Skip reflection steps
+                float2 nextDir = refr.xy;
+                // jitter
+                if (wall.mat.scattering > 0) {
+                    float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering;
+                    float s = sin(jitter), c = cos(jitter);
+                    nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
+                }
+
+                rayDir = normalize(nextDir);
+                
+                curSpeed = nextSpeed;
+                if (entering) wallDepth++; else wallDepth = max(0, wallDepth - 1);
+
+                rayPos += rayDir * eps;
+                continue;
             }
-            // If TIR (Total Internal Reflection), fall through to Reflection
         }
+
+        // reflection
+        float2 specularDir = reflect(rayDir, n);
         
-        if (rngVal < wall.mat.transmission + (1.0 - wall.mat.transmission) * wall.mat.scattering) {
-             float diffAng = asin(2.0 * random(rng) - 1.0);
-             float s = sin(diffAng), c = cos(diffAng);
-             rayDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
-        }
-        else {
-             rayDir = reflect(rayDir, n);
-        }
+        float diffAng = asin(2.0 * random(rng) - 1.0);
+        float s = sin(diffAng), c = cos(diffAng);
+        float2 diffuseDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
+
+        rayDir = normalize(lerp(specularDir, diffuseDir, wall.mat.scattering));
         
-        rayPos += n * eps; // Push backward (reflect)
+        rayPos += n * eps;
     }
 }
 

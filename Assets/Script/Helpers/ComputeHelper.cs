@@ -3,7 +3,7 @@ using UnityEngine.Experimental.Rendering;
 using System.Collections.Generic;
 using System;
 
-namespace Seb.Helpers
+namespace Helpers
 {
     // ---- Version 0.2 [07/May/2025] ----
     // This class contains some helper functions to make life a little easier working with compute shaders (Very work-in-progress!)

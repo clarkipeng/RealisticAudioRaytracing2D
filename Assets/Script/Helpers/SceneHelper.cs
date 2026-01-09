@@ -99,12 +99,13 @@ public static class SceneToData2D
     private static AudioMat ResolveMaterial(GameObject obj)
     {
         //default material can be added
-        var mat = obj.GetComponent<AudioMaterial>();
+        AcousticSurface surface = obj.GetComponent<AcousticSurface>();
+        AudioMaterial mat = surface.material;
         AudioMat ret;
         ret.absorption = mat.absorption;
         ret.scattering = mat.scattering;
         ret.transmission = mat.transmission;
-        ret.ior = mat.transmission;
+        ret.ior = mat.ior;
         return ret;
     }
 }
