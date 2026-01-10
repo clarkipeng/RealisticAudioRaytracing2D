@@ -5,7 +5,7 @@ using Helpers;
 using UnityEngine.Assertions;
 
 
-public class Acoustic2D : MonoBehaviour
+public class RayTraceManagerComplex : MonoBehaviour
 {
     [Header("Simulation Settings")]
     public ComputeShader shader;
