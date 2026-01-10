@@ -537,7 +537,6 @@ namespace Helpers
             buffer.GetData(data);
             return data;
         }
-
     }
 
     public enum DepthMode

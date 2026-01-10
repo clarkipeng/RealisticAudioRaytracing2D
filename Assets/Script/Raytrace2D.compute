@@ -278,7 +278,6 @@ void DrawIR(uint3 id : SV_DispatchThreadID)
 StructuredBuffer<float> InputAudio;
 RWStructuredBuffer<float> OutputAudio;
 
-
 int InputLength;
 int IRLength;
 
@@ -298,7 +297,7 @@ void AudioConvolve(uint3 id : SV_DispatchThreadID)
     for (int k = startK; k <= endK; k++)
     {
         float val = InputAudio[k];
-        if (abs(val) > eps) 
+        if (abs(val) > 0.0001) 
         {
             sum += val * ImpulseResponse[n - k];
         }
@@ -306,8 +305,3 @@ void AudioConvolve(uint3 id : SV_DispatchThreadID)
     
     OutputAudio[n] = sum / accumCount;
 }
-
-
-
-
-
