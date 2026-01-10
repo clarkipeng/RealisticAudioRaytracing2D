@@ -1,8 +1,10 @@
+
 #pragma kernel Trace
 
 static const float eps = 1e-4;
 static const float inf = 1e8;
 static const float PI = 3.14159265;
+
 
 float4 sourcePos;
 float4 listenerPos;
@@ -248,66 +250,188 @@ void ClearImpulse(uint3 id : SV_DispatchThreadID)
 #pragma kernel DrawIR
 
 RWTexture2D<float4> DebugTexture; 
+StructuredBuffer<float> ImpulseResponseSpectrogram; // Flattened 2D array [Time * BlockSize + Freq]
 int accumCount;
-int TexWidth, TexHeight;
+int TexWidth, TexHeight; 
+int BlockSize;
 float DebugGain;
+
+float3 TurboColormap(float t) {
+    const float3 c0 = float3(0.114089010972696, 0.0828523085427725, 0.373056117872124);
+    const float3 c1 = float3(0.939163989053249, 0.63582637685938, 0.252462255008546);
+    const float3 c2 = float3(4.55581134044558, 5.09337581958047, 4.30604811823795);
+    const float3 c3 = float3(-6.75629555431633, -7.56708781989445, -7.03926585970258);
+    const float3 c4 = float3(2.57147775533134, 2.76796472099351, 2.79336118471556);
+    // Simple cosine approximation for speed if exact Turbo is overkill, but let's just map Magnitude -> Color
+    return lerp(float3(0,0,0), float3(1,1,1), t); // Fallback: Black to White
+}
+
+float3 HeatMap(float v) {
+    float3 c = float3(1.0, 1.0, 1.0);
+    if (v < 0.25) {
+        c = lerp(float3(0.0, 0.0, 1.0), float3(0.0, 1.0, 1.0), v * 4.0);
+    } else if (v < 0.5) {
+        c = lerp(float3(0.0, 1.0, 1.0), float3(0.0, 1.0, 0.0), (v - 0.25) * 4.0);
+    } else if (v < 0.75) {
+        c = lerp(float3(0.0, 1.0, 0.0), float3(1.0, 1.0, 0.0), (v - 0.5) * 4.0);
+    } else {
+        c = lerp(float3(1.0, 1.0, 0.0), float3(1.0, 0.0, 0.0), (v - 0.75) * 4.0);
+    }
+    return c;
+}
 
 [numthreads(8, 8, 1)]
 void DrawIR(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
 
-    float uvX = id.x / (float)TexWidth;
-    int index = (int)(uvX * ImpulseLength);
-
-    float amp = 0;
-    if (index < ImpulseLength) amp = ImpulseResponse[index] / accumCount;
-
-    float h = (float)TexHeight;
-    float y = (0.1*h) + (amp * DebugGain * h);
-
-    // float dist = abs((float)id.y - y);
-    float4 col = (id.y < y && id.y> 0.1*h) ? float4(0, 1, 0, 1) : float4(0, 0, 0, 1);
+    // Map Texture X -> Time (Partition Index), Texture Y -> Frequency
+    int timeIdx = (int)((id.x / (float)TexWidth) * ImpulseLength);
+    int freqIdx = (int)((id.y / (float)TexHeight) * BlockSize);
     
-    DebugTexture[id.xy] = col;
+    // Safety check
+    if (timeIdx >= ImpulseLength) timeIdx = ImpulseLength - 1;
+    if (freqIdx >= BlockSize) freqIdx = BlockSize - 1;
+
+    // Get the flattened index: [Time * BlockSize + Freq]
+    // Assuming ImpulseResponse is now the spectrogram buffer (magnitude)
+    int flatIdx = timeIdx * BlockSize + freqIdx;
+    
+    float magnitude = ImpulseResponseSpectrogram[flatIdx] / max(1, accumCount);
+    
+    // Logarithmic scaling is usually better for audio visualization
+    float intensity = log(1.0 + magnitude * DebugGain); 
+    intensity = saturate(intensity);
+
+    float3 col = HeatMap(intensity);
+    
+    DebugTexture[id.xy] = float4(col, 1.0);
 }
 
 
 #pragma kernel AudioConvolve
 
-StructuredBuffer<float> InputAudio;
-RWStructuredBuffer<float> OutputAudio;
+StructuredBuffer<complex> InputFFTAudio;
+RWStructuredBuffer<complex> OutputAudioSpectrogram;
 
-
-int InputLength;
-int IRLength;
+const int BlockSize; // how many frequencies the fft outputs
+const int IRLength;
 
 [numthreads(256, 1, 1)]
 void AudioConvolve(uint3 id : SV_DispatchThreadID)
 {
-    int n = id.x; 
-    int outputLength = InputLength + IRLength;
-    
-    if (n >= outputLength) return;
+    int i = id.x; 
+    if (i >= BlockSize) return;
 
-    float sum = 0;
-    
-    int startK = max(0, n - IRLength + 1);
-    int endK = min(n, InputLength - 1);
+    complex val = InputFFTAudio[i];
 
-    for (int k = startK; k <= endK; k++)
+    if (dot(val, val) > eps * eps) 
     {
-        float val = InputAudio[k];
-        if (abs(val) > eps) 
+        for (int n = 0; n < IRLength; n++) 
         {
-            sum += val * ImpulseResponse[n - k];
+            int idx = n * BlockSize + i;
+            if (ImpulseResponse[idx] <= eps) continue;
+            OutputAudioSpectrogram[idx] = complex_mult(val, complex(ImpulseResponse[idx], 0));
         }
     }
-    
-    OutputAudio[n] = sum / accumCount;
 }
 
 
+// FFT and IFFT Kernels
+typedef float2 complex;
 
+const int WINDOW_SIZE = 128;
+complex complex_exp(float theta) {
+    return complex(cos(theta), sin(theta));
+}
+
+complex complex_mult(complex a, complex b) {
+    return complex(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+complex nth_root(int n, int k) {
+    float angle = -2.0 * PI * k / n;
+    return complex_exp(angle);
+}
+
+#pragma kernel FFT
+RWStructuredBuffer<complex> Data;
+[numthreads(1, 1, 1)]
+void FFT(uint3 id : SV_DispatchThreadID) {
+    int n = WINDOW_SIZE;
+    int bits = (int)log2(n);
+
+    // Bit-reversal permutation
+    for (uint i = 0; i < (uint)n; i++) {
+        uint rev = reversebits(i) >> (32 - bits);
+        if (i < rev) {
+            complex temp = Data[i];
+            Data[i] = Data[rev];
+            Data[rev] = temp;
+        }
+    }
+
+    for (int s = 1; s <= bits; s++) {
+        int m = 1 << s;
+        int m2 = m >> 1;
+        complex w_m = nth_root(m, 1);
+
+        for (int k = 0; k < n; k += m) {
+            complex w = complex(1, 0);
+            for (int j = 0; j < m2; j++) {
+                complex t = complex_mult(w, Data[k + j + m2]);
+                complex u = Data[k + j];
+                Data[k + j] = u + t;
+                Data[k + j + m2] = u - t;
+                w = complex_mult(w, w_m);
+            }
+        }
+    }
+}
+
+complex nth_root_inv(int n, int k) {
+    float angle = 2.0 * PI * k / n;
+    return complex_exp(angle);
+}
+
+#pragma kernel IFFT
+[numthreads(1, 1, 1)]
+void IFFT(uint3 id : SV_DispatchThreadID) {
+    int n = WINDOW_SIZE;
+    int bits = (int)log2(n);
+
+    // Bit-reversal permutation
+    for (uint i = 0; i < (uint)n; i++) {
+        uint rev = reversebits(i) >> (32 - bits);
+        if (i < rev) {
+            complex temp = Data[i];
+            Data[i] = Data[rev];
+            Data[rev] = temp;
+        }
+    }
+
+    for (int s = 1; s <= bits; s++) {
+        int m = 1 << s;
+        int m2 = m >> 1;
+        complex w_m = nth_root_inv(m, 1);
+
+        for (int k = 0; k < n; k += m) {
+            complex w = complex(1, 0);
+            for (int j = 0; j < m2; j++) {
+                complex t = complex_mult(w, Data[k + j + m2]);
+                complex u = Data[k + j];
+                Data[k + j] = u + t;
+                Data[k + j + m2] = u - t;
+                w = complex_mult(w, w_m);
+            }
+        }
+    }
+
+    // Normalization
+    float invN = 1.0 / n;
+    for (int idx = 0; idx < n; idx++) {
+        Data[idx] = Data[idx] * invN;
+    }
+}
 
 
