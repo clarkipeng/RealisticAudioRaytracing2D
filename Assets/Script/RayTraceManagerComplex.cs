@@ -65,6 +65,15 @@ public class RayTraceManagerComplex : MonoBehaviour
             irTexture.filterMode = FilterMode.Point;
             irTexture.Create();
         }
+
+        int irLength = (int)(sampleRate * reverbDuration);
+        ComputeHelper.CreateStructuredBuffer<float>(ref irBuffer, irLength);
+        
+        int kClear = shader.FindKernel("ClearImpulse");
+        shader.SetInt("ImpulseLength", irLength);
+        shader.SetBuffer(kClear, "ImpulseResponse", irBuffer);
+        shader.SetFloat("inputGain", inputGain);
+        ComputeHelper.Dispatch(shader, irLength, 1, 1, kClear);
     }
 
     void Update()
@@ -78,7 +87,7 @@ public class RayTraceManagerComplex : MonoBehaviour
         {
             BakeAudio();
         }
-        if (Input.GetKeyDown(KeyCode.R))
+        if (Input.GetKeyDown(KeyCode.R)) // Reset IR
         {
             accumFrames = 0;
             int irLength = (int)(sampleRate * reverbDuration);
