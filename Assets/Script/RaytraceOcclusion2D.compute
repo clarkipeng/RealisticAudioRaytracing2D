@@ -252,6 +252,7 @@ RWTexture2D<float4> DebugTexture;
 int accumCount;
 int TexWidth, TexHeight;
 float DebugGain;
+const float DEBUG_SCALE = 20.0;
 
 [numthreads(8, 8, 1)]
 void DrawIR(uint3 id : SV_DispatchThreadID)
@@ -265,7 +266,7 @@ void DrawIR(uint3 id : SV_DispatchThreadID)
     if (index < ImpulseLength) amp = ImpulseResponse[index] / accumCount;
 
     float h = (float)TexHeight;
-    float y = (0.1*h) + (amp * DebugGain * h);
+    float y = (0.1*h) + (amp * DebugGain * h * DEBUG_SCALE); // scale for visibility
 
     // float dist = abs((float)id.y - y);
     float4 col = (id.y < y && id.y> 0.1*h) ? float4(0, 1, 0, 1) : float4(0, 0, 0, 1);
@@ -307,7 +308,6 @@ void AudioConvolve(uint3 id : SV_DispatchThreadID)
     
     OutputAudio[n] = sum / accumCount;
 }
-
 
 // FFT and IFFT Kernels
 

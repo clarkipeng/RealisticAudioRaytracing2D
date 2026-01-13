@@ -173,8 +173,8 @@ MonoBehaviour:
   - {fileID: 690774871}
   - {fileID: 863865497}
   showDebugTexture: 1
-  debugTextureSize: {x: 512, y: 512}
-  waveformGain: 10
+  debugTextureSize: {x: 512, y: 128}
+  waveformGain: 100
 --- !u!4 &128884547
 Transform:
   m_ObjectHideFlags: 0

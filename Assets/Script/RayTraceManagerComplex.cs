@@ -16,7 +16,7 @@ public class RayTraceManagerComplex : MonoBehaviour
     public bool dynamicObstacles = false;
 
     [Header("Accum Settings")]
-    public int sampleRate = 44100;
+    public int sampleRate = 48000;
     ComputeBuffer argsBuffer;
 
     [Header("Audio Settings")]
@@ -35,7 +35,7 @@ public class RayTraceManagerComplex : MonoBehaviour
     [Header("Debug Visualization")]
     public bool showDebugTexture = true;
     public Vector2 debugTextureSize = new Vector2(512, 128);
-    [Range(1, 100)] public float waveformGain = 50.0f;
+    [Range(1, 100)] public float waveformGain = 100.0f;
 
     ComputeBuffer wallBuffer;
     ComputeBuffer hitBuffer;
@@ -203,6 +203,21 @@ public class RayTraceManagerComplex : MonoBehaviour
 
         float[] resultData = new float[outputLen];
         outputAudioBuffer.GetData(resultData);
+
+        float[] irData = new float[irLen];
+        irBuffer.GetData(irData);
+
+        // // maximum and average IR energy
+        // float irMax = 0f;
+        // float irAvg = 0f;
+        // foreach (float f in irData)
+        // {
+        //     float absF = Mathf.Abs(f);
+        //     irAvg += absF;
+        //     if (absF > irMax) irMax = absF;
+        // }
+        // irAvg /= irData.Length;
+        // Debug.Log($"IR Max Energy: {irMax}, IR Average Energy: {irAvg}");
 
         PlayResult(resultData);
     }
