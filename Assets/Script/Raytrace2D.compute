@@ -1,7 +1,4 @@
 #pragma kernel Trace
-#pragma kernel ProcessHits
-#pragma kernel ClearImpulse
-#pragma kernel DrawIR
 
 #include "Common.hlsl"
 
@@ -35,7 +32,6 @@ AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
 RWStructuredBuffer<float> ImpulseResponse;
 StructuredBuffer<RayInfo> RawHits;
-RWTexture2D<float4> DebugTexture;
 
 int SampleRate, ImpulseLength, HitCount, accumCount;
 int TexWidth, TexHeight;
@@ -158,7 +154,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         rayPos += n * eps;
     }
 }
-
+#pragma kernel ProcessHits
 [numthreads(64, 1, 1)]
 void ProcessHits(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)HitCount) return;
@@ -168,6 +164,7 @@ void ProcessHits(uint3 id : SV_DispatchThreadID) {
         ImpulseResponse[index] = ImpulseResponse[index] + hit.energy; 
 }
 
+#pragma kernel ClearImpulse
 [numthreads(256, 1, 1)]
 void ClearImpulse(uint3 id : SV_DispatchThreadID) {
     if (id.x < (uint)ImpulseLength)
@@ -177,9 +174,6 @@ void ClearImpulse(uint3 id : SV_DispatchThreadID) {
 #pragma kernel DrawIR
 
 RWTexture2D<float4> DebugTexture; 
-int accumCount;
-int TexWidth, TexHeight;
-float DebugGain;
 
 [numthreads(8, 8, 1)]
 void DrawIR(uint3 id : SV_DispatchThreadID) {

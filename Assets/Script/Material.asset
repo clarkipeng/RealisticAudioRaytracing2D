@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
   m_Name: Material
   m_EditorClassIdentifier: 
-  absorption: 0.306
+  absorption: 0.148
   scattering: 1
   transmission: 1
-  ior: 0.78
+  ior: 0.6

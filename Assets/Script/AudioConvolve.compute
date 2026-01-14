@@ -27,5 +27,5 @@ void AudioConvolve(uint3 id : SV_DispatchThreadID) {
         }
     }
     
-    OutputAudio[n] = sum;
+    OutputAudio[n] = (accumCount > 0) ? (sum / accumCount) : 0;
 }
