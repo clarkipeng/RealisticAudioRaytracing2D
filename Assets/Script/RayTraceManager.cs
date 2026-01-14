@@ -17,15 +17,14 @@ public class RayTraceManager : MonoBehaviour
     [Header("Audio Settings")]
     public AudioClip inputClip;
     public AudioManager audioManager;
-    public ComputeShader convolutionShader;
+    // public ComputeShader convolutionShader;
     public float inputGain = 1.0f;
     public int sampleRate = 48000;
-    public bool loop = true;
-    public float chunkDuration = 0.1f;
+    public bool loop = false;
+    public int chunkSize = 128;
 
     [Header("Accum Settings")]
     [Range(0.1f, 5.0f)] public float reverbDuration = 5f;
-    [Range(0f, 1f)] public float lookaheadSeconds = 0.1f;
 
     [Header("Scene")]
     public Transform source, listener;
@@ -35,15 +34,20 @@ public class RayTraceManager : MonoBehaviour
     [Header("Debug")]
     public bool showDebugTexture = true;
     public Vector2 debugTextureSize = new Vector2(1024, 512);
-    [Range(1, 5000)] public float waveformGain = 1000.0f;
+    [Range(1, 500000)] public float debugGain = 1000.0f;
     [Range(5, 100)] public int debugRayCount = 100;
     public int currentAccumCount;
     public float lastProcessingLatency;
 
-    ComputeBuffer wallBuffer, hitBuffer, debugBuffer, irBufferPing, irBufferPong, argsBuffer;
-    int activeIRIndex = 0;
+    ComputeBuffer wallBuffer, hitBuffer, debugBuffer, argsBuffer, spectrogramBuffer;
+    ComputeBuffer spectrogramBufferPing, spectrogramBufferPong;
+    ComputeBuffer fftBuffer, ifftBuffer;
+    int activeSpectrogramIndex = 0;
+    int numFrequencyBins;
+    Vector2[] currentChunkFFT;
+
     Vector4[] debugRayPaths;
-    RenderTexture irTexture;
+    RenderTexture spectrogramTexture; // For debugging
     List<Segment> activeSegments;
     int accumFrames = 0;
     int samplesSinceLastChunk = 0;
@@ -51,12 +55,22 @@ public class RayTraceManager : MonoBehaviour
     int nextStreamingOffset = 0;
     float[] fullInputSamples;
 
-    struct RayInfo { public float timeDelay, energy; public Vector2 hitPoint; };
+    struct RayInfo { public float timeDelay, energy, frequency; public Vector2 hitPoint; };
 
     void Start()
     {
+        Debug.Log($"[Start] Validating shader...");
+        if (shader == null)
+        {
+            Debug.LogError("[Start] Shader is NULL!");
+            return;
+        }
+        Debug.Log($"[Start] Shader: {shader.name}");
+        
         Assert.IsTrue(sampleRate == inputClip.frequency, $"SampleRate ({sampleRate}) != input frequency ({inputClip.frequency})");
         Assert.IsNotNull(audioManager);
+        numFrequencyBins = chunkSize / 2; // Nyquist limit
+        Debug.Log($"[Start] numFrequencyBins = {numFrequencyBins}");
         UpdateGeometry();
     }
 
@@ -67,10 +81,10 @@ public class RayTraceManager : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.Space) && audioManager)
         {
-            if (audioManager.IsStreaming) audioManager.StopStreaming();
-            else StartStreaming();
+            StartStreaming();
         }
-        if (Input.GetKeyDown(KeyCode.R)) { ResetIR(); audioManager?.StopStreaming(); }
+        if (Input.GetKeyDown(KeyCode.R)) { Reset(); }
+        if (Input.GetKeyDown(KeyCode.Q)) { QueueDebugSineWave(); }
     }
 
     void FixedUpdate()
@@ -78,7 +92,7 @@ public class RayTraceManager : MonoBehaviour
         if (!audioManager || !shader) return;
         if (dynamicObstacles) UpdateGeometry();
 
-        if (audioManager.IsStreaming)
+        if (nextStreamingOffset >= 0)
         {
             currentAccumCount = accumFrames;
             
@@ -94,16 +108,18 @@ public class RayTraceManager : MonoBehaviour
                     if (loop)
                         nextStreamingOffset = 0;
                     else
-                        audioManager.StopStreaming();
+                        nextStreamingOffset = -1; // Stop processing
                 }
                 else
                 {
-                    ComputeBuffer frozenBuffer = GetActiveIRBuffer();
+                    ComputeBuffer frozenBuffer = GetActiveSpectrogramBuffer();
+                    
+                    Debug.Log($"[FixedUpdate] Starting ProcessAndQueueChunk for offset {nextStreamingOffset}, chunkSamples {chunkSamples}, accumFrames {accumFrames}");
                     StartCoroutine(ProcessAndQueueChunk(nextStreamingOffset, chunkSamples, Mathf.Max(1, accumFrames), frozenBuffer));
                     
-                    activeIRIndex = 1 - activeIRIndex;
+                    activeSpectrogramIndex = 1 - activeSpectrogramIndex;
                     nextStreamingOffset += chunkSamples;
-                    ResetIR();
+                    Reset();
                     samplesSinceLastChunk -= chunkSamples;
                 }
             }
@@ -117,42 +133,60 @@ public class RayTraceManager : MonoBehaviour
         
         nextStreamingOffset = 0;
         samplesSinceLastChunk = 0;
-        chunkSamples = Mathf.RoundToInt(sampleRate * chunkDuration);
+
+        chunkSamples = chunkSize; // Use chunkSize directly (samples per chunk)
         fullInputSamples = LoadMonoSamples(inputClip);
-        ResetIR();
+        Reset();
         audioManager.StartStreaming(sampleRate);
     }
 
-    void ResetIR()
+    void Reset()
     {
         accumFrames = 0;
-        int len = (int)(sampleRate * reverbDuration);
-        ComputeBuffer activeBuffer = GetActiveIRBuffer();
+        int timeSteps = (int)(sampleRate * reverbDuration / chunkSize);
+        int totalSize = timeSteps * numFrequencyBins;
+        ComputeBuffer activeBuffer = GetActiveSpectrogramBuffer();
 
-        int k = shader.FindKernel("ClearImpulse");
-        shader.SetInt("ImpulseLength", len);
-        shader.SetBuffer(k, "ImpulseResponse", activeBuffer);
-        ComputeHelper.Dispatch(shader, len, 1, 1, k);
+        Debug.Log($"[Reset] Finding ClearSpectrogram kernel...");
+        int k = shader.FindKernel("ClearSpectrogram");
+        Debug.Log($"[Reset] ClearSpectrogram kernel index: {k}");
+        shader.SetInt("SpectrogramSize", totalSize);
+        shader.SetBuffer(k, "Spectrogram", activeBuffer);
+        ComputeHelper.Dispatch(shader, totalSize, 1, 1, k);
+        Debug.Log($"[Reset] ClearSpectrogram dispatched successfully");
     }
 
     void RunSimulation()
     {
-        int irLength = (int)(sampleRate * reverbDuration);
+        int spectrogramLength = (int)(sampleRate * reverbDuration);
 
         // Lazy initialization / Hot-reload safety
         ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
         ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
-        ComputeBuffer activeBuffer = GetActiveIRBuffer();
+        ComputeBuffer activeBuffer = GetActiveSpectrogramBuffer();
 
         if (wallBuffer == null || !wallBuffer.IsValid()) UpdateGeometry();
         if (argsBuffer == null || !argsBuffer.IsValid()) argsBuffer = new ComputeBuffer(1, sizeof(int) * 4, ComputeBufferType.IndirectArguments);
-        if (irTexture == null)
+        if (spectrogramTexture == null)
         {
-            irTexture = new RenderTexture(1024, 256, 0);
-            irTexture.enableRandomWrite = true;
-            irTexture.filterMode = FilterMode.Point;
-            irTexture.Create();
+            spectrogramTexture = new RenderTexture(1024, 256, 0);
+            spectrogramTexture.enableRandomWrite = true;
+            spectrogramTexture.filterMode = FilterMode.Point;
+            spectrogramTexture.Create();
         }
+
+        // Initialize FFT data with default values if not yet computed
+        if (currentChunkFFT == null || currentChunkFFT.Length != numFrequencyBins)
+        {   
+            Debug.Log($"[RunSimulation] Initializing currentChunkFFT with default values.");
+            currentChunkFFT = new Vector2[numFrequencyBins];
+            // Default: flat frequency response
+            for (int i = 0; i < numFrequencyBins; i++)
+                currentChunkFFT[i] = new Vector2(1.0f / numFrequencyBins, 0);
+        }
+
+        // Create or update FFT buffer for shader
+        ComputeHelper.CreateStructuredBuffer(ref fftBuffer, currentChunkFFT);
 
         int k = shader.FindKernel("Trace");
         hitBuffer.SetCounterValue(0);
@@ -167,9 +201,12 @@ public class RayTraceManager : MonoBehaviour
         shader.SetInt("rayCount", rayCount);
         shader.SetInt("debugRayCount", debugRayCount);
         shader.SetInt("accumFrames", accumFrames);
+        shader.SetInt("NumFrequencyBins", numFrequencyBins);
+        shader.SetInt("SampleRate", sampleRate);
         shader.SetBuffer(k, "walls", wallBuffer);
         shader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
         shader.SetBuffer(k, "debugRays", debugBuffer);
+        shader.SetBuffer(k, "FFTData", fftBuffer);
         ComputeHelper.Dispatch(shader, rayCount, 1, 1, k);
 
         AsyncGPUReadback.Request(debugBuffer, (request) => {
@@ -182,41 +219,46 @@ public class RayTraceManager : MonoBehaviour
             if (request.hasError) return;
             int[] args = request.GetData<int>().ToArray();
             int hitCount = args[0];
-            OnSimulationFinished(hitCount, irLength);
+            OnSimulationFinished(hitCount, spectrogramLength);
         });
     }
 
-    ComputeBuffer GetActiveIRBuffer() {
-        int len = (int)(sampleRate * reverbDuration);
-        ComputeHelper.CreateStructuredBuffer<float>(ref irBufferPing, len);
-        ComputeHelper.CreateStructuredBuffer<float>(ref irBufferPong, len);
-        return (activeIRIndex == 0) ? irBufferPing : irBufferPong;
+    ComputeBuffer GetActiveSpectrogramBuffer() {
+        int timeSteps = (int)(sampleRate * reverbDuration / chunkSize);
+        int totalSize = timeSteps * numFrequencyBins;
+        ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPing, totalSize);
+        ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPong, totalSize);
+        return (activeSpectrogramIndex == 0) ? spectrogramBufferPing : spectrogramBufferPong;
     }
 
-    void OnSimulationFinished(int hitCount, int irLength)
+    void OnSimulationFinished(int hitCount, int spectrogramLength)
     {
         if (hitCount > 0)
         {
             int kp = shader.FindKernel("ProcessHits");
             shader.SetInt("SampleRate", sampleRate);
+            shader.SetInt("ChunkSize", chunkSize);
             shader.SetInt("HitCount", hitCount);
+            shader.SetInt("NumFrequencyBins", numFrequencyBins);
             shader.SetBuffer(kp, "RawHits", hitBuffer);
-            shader.SetBuffer(kp, "ImpulseResponse", GetActiveIRBuffer());
+            shader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
             ComputeHelper.Dispatch(shader, hitCount, 1, 1, kp);
         }
 
         accumFrames++;
 
+        int timeSteps = (int)(sampleRate * reverbDuration / chunkSize);
         shader.SetInt("accumCount", accumFrames);
-        shader.SetInt("ImpulseLength", irLength);
+        shader.SetInt("TimeSteps", timeSteps);
+        shader.SetInt("NumFrequencyBins", numFrequencyBins);
 
-        int kd = shader.FindKernel("DrawIR");
-        shader.SetTexture(kd, "DebugTexture", irTexture);
-        shader.SetBuffer(kd, "ImpulseResponse", GetActiveIRBuffer());
-        shader.SetInt("TexWidth", irTexture.width);
-        shader.SetInt("TexHeight", irTexture.height);
-        shader.SetFloat("DebugGain", waveformGain);
-        ComputeHelper.Dispatch(shader, irTexture.width, irTexture.height, 1, kd);
+        int kd = shader.FindKernel("DrawSpectrogram");
+        shader.SetTexture(kd, "DebugTexture", spectrogramTexture);
+        shader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
+        shader.SetInt("TexWidth", spectrogramTexture.width);
+        shader.SetInt("TexHeight", spectrogramTexture.height);
+        shader.SetFloat("DebugGain", debugGain);
+        ComputeHelper.Dispatch(shader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
     }
 
     void UpdateGeometry()
@@ -241,32 +283,121 @@ public class RayTraceManager : MonoBehaviour
         return mono;
     }
 
-    IEnumerator ProcessAndQueueChunk(int sampleOffset, int chunkSamples, int accumCount, ComputeBuffer ir)
+    void QueueDebugSineWave()
+    {
+        if (audioManager == null)
+        {
+            Debug.LogWarning("[QueueDebugSineWave] AudioManager is null.");
+            return;
+        }
+
+        // Generate 0.5 second sine wave at 440 Hz (A4 note)
+        int duration = sampleRate / 2; // 0.5 seconds
+        float frequency = 440f;
+        float[] sineWave = new float[duration];
+        
+        for (int i = 0; i < duration; i++)
+        {
+            float t = i / (float)sampleRate;
+            sineWave[i] = Mathf.Sin(2 * Mathf.PI * frequency * t) * 0.5f; // 50% volume
+        }
+
+        // Queue directly - AudioManager writes at current position
+        audioManager.QueueAudioChunk(sineWave);
+        Debug.Log($"[QueueDebugSineWave] Queued sine wave at writeHead {audioManager.WriteHead}");
+    }
+
+    IEnumerator ProcessAndQueueChunk(int sampleOffset, int chunkSamples, int accumCount, ComputeBuffer spectrogram)
     {
         float start = Time.realtimeSinceStartup;
-        int inputLen = Mathf.Min(chunkSamples, fullInputSamples.Length - sampleOffset);
+        int inputLen = Mathf.Min(chunkSize, fullInputSamples.Length - sampleOffset);
         if (inputLen <= 0) yield break;
 
-        int irLen = ir.count, outputLen = inputLen + irLen;
-        float[] chunk = new float[inputLen];
-        System.Array.Copy(fullInputSamples, sampleOffset, chunk, 0, inputLen);
+        // Extract chunk
+        float[] chunk = new float[chunkSize];
+        System.Array.Copy(fullInputSamples, sampleOffset, chunk, 0, Mathf.Min(inputLen, chunkSize));
 
-        var inputBuf = new ComputeBuffer(inputLen, sizeof(float));
-        var outputBuf = new ComputeBuffer(outputLen, sizeof(float));
-        inputBuf.SetData(chunk);
+        // Convert to complex numbers for FFT (real, imaginary)
+        Vector2[] complexChunk = new Vector2[chunkSize];
+        for (int i = 0; i < chunkSize; i++)
+            complexChunk[i] = new Vector2(chunk[i], 0);
 
-        int k = convolutionShader.FindKernel("AudioConvolve");
-        convolutionShader.SetInt("InputLength", inputLen);
-        convolutionShader.SetInt("IRLength", irLen);
-        convolutionShader.SetInt("accumCount", accumCount);
-        convolutionShader.SetBuffer(k, "InputAudio", inputBuf);
-        convolutionShader.SetBuffer(k, "ImpulseResponse", ir);
-        convolutionShader.SetBuffer(k, "OutputAudio", outputBuf);
-        ComputeHelper.Dispatch(convolutionShader, outputLen, 1, 1, k);
+        // Create FFT buffer and compute FFT using Common.hlsl kernel
+        var tempFFTBuffer = new ComputeBuffer(chunkSize, sizeof(float) * 2);
+        tempFFTBuffer.SetData(complexChunk);
+        
+        Debug.Log($"[ProcessAndQueueChunk] Finding FFT kernel...");
+        int kFFT = shader.FindKernel("FFT");
+        Debug.Log($"[ProcessAndQueueChunk] FFT kernel index: {kFFT}");
+        shader.SetBuffer(kFFT, "Data", tempFFTBuffer);
+        shader.Dispatch(kFFT, 1, 1, 1);
+        Debug.Log($"[ProcessAndQueueChunk] FFT dispatched");
 
-        float[] result = new float[outputLen];
-        var req = AsyncGPUReadback.Request(outputBuf);
-        while (!req.done) yield return null;
+        // Read back FFT results
+        var fftReadback = AsyncGPUReadback.Request(tempFFTBuffer);
+        while (!fftReadback.done) yield return null;
+        
+        if (!fftReadback.hasError)
+        {
+            Vector2[] fftData = fftReadback.GetData<Vector2>().ToArray();
+            
+            // Store first half (positive frequencies) for next frame's ray tracing
+            currentChunkFFT = new Vector2[numFrequencyBins];
+            for (int i = 0; i < numFrequencyBins; i++)
+                currentChunkFFT[i] = fftData[i];
+        }
+        
+        tempFFTBuffer.Release();
+
+        // Now reconstruct audio from accumulated spectrogram
+        int timeSteps = (int)(sampleRate * reverbDuration / chunkSize);
+        int currentTimeStep = sampleOffset / chunkSize;
+
+        // Read back the spectrogram data
+        var spectrogramReadback = AsyncGPUReadback.Request(spectrogram);
+        while (!spectrogramReadback.done) yield return null;
+        if (spectrogramReadback.hasError) yield break;
+
+        float[] spectrogramData = spectrogramReadback.GetData<float>().ToArray();
+        
+        // Extract the relevant time slice from 2D spectrogram and prepare for IFFT
+        Vector2[] complexOutput = new Vector2[chunkSize];
+        for (int i = 0; i < chunkSize; i++)
+            complexOutput[i] = Vector2.zero;
+            
+        // Fill positive frequencies from spectrogram
+        for (int f = 0; f < numFrequencyBins; f++)
+        {
+            int idx = currentTimeStep * numFrequencyBins + f;
+            if (idx < spectrogramData.Length)
+            {
+                float magnitude = spectrogramData[idx] / Mathf.Max(1, accumCount);
+                complexOutput[f] = new Vector2(magnitude, 0);
+            }
+        }
+        
+        // Mirror for negative frequencies (IFFT requires conjugate symmetry for real output)
+        for (int f = 1; f < numFrequencyBins; f++)
+        {
+            int mirrorIdx = chunkSize - f;
+            if (mirrorIdx < chunkSize)
+                complexOutput[mirrorIdx] = new Vector2(complexOutput[f].x, -complexOutput[f].y);
+        }
+
+        // Perform IFFT to get time-domain audio
+        var tempIFFTBuffer = new ComputeBuffer(chunkSize, sizeof(float) * 2);
+        tempIFFTBuffer.SetData(complexOutput);
+        
+        Debug.Log($"[ProcessAndQueueChunk] Finding IFFT kernel...");
+        int kIFFT = shader.FindKernel("IFFT");
+        Debug.Log($"[ProcessAndQueueChunk] IFFT kernel index: {kIFFT}");
+        shader.SetBuffer(kIFFT, "Data", tempIFFTBuffer);
+        shader.Dispatch(kIFFT, 1, 1, 1);
+        Debug.Log($"[ProcessAndQueueChunk] IFFT dispatched");
+
+        // Read back IFFT results
+        var ifftReadback = AsyncGPUReadback.Request(tempIFFTBuffer);
+        while (!ifftReadback.done) yield return null;
 
         if (req.hasError) { inputBuf.Release(); outputBuf.Release(); yield break; }
 
