@@ -1,0 +1,18 @@
+[33m5c58f67[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Occlusion
+[33m3989f8b[m streaming
+[33ma3cca67[m streaming
+[33m7a3a7ee[m visible ir
+[33m1aca72b[m ir setup in start
+[33mfa97cab[m Update RayTraceManagerComplex.cs
+[33mac54d0d[m Reapply "muffling start"
+[33m8c5aa28[m Revert "muffling start"
+[33m78c3bd1[m muffling start
+[33m956cb1c[m TIR + occlusion
+[33m32762d0[m final fix
+[33m594d6ee[m  fix invsq calc
+[33me8c99ff[m working with direct intersections + mc integration
+[33mb9766df[m move scenes to scenes
+[33mcf5b558[m scene
+[33m47bc56d[m audio demo
+[33m59aa7d3[m working ray accumulation
+[33m90877ef[m Initial commit
