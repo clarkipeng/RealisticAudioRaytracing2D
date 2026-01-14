@@ -28,6 +28,7 @@ struct Wall {
 struct RayInfo { 
     float timeDelay; 
     float energy; 
+    float muffleFactor;
     float2 hitPoint; 
 };
 
@@ -79,7 +80,8 @@ float3 Refract(float3 i, float3 n, float eta) {
     float cosi = dot(-i, n);
     float cost2 = 1.0 - eta * eta * (1.0 - cosi*cosi);
     float3 t = eta * i + ((eta * cosi - sqrt(abs(cost2))) * n);
-    return t * (float3)(cost2 > 0); // Return 0 if Total Internal Reflection occurs
+    // Return 0 if Total Internal Reflection occurs
+    return (cost2 > 0) ? t : float3(0.0, 0.0, 0.0);
 }
 
 [numthreads(64,1,1)]
@@ -119,6 +121,9 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                 info.timeDelay = accumTime + (distToListener / curSpeed);
                 float totalD = totalDist + distToListener;
                 info.energy = curEnergy / max(1.0, totalD * totalD);
+
+                /* TODO: Muffle Factor Calculation */
+                info.muffleFactor = 1.0 - info.energy; // placeholder for future use
                 rayInfoBuffer.Append(info);
             }
         }
@@ -219,8 +224,11 @@ void Trace (uint3 id : SV_DispatchThreadID) {
 
 RWStructuredBuffer<float> ImpulseResponse;
 StructuredBuffer<RayInfo> RawHits;
+
+float MuffleScale;
 int SampleRate;
 int ImpulseLength;
+int WindowSize;
 int HitCount;
 
 [numthreads(64, 1, 1)]
@@ -230,11 +238,16 @@ void ProcessHits(uint3 id : SV_DispatchThreadID)
 
     RayInfo hit = RawHits[id.x];
 
-    int index = (int)(hit.timeDelay * SampleRate);
+    int index = (int)(hit.timeDelay * SampleRate / WindowSize);
 
     if (index < ImpulseLength && index >= 0)
     {
-        ImpulseResponse[index] = ImpulseResponse[index] + hit.energy; 
+        for (int freq = 0; freq < WindowSize; freq++)
+        {
+            /* TODO: Do a proper frequency-dependent muffle factor */
+            ImpulseResponse[index * WindowSize + freq] += hit.energy * exp(-hit.muffleFactor * freq * MuffleScale / WindowSize);
+        }
+        // ImpulseResponse[index] = ImpulseResponse[index] + hit.energy; 
     }
 }
 
@@ -252,7 +265,6 @@ RWTexture2D<float4> DebugTexture;
 int accumCount;
 int TexWidth, TexHeight;
 float DebugGain;
-const float DEBUG_SCALE = 20.0;
 
 [numthreads(8, 8, 1)]
 void DrawIR(uint3 id : SV_DispatchThreadID)
@@ -260,16 +272,19 @@ void DrawIR(uint3 id : SV_DispatchThreadID)
     if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
 
     float uvX = id.x / (float)TexWidth;
-    int index = (int)(uvX * ImpulseLength);
+    float uvY = id.y / (float)TexHeight;
+
+    int index = (int)(uvX * ImpulseLength / WindowSize);
+    int freq = (int)(uvY * WindowSize);
 
     float amp = 0;
-    if (index < ImpulseLength) amp = ImpulseResponse[index] / accumCount;
+    if (index < ImpulseLength) amp = ImpulseResponse[index * WindowSize + freq] / accumCount;
 
     float h = (float)TexHeight;
-    float y = (0.1*h) + (amp * DebugGain * h * DEBUG_SCALE); // scale for visibility
+    // float y = (0.1*h) + (amp * DebugGain * h * DEBUG_SCALE); // scale for visibility
 
     // float dist = abs((float)id.y - y);
-    float4 col = (id.y < y && id.y> 0.1*h) ? float4(0, 1, 0, 1) : float4(0, 0, 0, 1);
+    float4 col = amp * float4(0, 1, 0, 1);
     
     DebugTexture[id.xy] = col;
 }
@@ -312,7 +327,6 @@ void AudioConvolve(uint3 id : SV_DispatchThreadID)
 // FFT and IFFT Kernels
 
 #pragma kernel FFT
-
 typedef float2 complex;
 
 const int WINDOW_SIZE = 128;

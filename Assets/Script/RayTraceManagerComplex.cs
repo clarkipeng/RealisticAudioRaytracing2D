@@ -24,6 +24,8 @@ public class RayTraceManagerComplex : MonoBehaviour
     public float inputGain = 1.0f;
     public bool bakeOnSpace = true;
     [Range(0.1f, 5.0f)] public float reverbDuration = 0.5f;
+    public int windowSize = 128;
+    public float muffleFactor = 5.0f;
 
     [Header("Scene Objects")]
     public Transform source;
@@ -35,7 +37,7 @@ public class RayTraceManagerComplex : MonoBehaviour
     [Header("Debug Visualization")]
     public bool showDebugTexture = true;
     public Vector2 debugTextureSize = new Vector2(512, 128);
-    [Range(1, 100)] public float waveformGain = 100.0f;
+    [Range(1, 10_000)] public float waveformGain = 10_000.0f;
 
     ComputeBuffer wallBuffer;
     ComputeBuffer hitBuffer;
@@ -52,7 +54,7 @@ public class RayTraceManagerComplex : MonoBehaviour
     List<Segment> activeSegments;
     private int accumFrames = 0;
 
-    struct RayInfo { public float timeDelay; public float energy; public Vector2 hitPoint; };
+    struct RayInfo { public float timeDelay; public float energy; public Vector2 hitPoint; public float muffleFactor; };
 
     void Start()
     {
@@ -70,7 +72,9 @@ public class RayTraceManagerComplex : MonoBehaviour
         ComputeHelper.CreateStructuredBuffer<float>(ref irBuffer, irLength);
         
         int kClear = shader.FindKernel("ClearImpulse");
+        shader.SetInt("WindowSize", windowSize);
         shader.SetInt("ImpulseLength", irLength);
+        shader.SetFloat("MuffleScale", muffleFactor); // Adjust this value to control the amount of high-frequency attenuation
         shader.SetBuffer(kClear, "ImpulseResponse", irBuffer);
         shader.SetFloat("inputGain", inputGain);
         ComputeHelper.Dispatch(shader, irLength, 1, 1, kClear);
