@@ -21,7 +21,7 @@ public class RayTraceManager : MonoBehaviour
     public float inputGain = 1.0f;
     public int sampleRate = 48000;
     public bool loop = false;
-    public int chunkSize = 128;
+    public int chunkSize = 256;
 
     [Header("Accum Settings")]
     [Range(0.1f, 5.0f)] public float reverbDuration = 5f;
@@ -99,6 +99,7 @@ public class RayTraceManager : MonoBehaviour
             // Convert fixed delta to samples (exact)
             int samplesThisFrame = Mathf.RoundToInt(Time.fixedDeltaTime * sampleRate);
             samplesSinceLastChunk += samplesThisFrame;
+            Debug.Log($"[FixedUpdate] samplesThisFrame: {samplesThisFrame}, samplesSinceLastChunk: {samplesSinceLastChunk}, nextStreamingOffset: {nextStreamingOffset}");
 
             // Dispatch when we've accumulated exactly one chunk worth of samples
             if (samplesSinceLastChunk >= chunkSamples)
@@ -129,7 +130,6 @@ public class RayTraceManager : MonoBehaviour
     void StartStreaming()
     {
         Assert.IsNotNull(inputClip, "RayTraceManager: inputClip is null");
-        Assert.IsNotNull(convolutionShader, "RayTraceManager: convolutionShader not assigned");
         
         nextStreamingOffset = 0;
         samplesSinceLastChunk = 0;
@@ -349,10 +349,10 @@ public class RayTraceManager : MonoBehaviour
         
         tempFFTBuffer.Release();
 
-        // Now reconstruct audio from accumulated spectrogram
+        // Reconstruct audio from spectrogram using IFFT on current time slice
         int timeSteps = (int)(sampleRate * reverbDuration / chunkSize);
         int currentTimeStep = sampleOffset / chunkSize;
-
+        
         // Read back the spectrogram data
         var spectrogramReadback = AsyncGPUReadback.Request(spectrogram);
         while (!spectrogramReadback.done) yield return null;
@@ -360,7 +360,7 @@ public class RayTraceManager : MonoBehaviour
 
         float[] spectrogramData = spectrogramReadback.GetData<float>().ToArray();
         
-        // Extract the relevant time slice from 2D spectrogram and prepare for IFFT
+        // Extract frequency bins for current time step only
         Vector2[] complexOutput = new Vector2[chunkSize];
         for (int i = 0; i < chunkSize; i++)
             complexOutput[i] = Vector2.zero;
@@ -376,7 +376,7 @@ public class RayTraceManager : MonoBehaviour
             }
         }
         
-        // Mirror for negative frequencies (IFFT requires conjugate symmetry for real output)
+        // Mirror for negative frequencies (conjugate symmetry for real IFFT output)
         for (int f = 1; f < numFrequencyBins; f++)
         {
             int mirrorIdx = chunkSize - f;
@@ -384,36 +384,50 @@ public class RayTraceManager : MonoBehaviour
                 complexOutput[mirrorIdx] = new Vector2(complexOutput[f].x, -complexOutput[f].y);
         }
 
-        // Perform IFFT to get time-domain audio
+        // Perform IFFT to get time-domain audio for this chunk
         var tempIFFTBuffer = new ComputeBuffer(chunkSize, sizeof(float) * 2);
         tempIFFTBuffer.SetData(complexOutput);
         
-        Debug.Log($"[ProcessAndQueueChunk] Finding IFFT kernel...");
         int kIFFT = shader.FindKernel("IFFT");
-        Debug.Log($"[ProcessAndQueueChunk] IFFT kernel index: {kIFFT}");
         shader.SetBuffer(kIFFT, "Data", tempIFFTBuffer);
         shader.Dispatch(kIFFT, 1, 1, 1);
-        Debug.Log($"[ProcessAndQueueChunk] IFFT dispatched");
 
         // Read back IFFT results
         var ifftReadback = AsyncGPUReadback.Request(tempIFFTBuffer);
         while (!ifftReadback.done) yield return null;
+        
+        float[] result = new float[chunkSize];
+        if (!ifftReadback.hasError)
+        {
+            Vector2[] ifftData = ifftReadback.GetData<Vector2>().ToArray();
+            for (int i = 0; i < chunkSize; i++)
+                result[i] = ifftData[i].x; // Take real part
+        }
+        
+        tempIFFTBuffer.Release();
 
-        if (req.hasError) { inputBuf.Release(); outputBuf.Release(); yield break; }
+        // Debug: stats
+        float max = 0, sum = 0;
+        for (int i = 0; i < result.Length; i++)
+        {
+            float abs = Mathf.Abs(result[i]);
+            if (abs > max) max = abs;
+            sum += abs;
+        }
+        float avg = result.Length > 0 ? sum / result.Length : 0;
+        Debug.Log($"[IFFT Result] TimeStep: {currentTimeStep}/{timeSteps}, Max: {max:F6}, Avg: {avg:F6}, AccumFrames: {accumCount}");
 
-        req.GetData<float>().CopyTo(result);
         lastProcessingLatency = Time.realtimeSinceStartup - start;
-        inputBuf.Release();
-        outputBuf.Release();
 
         // Queue the processed chunk to AudioManager
+        Debug.Log($"[ProcessAndQueueChunk] Queuing audio chunk at sampleOffset {sampleOffset}");
         audioManager.QueueAudioChunk(result, sampleOffset);
     }
 
     void OnGUI()
     {
-        if (showDebugTexture && irTexture)
-            GUI.DrawTexture(new Rect(10, 10, debugTextureSize.x, debugTextureSize.y), irTexture);
+        if (showDebugTexture && spectrogramTexture)
+            GUI.DrawTexture(new Rect(10, 10, debugTextureSize.x, debugTextureSize.y), spectrogramTexture);
     }
 
     void OnDrawGizmos()
@@ -442,6 +456,6 @@ public class RayTraceManager : MonoBehaviour
 
     void OnDestroy()
     {
-        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, irBufferPing, irBufferPong, argsBuffer); irTexture?.Release();
+        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, argsBuffer, fftBuffer, ifftBuffer); spectrogramTexture?.Release();
     }
 }

@@ -3,88 +3,85 @@ using UnityEngine;
 public class AudioManager : MonoBehaviour
 {
     [Header("Debug")]
-    public int queuedSamples;
+    public int writeHead;
+    public int readHead_Debug;
     public int bufferCapacity;
 
     float[] ringBuffer;
     int readHead, sampleRate, bufferSize;
     readonly object bufferLock = new object();
-    bool isStreaming;
 
-    public bool IsStreaming => isStreaming;
     public int SampleRate => sampleRate;
+    public int WriteHead => writeHead;
+    public int ReadHead { get { lock (bufferLock) return readHead; } }
 
     void Awake()
     {
         sampleRate = AudioSettings.outputSampleRate;
-        bufferSize = sampleRate * 4;
+        bufferSize = sampleRate * 4; // 4 second buffer
         ringBuffer = new float[bufferSize];
         
         var src = gameObject.AddComponent<AudioSource>();
-        src.playOnAwake = false;
+        src.playOnAwake = true;
         src.loop = true;
-        var clip = AudioClip.Create("Silent", sampleRate, 1, sampleRate, false);
+        var clip = AudioClip.Create("RingBuffer", sampleRate, 1, sampleRate, false);
         clip.SetData(new float[sampleRate], 0);
         src.clip = clip;
+        src.Play();
     }
 
     public void StartStreaming(int audioSampleRate)
     {
         sampleRate = audioSampleRate;
-        if (isStreaming) StopStreaming();
         lock (bufferLock) 
         { 
-            readHead = 0; 
+            readHead = 0;
+            writeHead = 0;
             System.Array.Clear(ringBuffer, 0, ringBuffer.Length); 
         }
-        isStreaming = true;
-        GetComponent<AudioSource>().Play();
     }
 
-    public void StopStreaming()
+    /// <summary>
+    /// Add audio chunk to ring buffer just ahead of read position for immediate playback
+    /// </summary>
+    public void QueueAudioChunk(float[] audio, int offsetIgnored = 0)
     {
-        if (!isStreaming) return;
-        isStreaming = false;
-        GetComponent<AudioSource>()?.Stop();
-    }
-
-    public void QueueAudioChunk(float[] processedAudio, int sampleOffset)
-    {
-        if (!isStreaming || processedAudio == null || processedAudio.Length == 0) return;
+        if (audio == null || audio.Length == 0) return;
 
         lock (bufferLock)
         {
-            int writePos = sampleOffset % bufferSize;
-            for (int i = 0; i < processedAudio.Length; i++)
-                ringBuffer[(writePos + i) % bufferSize] += processedAudio[i];
+            // Write ahead of readHead by a small safety buffer (e.g., 1 audio frame ~20ms)
+            int safetyBuffer = sampleRate / 50; // 20ms
+            int writePos = (readHead + safetyBuffer) % bufferSize;
+            
+            for (int i = 0; i < audio.Length; i++)
+            {
+                ringBuffer[(writePos + i) % bufferSize] += audio[i];
+            }
+            
+            // Update writeHead to track latest write position
+            writeHead = (writePos + audio.Length) % bufferSize;
         }
     }
 
     void OnAudioFilterRead(float[] data, int channels)
     {
-        if (!isStreaming) return;
         lock (bufferLock)
         {
             for (int i = 0; i < data.Length / channels; i++)
             {
                 float s = ringBuffer[readHead];
-                ringBuffer[readHead] = 0;
+                ringBuffer[readHead] = 0; // Clear after reading
                 readHead = (readHead + 1) % bufferSize;
-                for (int c = 0; c < channels; c++) data[i * channels + c] = s;
+                for (int c = 0; c < channels; c++) 
+                    data[i * channels + c] = s;
             }
         }
     }
 
     void Update()
     {
-        lock (bufferLock)
-        {
-            queuedSamples = (readHead <= readHead) 
-                ? readHead - readHead 
-                : (bufferSize - readHead) + readHead;
-            bufferCapacity = bufferSize;
-        }
+        bufferCapacity = bufferSize;
+        readHead_Debug = readHead;
     }
-
-    void OnDestroy() => StopStreaming();
 }

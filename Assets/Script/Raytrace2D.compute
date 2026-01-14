@@ -24,16 +24,19 @@ struct Wall {
 struct RayInfo { 
     float timeDelay; 
     float energy; 
+    float frequency;
     float2 hitPoint; 
 };
 
 StructuredBuffer<Wall> walls;
 AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
-RWStructuredBuffer<float> ImpulseResponse;
+RWStructuredBuffer<float> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
+StructuredBuffer<float2> FFTData;  // Complex FFT values per frequency bin
 
-int SampleRate, ImpulseLength, HitCount, accumCount;
+int SampleRate, ChunkSize, HitCount, accumCount;
+int NumFrequencyBins, TimeSteps;
 int TexWidth, TexHeight;
 float DebugGain;
 
@@ -49,11 +52,44 @@ bool checkVis(float2 start, float2 end, float dist) {
 [numthreads(64,1,1)]
 void Trace (uint3 id : SV_DispatchThreadID) {
     uint rng = id.x + rngStateOffset * 719393;
+    
+    // Determine which frequency bin this ray belongs to based on FFT amplitudes
+    // Each frequency gets rays proportional to its amplitude
+    float totalEnergy = 0;
+    float freqAmplitudes[128];  // Max 128 frequency bins (chunkSize/2)
+    
+    // Calculate total energy and individual amplitudes
+    for (int f = 0; f < NumFrequencyBins && f < 128; f++) {
+        float2 complexVal = FFTData[f];
+        float magnitude = length(complexVal);
+        freqAmplitudes[f] = magnitude;
+        totalEnergy += magnitude;
+    }
+    
+    // Normalize to get probability distribution
+    if (totalEnergy < eps) return; // No energy, skip ray
+    
+    // Randomly select frequency based on energy distribution
+    float randVal = random(rng) * totalEnergy;
+    float cumulative = 0;
+    int selectedFreq = 0;
+    
+    for (int f = 0; f < NumFrequencyBins && f < 128; f++) {
+        cumulative += freqAmplitudes[f];
+        if (randVal <= cumulative) {
+            selectedFreq = f;
+            break;
+        }
+    }
+    
+    // Calculate actual frequency in Hz
+    float rayFrequency = selectedFreq * (SampleRate / 2.0) / NumFrequencyBins;
+    
     float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
     
     float2 rayDir = float2(cos(angle), sin(angle));
     float2 rayPos = sourcePos.xy;
-    float curEnergy = inputGain;
+    float curEnergy = inputGain * (freqAmplitudes[selectedFreq] / totalEnergy);
     float accumTime = 0;
     float totalDist = 0;
     float currentIOR = 1.0; 
@@ -77,6 +113,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                 RayInfo info;
                 info.hitPoint = rayPos + rayDir * distToListener; 
                 info.timeDelay = accumTime + (distToListener / curSpeed);
+                info.frequency = rayFrequency;
                 float totalD = totalDist + distToListener;
                 info.energy = curEnergy / max(1.0, totalD * totalD);
                 rayInfoBuffer.Append(info);
@@ -112,6 +149,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                     RayInfo info;
                     info.hitPoint = rayPos;
                     info.timeDelay = accumTime + (distList / speedOfSound);
+                    info.frequency = rayFrequency;
                     info.energy = contrib;
                     rayInfoBuffer.Append(info);
                 }
@@ -159,31 +197,50 @@ void Trace (uint3 id : SV_DispatchThreadID) {
 void ProcessHits(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)HitCount) return;
     RayInfo hit = RawHits[id.x];
-    int index = (int)(hit.timeDelay * SampleRate);
-    if (index < ImpulseLength && index >= 0)
-        ImpulseResponse[index] = ImpulseResponse[index] + hit.energy; 
+    
+    // Calculate which time chunk this hit belongs to
+    int timeIndex = (int)(hit.timeDelay * SampleRate / ChunkSize);
+    int freqIndex = (int)(hit.frequency * NumFrequencyBins / (SampleRate / 2.0));
+    
+    if (timeIndex >= 0 && timeIndex < TimeSteps && freqIndex >= 0 && freqIndex < NumFrequencyBins) {
+        int spectrogramIndex = timeIndex * NumFrequencyBins + freqIndex;
+        Spectrogram[spectrogramIndex] = Spectrogram[spectrogramIndex] + hit.energy;
+    }
 }
 
-#pragma kernel ClearImpulse
+int SpectrogramSize;
+#pragma kernel ClearSpectrogram
 [numthreads(256, 1, 1)]
-void ClearImpulse(uint3 id : SV_DispatchThreadID) {
-    if (id.x < (uint)ImpulseLength)
-        ImpulseResponse[id.x] = 0.0;
+void ClearSpectrogram(uint3 id : SV_DispatchThreadID) {
+    if (id.x < (uint)SpectrogramSize)
+        Spectrogram[id.x] = 0.0;
 }
 
-#pragma kernel DrawIR
+
+
+#pragma kernel DrawSpectrogram
 
 RWTexture2D<float4> DebugTexture; 
 
 [numthreads(8, 8, 1)]
-void DrawIR(uint3 id : SV_DispatchThreadID) {
+void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
     float uvX = id.x / (float)TexWidth;
-    int index = (int)(uvX * ImpulseLength);
+    float uvY = id.y / (float)TexHeight;
+
+    // X axis = time, Y axis = frequency
+    int timeIndex = (int)(uvX * TimeSteps);
+    int freqIndex = (int)(uvY * NumFrequencyBins);
+
     float amp = 0;
-    if (index < ImpulseLength) amp = ImpulseResponse[index] / accumCount;
-    float h = (float)TexHeight;
-    float y = (0.1*h) + (amp * DebugGain * h);
-    float4 col = (id.y < y && id.y > 0.1*h) ? float4(0, 1, 0, 1) : float4(0, 0, 0, 1);
+    if (timeIndex < TimeSteps && freqIndex < NumFrequencyBins) {
+        int spectrogramIndex = timeIndex * NumFrequencyBins + freqIndex;
+        amp = Spectrogram[spectrogramIndex] / max(1, accumCount);
+    }
+    
+    // Color based on amplitude (heat map style)
+    float intensity = saturate(amp * DebugGain);
+    float4 col = float4(intensity, intensity * 0.5, 0, 1);
     DebugTexture[id.xy] = col;
 }

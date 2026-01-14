@@ -64,78 +64,102 @@ float2 nth_root_inv(int n, int k) {
 }
 
 RWStructuredBuffer<float2> Data;
-[numthreads(1, 1, 1)]
+
+[numthreads(128, 1, 1)]
 void FFT(uint3 id : SV_DispatchThreadID) {
     int n = WINDOW_SIZE;
     int bits = (int)log2(n);
+    uint idx = id.x;
+    
+    if (idx >= (uint)n) return;
 
-    // Bit-reversal permutation
-    for (uint i = 0; i < (uint)n; i++) {
-        uint rev = reversebits(i) >> (32 - bits);
-        if (i < rev) {
-            float2 temp = Data[i];
-            Data[i] = Data[rev];
-            Data[rev] = temp;
-        }
+    // Bit-reversal permutation (parallel)
+    uint rev = reversebits(idx) >> (32 - bits);
+    if (idx < rev) {
+        float2 temp = Data[idx];
+        Data[idx] = Data[rev];
+        Data[rev] = temp;
     }
+    
+    GroupMemoryBarrierWithGroupSync(); // Wait for all bit reversals
 
+    // FFT stages - each stage must complete before next begins
     for (int s = 1; s <= bits; s++) {
         int m = 1 << s;
         int m2 = m >> 1;
         float2 w_m = nth_root(m, 1);
 
-        for (int k = 0; k < n; k += m) {
-            float2 w = float2(1, 0);
-            for (int j = 0; j < m2; j++) {
-                float2 t = complex_mult(w, Data[k + j + m2]);
-                float2 u = Data[k + j];
-                Data[k + j] = u + t;
-                Data[k + j + m2] = u - t;
+        // Each thread processes its butterfly operations
+        int k_base = (idx / m2) * m;
+        int j = idx % m2;
+        
+        if (k_base + j + m2 < n) {
+            float2 w = w_m;
+            // Calculate w^j
+            for (int p = 0; p < j; p++) {
                 w = complex_mult(w, w_m);
             }
+            
+            float2 t = complex_mult(w, Data[k_base + j + m2]);
+            float2 u = Data[k_base + j];
+            Data[k_base + j] = u + t;
+            Data[k_base + j + m2] = u - t;
         }
+        
+        GroupMemoryBarrierWithGroupSync(); // Wait for stage to complete
     }
 }
 
 
 
 #pragma kernel IFFT
-[numthreads(1, 1, 1)]
+[numthreads(128, 1, 1)]
 void IFFT(uint3 id : SV_DispatchThreadID) {
     int n = WINDOW_SIZE;
     int bits = (int)log2(n);
+    uint idx = id.x;
+    
+    if (idx >= (uint)n) return;
 
-    // Bit-reversal permutation
-    for (uint i = 0; i < (uint)n; i++) {
-        uint rev = reversebits(i) >> (32 - bits);
-        if (i < rev) {
-            float2 temp = Data[i];
-            Data[i] = Data[rev];
-            Data[rev] = temp;
-        }
+    // Bit-reversal permutation (parallel)
+    uint rev = reversebits(idx) >> (32 - bits);
+    if (idx < rev) {
+        float2 temp = Data[idx];
+        Data[idx] = Data[rev];
+        Data[rev] = temp;
     }
+    
+    GroupMemoryBarrierWithGroupSync(); // Wait for all bit reversals
 
+    // IFFT stages - each stage must complete before next begins
     for (int s = 1; s <= bits; s++) {
         int m = 1 << s;
         int m2 = m >> 1;
         float2 w_m = nth_root_inv(m, 1);
 
-        for (int k = 0; k < n; k += m) {
-            float2 w = float2(1, 0);
-            for (int j = 0; j < m2; j++) {
-                float2 t = complex_mult(w, Data[k + j + m2]);
-                float2 u = Data[k + j];
-                Data[k + j] = u + t;
-                Data[k + j + m2] = u - t;
+        // Each thread processes its butterfly operations
+        int k_base = (idx / m2) * m;
+        int j = idx % m2;
+        
+        if (k_base + j + m2 < n) {
+            float2 w = w_m;
+            // Calculate w^j
+            for (int p = 0; p < j; p++) {
                 w = complex_mult(w, w_m);
             }
+            
+            float2 t = complex_mult(w, Data[k_base + j + m2]);
+            float2 u = Data[k_base + j];
+            Data[k_base + j] = u + t;
+            Data[k_base + j + m2] = u - t;
         }
+        
+        GroupMemoryBarrierWithGroupSync(); // Wait for stage to complete
     }
 
-    // Normalization
-    float invN = 1.0 / n;
-    for (int idx = 0; idx < n; idx++) {
-        Data[idx] = Data[idx] * invN;
+    // Normalization (parallel)
+    if (idx < (uint)n) {
+        Data[idx] = Data[idx] * (1.0 / n);
     }
 }
 

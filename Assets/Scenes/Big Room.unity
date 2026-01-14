@@ -152,17 +152,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   shader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 15000
+  rayCount: 45000
   maxBounces: 5
   speedOfSound: 343
   dynamicObstacles: 1
   inputClip: {fileID: 8300000, guid: 9774d7c519f6140e1a01b40afc918025, type: 3}
   audioManager: {fileID: 1445243919}
-  inputGain: 100
+  inputGain: 10000
   sampleRate: 48000
-  loop: 1
-  reverbDuration: 1.5
-  lookaheadSeconds: 0.03
+  loop: 0
+  chunkSize: 256
+  reverbDuration: 1
   source: {fileID: 1860376488}
   listener: {fileID: 849675356}
   listenerRadius: 0.5
@@ -174,8 +174,10 @@ MonoBehaviour:
   - {fileID: 863865497}
   showDebugTexture: 1
   debugTextureSize: {x: 512, y: 128}
-  waveformGain: 100
+  debugGain: 500000
   debugRayCount: 100
+  currentAccumCount: 0
+  lastProcessingLatency: 0
 --- !u!4 &128884547
 Transform:
   m_ObjectHideFlags: 0
@@ -993,10 +995,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a2b430a59924455e84d12c6a2e3434d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  chunkDuration: 0.1
-  convolutionShader: {fileID: 7200000, guid: 8064afd09b17f405a849c2a9c70f3d4f, type: 3}
-  currentAccumCount: 1
-  lastProcessingLatency: 0
+  writeHead: 0
+  readHead_Debug: 0
+  bufferCapacity: 0
 --- !u!4 &1445243920
 Transform:
   m_ObjectHideFlags: 0
@@ -1234,7 +1235,7 @@ Transform:
   m_GameObject: {fileID: 1860376486}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -183.8, y: 87.1, z: 0}
+  m_LocalPosition: {x: -161, y: 46.4, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
