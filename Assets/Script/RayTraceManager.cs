@@ -1,62 +1,53 @@
 using UnityEngine;
-using UnityEditor;
 using System.Collections.Generic;
 using Helpers;
 using UnityEngine.Assertions;
 
-
-public class Acoustic2D : MonoBehaviour
+public class RayTraceManager : MonoBehaviour
 {
-    [Header("Simulation Settings")]
+    [Header("Simulation")]
     public ComputeShader shader;
     [Range(10, 100000)] public int rayCount = 1000;
-    [Range(5, 100)] public int debugRayCount = 100;
     [Range(1, 10)] public int maxBounces = 5;
     public float speedOfSound = 343f;
     public bool dynamicObstacles = false;
 
-    [Header("Accum Settings")]
-    public int sampleRate = 48000;
-    ComputeBuffer argsBuffer;
-
     [Header("Audio Settings")]
     public AudioClip inputClip;
+    public AudioManager audioManager;
     public float inputGain = 1.0f;
-    public bool bakeOnSpace = true;
-    [Range(0.1f, 5.0f)] public float reverbDuration = 0.5f;
+    public int sampleRate = 48000;
 
-    [Header("Scene Objects")]
-    public Transform source;
-    public Transform listener;
+    [Header("Accum Settings")]
+    [Range(0.1f, 5.0f)] public float reverbDuration = 5f;
+    [Range(0f, 1f)] public float lookaheadSeconds = 0.1f;
+    ComputeBuffer argsBuffer;
+
+    [Header("Scene")]
+    public Transform source, listener;
     [Range(0.1f, 5f)] public float listenerRadius = 0.5f;
     public List<GameObject> obstacleObjects;
 
-
-    [Header("Debug Visualization")]
+    [Header("Debug")]
     public bool showDebugTexture = true;
     public Vector2 debugTextureSize = new Vector2(512, 128);
-    [Range(1, 100)] public float waveformGain = 100.0f;
+    [Range(1, 5000)] public float waveformGain = 1000.0f;
+    [Range(5, 100)] public int debugRayCount = 100;
 
-    ComputeBuffer wallBuffer;
-    ComputeBuffer hitBuffer;
-
-    ComputeBuffer debugBuffer;
-    ComputeBuffer irBuffer;
-
-    ComputeBuffer inputAudioBuffer;
-    ComputeBuffer outputAudioBuffer;
-
+    ComputeBuffer wallBuffer, hitBuffer, debugBuffer, irBuffer, argsBuffer;
     Vector4[] debugRayPaths;
     RenderTexture irTexture;
-
     List<Segment> activeSegments;
-    private int accumFrames = 0;
+    int accumFrames = 0;
+    float streamingTimer = 0;
+    int nextStreamingOffset = 0;
 
-    struct RayInfo { public float timeDelay; public float energy; public Vector2 hitPoint; };
+    struct RayInfo { public float timeDelay, energy; public Vector2 hitPoint; };
 
     void Start()
     {
-        Assert.IsTrue(sampleRate == inputClip.frequency);
+        Assert.IsTrue(sampleRate == inputClip.frequency, $"SampleRate ({sampleRate}) != input frequency ({inputClip.frequency})");
+        Assert.IsNotNull(audioManager);
         UpdateGeometry();
         if (irTexture == null)
         {
@@ -78,64 +69,87 @@ public class Acoustic2D : MonoBehaviour
 
     void Update()
     {
-        if (source == null || listener == null || shader == null) return;
-
+        if (!source || !listener || !shader) return;
         if (dynamicObstacles) UpdateGeometry();
 
         RunSimulation();
-        if (bakeOnSpace && Input.GetKeyDown(KeyCode.Space))
+
+        if (audioManager.IsStreaming)
         {
-            BakeAudio();
+            audioManager.currentAccumCount = accumFrames;
+            streamingTimer += Time.deltaTime;
+
+            // Use a small lookahead to ensure we start processing early enough to get results
+            float lookaheadThreshold = Mathf.Max(0, audioManager.chunkDuration - lookaheadSeconds);
+
+            if (streamingTimer >= lookaheadThreshold)
+            {
+                if (nextStreamingOffset >= inputClip.samples)
+                {
+                    audioManager.StopStreaming();
+                }
+                else
+                {
+                    audioManager.ProcessNextChunk(nextStreamingOffset, (int)(sampleRate * audioManager.chunkDuration));
+                    nextStreamingOffset += (int)(sampleRate * audioManager.chunkDuration);
+                    ResetIR();
+                    streamingTimer -= audioManager.chunkDuration;
+                }
+            }
         }
-        if (Input.GetKeyDown(KeyCode.R)) // Reset IR
+
+        if (Input.GetKeyDown(KeyCode.Space) && audioManager)
         {
-            accumFrames = 0;
-            int irLength = (int)(sampleRate * reverbDuration);
-            int kClear = shader.FindKernel("ClearImpulse");
-            shader.SetInt("ImpulseLength", irLength);
-            shader.SetBuffer(kClear, "ImpulseResponse", irBuffer);
-            shader.SetFloat("inputGain", inputGain);
-            ComputeHelper.Dispatch(shader, irLength, 1, 1, kClear);
+            if (audioManager.IsStreaming) audioManager.StopStreaming();
+            else StartStreaming();
         }
+        if (Input.GetKeyDown(KeyCode.R)) { ResetIR(); audioManager?.StopStreaming(); }
+    }
+
+    void StartStreaming()
+    {
+        nextStreamingOffset = 0;
+        streamingTimer = 0;
+        ResetIR();
+        audioManager.StartStreaming(inputClip, irBuffer, sampleRate);
+    }
+
+    void ResetIR()
+    {
+        accumFrames = 0;
+        int len = (int)(sampleRate * reverbDuration);
+        int k = shader.FindKernel("ClearImpulse");
+        shader.SetInt("ImpulseLength", len);
+        shader.SetBuffer(k, "ImpulseResponse", irBuffer);
+        ComputeHelper.Dispatch(shader, len, 1, 1, k);
     }
 
     void RunSimulation()
     {
-        int irLength = (int)(sampleRate * reverbDuration);
+        int len = (int)(sampleRate * reverbDuration);
+        argsBuffer = new ComputeBuffer(1, sizeof(int) * 4, ComputeBufferType.IndirectArguments);
 
-        ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
-        ComputeHelper.CreateStructuredBuffer<float>(ref irBuffer, irLength);
-        ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
-        if (argsBuffer == null)
-            argsBuffer = new ComputeBuffer(1, sizeof(int) * 4, ComputeBufferType.IndirectArguments);
-
-
-        int kernel = shader.FindKernel("Trace");
+        int k = shader.FindKernel("Trace");
         hitBuffer.SetCounterValue(0);
-
-        shader.SetVector("sourcePos", new Vector2(source.position.x, source.position.y));
-        shader.SetVector("listenerPos", new Vector2(listener.position.x, listener.position.y));
+        shader.SetVector("sourcePos", source.position);
+        shader.SetVector("listenerPos", listener.position);
         shader.SetFloat("listenerRadius", listenerRadius);
         shader.SetFloat("speedOfSound", speedOfSound);
+        shader.SetFloat("inputGain", inputGain);
         shader.SetInt("maxBounceCount", maxBounces);
         shader.SetInt("rngStateOffset", Time.frameCount);
         shader.SetInt("numWalls", activeSegments.Count);
         shader.SetInt("rayCount", rayCount);
         shader.SetInt("debugRayCount", debugRayCount);
         shader.SetInt("accumFrames", accumFrames);
-
-        shader.SetBuffer(kernel, "walls", wallBuffer);
-        shader.SetBuffer(kernel, "rayInfoBuffer", hitBuffer);
-        shader.SetBuffer(kernel, "debugRays", debugBuffer);
-
-        ComputeHelper.Dispatch(shader, rayCount, 1, 1, kernel);
+        shader.SetBuffer(k, "walls", wallBuffer);
+        shader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
+        shader.SetBuffer(k, "debugRays", debugBuffer);
+        ComputeHelper.Dispatch(shader, rayCount, 1, 1, k);
 
         debugRayPaths = ComputeHelper.ReadbackData<Vector4>(debugBuffer);
-
         ComputeBuffer.CopyCount(hitBuffer, argsBuffer, 0);
-
-        int[] args = new int[4];
-        argsBuffer.GetData(args);
+        int[] args = new int[4]; argsBuffer.GetData(args);
         int hitCount = args[0];
 
         accumFrames++;
@@ -143,162 +157,54 @@ public class Acoustic2D : MonoBehaviour
 
         if (hitCount > 0)
         {
-            int kProc = shader.FindKernel("ProcessHits");
+            int kp = shader.FindKernel("ProcessHits");
             shader.SetInt("SampleRate", sampleRate);
-            shader.SetInt("ImpulseLength", irLength);
+            shader.SetInt("ImpulseLength", len);
             shader.SetInt("HitCount", hitCount);
-            shader.SetBuffer(kProc, "RawHits", hitBuffer);
-            shader.SetBuffer(kProc, "ImpulseResponse", irBuffer);
-            ComputeHelper.Dispatch(shader, hitCount, 1, 1, kProc);
+            shader.SetBuffer(kp, "RawHits", hitBuffer);
+            shader.SetBuffer(kp, "ImpulseResponse", irBuffer);
+            ComputeHelper.Dispatch(shader, hitCount, 1, 1, kp);
         }
 
-        int kDraw = shader.FindKernel("DrawIR");
-        shader.SetTexture(kDraw, "DebugTexture", irTexture);
-        shader.SetBuffer(kDraw, "ImpulseResponse", irBuffer);
+        int kd = shader.FindKernel("DrawIR");
+        shader.SetTexture(kd, "DebugTexture", irTexture);
+        shader.SetBuffer(kd, "ImpulseResponse", irBuffer);
         shader.SetInt("TexWidth", irTexture.width);
         shader.SetInt("TexHeight", irTexture.height);
-        shader.SetInt("ImpulseLength", irLength);
+        shader.SetInt("ImpulseLength", len);
         shader.SetFloat("DebugGain", waveformGain);
-
-        ComputeHelper.Dispatch(shader, irTexture.width, irTexture.height, 1, kDraw);
-    }
-
-    void BakeAudio()
-    {
-        if (inputClip == null) { Debug.LogError("Assign an Input Clip!"); return; }
-
-        Debug.Log("Convolving on GPU...");
-
-        float[] rawSamples = new float[inputClip.samples * inputClip.channels];
-        inputClip.GetData(rawSamples, 0);
-
-        float[] monoSamples = new float[inputClip.samples];
-        int channels = inputClip.channels;
-        for (int i = 0; i < inputClip.samples; i++)
-        {
-            float sum = 0;
-            for (int c = 0; c < channels; c++)
-            {
-                sum += rawSamples[i * channels + c];
-            }
-            monoSamples[i] = sum / channels;
-        }
-
-        ComputeHelper.CreateStructuredBuffer<float>(ref inputAudioBuffer, monoSamples.Length);
-        inputAudioBuffer.SetData(monoSamples);
-
-        int irLen = irBuffer.count;
-        int outputLen = monoSamples.Length + irLen;
-        ComputeHelper.CreateStructuredBuffer<float>(ref outputAudioBuffer, outputLen);
-
-        int kConv = shader.FindKernel("AudioConvolve");
-        shader.SetInt("InputLength", monoSamples.Length);
-        shader.SetInt("IRLength", irLen);
-
-        shader.SetBuffer(kConv, "InputAudio", inputAudioBuffer);
-        shader.SetBuffer(kConv, "ImpulseResponse", irBuffer);
-        shader.SetBuffer(kConv, "OutputAudio", outputAudioBuffer);
-
-        ComputeHelper.Dispatch(shader, outputLen, 1, 1, kConv);
-
-        float[] resultData = new float[outputLen];
-        outputAudioBuffer.GetData(resultData);
-
-        float[] irData = new float[irLen];
-        irBuffer.GetData(irData);
-
-        // maximum and average IR energy
-        float irMax = 0f;
-        float irAvg = 0f;
-        foreach (float f in irData)
-        {
-            float absF = Mathf.Abs(f);
-            irAvg += absF;
-            if (absF > irMax) irMax = absF;
-        }
-        irAvg /= irData.Length;
-        Debug.Log($"IR Max Energy: {irMax}, IR Average Energy: {irAvg}");
-
-        PlayResult(resultData);
-    }
-    void PlayResult(float[] data)
-    {
-        float maxVol = 0f;
-        foreach (float f in data) if (Mathf.Abs(f) > maxVol) maxVol = Mathf.Abs(f);
-        if (maxVol > 0.0001f)
-        {
-            float scaler = 1.0f / maxVol;
-            for (int i = 0; i < data.Length; i++) data[i] *= scaler;
-        }
-
-        AudioClip result = AudioClip.Create("ReverbResult", data.Length, 1, sampleRate, false);
-        result.SetData(data, 0);
-
-        AudioSource source = GetComponent<AudioSource>();
-        source.clip = result;
-        source.Play();
-        Debug.Log("Playing Result!");
+        ComputeHelper.Dispatch(shader, irTexture.width, irTexture.height, 1, kd);
     }
 
     void UpdateGeometry()
     {
         activeSegments = SceneToData2D.GetSegmentsFromColliders(obstacleObjects);
-        Assert.IsTrue(activeSegments.Count != 0, "MUST HAVE OBJECTS IN SCENE");
         ComputeHelper.CreateStructuredBuffer(ref wallBuffer, activeSegments);
     }
 
     void OnGUI()
     {
-        if (showDebugTexture && irTexture != null)
-        {
-            GUI.DrawTexture(new Rect(10, 10, debugTextureSize[0], debugTextureSize[1]), irTexture);
-        }
+        if (showDebugTexture && irTexture)
+            GUI.DrawTexture(new Rect(10, 10, debugTextureSize.x, debugTextureSize.y), irTexture);
     }
 
     void OnDrawGizmos()
     {
-        if (source == null || listener == null) return;
-
+        if (!source || !listener) return;
         Gizmos.color = Color.green; Gizmos.DrawWireSphere(source.position, 0.2f);
         Gizmos.color = Color.cyan; Gizmos.DrawWireSphere(listener.position, listenerRadius);
-
-        if (activeSegments != null)
-        {
-            Gizmos.color = Color.red;
-            foreach (var seg in activeSegments)
-            {
-                Gizmos.DrawLine(seg.start, seg.end);
-                Gizmos.DrawLine((seg.start + seg.end) * 0.5f, (seg.start + seg.end) * 0.5f + seg.normal * 0.2f);
-            }
-        }
-
+        if (activeSegments != null) { Gizmos.color = Color.red; foreach (var seg in activeSegments) Gizmos.DrawLine(seg.start, seg.end); }
         if (debugRayPaths != null)
         {
-            int stride = maxBounces + 1;
-            float z = source.position.z - 5.0f;
-
+            int stride = maxBounces + 1; float z = source.position.z - 5.0f;
             for (int i = 0; i < debugRayCount; i++)
             {
-                for (int b = 0; b < maxBounces; b++)
+                for (int b = 0; b < maxBounces - 1; b++)
                 {
-                    if (i * stride + b >= debugRayPaths.Length)
-                    {
-                        break;
-                    }
-                    Vector4 p1 = debugRayPaths[i * stride + b];
-                    Vector4 p2 = debugRayPaths[i * stride + b + 1];
-
+                    Vector4 p1 = debugRayPaths[i * stride + b], p2 = debugRayPaths[i * stride + b + 1];
                     if (p2.sqrMagnitude == 0) break;
-
-                    Vector3 start = new Vector3(p1.x, p1.y, z);
-                    Vector3 end = new Vector3(p2.x, p2.y, z);
-
-                    float energy = p1.z;
-                    float width = Mathf.Lerp(0.5f, 5.0f, energy);
-                    Color col = Color.Lerp(new Color(1, 0.5f, 0, 0.1f), new Color(1, 1, 0, 0.8f), energy);
-
-                    Gizmos.color = col;
-                    Gizmos.DrawLine(start, end);
+                    Gizmos.color = Color.Lerp(new Color(1, 0.5f, 0, 0.1f), new Color(1, 1, 0, 0.8f), p1.z);
+                    Gizmos.DrawLine(new Vector3(p1.x, p1.y, z), new Vector3(p2.x, p2.y, z));
                 }
             }
         }
@@ -306,7 +212,6 @@ public class Acoustic2D : MonoBehaviour
 
     void OnDestroy()
     {
-        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, irBuffer, argsBuffer, inputAudioBuffer, outputAudioBuffer);
-        if (irTexture != null) irTexture.Release();
+        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, irBuffer, argsBuffer); irTexture?.Release();
     }
 }
