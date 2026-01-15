@@ -156,7 +156,7 @@ MonoBehaviour:
   maxBounces: 5
   speedOfSound: 343
   dynamicObstacles: 1
-  inputClip: {fileID: 8300000, guid: 9774d7c519f6140e1a01b40afc918025, type: 3}
+  inputClip: {fileID: 8300000, guid: 1ae3075ca6632f34f8a6cb10af8b8341, type: 3}
   audioManager: {fileID: 1445243919}
   inputGain: 10000
   sampleRate: 48000

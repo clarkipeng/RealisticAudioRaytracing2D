@@ -48,6 +48,7 @@ public class RayTraceManager : MonoBehaviour
 
     Vector4[] debugRayPaths;
     RenderTexture spectrogramTexture; // For debugging
+    RenderTexture waveformTexture; // Waveform visualization
     List<Segment> activeSegments;
     int accumFrames = 0;
     int samplesSinceLastChunk = 0;
@@ -173,6 +174,18 @@ public class RayTraceManager : MonoBehaviour
             spectrogramTexture.enableRandomWrite = true;
             spectrogramTexture.filterMode = FilterMode.Point;
             spectrogramTexture.Create();
+        }
+        if (waveformTexture == null)
+        {
+            waveformTexture = new RenderTexture(1024, 256, 0);
+            waveformTexture.enableRandomWrite = true;
+            waveformTexture.filterMode = FilterMode.Point;
+            waveformTexture.Create();
+            
+            // Clear to visible color to verify it's displaying
+            RenderTexture.active = waveformTexture;
+            GL.Clear(true, true, new Color(0.1f, 0.1f, 0.2f, 1));
+            RenderTexture.active = null;
         }
 
         // Initialize FFT data with default values if not yet computed
@@ -304,7 +317,29 @@ public class RayTraceManager : MonoBehaviour
 
         // Queue directly - AudioManager writes at current position
         audioManager.QueueAudioChunk(sineWave);
+        DrawWaveform(sineWave);
         Debug.Log($"[QueueDebugSineWave] Queued sine wave at writeHead {audioManager.WriteHead}");
+    }
+
+    void DrawWaveform(float[] samples)
+    {
+        if (shader == null || waveformTexture == null || samples == null || samples.Length == 0)
+            return;
+
+        Debug.Log($"[DrawWaveform] Drawing waveform with {samples.Length} samples");
+        var waveformBuffer = new ComputeBuffer(samples.Length, sizeof(float));
+        waveformBuffer.SetData(samples);
+
+        int kWaveform = shader.FindKernel("DrawWaveform");
+        shader.SetBuffer(kWaveform, "WaveformData", waveformBuffer);
+        shader.SetInt("WaveformLength", samples.Length);
+        shader.SetTexture(kWaveform, "DebugTexture", waveformTexture);
+        shader.SetInt("TexWidth", waveformTexture.width);
+        shader.SetInt("TexHeight", waveformTexture.height);
+        shader.SetFloat("DebugGain", debugGain);
+        ComputeHelper.Dispatch(shader, waveformTexture.width, waveformTexture.height, 1, kWaveform);
+
+        waveformBuffer.Release();
     }
 
     IEnumerator ProcessAndQueueChunk(int sampleOffset, int chunkSamples, int accumCount, ComputeBuffer spectrogram)
@@ -417,6 +452,9 @@ public class RayTraceManager : MonoBehaviour
         float avg = result.Length > 0 ? sum / result.Length : 0;
         Debug.Log($"[IFFT Result] TimeStep: {currentTimeStep}/{timeSteps}, Max: {max:F6}, Avg: {avg:F6}, AccumFrames: {accumCount}");
 
+        // Draw waveform visualization
+        DrawWaveform(result);
+
         lastProcessingLatency = Time.realtimeSinceStartup - start;
 
         // Queue the processed chunk to AudioManager
@@ -426,8 +464,13 @@ public class RayTraceManager : MonoBehaviour
 
     void OnGUI()
     {
-        if (showDebugTexture && spectrogramTexture)
-            GUI.DrawTexture(new Rect(10, 10, debugTextureSize.x, debugTextureSize.y), spectrogramTexture);
+        if (showDebugTexture)
+        {
+            if (spectrogramTexture)
+                GUI.DrawTexture(new Rect(10, 10, debugTextureSize.x, debugTextureSize.y), spectrogramTexture);
+            if (waveformTexture)
+                GUI.DrawTexture(new Rect(10, 20 + debugTextureSize.y, debugTextureSize.x, debugTextureSize.y), waveformTexture);
+        }
     }
 
     void OnDrawGizmos()
@@ -456,6 +499,8 @@ public class RayTraceManager : MonoBehaviour
 
     void OnDestroy()
     {
-        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, argsBuffer, fftBuffer, ifftBuffer); spectrogramTexture?.Release();
+        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, argsBuffer, fftBuffer, ifftBuffer); 
+        spectrogramTexture?.Release();
+        waveformTexture?.Release();
     }
 }

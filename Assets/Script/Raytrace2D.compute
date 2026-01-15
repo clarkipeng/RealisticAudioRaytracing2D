@@ -219,8 +219,11 @@ void ClearSpectrogram(uint3 id : SV_DispatchThreadID) {
 
 
 #pragma kernel DrawSpectrogram
+#pragma kernel DrawWaveform
 
 RWTexture2D<float4> DebugTexture; 
+StructuredBuffer<float> WaveformData;
+int WaveformLength;
 
 [numthreads(8, 8, 1)]
 void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
@@ -244,3 +247,38 @@ void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
     float4 col = float4(intensity, intensity * 0.5, 0, 1);
     DebugTexture[id.xy] = col;
 }
+
+[numthreads(8, 8, 1)]
+void DrawWaveform(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
+    // Clear to dark background
+    float4 col = float4(0.05, 0.05, 0.1, 1);
+    
+    // Map x to waveform sample index
+    if (WaveformLength > 0) {
+        float u = id.x / (float)max(1, TexWidth - 1);
+        int sampleIndex = (int)(u * (WaveformLength - 1));
+        sampleIndex = clamp(sampleIndex, 0, WaveformLength - 1);
+        
+        float amp = WaveformData[sampleIndex];
+        float ampScaled = saturate(abs(amp) * DebugGain * 50.0);
+        
+        // Centered waveform
+        float midY = (TexHeight - 1) * 0.5;
+        float waveY = midY + amp * midY;
+        float dist = abs((float)id.y - waveY);
+        float thickness = 1.5; // pixels
+        
+        if (dist <= thickness) {
+            col = float4(0.1, 0.8, 1.0, 1);
+        } else {
+            // Subtle glow based on amplitude
+            float glow = saturate(1.0 - dist / (thickness + 6.0)) * ampScaled;
+            col += float4(0.1, 0.4, 0.6, 0) * glow;
+        }
+    }
+    
+    DebugTexture[id.xy] = col;
+}
+

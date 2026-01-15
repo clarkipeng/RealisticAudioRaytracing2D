@@ -44,7 +44,7 @@ public class AudioManager : MonoBehaviour
     /// <summary>
     /// Add audio chunk to ring buffer just ahead of read position for immediate playback
     /// </summary>
-    public void QueueAudioChunk(float[] audio, int offsetIgnored = 0)
+    public void QueueAudioChunk(float[] audio, int offset = 0)
     {
         if (audio == null || audio.Length == 0) return;
 
@@ -52,7 +52,7 @@ public class AudioManager : MonoBehaviour
         {
             // Write ahead of readHead by a small safety buffer (e.g., 1 audio frame ~20ms)
             int safetyBuffer = sampleRate / 50; // 20ms
-            int writePos = (readHead + safetyBuffer) % bufferSize;
+            int writePos = (readHead + safetyBuffer + offset) % bufferSize;
             
             for (int i = 0; i < audio.Length; i++)
             {
