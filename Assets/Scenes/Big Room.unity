@@ -158,10 +158,10 @@ MonoBehaviour:
   dynamicObstacles: 1
   inputClip: {fileID: 8300000, guid: 1ae3075ca6632f34f8a6cb10af8b8341, type: 3}
   audioManager: {fileID: 1445243919}
-  inputGain: 10000
+  inputGain: 100000
   sampleRate: 48000
   loop: 0
-  chunkSize: 256
+  chunkSize: 128
   reverbDuration: 1
   source: {fileID: 1860376488}
   listener: {fileID: 849675356}
@@ -998,6 +998,12 @@ MonoBehaviour:
   writeHead: 0
   readHead_Debug: 0
   bufferCapacity: 0
+  shader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
+  rayTraceManager: {fileID: 128884546}
+  showWaveform: 1
+  waveformTextureSize: {x: 512, y: 128}
+  waveformGain: 10
+  waveformTexture: {fileID: 0}
 --- !u!4 &1445243920
 Transform:
   m_ObjectHideFlags: 0

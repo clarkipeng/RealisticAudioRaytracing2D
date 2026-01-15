@@ -54,6 +54,8 @@ public class RayTraceManager : MonoBehaviour
     int samplesSinceLastChunk = 0;
     int chunkSamples;
     int nextStreamingOffset = 0;
+
+    int? nextWritePos = null;
     float[] fullInputSamples;
 
     struct RayInfo { public float timeDelay, energy, frequency; public Vector2 hitPoint; };
@@ -92,6 +94,9 @@ public class RayTraceManager : MonoBehaviour
     {
         if (!audioManager || !shader) return;
         if (dynamicObstacles) UpdateGeometry();
+
+        if (fullInputSamples == null || chunkSamples <= 0)
+            return;
 
         if (nextStreamingOffset >= 0)
         {
@@ -345,6 +350,12 @@ public class RayTraceManager : MonoBehaviour
     IEnumerator ProcessAndQueueChunk(int sampleOffset, int chunkSamples, int accumCount, ComputeBuffer spectrogram)
     {
         float start = Time.realtimeSinceStartup;
+        Debug.Log($"[ProcessAndQueueChunk] Processing chunk at offset {sampleOffset} with chunkSamples {chunkSamples}, accumCount {accumCount}");
+        if (fullInputSamples == null)
+        {
+            Debug.LogWarning("[ProcessAndQueueChunk] fullInputSamples is null. Did you call StartStreaming?");
+            yield break;
+        }
         int inputLen = Mathf.Min(chunkSize, fullInputSamples.Length - sampleOffset);
         if (inputLen <= 0) yield break;
 
@@ -363,7 +374,10 @@ public class RayTraceManager : MonoBehaviour
         
         Debug.Log($"[ProcessAndQueueChunk] Finding FFT kernel...");
         int kFFT = shader.FindKernel("FFT");
+
         Debug.Log($"[ProcessAndQueueChunk] FFT kernel index: {kFFT}");
+
+        shader.SetInt("WindowSize", chunkSize);
         shader.SetBuffer(kFFT, "Data", tempFFTBuffer);
         shader.Dispatch(kFFT, 1, 1, 1);
         Debug.Log($"[ProcessAndQueueChunk] FFT dispatched");
@@ -424,6 +438,7 @@ public class RayTraceManager : MonoBehaviour
         tempIFFTBuffer.SetData(complexOutput);
         
         int kIFFT = shader.FindKernel("IFFT");
+        shader.SetInt("WindowSize", chunkSize);
         shader.SetBuffer(kIFFT, "Data", tempIFFTBuffer);
         shader.Dispatch(kIFFT, 1, 1, 1);
 
@@ -459,7 +474,12 @@ public class RayTraceManager : MonoBehaviour
 
         // Queue the processed chunk to AudioManager
         Debug.Log($"[ProcessAndQueueChunk] Queuing audio chunk at sampleOffset {sampleOffset}");
-        audioManager.QueueAudioChunk(result, sampleOffset);
+        if (nextWritePos.HasValue)
+            nextWritePos = audioManager.QueueAudioChunk(result, sampleOffset, nextWritePos);
+        else {
+            Debug.Log($"[ProcessAndQueueChunk] Queuing audio chunk at sampleOffset {sampleOffset} without forced write position");
+            nextWritePos = audioManager.QueueAudioChunk(result, sampleOffset);
+        }
     }
 
     void OnGUI()
