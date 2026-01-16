@@ -171,19 +171,130 @@ void ClearImpulse(uint3 id : SV_DispatchThreadID) {
         ImpulseResponse[id.x] = 0.0;
 }
 
-#pragma kernel DrawIR
+#pragma kernel DrawSpectrogram
+#pragma kernel DrawWaveform
 
 RWTexture2D<float4> DebugTexture; 
+StructuredBuffer<float> WaveformData;
+int WaveformLength;
+int FFTLength;
 
 [numthreads(8, 8, 1)]
-void DrawIR(uint3 id : SV_DispatchThreadID) {
+void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
     float uvX = id.x / (float)TexWidth;
-    int index = (int)(uvX * ImpulseLength);
+    float uvY = id.y / (float)TexHeight;
+
+    // X axis = time, Y axis = frequency
+    int timeIndex = (int)(uvX * TimeSteps);
+    int freqIndex = (int)(uvY * NumFrequencyBins);
+
     float amp = 0;
-    if (index < ImpulseLength) amp = ImpulseResponse[index] / accumCount;
-    float h = (float)TexHeight;
-    float y = (0.1*h) + (amp * DebugGain * h);
-    float4 col = (id.y < y && id.y > 0.1*h) ? float4(0, 1, 0, 1) : float4(0, 0, 0, 1);
+    if (timeIndex < TimeSteps && freqIndex < NumFrequencyBins) {
+        int spectrogramIndex = timeIndex * NumFrequencyBins + freqIndex;
+        amp = Spectrogram[spectrogramIndex] / max(1, accumCount);
+    }
+    
+    // Color based on amplitude (heat map style)
+    float intensity = saturate(amp * DebugGain);
+    float4 col = float4(intensity, intensity * 0.5, 0, 1);
+    DebugTexture[id.xy] = col;
+}
+
+[numthreads(8, 8, 1)]
+void DrawWaveform(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
+    // Clear to dark background
+    float4 col = float4(0.05, 0.05, 0.1, 1);
+    
+    // Map x to waveform sample index
+    if (WaveformLength > 0) {
+        float u = id.x / (float)max(1, TexWidth - 1);
+        int sampleIndex = (int)(u * (WaveformLength - 1));
+        sampleIndex = clamp(sampleIndex, 0, WaveformLength - 1);
+        
+        float amp = WaveformData[sampleIndex];
+        float ampScaled = saturate(abs(amp) * DebugGain * 50.0);
+        
+        // Centered waveform
+        float midY = (TexHeight - 1) * 0.5;
+        float waveY = midY + amp * midY;
+        float dist = abs((float)id.y - waveY);
+        float thickness = 1.5; // pixels
+        
+        if (dist <= thickness) {
+            col = float4(0.1, 0.8, 1.0, 1);
+        } else {
+            // Subtle glow based on amplitude
+            float glow = saturate(1.0 - dist / (thickness + 6.0)) * ampScaled;
+            col += float4(0.1, 0.4, 0.6, 0) * glow;
+        }
+    }
+    
+    DebugTexture[id.xy] = col;
+}
+
+// ===== Ring Buffer Waveform Visualization =====
+#pragma kernel DrawRingBufferWaveform
+
+StructuredBuffer<float> RingBufferData;
+int RingBufferSize;
+int RingBufferReadHead;
+int RingBufferWriteHead;
+float WaveformGain;
+
+[numthreads(8, 8, 1)]
+void DrawRingBufferWaveform(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
+    // Background color
+    float4 col = float4(0.05, 0.05, 0.1, 1);
+    
+    if (RingBufferSize > 0) {
+        // Map x coordinate to position in ring buffer
+        // Display from readHead to writeHead (or full buffer if wrapping)
+        float u = id.x / (float)max(1, TexWidth - 1);
+        
+        // Calculate sample index in ring buffer
+        // We want to visualize the buffer cyclically, showing what's queued
+        int bufferSpan = RingBufferSize;
+        int sampleOffset = (int)(u * bufferSpan);
+        int sampleIndex = (RingBufferReadHead + sampleOffset) % RingBufferSize;
+        
+        float amp = RingBufferData[sampleIndex];
+        float ampScaled = saturate(abs(amp) * WaveformGain);
+        
+        // Centered waveform
+        float midY = (TexHeight - 1) * 0.5;
+        float waveY = midY + amp * WaveformGain * midY * 0.8; // Scale to fit
+        float dist = abs((float)id.y - waveY);
+        float thickness = 1.5;
+        
+        // Draw waveform line
+        if (dist <= thickness) {
+            col = float4(0.1, 0.8, 1.0, 1);
+        } else {
+            // Subtle glow
+            float glow = saturate(1.0 - dist / (thickness + 6.0)) * ampScaled;
+            col += float4(0.1, 0.4, 0.6, 0) * glow;
+        }
+        
+        // Highlight read/write head positions
+        int readHeadPixel = ((RingBufferReadHead - RingBufferReadHead) * TexWidth) / RingBufferSize;
+        int writeHeadPixel = ((RingBufferWriteHead - RingBufferReadHead + RingBufferSize) % RingBufferSize * TexWidth) / RingBufferSize;
+        
+        // Read head marker (green vertical line)
+        if (abs((int)id.x - readHeadPixel) <= 1) {
+            col = lerp(col, float4(0, 1, 0, 1), 0.5);
+        }
+        
+        // Write head marker (red vertical line)
+        if (abs((int)id.x - writeHeadPixel) <= 1) {
+            col = lerp(col, float4(1, 0, 0, 1), 0.5);
+        }
+    }
+    
     DebugTexture[id.xy] = col;
 }

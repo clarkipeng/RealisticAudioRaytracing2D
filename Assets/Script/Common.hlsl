@@ -42,4 +42,141 @@ float3 Refract(float3 i, float3 n, float eta) {
     return t * (float3)(cost2 > 0);
 }
 
+
+#pragma kernel FFT
+#pragma kernel IFFT
+
+#define PI 3.14159265359
+#define WINDOW_SIZE 128
+
+RWStructuredBuffer<float2> Data;
+
+// Create fast shared memory for the thread group
+groupshared float2 sharedData[WINDOW_SIZE];
+
+float2 complex_mult(float2 a, float2 b) {
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+float2 complex_exp(float theta) {
+    float c, s;
+    sincos(theta, s, c); // Faster intrinsic
+    return float2(c, s);
+}
+
+// Helper to handle loading/unloading based on GroupID
+// This allows you to process arrays larger than 128 by dispatching multiple groups
+void LoadShared(uint groupIdx, uint groupThreadIdx) {
+    uint globalIdx = groupIdx * WINDOW_SIZE + groupThreadIdx;
+    sharedData[groupThreadIdx] = Data[globalIdx];
+}
+
+void StoreShared(uint groupIdx, uint groupThreadIdx) {
+    uint globalIdx = groupIdx * WINDOW_SIZE + groupThreadIdx;
+    Data[globalIdx] = sharedData[groupThreadIdx];
+}
+
+[numthreads(WINDOW_SIZE, 1, 1)]
+void FFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
+    uint idx = groupThreadID.x;
+    int n = WINDOW_SIZE;
+    int bits = (int)log2(n);
+
+    // 1. Load Global -> Shared
+    LoadShared(groupID.x, idx);
+    GroupMemoryBarrierWithGroupSync();
+
+    // 2. Bit-reversal
+    uint rev = reversebits(idx) >> (32 - bits);
+    if (idx < rev) {
+        float2 temp = sharedData[idx];
+        sharedData[idx] = sharedData[rev];
+        sharedData[rev] = temp;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // 3. FFT Stages
+    for (int s = 1; s <= bits; s++) {
+        int m = 1 << s;       // Stage size
+        int m2 = m >> 1;      // Half stage
+
+        // Butterfly Mapping
+        int k = (idx / m2) * m; // Start of the butterfly group
+        int j = idx % m2;       // Index within the butterfly group
+
+        // Only threads that map to a valid butterfly need to run
+        if (j < m2) {
+            // FIX: Calculate Angle Directly (Precise & Fast)
+            // -2 * PI * j / m
+            float angle = -2.0 * PI * j / m; 
+            float2 w = complex_exp(angle);
+
+            int i1 = k + j;
+            int i2 = k + j + m2;
+
+            float2 u = sharedData[i1];
+            float2 t = complex_mult(w, sharedData[i2]);
+
+            sharedData[i1] = u + t;
+            sharedData[i2] = u - t;
+        }
+        
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    // 4. Store Shared -> Global
+    StoreShared(groupID.x, idx);
+}
+
+[numthreads(WINDOW_SIZE, 1, 1)]
+void IFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
+    uint idx = groupThreadID.x;
+    int n = WINDOW_SIZE;
+    int bits = (int)log2(n);
+
+    // 1. Load
+    LoadShared(groupID.x, idx);
+    GroupMemoryBarrierWithGroupSync();
+
+    // 2. Bit-reversal
+    uint rev = reversebits(idx) >> (32 - bits);
+    if (idx < rev) {
+        float2 temp = sharedData[idx];
+        sharedData[idx] = sharedData[rev];
+        sharedData[rev] = temp;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // 3. IFFT Stages
+    for (int s = 1; s <= bits; s++) {
+        int m = 1 << s;
+        int m2 = m >> 1;
+
+        int k = (idx / m2) * m;
+        int j = idx % m2;
+
+        if (j < m2) {
+            // INVERSE: Positive angle
+            float angle = 2.0 * PI * j / m;
+            float2 w = complex_exp(angle);
+
+            int i1 = k + j;
+            int i2 = k + j + m2;
+
+            float2 u = sharedData[i1];
+            float2 t = complex_mult(w, sharedData[i2]);
+
+            sharedData[i1] = u + t;
+            sharedData[i2] = u - t;
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    // 4. Normalization and Store
+    // (Inverse FFT requires dividing by N)
+    float invN = 1.0 / n;
+    Data[groupID.x * WINDOW_SIZE + idx] = sharedData[idx] * invN;
+}
+
+
 #endif
