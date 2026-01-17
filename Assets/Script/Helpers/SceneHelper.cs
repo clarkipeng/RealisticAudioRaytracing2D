@@ -5,20 +5,13 @@ using System;
 using System.Runtime.InteropServices;
 
 
-public struct AudioMat
-{
-    public float absorption;
-    public float scattering;
-    public float transmission;
-    public float ior;
-}
 [StructLayout(LayoutKind.Sequential)]
 public struct Segment
 {
     public Vector2 start;
     public Vector2 end;
     public Vector2 normal;
-    public AudioMat mat;
+    public AudioMatData mat;
 }
 
 public static class SceneToData2D
@@ -36,7 +29,7 @@ public static class SceneToData2D
             if (col == null || !col.enabled) continue;
 
             List<Vector2> worldPoints = new List<Vector2>();
-            AudioMat mat = ResolveMaterial(obj);
+            AudioMatData mat = ResolveMaterial(obj);
 
             if (col is PolygonCollider2D poly)
             {
@@ -75,7 +68,7 @@ public static class SceneToData2D
         return allSegments;
     }
 
-    private static void AddLoopToSegments(Transform trans, Vector2[] localPoints, List<Segment> outSegments, AudioMat material)
+    private static void AddLoopToSegments(Transform trans, Vector2[] localPoints, List<Segment> outSegments, AudioMatData material)
     {
         Vector3 s = trans.lossyScale;
         float winding = Mathf.Sign(s.x * s.y);
@@ -96,16 +89,12 @@ public static class SceneToData2D
             outSegments.Add(seg);
         }
     }
-    private static AudioMat ResolveMaterial(GameObject obj)
+    private static AudioMatData ResolveMaterial(GameObject obj)
     {
         //default material can be added
         AcousticSurface surface = obj.GetComponent<AcousticSurface>();
         AudioMaterial mat = surface.material;
-        AudioMat ret;
-        ret.absorption = mat.absorption;
-        ret.scattering = mat.scattering;
-        ret.transmission = mat.transmission;
-        ret.ior = mat.ior;
+        AudioMatData ret = mat.GetShaderData();
         return ret;
     }
 }

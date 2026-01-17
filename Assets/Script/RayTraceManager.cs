@@ -50,6 +50,7 @@ public class RayTraceManager : MonoBehaviour
     void Update()
     {
         if (!source || !listener || !raytraceShader) return;
+        if (dynamicObstacles) UpdateGeometry();  // Update geometry every frame when enabled
         RunSimulation();
 
         if (Input.GetKeyDown(KeyCode.Space) && audioManager)
@@ -64,7 +65,6 @@ public class RayTraceManager : MonoBehaviour
     void FixedUpdate()
     {
         if (!audioManager || !audioManager.IsStreaming) return;
-        if (dynamicObstacles) UpdateGeometry();
 
         int samplesThisFrame = Mathf.RoundToInt(Time.fixedDeltaTime * sampleRate);
         samplesSinceLastChunk += samplesThisFrame;
@@ -76,7 +76,7 @@ public class RayTraceManager : MonoBehaviour
                 if (loop) nextStreamingOffset = 0;
                 else audioManager.StopStreaming();
             }
-            
+
             if (audioManager.IsStreaming)
             {
                 StartCoroutine(ProcessChunk(nextStreamingOffset, chunkSamples, Mathf.Max(1, accumFrames), GetActiveIRBuffer()));
@@ -136,7 +136,7 @@ public class RayTraceManager : MonoBehaviour
     {
         float[] raw = new float[clip.samples * clip.channels];
         clip.GetData(raw, 0);
-        
+
         // Convert to mono
         float[] mono = new float[clip.samples];
         for (int i = 0; i < clip.samples; i++)
@@ -145,14 +145,14 @@ public class RayTraceManager : MonoBehaviour
             for (int c = 0; c < clip.channels; c++) sum += raw[i * clip.channels + c];
             mono[i] = sum / clip.channels;
         }
-        
+
         // Resample if needed
         if (clip.frequency == sampleRate) return mono;
-        
+
         float ratio = (float)clip.frequency / sampleRate;
         int newLength = Mathf.RoundToInt(clip.samples / ratio);
         float[] resampled = new float[newLength];
-        
+
         for (int i = 0; i < newLength; i++)
         {
             float srcIdx = i * ratio;
@@ -161,7 +161,7 @@ public class RayTraceManager : MonoBehaviour
             float t = srcIdx - idx0;
             resampled[i] = Mathf.Lerp(mono[idx0], mono[idx1], t);
         }
-        
+
         Debug.Log($"Resampled audio from {clip.frequency}Hz to {sampleRate}Hz ({clip.samples} -> {newLength} samples)");
         return resampled;
     }
@@ -220,7 +220,7 @@ public class RayTraceManager : MonoBehaviour
     void OnSimulationFinished(int hitCount, int irLength)
     {
         if (hitBuffer == null || irTexture == null) return;
-        
+
         if (hitCount > 0)
         {
             int kp = raytraceShader.FindKernel("ProcessHits");
