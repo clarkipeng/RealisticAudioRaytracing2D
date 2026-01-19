@@ -14,18 +14,24 @@ public class RayTraceManager : MonoBehaviour
     public bool dynamicObstacles = false;
 
     [Header("Audio Settings")]
-    public AudioClip inputClip;
+    // public AudioClip inputClip;
+    // // public float inputGain = 1.0f;
+    // // public bool loop = true;
     public AudioManager audioManager;
-    public float inputGain = 1.0f;
     public int sampleRate = 48000;
-    public bool loop = true;
+    
+    
 
     [Header("Accum Settings")]
     [Range(0.1f, 5.0f)] public float reverbDuration = 5f;
     [Range(0f, 1f)] public float lookaheadSeconds = 0.1f;
 
     [Header("Scene")]
-    public Transform source, listener;
+    public Transform listener;
+
+    // made the source be a list so many sources can be layered together
+    public List<GameObject> source;
+    
     [Range(0.1f, 5f)] public float listenerRadius = 0.5f;
     public List<GameObject> obstacleObjects;
 
@@ -49,14 +55,14 @@ public class RayTraceManager : MonoBehaviour
 
     void Start()
     {
-        Assert.IsTrue(sampleRate == inputClip.frequency, $"SampleRate ({sampleRate}) != input frequency ({inputClip.frequency})");
+        // Assert.IsTrue(sampleRate == inputClip.frequency, $"SampleRate ({sampleRate}) != input frequency ({inputClip.frequency})");
         Assert.IsNotNull(audioManager);
         UpdateGeometry();
     }
 
     void Update()
     {
-        if (!source || !listener || !shader) return;
+        if (source == null || !listener || !shader) return;
         RunSimulation();
 
         if (Input.GetKeyDown(KeyCode.Space) && audioManager)
@@ -223,7 +229,7 @@ public class RayTraceManager : MonoBehaviour
 
     void OnDrawGizmos()
     {
-        if (!source || !listener) return;
+        if (source == null || !listener) return;
         Gizmos.color = Color.green; Gizmos.DrawWireSphere(source.position, 0.2f);
         Gizmos.color = Color.cyan; Gizmos.DrawWireSphere(listener.position, listenerRadius);
         if (activeSegments != null) { Gizmos.color = Color.red; foreach (var seg in activeSegments) Gizmos.DrawLine(seg.start, seg.end); }
