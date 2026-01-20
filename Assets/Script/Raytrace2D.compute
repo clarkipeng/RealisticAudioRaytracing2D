@@ -23,17 +23,19 @@ struct Wall {
 
 struct RayInfo { 
     float timeDelay; 
-    float energy; 
+    float energy;
+    float frequency;
     float2 hitPoint; 
 };
 
 StructuredBuffer<Wall> walls;
 AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
-RWStructuredBuffer<float> ImpulseResponse;
+RWStructuredBuffer<float> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
+StructuredBuffer<float> FrequencyDistribution;
 
-int SampleRate, ImpulseLength, HitCount, accumCount;
+int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
 float DebugGain;
 
@@ -57,7 +59,8 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     float accumTime = 0;
     float totalDist = 0;
     float currentIOR = 1.0; 
-    float curSpeed = speedOfSound; 
+    float curSpeed = speedOfSound;
+    float curFreq = FrequencyDistribution[id.x % FrequencyDistribution.Length];
     int wallDepth = 0;
 
     if (id.x < 100) 
@@ -79,6 +82,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                 info.timeDelay = accumTime + (distToListener / curSpeed);
                 float totalD = totalDist + distToListener;
                 info.energy = curEnergy / max(1.0, totalD * totalD);
+                info.frequency = curFreq;
                 rayInfoBuffer.Append(info);
             }
         }
@@ -154,21 +158,24 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         rayPos += n * eps;
     }
 }
+
+int ChunkSamples = 128;
+
 #pragma kernel ProcessHits
 [numthreads(64, 1, 1)]
 void ProcessHits(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)HitCount) return;
     RayInfo hit = RawHits[id.x];
-    int index = (int)(hit.timeDelay * SampleRate);
-    if (index < ImpulseLength && index >= 0)
-        ImpulseResponse[index] = ImpulseResponse[index] + hit.energy; 
+    int index = (int)(hit.timeDelay * SampleRate / ChunkSamples);
+    if (index < SpectrogramSize && index >= 0)
+        Spectrogram[index * ChunkSamples + hit.frequency] += hit.energy;
 }
 
-#pragma kernel ClearImpulse
+#pragma kernel ClearSpectrogram
 [numthreads(256, 1, 1)]
-void ClearImpulse(uint3 id : SV_DispatchThreadID) {
-    if (id.x < (uint)ImpulseLength)
-        ImpulseResponse[id.x] = 0.0;
+void ClearSpectrogram(uint3 id : SV_DispatchThreadID) {
+    if (id.x < (uint)SpectrogramSize)
+        Spectrogram[id.x] = 0.0;
 }
 
 #pragma kernel DrawSpectrogram

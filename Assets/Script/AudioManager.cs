@@ -59,8 +59,6 @@ public class AudioManager : MonoBehaviour
 
         lock (bufferLock)
         {
-            // Write ahead of readHead by a small safety buffer (e.g., 1 audio frame ~20ms)
-            // int safetyBuffer = sampleRate / 50; // 20ms
 
             int writePos = (readHead + /*safetyBuffer*/ 0 + offset) % bufferSize;
             if (forcedWritePos.HasValue)
