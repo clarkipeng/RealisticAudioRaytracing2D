@@ -49,7 +49,6 @@ public class RayTraceManager : MonoBehaviour
     int accumFrames = 0;
     int samplesSinceLastChunk = 0;
     int chunkSamples; // Exact samples per chunk
-    int nextStreamingOffset = 0;
 
     struct RayInfo { public float timeDelay, energy; public Vector2 hitPoint; };
 
@@ -89,34 +88,33 @@ public class RayTraceManager : MonoBehaviour
             // Dispatch when we've accumulated exactly one chunk worth of samples
             if (samplesSinceLastChunk >= chunkSamples)
             {
-                if (nextStreamingOffset >= inputClip.samples)
-                {
-                    if (loop)
-                        nextStreamingOffset = 0;
-                    else
-                        audioManager.StopStreaming();
-                }
-                else
-                {
-                    ComputeBuffer frozenBuffer = GetActiveIRBuffer();
-                    audioManager.ProcessNextChunk(nextStreamingOffset, chunkSamples, Mathf.Max(1, accumFrames), frozenBuffer);
-                    
-                    activeIRIndex = 1 - activeIRIndex;
-                    nextStreamingOffset += chunkSamples;
-                    ResetIR();
-                    samplesSinceLastChunk -= chunkSamples;
-                }
+                // AudioManager now handles per-source offsets and looping internally
+                ComputeBuffer frozenBuffer = GetActiveIRBuffer();
+                audioManager.ProcessNextChunk(chunkSamples, Mathf.Max(1, accumFrames), frozenBuffer);
+                
+                activeIRIndex = 1 - activeIRIndex;
+                ResetIR();
+                samplesSinceLastChunk -= chunkSamples;
             }
         }
     }
 
     void StartStreaming()
     {
-        nextStreamingOffset = 0;
         samplesSinceLastChunk = 0;
-        chunkSamples = Mathf.RoundToInt(sampleRate * audioManager.chunkDuration); // Calculate once, exact
+        chunkSamples = Mathf.RoundToInt(sampleRate * audioManager.chunkDuration);
         ResetIR();
-        audioManager.StartStreaming(inputClip, GetActiveIRBuffer(), sampleRate);
+        
+        // Collect Unity AudioSources from all source GameObjects
+        var audioSources = new List<UnityEngine.AudioSource>();
+        foreach (var src in source)
+        {
+            var audioSrc = src.GetComponent<UnityEngine.AudioSource>();
+            if (audioSrc != null && audioSrc.clip != null) 
+                audioSources.Add(audioSrc);
+        }
+        
+        audioManager.StartStreaming(audioSources, GetActiveIRBuffer(), sampleRate);
     }
 
     void ResetIR()
@@ -152,11 +150,11 @@ public class RayTraceManager : MonoBehaviour
 
         int k = shader.FindKernel("Trace");
         hitBuffer.SetCounterValue(0);
-        shader.SetVector("sourcePos", source.position);
+        // shader.SetVector("sourcePos", source.position);
         shader.SetVector("listenerPos", listener.position);
         shader.SetFloat("listenerRadius", listenerRadius);
         shader.SetFloat("speedOfSound", speedOfSound);
-        shader.SetFloat("inputGain", inputGain);
+        // shader.SetFloat("inputGain", inputGain);
         shader.SetInt("maxBounceCount", maxBounces);
         shader.SetInt("rngStateOffset", Time.frameCount);
         shader.SetInt("numWalls", activeSegments.Count);
@@ -166,7 +164,21 @@ public class RayTraceManager : MonoBehaviour
         shader.SetBuffer(k, "walls", wallBuffer);
         shader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
         shader.SetBuffer(k, "debugRays", debugBuffer);
-        ComputeHelper.Dispatch(shader, rayCount, 1, 1, k);
+
+
+        // Trace rays from each source position
+        foreach (var src in source)
+        {
+            if (src == null) continue;
+            var audioSource = src.GetComponent<UnityEngine.AudioSource>();
+            
+            // Set shader parameters for this source
+            shader.SetVector("sourcePos", src.transform.position);
+            shader.SetFloat("inputGain", audioSource != null ? audioSource.volume : 1f);
+
+            // Dispatch rays for this source (they all accumulate into the same IR)
+            ComputeHelper.Dispatch(shader, rayCount / Mathf.Max(1, source.Count), 1, 1, k);
+        }
 
         AsyncGPUReadback.Request(debugBuffer, (request) => {
             if (request.hasError) return;
@@ -191,6 +203,9 @@ public class RayTraceManager : MonoBehaviour
 
     void OnSimulationFinished(int hitCount, int irLength)
     {
+        // Safety check - buffers might be released
+        if (hitBuffer == null || !hitBuffer.IsValid()) return;
+        
         if (hitCount > 0)
         {
             int kp = shader.FindKernel("ProcessHits");
@@ -229,13 +244,28 @@ public class RayTraceManager : MonoBehaviour
 
     void OnDrawGizmos()
     {
-        if (source == null || !listener) return;
-        Gizmos.color = Color.green; Gizmos.DrawWireSphere(source.position, 0.2f);
-        Gizmos.color = Color.cyan; Gizmos.DrawWireSphere(listener.position, listenerRadius);
-        if (activeSegments != null) { Gizmos.color = Color.red; foreach (var seg in activeSegments) Gizmos.DrawLine(seg.start, seg.end); }
-        if (debugRayPaths != null)
+        if (source == null || source.Count == 0 || !listener) return;
+        
+        // Draw all source positions
+        Gizmos.color = Color.green;
+        foreach (var src in source)
         {
-            int stride = maxBounces + 1; float z = source.position.z - 5.0f;
+            if (src != null) Gizmos.DrawWireSphere(src.transform.position, 0.2f);
+        }
+        
+        Gizmos.color = Color.cyan; 
+        Gizmos.DrawWireSphere(listener.position, listenerRadius);
+        
+        if (activeSegments != null) 
+        { 
+            Gizmos.color = Color.red; 
+            foreach (var seg in activeSegments) Gizmos.DrawLine(seg.start, seg.end); 
+        }
+        
+        if (debugRayPaths != null && source.Count > 0 && source[0] != null)
+        {
+            int stride = maxBounces + 1; 
+            float z = source[0].transform.position.z - 5.0f;
             if (debugRayPaths.Length < debugRayCount * stride) return;
 
             for (int i = 0; i < debugRayCount; i++)

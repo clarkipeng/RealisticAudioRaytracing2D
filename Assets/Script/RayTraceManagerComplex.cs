@@ -234,7 +234,7 @@ public class RayTraceManagerComplex : MonoBehaviour
         AudioClip result = AudioClip.Create("ReverbResult", data.Length, 1, sampleRate, false);
         result.SetData(data, 0);
 
-        AudioSource source = GetComponent<AudioSource>();
+        UnityEngine.AudioSource source = GetComponent<UnityEngine.AudioSource>();
         source.clip = result;
         source.Play();
         Debug.Log("Playing Result!");

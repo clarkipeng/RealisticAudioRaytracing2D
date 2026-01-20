@@ -3,6 +3,7 @@ using UnityEngine.Rendering;
 using System.Collections;
 using Helpers;
 using UnityEngine.Assertions;
+using System.Collections.Generic;
 
 public class AudioManager : MonoBehaviour
 {
@@ -15,13 +16,23 @@ public class AudioManager : MonoBehaviour
     public int currentAccumCount;
     public float lastProcessingLatency;
 
-    float[] ringBuffer, fullInputSamples;
-    int readHead, sampleRate, bufferSize;
+    float[] ringBuffer;
+    int readHead, writeHead, sampleRate, bufferSize;
     readonly object bufferLock = new object();
     bool isStreaming;
     ComputeBuffer irBuffer;
 
     public bool IsStreaming => isStreaming;
+
+    struct Source
+    {
+        public float[] samples;
+        public int offset;
+        public float volume;
+        public bool loop;
+        public int clipLength;
+    }
+    List<Source> sources;
 
     void Awake()
     {
@@ -29,7 +40,7 @@ public class AudioManager : MonoBehaviour
         bufferSize = sampleRate * 4;
         ringBuffer = new float[bufferSize];
         
-        var src = gameObject.AddComponent<AudioSource>();
+        var src = gameObject.AddComponent<UnityEngine.AudioSource>();
         src.playOnAwake = false;
         src.loop = true;
         var clip = AudioClip.Create("Silent", sampleRate, 1, sampleRate, false);
@@ -37,26 +48,43 @@ public class AudioManager : MonoBehaviour
         src.clip = clip;
     }
 
-    public void StartStreaming(AudioClip inputClip, ComputeBuffer impulseResponseBuffer, int audioSampleRate)
+    /// Stream multiple Unity AudioSources
+    public void StartStreaming(List<UnityEngine.AudioSource> audioSources, ComputeBuffer impulseResponseBuffer, int audioSampleRate)
     {
-        Assert.IsNotNull(inputClip, "AudioManager: inputClip is null");
         Assert.IsNotNull(impulseResponseBuffer, "AudioManager: impulseResponseBuffer is null");
         Assert.IsNotNull(convolutionShader, "AudioManager: convolutionShader not assigned");
+        Assert.IsTrue(audioSources.Count > 0, "AudioManager: no audio sources provided");
         
         irBuffer = impulseResponseBuffer;
         sampleRate = audioSampleRate;
         if (isStreaming) StopStreaming();
-        fullInputSamples = LoadMonoSamples(inputClip);
-        lock (bufferLock) { readHead = 0; System.Array.Clear(ringBuffer, 0, ringBuffer.Length); }
+        
+        // iterates and makes a list of the audio sources
+        sources = new List<Source>();
+        foreach (var src in audioSources)
+        {
+            if (src == null || src.clip == null) continue;
+            
+            sources.Add(new Source
+            {
+                samples = LoadMonoSamples(src.clip),   // Use Unity AudioSource clip
+                offset = 0,
+                volume = src.volume,                    // Use Unity AudioSource volume
+                loop = src.loop,                        // Use Unity AudioSource loop
+                clipLength = src.clip.samples
+            });
+        }
+        
+        lock (bufferLock) { readHead = 0; writeHead = 0; System.Array.Clear(ringBuffer, 0, ringBuffer.Length); }
         isStreaming = true;
-        GetComponent<AudioSource>().Play();
+        GetComponent<UnityEngine.AudioSource>().Play();
     }
 
     public void StopStreaming()
     {
         if (!isStreaming) return;
         isStreaming = false;
-        GetComponent<AudioSource>()?.Stop();
+        GetComponent<UnityEngine.AudioSource>()?.Stop();
     }
 
     float[] LoadMonoSamples(AudioClip clip)
@@ -75,27 +103,59 @@ public class AudioManager : MonoBehaviour
         return mono;
     }
 
-    public void ProcessNextChunk(int sampleOffset, int chunkSampleCount, int accumCount, ComputeBuffer ir)
+    /// AI helped write, but apparently this mixes all of the next audio chunks into one thing
+    public void ProcessNextChunk(int chunkSampleCount, int accumCount, ComputeBuffer ir)
     {
-        if (isStreaming) StartCoroutine(ProcessAndPush(sampleOffset, chunkSampleCount, accumCount, ir ?? irBuffer));
+        if (isStreaming) StartCoroutine(ProcessAndPush(chunkSampleCount, accumCount, ir ?? irBuffer));
     }
 
-    IEnumerator ProcessAndPush(int sampleOffset, int chunkSamples, int accumCount, ComputeBuffer ir)
+    IEnumerator ProcessAndPush(int chunkSamples, int accumCount, ComputeBuffer ir)
     {
         float start = Time.realtimeSinceStartup;
-        int inputLen = Mathf.Min(chunkSamples, fullInputSamples.Length - sampleOffset);
-        if (inputLen <= 0) yield break;
+        if (sources == null || sources.Count == 0) yield break;
 
-        int irLen = ir.count, outputLen = inputLen + irLen;
-        float[] chunk = new float[inputLen];
-        System.Array.Copy(fullInputSamples, sampleOffset, chunk, 0, inputLen);
+        // array for mixed audio
+        float[] mixBuffer = new float[chunkSamples];
+        
+        // loops for each of the sources
+        for (int i = 0; i < sources.Count; i++)
+        {
+            Source src = sources[i];
+            
+            // for each of samples in a chunk
+            for (int s = 0; s < chunkSamples; s++)
+            {
+                // find the what to play, offset + current sample
+                int idx = src.offset + s;
+                
+                // if the offset makes the audio too long, if loop wrap around to beginning, else stop
+                if (src.loop)
+                {
+                    idx = idx % src.clipLength;  // Wrap around
+                }
+                else if (idx >= src.clipLength)
+                {
+                    continue;
+                }
+                
+                // uh this is the math, takes the sample and adds it to the buffer array
+                mixBuffer[s] += src.samples[idx] * src.volume;
+            }
+            
+            // move to the next offset location
+            src.offset += chunkSamples;
+            if (src.loop) src.offset %= src.clipLength;
+            sources[i] = src;  // Structs are value types, so we must write back
+        }
 
-        var inputBuf = new ComputeBuffer(inputLen, sizeof(float));
+        int irLen = ir.count, outputLen = chunkSamples + irLen;
+
+        var inputBuf = new ComputeBuffer(chunkSamples, sizeof(float));
         var outputBuf = new ComputeBuffer(outputLen, sizeof(float));
-        inputBuf.SetData(chunk);
+        inputBuf.SetData(mixBuffer);
 
         int k = convolutionShader.FindKernel("AudioConvolve");
-        convolutionShader.SetInt("InputLength", inputLen);
+        convolutionShader.SetInt("InputLength", chunkSamples);
         convolutionShader.SetInt("IRLength", irLen);
         convolutionShader.SetInt("accumCount", accumCount);
         convolutionShader.SetBuffer(k, "InputAudio", inputBuf);
@@ -114,11 +174,12 @@ public class AudioManager : MonoBehaviour
         inputBuf.Release();
         outputBuf.Release();
 
+        // this iterates all of the sources instead of just one
         lock (bufferLock)
         {
-            int writePos = sampleOffset % bufferSize;
             for (int i = 0; i < outputLen; i++)
-                ringBuffer[(writePos + i) % bufferSize] += result[i];
+                ringBuffer[(writeHead + i) % bufferSize] += result[i];
+            writeHead = (writeHead + chunkSamples) % bufferSize;
         }
     }
 
