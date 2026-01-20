@@ -8,6 +8,7 @@ float inputGain;
 float listenerRadius, speedOfSound;
 int rayCount, debugRayCount, maxBounceCount, numWalls;
 uint rngStateOffset;
+int frequencyDistributionSize;
 
 struct AudioMat {
     float absorption;
@@ -60,7 +61,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     float totalDist = 0;
     float currentIOR = 1.0; 
     float curSpeed = speedOfSound;
-    float curFreq = FrequencyDistribution[id.x % FrequencyDistribution.Length];
+    float curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
     int wallDepth = 0;
 
     if (id.x < 100) 

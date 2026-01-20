@@ -47,6 +47,8 @@ float3 Refract(float3 i, float3 n, float eta) {
 #pragma kernel IFFT
 
 #define PI 3.14159265359
+
+// Change this to modify FFT size
 #define WINDOW_SIZE 128
 
 RWStructuredBuffer<float2> Data;

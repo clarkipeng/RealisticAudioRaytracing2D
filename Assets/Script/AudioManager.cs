@@ -157,7 +157,7 @@ public class AudioManager : MonoBehaviour
             if (rayTraceManager != null && rayTraceManager.showDebugTexture)
             {
                 // Stack below the two RayTraceManager textures
-                yOffset = 30 + rayTraceManager.debugTextureSize.y * 2;
+                yOffset = 30 + rayTraceManager.waveformTexture.height * 2;
             }
             
             GUI.DrawTexture(new Rect(10, yOffset, waveformTextureSize.x, waveformTextureSize.y), waveformTexture);

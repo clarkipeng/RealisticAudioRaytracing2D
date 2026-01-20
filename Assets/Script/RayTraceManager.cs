@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 using Helpers;
 using UnityEngine.Rendering;
@@ -33,15 +34,20 @@ public class RayTraceManager : MonoBehaviour
     [Range(5, 100)] public int debugRayCount = 100;
     [Range(1, 10000)] public float waveformGain = 1000.0f;
 
-    ComputeBuffer wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, argsBuffer;
+    ComputeBuffer wallBuffer,
+        hitBuffer,
+        debugBuffer,
+        spectrogramBufferPing,
+        spectrogramBufferPong,
+        argsBuffer,
+        frequencyDistributionBuffer;
     RenderTexture spectrogramTexture;
-    RenderTexture waveformTexture;
+    public RenderTexture waveformTexture;
     List<Segment> activeSegments;
     Vector4[] debugRayPaths;
     float[] fullInputSamples;
     int activeSpectrogramIndex;
     int accumFrames;
-    int chunkSamples;
 
     struct RayInfo { public float timeDelay, energy; public Vector2 hitPoint; }
 
@@ -57,6 +63,16 @@ public class RayTraceManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R)) { ResetSpectrogram(); accumFrames = 0; }
         if (Input.GetKeyDown(KeyCode.Q)) QueueSineWave(440f, 1.0f);
         if (Input.GetKeyDown(KeyCode.Space)) StartStreaming();
+
+        // Draw Spectrogram
+        if (spectrogramTexture == null || raytraceShader == null) return;
+
+        int kd = raytraceShader.FindKernel("DrawSpectrogram");
+        raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+        raytraceShader.SetTexture(kd, "SpectrogramTexture", spectrogramTexture);
+        raytraceShader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
+        ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
+
     }
 
     void FixedUpdate()
@@ -102,6 +118,12 @@ public class RayTraceManager : MonoBehaviour
             // First the simulation takes the FFT of the chunk, then runs the raytracing
             // based on the distribution of frequencies in the chunk
             RunSimulation(chunk);
+
+            // After simulation is done, we need to process the spectrogram
+            // and queue it to the audio manager
+            ProcessAndQueueSpectrogram();
+            
+            yield return new WaitForSeconds(delayBetweenChunks);
         }   
     }
 
@@ -152,9 +174,29 @@ public class RayTraceManager : MonoBehaviour
 
         // Compute FFT of input samples
         int k_fft = raytraceShader.FindKernel("FFT");
-        ComputeBuffer inputBuffer = ComputeHelper.CreateStructuredBuffer(inputSamples);
-        ComputeBuffer fftBuffer = ComputeHelper.CreateStructuredBuffer<float>(inputSamples.Length);
+        
+        // Convert float samples to complex numbers (Vector2)
+        Vector2[] complexSamples = new Vector2[inputSamples.Length];
+        for (int i = 0; i < inputSamples.Length; i++)
+        {
+            complexSamples[i] = new Vector2(inputSamples[i], 0f); // real part = sample, imaginary part = 0
+        }
+        
+        ComputeBuffer inputBuffer = ComputeHelper.CreateStructuredBuffer(complexSamples);
+        ComputeBuffer fftBuffer = ComputeHelper.CreateStructuredBuffer<Vector2>(inputSamples.Length);
 
+        raytraceShader.SetBuffer(k_fft, "Data", inputBuffer);
+        ComputeHelper.Dispatch(raytraceShader, inputSamples.Length / 128, 1, 1, k_fft);
+        
+        // Synchronous readback (blocks until GPU finishes)
+        Vector2[] fftResult = new Vector2[inputSamples.Length];
+        inputBuffer.GetData(fftResult);
+
+        ComputeHelper.Release(inputBuffer, fftBuffer);
+
+        // Build weighted frequency distribution from FFT magnitudes
+        float[] frequencyDistribution = BuildFrequencyDistribution(fftResult);
+        ComputeHelper.CreateStructuredBuffer(ref frequencyDistributionBuffer, frequencyDistribution);
 
         int spectrogramSize = (int)(sampleRate * reverbDuration);
 
@@ -186,16 +228,23 @@ public class RayTraceManager : MonoBehaviour
         raytraceShader.SetInt("rayCount", rayCount);
         raytraceShader.SetInt("debugRayCount", debugRayCount);
         raytraceShader.SetInt("accumFrames", accumFrames);
+        raytraceShader.SetInt("frequencyDistributionSize", frequencyDistribution.Length);
 
         raytraceShader.SetBuffer(k, "walls", wallBuffer);
         raytraceShader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
         raytraceShader.SetBuffer(k, "debugRays", debugBuffer);
+        raytraceShader.SetBuffer(k, "FrequencyDistribution", frequencyDistributionBuffer);
 
         ComputeHelper.Dispatch(raytraceShader, rayCount, 1, 1, k);
 
         AsyncGPUReadback.Request(debugBuffer, r => { if (!r.hasError) debugRayPaths = r.GetData<Vector4>().ToArray(); });
         ComputeBuffer.CopyCount(hitBuffer, argsBuffer, 0);
-        AsyncGPUReadback.Request(argsBuffer, r => { if (!r.hasError) OnSimulationFinished(r.GetData<int>().ToArray()[0], spectrogramSize); });
+
+        int[] hitCountArray = new int[1];
+        argsBuffer.GetData(hitCountArray);
+        int hitCount = hitCountArray[0];
+        
+        OnSimulationFinished(hitCount, spectrogramSize);
     }
 
     void OnSimulationFinished(int hitCount, int spectrogramSize)
@@ -213,14 +262,84 @@ public class RayTraceManager : MonoBehaviour
             ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
         }
         accumFrames++;
-
-
-        // TODO: Draw Spectrogram
     }
 
     ComputeBuffer GetActiveSpectrogramBuffer()
     {
         return activeSpectrogramIndex == 0 ? spectrogramBufferPing : spectrogramBufferPong;
+    }
+
+    float[] BuildFrequencyDistribution(Vector2[] fftResult)
+    {
+        // Only use first half of FFT (positive frequencies)
+        int halfSize = fftResult.Length / 2;
+        
+        // Calculate magnitudes for each frequency bin
+        float[] magnitudes = new float[halfSize];
+        float totalMagnitude = 0f;
+        
+        for (int i = 0; i < halfSize; i++)
+        {
+            magnitudes[i] = Mathf.Sqrt(fftResult[i].x * fftResult[i].x + fftResult[i].y * fftResult[i].y);
+            totalMagnitude += magnitudes[i];
+        }
+        
+        // Normalize magnitudes
+        if (totalMagnitude > 0)
+        {
+            for (int i = 0; i < halfSize; i++)
+                magnitudes[i] /= totalMagnitude;
+        }
+        
+        // Build weighted distribution buffer (rayCount entries)
+        // Each entry is a frequency value (Hz), with frequencies appearing proportional to their magnitude
+        float[] distribution = new float[rayCount];
+        int distributionIndex = 0;
+        
+        for (int i = 0; i < halfSize && distributionIndex < rayCount; i++)
+        {
+            // Convert bin index to frequency
+            float frequency = i * (float)sampleRate / fftResult.Length;
+            
+            // Add this frequency proportional to its normalized magnitude
+            int count = Mathf.RoundToInt(magnitudes[i] * rayCount);
+            
+            for (int j = 0; j < count && distributionIndex < rayCount; j++)
+            {
+                distribution[distributionIndex++] = frequency;
+            }
+        }
+        
+        // Fill any remaining slots with audible frequencies (if rounding left gaps)
+        while (distributionIndex < rayCount)
+        {
+            int randomBin = Random.Range(0, halfSize);
+            distribution[distributionIndex++] = randomBin * (float)sampleRate / fftResult.Length;
+        }
+        
+        return distribution;
+    }
+
+    void ProcessAndQueueSpectrogram()
+    {
+        // Read the accumulated spectrogram from the current active buffer
+        ComputeBuffer currentBuffer = GetActiveSpectrogramBuffer();
+        
+        // TODO: Read spectrogram data, perform IFFT, and queue to audio manager
+        // float[] spectrogramData = new float[spectrogramSize];
+        // currentBuffer.GetData(spectrogramData);
+        // ... perform IFFT ...
+        // audioManager.QueueAudioChunk(audioSamples);
+        
+        // Switch buffers for next chunk (ping-pong)
+        activeSpectrogramIndex = 1 - activeSpectrogramIndex;
+        
+        // Clear the new active buffer for fresh accumulation
+        int kClear = raytraceShader.FindKernel("ClearSpectrogram");
+        int spectrogramSize = Mathf.CeilToInt(sampleRate * reverbDuration);
+        raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+        raytraceShader.SetBuffer(kClear, "Spectrogram", GetActiveSpectrogramBuffer());
+        ComputeHelper.Dispatch(raytraceShader, spectrogramSize, 1, 1, kClear);
     }
 
     void UpdateGeometry()
@@ -267,5 +386,5 @@ public class RayTraceManager : MonoBehaviour
         }
     }
 
-    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, argsBuffer);
+    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, argsBuffer, frequencyDistributionBuffer);
 }
