@@ -324,11 +324,31 @@ public class RayTraceManager : MonoBehaviour
     {
         // Read the accumulated spectrogram from the current active buffer
         ComputeBuffer currentBuffer = GetActiveSpectrogramBuffer();
+
+        float[] spectrogramData = new float[spectrogramSize];
+        currentBuffer.GetData(spectrogramData);
+
+        // convert to complex numbers for IFFT
+        Vector2[] complexSpectrogram = new Vector2[spectrogramSize];
+        for (int i = 0; i < spectrogramSize; i++)
+        {
+            complexSpectrogram[i] = new Vector2(spectrogramData[i], 0f); // real part = amplitude, imaginary part = 0
+        }
+
+        int k_ifft = raytraceShader.FindKernel("IFFT");
+
+
+        // After reading spectrogram, for each time slice:
+        for (int i = 1; i < chunkSamples/2; i++) {
+            complexSpectrogram[chunkSamples - i] = new Vector2(
+                complexSpectrogram[i].x,  // real part same
+                -complexSpectrogram[i].y  // imaginary part negated
+            );
+        }
+
+        ComputeBuffer spectrogramBuffer = ComputeHelper.CreateStructuredBuffer(complexSpectrogram);
         
-        // TODO: Read spectrogram data, perform IFFT, and queue to audio manager
-        // float[] spectrogramData = new float[spectrogramSize];
-        // currentBuffer.GetData(spectrogramData);
-        // ... perform IFFT ...
+
         // audioManager.QueueAudioChunk(audioSamples);
         
         // Switch buffers for next chunk (ping-pong)
