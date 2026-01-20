@@ -7,7 +7,6 @@ public class RayTraceManager : MonoBehaviour
 {
     [Header("Shaders")]
     public ComputeShader raytraceShader;
-    public ComputeShader convolutionShader;
 
     [Header("Simulation")]
     [Range(10, 100000)] public int rayCount = 1000;
@@ -40,7 +39,9 @@ public class RayTraceManager : MonoBehaviour
     List<Segment> activeSegments;
     Vector4[] debugRayPaths;
     float[] fullInputSamples;
-    int activeSpectrogramIndex, accumFrames, samplesSinceLastChunk, chunkSamples, nextStreamingOffset;
+    int activeSpectrogramIndex;
+    int accumFrames;
+    int chunkSamples;
 
     struct RayInfo { public float timeDelay, energy; public Vector2 hitPoint; }
 
@@ -54,6 +55,7 @@ public class RayTraceManager : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.R)) { ResetSpectrogram(); accumFrames = 0; }
         if (Input.GetKeyDown(KeyCode.Q)) QueueSineWave(440f, 1.0f);
+        if (Input.GetKeyDown(KeyCode.Space)) StartStreaming();
     }
 
     void FixedUpdate()
@@ -61,10 +63,9 @@ public class RayTraceManager : MonoBehaviour
         if (!source || !listener || !raytraceShader) return;
         
         RunSimulation();
-
     }
 
-    void  QueueSineWave(float frequency, float duration)
+    void QueueSineWave(float frequency, float duration)
     {
         int totalSamples = Mathf.CeilToInt(sampleRate * duration);
         float[] samples = new float[totalSamples];
@@ -78,6 +79,25 @@ public class RayTraceManager : MonoBehaviour
     {
         fullInputSamples = LoadSample(inputClip);
         ResetSpectrogram();
+        float delayBetweenChunks = (float)chunkSamples / sampleRate;
+        StartCoroutine(StreamChunks(delayBetweenChunks));
+    }
+
+    // Breaks the full input samples into chunks and processes them and plays them over time
+    IEnumerator StreamChunks(float delayBetweenChunks)
+    {
+        int totalSamples = fullInputSamples.Length;
+        int offset = 0;
+
+        while (offset < totalSamples)
+        {
+            int samplesToProcess = Mathf.Min(chunkSamples, totalSamples - offset);
+            float[] chunk = new float[samplesToProcess];
+            System.Array.Copy(fullInputSamples, offset, chunk, 0, samplesToProcess);
+            offset += samplesToProcess;
+
+            // Simulation should be ran here?
+        }   
     }
 
     float[] LoadSample(AudioClip clip)
@@ -140,25 +160,50 @@ public class RayTraceManager : MonoBehaviour
 
         int k = raytraceShader.FindKernel("Trace");
         hitBuffer.SetCounterValue(0);
+
         raytraceShader.SetVector("sourcePos", source.position);
         raytraceShader.SetVector("listenerPos", listener.position);
+
         raytraceShader.SetFloat("listenerRadius", listenerRadius);
         raytraceShader.SetFloat("speedOfSound", speedOfSound);
         raytraceShader.SetFloat("inputGain", inputGain);
+
         raytraceShader.SetInt("maxBounceCount", maxBounces);
         raytraceShader.SetInt("rngStateOffset", Time.frameCount);
         raytraceShader.SetInt("numWalls", activeSegments.Count);
         raytraceShader.SetInt("rayCount", rayCount);
         raytraceShader.SetInt("debugRayCount", debugRayCount);
         raytraceShader.SetInt("accumFrames", accumFrames);
+
         raytraceShader.SetBuffer(k, "walls", wallBuffer);
         raytraceShader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
         raytraceShader.SetBuffer(k, "debugRays", debugBuffer);
+
         ComputeHelper.Dispatch(raytraceShader, rayCount, 1, 1, k);
 
         AsyncGPUReadback.Request(debugBuffer, r => { if (!r.hasError) debugRayPaths = r.GetData<Vector4>().ToArray(); });
         ComputeBuffer.CopyCount(hitBuffer, argsBuffer, 0);
         AsyncGPUReadback.Request(argsBuffer, r => { if (!r.hasError) OnSimulationFinished(r.GetData<int>().ToArray()[0], spectrogramSize); });
+    }
+
+    void OnSimulationFinished(int hitCount, int spectrogramSize)
+    {
+        if (hitBuffer == null || spectrogramTexture == null) return;
+        
+        // Process Hits
+        if (hitCount > 0)
+        {
+            int kp = raytraceShader.FindKernel("ProcessHits");
+            raytraceShader.SetInt("SampleRate", sampleRate);
+            raytraceShader.SetInt("HitCount", hitCount);
+            raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
+            raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
+            ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
+        }
+        accumFrames++;
+
+
+        // TODO: Draw Spectrogram
     }
 
     ComputeBuffer GetActiveSpectrogramBuffer()
@@ -167,32 +212,6 @@ public class RayTraceManager : MonoBehaviour
         ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPing, len);
         ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPong, len);
         return activeSpectrogramIndex == 0 ? spectrogramBufferPing : spectrogramBufferPong;
-    }
-
-    void OnSimulationFinished(int hitCount, int irLength)
-    {
-        if (hitBuffer == null || irTexture == null) return;
-        
-        if (hitCount > 0)
-        {
-            int kp = raytraceShader.FindKernel("ProcessHits");
-            raytraceShader.SetInt("SampleRate", sampleRate);
-            raytraceShader.SetInt("HitCount", hitCount);
-            raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
-            raytraceShader.SetBuffer(kp, "ImpulseResponse", GetActiveIRBuffer());
-            ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
-        }
-        accumFrames++;
-
-        int kd = raytraceShader.FindKernel("DrawIR");
-        raytraceShader.SetInt("accumCount", accumFrames);
-        raytraceShader.SetInt("ImpulseLength", irLength);
-        raytraceShader.SetTexture(kd, "DebugTexture", irTexture);
-        raytraceShader.SetBuffer(kd, "ImpulseResponse", GetActiveIRBuffer());
-        raytraceShader.SetInt("TexWidth", irTexture.width);
-        raytraceShader.SetInt("TexHeight", irTexture.height);
-        raytraceShader.SetFloat("DebugGain", waveformGain);
-        ComputeHelper.Dispatch(raytraceShader, irTexture.width, irTexture.height, 1, kd);
     }
 
     void UpdateGeometry()
