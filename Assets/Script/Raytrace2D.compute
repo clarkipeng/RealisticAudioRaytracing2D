@@ -6,6 +6,7 @@ float4 sourcePos;
 float4 listenerPos;
 float inputGain;
 float listenerRadius, speedOfSound;
+float diffractionFactor, minFrequency, maxFrequency;
 int rayCount, debugRayCount, maxBounceCount, numWalls;
 uint rngStateOffset;
 
@@ -53,11 +54,16 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     uint rng = id.x + rngStateOffset * 719393;
     float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
     
+    // Assign random frequency to this ray (log-uniform distribution for perceptual balance)
+    float freqT = random(rng);
+    float rayFrequency = minFrequency * pow(maxFrequency / minFrequency, freqT);
+    float wavelength = speedOfSound / rayFrequency;
+    float diffractionThreshold = wavelength * diffractionFactor;
+    
     float2 rayDir = float2(cos(angle), sin(angle));
     float2 rayPos = sourcePos.xy;
     float curEnergy = inputGain;
     float accumTime = 0;
-    // float totalDist = 0;
     float currentIOR = 1.0; 
     float curSpeed = speedOfSound; 
     int wallDepth = 0;
@@ -68,9 +74,48 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     for (int i = 0; i < maxBounceCount; i++) {
         float closest = inf; int hitIdx = -1;
 
+        // Track closest approach to any corner along the ray path
+        float closestApproachT = inf;
+        float closestApproachDist = inf;
+        float2 closestCorner = float2(0, 0);
+
         for (int w = 0; w < numWalls; w++) {
             float d = intersect(rayPos, rayDir, walls[w].a, walls[w].b);
             if (d < closest) { closest = d; hitIdx = w; }
+
+            float2 toA = walls[w].a - rayPos;
+            float2 toB = walls[w].b - rayPos;
+            float distToA = length(toA);
+            float distToB = length(toB);
+            
+            float tA = dot(toA, rayDir);  // Distance along ray to closest approach to corner A
+            float tB = dot(toB, rayDir);  // Distance along ray to closest approach to corner B
+            
+            // Only consider corners ahead of the ray (t > 0) AND not already within threshold
+            if (tA > eps && distToA > diffractionThreshold) {
+                float2 approachPointA = rayPos + rayDir * tA;
+                float perpDistA = length(walls[w].a - approachPointA);
+                
+                if (perpDistA < closestApproachDist && perpDistA < diffractionThreshold) {
+                    if (checkVis(rayPos, walls[w].a, distToA)) {
+                        closestApproachT = tA;
+                        closestApproachDist = perpDistA;
+                        closestCorner = walls[w].a;
+                    }
+                }
+            }
+            if (tB > eps && distToB > diffractionThreshold) {
+                float2 approachPointB = rayPos + rayDir * tB;
+                float perpDistB = length(walls[w].b - approachPointB);
+                
+                if (perpDistB < closestApproachDist && perpDistB < diffractionThreshold) {
+                    if (checkVis(rayPos, walls[w].b, distToB)) {
+                        closestApproachT = tB;
+                        closestApproachDist = perpDistB;
+                        closestCorner = walls[w].b;
+                    }
+                }
+            }
         }
         
         if (wallDepth == 0) {
@@ -79,12 +124,45 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                 RayInfo info;
                 info.hitPoint = rayPos + rayDir * distList; 
                 info.timeDelay = accumTime + (distList / curSpeed);
-                // float totalD = totalDist + distList;
-                info.energy = curEnergy *  exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
+                info.energy = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
                 rayInfoBuffer.Append(info);
+            }
+            
+            // diffraction
+            if (closestApproachT < closest && closestApproachDist < diffractionThreshold) {
+                float2 approachPoint = rayPos + rayDir * closestApproachT;
+                
+                if (id.x < (uint)debugRayCount) 
+                    debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(approachPoint, curEnergy, 0);
+                
+                rayPos = approachPoint;
+                accumTime += closestApproachT / curSpeed;
+                
+                float2 toCorner = normalize(closestCorner - rayPos);
+                float t = 1.0 - (closestApproachDist / diffractionThreshold);
+                rayDir = normalize(rayDir * (1.0 - t) + toCorner * t);
+                curEnergy *= t;
+                
+                float2 toList = listenerPos.xy - rayPos;
+                float distList = length(toList);
+                
+                // Note: No wall.normal here - diffraction is omnidirectional from the corner
+                if (checkVis(rayPos, listenerPos.xy, distList)) {
+                    float contrib = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / max(1, distList));
+
+                    if (contrib > 1e-5) {
+                        RayInfo info;
+                        info.hitPoint = rayPos;
+                        info.timeDelay = accumTime + (distList / speedOfSound);
+                        info.energy = contrib;
+                        rayInfoBuffer.Append(info);
+                    }
+                }
+                continue;
             }
         }
         
+        // No hit and no diffraction - ray escapes
         if (hitIdx == -1) {
             if (id.x < (uint)debugRayCount) 
                 debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);

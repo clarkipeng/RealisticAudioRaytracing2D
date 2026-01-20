@@ -42,4 +42,13 @@ float3 Refract(float3 i, float3 n, float eta) {
     return t * (float3)(cost2 > 0);
 }
 
+// Distance from point p to line segment (a, b)
+float distanceToLineSegment(float2 p, float2 a, float2 b) {
+    float2 ab = b - a;
+    float2 ap = p - a;
+    float t = saturate(dot(ap, ab) / dot(ab, ab));
+    float2 closest = a + t * ab;
+    return length(p - closest);
+}
+
 #endif

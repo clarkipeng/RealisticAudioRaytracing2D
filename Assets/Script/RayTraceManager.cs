@@ -14,6 +14,11 @@ public class RayTraceManager : MonoBehaviour
     [Range(1, 10)] public int maxBounces = 5;
     public float speedOfSound = 343f;
     public bool dynamicObstacles = false;
+    
+    [Header("Diffraction")]
+    [Range(0f, 2f)] public float diffractionFactor = 0.5f;
+    public float minFrequency = 100f;
+    public float maxFrequency = 10000f;
 
     [Header("Audio")]
     public AudioClip inputClip;
@@ -199,6 +204,9 @@ public class RayTraceManager : MonoBehaviour
         raytraceShader.SetInt("rayCount", rayCount);
         raytraceShader.SetInt("debugRayCount", debugRayCount);
         raytraceShader.SetInt("accumFrames", accumFrames);
+        raytraceShader.SetFloat("diffractionFactor", diffractionFactor);
+        raytraceShader.SetFloat("minFrequency", minFrequency);
+        raytraceShader.SetFloat("maxFrequency", maxFrequency);
         raytraceShader.SetBuffer(k, "walls", wallBuffer);
         raytraceShader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
         raytraceShader.SetBuffer(k, "debugRays", debugBuffer);
