@@ -188,6 +188,9 @@ int FFTLength;
 
 [numthreads(8, 8, 1)]
 void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
+    int NumFrequencyBins = ChunkSamples;
+    int TimeSteps = SpectrogramSize / ChunkSamples;
+
     if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
     
     float uvX = id.x / (float)TexWidth;

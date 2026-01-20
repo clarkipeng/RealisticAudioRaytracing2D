@@ -48,6 +48,7 @@ public class RayTraceManager : MonoBehaviour
     void Start()
     {
         UpdateGeometry();
+        ResetSpectrogram();
         audioManager.StartStreaming(sampleRate);
     }
 
@@ -62,7 +63,8 @@ public class RayTraceManager : MonoBehaviour
     {
         if (!source || !listener || !raytraceShader) return;
         
-        RunSimulation();
+        // Simulation should be run before each audio chunk
+        // RunSimulation(); 
     }
 
     void QueueSineWave(float frequency, float duration)
@@ -96,7 +98,10 @@ public class RayTraceManager : MonoBehaviour
             System.Array.Copy(fullInputSamples, offset, chunk, 0, samplesToProcess);
             offset += samplesToProcess;
 
-            // Simulation should be ran here?
+            // Simulation should be ran here
+            // First the simulation takes the FFT of the chunk, then runs the raytracing
+            // based on the distribution of frequencies in the chunk
+            RunSimulation(chunk);
         }   
     }
 
@@ -142,8 +147,15 @@ public class RayTraceManager : MonoBehaviour
         ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPong, len);
     }
 
-    void RunSimulation()
+    void RunSimulation(float[] inputSamples)
     {
+
+        // Compute FFT of input samples
+        int k_fft = raytraceShader.FindKernel("FFT");
+        ComputeBuffer inputBuffer = ComputeHelper.CreateStructuredBuffer(inputSamples);
+        ComputeBuffer fftBuffer = ComputeHelper.CreateStructuredBuffer<float>(inputSamples.Length);
+
+
         int spectrogramSize = (int)(sampleRate * reverbDuration);
 
         ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
@@ -208,9 +220,6 @@ public class RayTraceManager : MonoBehaviour
 
     ComputeBuffer GetActiveSpectrogramBuffer()
     {
-        int len = (int)(sampleRate * reverbDuration);
-        ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPing, len);
-        ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPong, len);
         return activeSpectrogramIndex == 0 ? spectrogramBufferPing : spectrogramBufferPong;
     }
 
@@ -258,5 +267,5 @@ public class RayTraceManager : MonoBehaviour
         }
     }
 
-    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, irBufferPing, irBufferPong, argsBuffer);
+    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, argsBuffer);
 }
