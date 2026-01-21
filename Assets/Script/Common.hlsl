@@ -130,6 +130,8 @@ void FFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
     StoreShared(groupID.x, idx);
 }
 
+
+
 [numthreads(WINDOW_SIZE, 1, 1)]
 void IFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
     uint idx = groupThreadID.x;
