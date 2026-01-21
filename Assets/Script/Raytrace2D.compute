@@ -118,6 +118,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                     info.hitPoint = rayPos;
                     info.timeDelay = accumTime + (distList / speedOfSound);
                     info.energy = contrib;
+                    info.frequency = curFreq;
                     rayInfoBuffer.Append(info);
                 }
             }

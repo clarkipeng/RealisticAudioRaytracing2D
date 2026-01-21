@@ -57,23 +57,54 @@ public class RayTraceManager : MonoBehaviour
     {
         UpdateGeometry();
         ResetSpectrogram();
+
+        if (spectrogramTexture == null) {
+            spectrogramTexture = new RenderTexture(1024, 256, 0) {
+                enableRandomWrite = true, filterMode = FilterMode.Point 
+            };
+            spectrogramTexture.Create();
+        }
+
+        if (waveformTexture == null) {
+            waveformTexture = new RenderTexture(1024, 128, 0) {
+                enableRandomWrite = true, filterMode = FilterMode.Point 
+            };
+            waveformTexture.Create();
+        }
+
         audioManager.StartStreaming(sampleRate);
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.R)) { ResetSpectrogram(); accumFrames = 0; }
-        if (Input.GetKeyDown(KeyCode.Q)) QueueSineWave(440f, 1.0f);
-        if (Input.GetKeyDown(KeyCode.Space)) StartStreaming();
+        
+        if (Input.GetKeyDown(KeyCode.R)) { Debug.Log("R pressed - Resetting"); ResetSpectrogram(); accumFrames = 0; }
+        if (Input.GetKeyDown(KeyCode.Q)) { Debug.Log("Q pressed - Queueing sine"); QueueSineWave(440f, 1.0f); }
+        if (Input.GetKeyDown(KeyCode.Space)) {
+            Debug.Log("Space pressed - Starting stream");
+            StartStreaming();
+        }
+        
+        // Debug: Check if ANY key is pressed
+        if (Input.anyKeyDown) Debug.Log($"A key was pressed this frame");
 
-        // Draw Spectrogram
-        if (spectrogramTexture == null || raytraceShader == null) return;
+        if (spectrogramTexture == null || raytraceShader == null) {
+            Debug.LogWarning("Spectrogram texture or raytrace shader not assigned.");
+            return;
+        }
 
+        // ===== Kernel Call: Draw Spectrogram =====
         int kd = raytraceShader.FindKernel("DrawSpectrogram");
         raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+        raytraceShader.SetInt("ChunkSamples", chunkSamples);
+        raytraceShader.SetInt("TexWidth", spectrogramTexture.width);
+        raytraceShader.SetInt("TexHeight", spectrogramTexture.height);
+        raytraceShader.SetInt("accumCount", accumFrames);
+        raytraceShader.SetFloat("DebugGain", 10.0f);
         raytraceShader.SetTexture(kd, "DebugTexture", spectrogramTexture);
         raytraceShader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
         ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
+
     }
 
     void FixedUpdate()
@@ -109,6 +140,7 @@ public class RayTraceManager : MonoBehaviour
 
     void StartStreaming()
     {
+        Debug.Log("Starting audio streaming and processing.");
         fullInputSamples = LoadSample(inputClip);
         ResetSpectrogram();
         float delayBetweenChunks = (float)chunkSamples / sampleRate;
@@ -177,7 +209,7 @@ public class RayTraceManager : MonoBehaviour
 
     void RunSimulation(float[] inputSamples)
     {
-
+        Debug.Log($"Running simulation for chunk of {inputSamples.Length} samples.");
         // Compute FFT of input samples
         int k_fft = raytraceShader.FindKernel("FFT");
         
@@ -211,12 +243,6 @@ public class RayTraceManager : MonoBehaviour
         
         if (wallBuffer == null || !wallBuffer.IsValid()) UpdateGeometry();
         if (argsBuffer == null || !argsBuffer.IsValid()) argsBuffer = new ComputeBuffer(1, sizeof(int) * 4, ComputeBufferType.IndirectArguments);
-        if (spectrogramTexture == null) {
-            spectrogramTexture = new RenderTexture(1024, 256, 0) {
-                enableRandomWrite = true, filterMode = FilterMode.Point 
-            };
-            spectrogramTexture.Create();
-        }
 
         int k = raytraceShader.FindKernel("Trace");
         hitBuffer.SetCounterValue(0);
@@ -246,9 +272,9 @@ public class RayTraceManager : MonoBehaviour
         AsyncGPUReadback.Request(debugBuffer, r => { if (!r.hasError) debugRayPaths = r.GetData<Vector4>().ToArray(); });
         ComputeBuffer.CopyCount(hitBuffer, argsBuffer, 0);
 
-        int[] hitCountArray = new int[1];
-        argsBuffer.GetData(hitCountArray);
-        int hitCount = hitCountArray[0];
+        int[] argsData = new int[4];  // Match the actual buffer size
+        argsBuffer.GetData(argsData);
+        int hitCount = argsData[0];  // Only the first int is the counter
         
         // Ray hit processing
         if (hitBuffer == null || spectrogramTexture == null) return;
@@ -258,6 +284,7 @@ public class RayTraceManager : MonoBehaviour
         {
             int kp = raytraceShader.FindKernel("ProcessHits");
             raytraceShader.SetInt("SampleRate", sampleRate);
+            raytraceShader.SetInt("ChunkSamples", chunkSamples);
             raytraceShader.SetInt("HitCount", hitCount);
             raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
             raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
@@ -381,7 +408,10 @@ public class RayTraceManager : MonoBehaviour
         {
             ComputeBuffer waveformBuffer = ComputeHelper.CreateStructuredBuffer(outputWaveform);
             int kw = raytraceShader.FindKernel("DrawWaveform");
-            raytraceShader.SetFloat("WaveformGain", waveformGain);
+            raytraceShader.SetInt("WaveformLength", outputWaveform.Length);
+            raytraceShader.SetInt("TexWidth", waveformTexture.width);
+            raytraceShader.SetInt("TexHeight", waveformTexture.height);
+            raytraceShader.SetFloat("DebugGain", waveformGain);
             raytraceShader.SetBuffer(kw, "WaveformData", waveformBuffer);
             raytraceShader.SetTexture(kw, "DebugTexture", waveformTexture);
             ComputeHelper.Dispatch(raytraceShader, waveformTexture.width, 1, 1, kw);
@@ -417,7 +447,7 @@ public class RayTraceManager : MonoBehaviour
             if (waveformTexture != null)
             {
                 float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
-                GUI.DrawTexture(new Rect(10, 20 + Screen.height * 0.15f, w, h), waveformTexture);
+                GUI.DrawTexture(new Rect(10, 100 + Screen.height * 0.15f, w, h), waveformTexture);
             }
         }
     }
