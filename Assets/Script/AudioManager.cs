@@ -39,9 +39,11 @@ public class AudioManager : MonoBehaviour
         sampleRate = AudioSettings.outputSampleRate;
         bufferSize = sampleRate * 4;
         ringBuffer = new float[bufferSize];
-        
-        var src = gameObject.AddComponent<UnityEngine.AudioSource>();
-        src.playOnAwake = false;
+
+        // Ensure AudioSource is attached and initialized
+        var src = gameObject.GetComponent<UnityEngine.AudioSource>();
+        if (src == null)
+            src = gameObject.AddComponent<UnityEngine.AudioSource>();
         src.loop = true;
         var clip = AudioClip.Create("Silent", sampleRate, 1, sampleRate, false);
         clip.SetData(new float[sampleRate], 0);
@@ -49,7 +51,7 @@ public class AudioManager : MonoBehaviour
     }
 
     /// Stream multiple Unity AudioSources
-    public void StartStreaming(List<UnityEngine.AudioSource> audioSources, ComputeBuffer impulseResponseBuffer, int audioSampleRate)
+    public void StartStreaming(List<AudioSource> audioSources, ComputeBuffer impulseResponseBuffer, int audioSampleRate)
     {
         Assert.IsNotNull(impulseResponseBuffer, "AudioManager: impulseResponseBuffer is null");
         Assert.IsNotNull(convolutionShader, "AudioManager: convolutionShader not assigned");
@@ -63,15 +65,15 @@ public class AudioManager : MonoBehaviour
         sources = new List<Source>();
         foreach (var src in audioSources)
         {
-            if (src == null || src.clip == null) continue;
+            if (src == null || src.inputClip == null) continue;
             
             sources.Add(new Source
             {
-                samples = LoadMonoSamples(src.clip),   // Use Unity AudioSource clip
+                samples = LoadMonoSamples(src.inputClip),   // Use Unity AudioSource clip
                 offset = 0,
                 volume = src.volume,                    // Use Unity AudioSource volume
                 loop = src.loop,                        // Use Unity AudioSource loop
-                clipLength = src.clip.samples
+                clipLength = src.inputClip.samples
             });
         }
         

@@ -106,12 +106,11 @@ public class RayTraceManager : MonoBehaviour
         ResetIR();
         
         // Collect Unity AudioSources from all source GameObjects
-        var audioSources = new List<UnityEngine.AudioSource>();
+        var audioSources = new List<AudioSource>();
         foreach (var src in source)
         {
-            var audioSrc = src.GetComponent<UnityEngine.AudioSource>();
-            if (audioSrc != null && audioSrc.clip != null) 
-                audioSources.Add(audioSrc);
+            var audioSrc = src.GetComponent<AudioSource>();
+            if (audioSrc != null) audioSources.Add(audioSrc);
         }
         
         audioManager.StartStreaming(audioSources, GetActiveIRBuffer(), sampleRate);
@@ -170,7 +169,7 @@ public class RayTraceManager : MonoBehaviour
         foreach (var src in source)
         {
             if (src == null) continue;
-            var audioSource = src.GetComponent<UnityEngine.AudioSource>();
+            var audioSource = src.GetComponent<AudioSource>();
             
             // Set shader parameters for this source
             shader.SetVector("sourcePos", src.transform.position);
