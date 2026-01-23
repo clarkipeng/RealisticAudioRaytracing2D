@@ -20,7 +20,7 @@ public class RayTraceManager : MonoBehaviour
     public AudioManager audioManager;
     public int sampleRate = 48000;
     public int chunkSamples = 128;
-    [Range(0.1f, 10f)] public float inputGain = 1.0f;
+    [Range(0.1f, 1000000f)] public float inputGain = 1.0f;
     [Range(0.1f, 5.0f)] public float reverbDuration = 5f;
     public bool loop = true;
 
@@ -32,7 +32,8 @@ public class RayTraceManager : MonoBehaviour
     [Header("Debug")]
     public bool showDebugTexture = true;
     [Range(5, 100)] public int debugRayCount = 100;
-    [Range(1, 10000)] public float waveformGain = 1000.0f;
+    [Range(1, 1000000)] public float waveformGain = 1000.0f;
+    [Range(1, 1000000)] public float spectrogramGain = 1000.0f;
 
     ComputeBuffer wallBuffer,
         hitBuffer,
@@ -66,7 +67,7 @@ public class RayTraceManager : MonoBehaviour
         }
 
         if (waveformTexture == null) {
-            waveformTexture = new RenderTexture(1024, 128, 0) {
+            waveformTexture = new RenderTexture(1024, 256, 0) {
                 enableRandomWrite = true, filterMode = FilterMode.Point 
             };
             waveformTexture.Create();
@@ -100,7 +101,7 @@ public class RayTraceManager : MonoBehaviour
         raytraceShader.SetInt("TexWidth", spectrogramTexture.width);
         raytraceShader.SetInt("TexHeight", spectrogramTexture.height);
         raytraceShader.SetInt("accumCount", accumFrames);
-        raytraceShader.SetFloat("DebugGain", 10.0f);
+        raytraceShader.SetFloat("DebugGain", spectrogramGain);
         raytraceShader.SetTexture(kd, "DebugTexture", spectrogramTexture);
         raytraceShader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
         ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
@@ -282,13 +283,46 @@ public class RayTraceManager : MonoBehaviour
         // Process Hits
         if (hitCount > 0)
         {
-            int kp = raytraceShader.FindKernel("ProcessHits");
-            raytraceShader.SetInt("SampleRate", sampleRate);
+            // Debug.Log($"Processing {hitCount} ray hits into spectrogram.");
+            // int kp = raytraceShader.FindKernel("ProcessHits");
+            // raytraceShader.SetInt("SampleRate", sampleRate);
+            // raytraceShader.SetInt("ChunkSamples", chunkSamples);
+            // raytraceShader.SetInt("HitCount", hitCount);
+            // raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
+            // raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
+            // ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
+
+            // ===== DEBUG: Test Spectrogram (pulse) =====
+            int kp = raytraceShader.FindKernel("TestSetSpectrogramAtCertainFreq");
+            raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
             raytraceShader.SetInt("ChunkSamples", chunkSamples);
-            raytraceShader.SetInt("HitCount", hitCount);
-            raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
+            raytraceShader.SetInt("TestSetSpectrogramFreqBin", 3); // A4
+
             raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
-            ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
+
+            ComputeHelper.Dispatch(raytraceShader, spectrogramSize, 1, 1, kp);
+
+            // Spectrogram Stats
+            float[] specData = new float[spectrogramSize];
+            GetActiveSpectrogramBuffer().GetData(specData);
+            float maxVal = 0f, sumVal = 0f;
+            for (int i = 0; i < specData.Length; i++) {
+                if (specData[i] > maxVal) maxVal = specData[i];
+                sumVal += specData[i];
+            }
+            Debug.Log($"Spectrogram Stats - Max: {maxVal}, Sum: {sumVal}");
+
+            // ===== Kernel Call: Draw Spectrogram =====
+            int kd = raytraceShader.FindKernel("DrawSpectrogram");
+            raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+            raytraceShader.SetInt("ChunkSamples", chunkSamples);
+            raytraceShader.SetInt("TexWidth", spectrogramTexture.width);
+            raytraceShader.SetInt("TexHeight", spectrogramTexture.height);
+            raytraceShader.SetInt("accumCount", accumFrames);
+            raytraceShader.SetFloat("DebugGain", spectrogramGain);
+            raytraceShader.SetTexture(kd, "DebugTexture", spectrogramTexture);
+            raytraceShader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
+            ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
         }
         accumFrames++;
     }
@@ -414,7 +448,7 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetFloat("DebugGain", waveformGain);
             raytraceShader.SetBuffer(kw, "WaveformData", waveformBuffer);
             raytraceShader.SetTexture(kw, "DebugTexture", waveformTexture);
-            ComputeHelper.Dispatch(raytraceShader, waveformTexture.width, 1, 1, kw);
+            ComputeHelper.Dispatch(raytraceShader, waveformTexture.width, waveformTexture.height, 1, kw);
         }
         
         // Switch buffers for next chunk (ping-pong)
@@ -447,7 +481,7 @@ public class RayTraceManager : MonoBehaviour
             if (waveformTexture != null)
             {
                 float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
-                GUI.DrawTexture(new Rect(10, 100 + Screen.height * 0.15f, w, h), waveformTexture);
+                GUI.DrawTexture(new Rect(10, 20 + Screen.height * 0.15f, w, h), waveformTexture);
             }
         }
     }

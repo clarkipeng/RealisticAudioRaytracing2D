@@ -173,6 +173,22 @@ void ProcessHits(uint3 id : SV_DispatchThreadID) {
         Spectrogram[index * ChunkSamples + hit.frequency] += hit.energy;
 }
 
+#pragma kernel TestSetSpectrogramAtCertainFreq
+int TestSetSpectrogramFreqBin;
+
+[numthreads(64, 1, 1)]
+void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
+    if (id.x * ChunkSamples + TestSetSpectrogramFreqBin >= (uint)SpectrogramSize) return;
+
+    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin - 2] = 2.0;
+    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin - 1] = 5.0;
+    Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin] = 10.0;
+    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin + 1] = 5.0;
+    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin + 2] = 2.0;
+
+
+}
+
 #pragma kernel ClearSpectrogram
 [numthreads(256, 1, 1)]
 void ClearSpectrogram(uint3 id : SV_DispatchThreadID) {
@@ -211,6 +227,8 @@ void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
     // Color based on amplitude (heat map style)
     float intensity = saturate(amp * DebugGain);
     float4 col = float4(intensity, intensity * 0.5, 0, 1);
+
+    // float4 col = float4(1, uvX, uvY, 1);
     DebugTexture[id.xy] = col;
 }
 
@@ -308,5 +326,6 @@ void DrawRingBufferWaveform(uint3 id : SV_DispatchThreadID) {
         }
     }
     
+    // col = float4(1,0,0, 1);
     DebugTexture[id.xy] = col;
 }

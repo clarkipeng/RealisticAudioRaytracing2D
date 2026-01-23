@@ -1,4 +1,5 @@
 using UnityEngine;
+using Helpers;
 
 public class AudioManager : MonoBehaviour
 {
@@ -11,7 +12,7 @@ public class AudioManager : MonoBehaviour
     public ComputeShader shader;
     public RayTraceManager rayTraceManager;
     public bool showWaveform = true;
-    public Vector2 waveformTextureSize = new Vector2(1024, 512);
+    public Vector2 waveformTextureSize = new Vector2(1024, 256);
     [Range(0.1f, 100f)] public float waveformGain = 10.0f;
     public RenderTexture waveformTexture;
 
@@ -19,6 +20,8 @@ public class AudioManager : MonoBehaviour
     int readHead, sampleRate, bufferSize;
     readonly object bufferLock = new object();
     ComputeBuffer ringBufferGPU;
+
+    const string WaveformKernelName = "DrawRingBufferWaveform";
 
     public int SampleRate => sampleRate;
     public int WriteHead => writeHead;
@@ -37,6 +40,19 @@ public class AudioManager : MonoBehaviour
         clip.SetData(new float[sampleRate], 0);
         src.clip = clip;
         src.Play();
+    }
+
+    void Start()
+    {
+        if (shader == null && rayTraceManager != null)
+            shader = rayTraceManager.raytraceShader;
+
+        if (waveformTexture == null) {
+            waveformTexture = new RenderTexture((int)waveformTextureSize.x, (int)waveformTextureSize.y, 0) {
+                enableRandomWrite = true, filterMode = FilterMode.Point 
+            };
+            waveformTexture.Create();
+        }
     }
 
     public void StartStreaming(int audioSampleRate)
@@ -102,6 +118,14 @@ public class AudioManager : MonoBehaviour
     
     void DrawCyclingWaveform()
     {
+        if (shader == null)
+            return;
+        if (!shader.HasKernel(WaveformKernelName))
+        {
+            Debug.LogWarning($"Waveform kernel '{WaveformKernelName}' not found on shader '{shader.name}'.");
+            return;
+        }
+
         // Lazy initialize waveform texture
         if (waveformTexture == null || waveformTexture.width != (int)waveformTextureSize.x || waveformTexture.height != (int)waveformTextureSize.y)
         {
@@ -133,7 +157,7 @@ public class AudioManager : MonoBehaviour
         }
         
         // Dispatch compute shader
-        int kernel = shader.FindKernel("DrawRingBufferWaveform");
+        int kernel = shader.FindKernel(WaveformKernelName);
         shader.SetBuffer(kernel, "RingBufferData", ringBufferGPU);
         shader.SetInt("RingBufferSize", bufferSize);
         shader.SetInt("RingBufferReadHead", readHead);
@@ -143,24 +167,25 @@ public class AudioManager : MonoBehaviour
         shader.SetInt("TexHeight", waveformTexture.height);
         shader.SetFloat("WaveformGain", waveformGain);
         
-        int threadGroupsX = Mathf.CeilToInt(waveformTexture.width / 8.0f);
-        int threadGroupsY = Mathf.CeilToInt(waveformTexture.height / 8.0f);
-        shader.Dispatch(kernel, threadGroupsX, threadGroupsY, 1);
+        ComputeHelper.Dispatch(shader, waveformTexture.width, waveformTexture.height, 1, kernel);
     }
     
     void OnGUI()
     {
         if (showWaveform && waveformTexture != null)
         {
-            // Position below RayTraceManager's two textures
+            float w = Screen.width * 0.4f;
+            float h = Screen.height * 0.15f;
+
+            // Position below RayTraceManager's two textures using the same on-screen size
             float yOffset = 10;
             if (rayTraceManager != null && rayTraceManager.showDebugTexture)
             {
-                // Stack below the two RayTraceManager textures
-                yOffset = 30 + rayTraceManager.waveformTexture.height * 2;
+                yOffset = 30 + h * 2;
             }
-            
-            GUI.DrawTexture(new Rect(10, yOffset, waveformTextureSize.x, waveformTextureSize.y), waveformTexture);
+
+            GUI.DrawTexture(new Rect(10, yOffset, w, h), waveformTexture);
+
         }
     }
     
