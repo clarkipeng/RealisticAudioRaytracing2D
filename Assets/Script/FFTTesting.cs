@@ -14,12 +14,19 @@ public class FFTTesting : MonoBehaviour
         int N = 128;
         
         // 1. Use Vector2 to match 'float2' in HLSL (Real, Imaginary)
+
+        int Hz = 440;
+        int sampleRate = 48000;
+        float totalTime = N / (float)sampleRate;
+        float cycles = Hz * totalTime;
+        float period = N / cycles;
+
         Vector2[] data = new Vector2[N];
         
         // Initialize input: Real = Sine Wave, Imaginary = 0
         for (int i = 0; i < N; i++)
         {
-            float val = Mathf.Sin(2 * Mathf.PI * 5 * i / N); // 5 Hz signal
+            float val = Mathf.Sin(2 * Mathf.PI * i / period);
             data[i] = new Vector2(val, 0f);
         }
 

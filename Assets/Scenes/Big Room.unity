@@ -156,13 +156,13 @@ MonoBehaviour:
   maxBounces: 5
   speedOfSound: 343
   dynamicObstacles: 1
-  inputClip: {fileID: 8300000, guid: 9774d7c519f6140e1a01b40afc918025, type: 3}
+  inputClip: {fileID: 8300000, guid: 30544564271e11e4aae57a2819044c2a, type: 3}
   audioManager: {fileID: 1445243919}
   sampleRate: 48000
   chunkSamples: 128
   inputGain: 1000000
   reverbDuration: 1.5
-  loop: 1
+  loop: 0
   source: {fileID: 1860376488}
   listener: {fileID: 849675356}
   listenerRadius: 0.5
