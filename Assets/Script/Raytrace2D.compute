@@ -178,13 +178,10 @@ int TestSetSpectrogramFreqBin;
 
 [numthreads(64, 1, 1)]
 void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
-    if (id.x * ChunkSamples + TestSetSpectrogramFreqBin >= (uint)SpectrogramSize) return;
+    if (id.x * ChunkSamples + id.y >= (uint)SpectrogramSize) return;
 
-    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin - 2] = 2.0;
-    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin - 1] = 5.0;
-    Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin] = 10.0;
-    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin + 1] = 5.0;
-    // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin + 2] = 2.0;
+    if (id.y == TestSetSpectrogramFreqBin)
+        Spectrogram[id.x * ChunkSamples + id.y] = 40.0;
 }
 
 #pragma kernel ClearSpectrogram
@@ -225,9 +222,13 @@ void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
     // Color based on amplitude (heat map style)
     float intensity = saturate(amp * DebugGain);
     float4 col = float4(intensity, intensity * 0.5, 0, 1);
-
     // float4 col = float4(1, uvX, uvY, 1);
-    DebugTexture[id.xy] = col;
+
+    // if (id.y == 5 || id.y == 6) {
+    //     DebugTexture[id.xy] = float4(1, 0.5, 0, 1);
+    // } else {
+        DebugTexture[id.xy] = col;
+    // }
 }
 
 [numthreads(8, 8, 1)]
@@ -382,4 +383,82 @@ void DrawFFTDebug(uint3 id : SV_DispatchThreadID) {
     }
     
     FFTDebugTexture[id.xy] = col;
+}
+
+// ===== Spectrogram -> Waveform (GPU ST-IFFT) =====
+// Converts the accumulated spectrogram (time-major, ChunkSamples frequency bins per frame)
+// into a time-domain waveform by performing an IFFT per time frame.
+//
+// Notes:
+// - This kernel does NOT modify the existing FFT/IFFT kernels in Common.hlsl.
+// - Assumes ChunkSamples == WINDOW_SIZE (1024) so it can reuse the same radix-2 implementation.
+// - Matches the current CPU behavior: no windowing, no overlap, writes contiguous chunks.
+
+#pragma kernel SpectrogramToWaveformIFFT
+
+RWStructuredBuffer<float> WaveformOut;
+
+[numthreads(WINDOW_SIZE, 1, 1)]
+void SpectrogramToWaveformIFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
+    uint idx = groupThreadID.x;
+    uint timeIndex = groupID.x;
+
+    uint timeSteps = (ChunkSamples > 0) ? (uint)(SpectrogramSize / ChunkSamples) : 0;
+    if (timeIndex >= timeSteps) return;
+
+    uint baseIndex = timeIndex * (uint)ChunkSamples;
+
+    // 1) Load real-only spectrum into shared memory
+    //    sharedData[] comes from Common.hlsl and is sized WINDOW_SIZE.
+    sharedData[idx] = float2(Spectrogram[baseIndex + idx], 0.0);
+    GroupMemoryBarrierWithGroupSync();
+
+    // 2) Enforce conjugate symmetry for real time-domain signal
+    //    (mirrors the CPU-side reconstruction pattern)
+    if (idx > 0 && idx < (WINDOW_SIZE / 2)) {
+        sharedData[WINDOW_SIZE - idx] = float2(sharedData[idx].x, -sharedData[idx].y);
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // 3) In-place IFFT (same algorithm as the IFFT kernel, but local to this kernel)
+    int n = WINDOW_SIZE;
+    int bits = (int)log2((float)n);
+
+    // Bit-reversal
+    uint rev = reversebits(idx) >> (32 - bits);
+    if (idx < rev) {
+        float2 temp = sharedData[idx];
+        sharedData[idx] = sharedData[rev];
+        sharedData[rev] = temp;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // IFFT stages
+    for (int s = 1; s <= bits; s++) {
+        int m = 1 << s;
+        int m2 = m >> 1;
+
+        int k = (idx / m2) * m;
+        int j = idx % m2;
+
+        if (j < m2) {
+            float angle = 2.0 * PI * j / m;
+            float2 w = complex_exp(angle);
+
+            int i1 = k + j;
+            int i2 = k + j + m2;
+
+            float2 u = sharedData[i1];
+            float2 t = complex_mult(w, sharedData[i2]);
+
+            sharedData[i1] = u + t;
+            sharedData[i2] = u - t;
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    // 4) Normalize and write real component
+    float invN = 1.0 / (float)WINDOW_SIZE;
+    WaveformOut[baseIndex + idx] = sharedData[idx].x * invN;
 }
