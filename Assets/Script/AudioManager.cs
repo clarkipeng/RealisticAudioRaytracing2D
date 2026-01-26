@@ -183,7 +183,6 @@ public class AudioManager : MonoBehaviour
             {
                 yOffset = 30 + h * 2;
             }
-
             GUI.DrawTexture(new Rect(10, yOffset, w, h), waveformTexture);
 
         }

@@ -54,7 +54,7 @@ public class RayTraceManager : MonoBehaviour
     int accumFrames;
     int spectrogramSize => Mathf.CeilToInt(sampleRate * reverbDuration);
 
-    struct RayInfo { public float timeDelay, energy; public Vector2 hitPoint; }
+    struct RayInfo { public float timeDelay, energy; public int frequencyBin; public Vector2 hitPoint; }
 
     void Start()
     {
@@ -264,10 +264,8 @@ public class RayTraceManager : MonoBehaviour
         ComputeHelper.Release(inputBuffer, fftBuffer);
 
         // Build weighted frequency distribution from FFT magnitudes
-        float[] frequencyDistribution = BuildFrequencyDistribution(fftResult);
+        int[] frequencyDistribution = BuildFrequencyDistribution(fftResult);
         ComputeHelper.CreateStructuredBuffer(ref frequencyDistributionBuffer, frequencyDistribution);
-
-        // int spectrogramSize = (int)(sampleRate * reverbDuration);
 
         ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
         ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
@@ -354,10 +352,12 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
             ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
         }
+
         accumFrames++;
     }
 
-    float[] BuildFrequencyDistribution(Vector2[] fftResult)
+    // Build a weighted frequency distribution from the FFT result (Bins)
+    int[] BuildFrequencyDistribution(Vector2[] fftResult)
     {
         // Only use first half of FFT (positive frequencies)
         int halfSize = fftResult.Length / 2;
@@ -380,25 +380,26 @@ public class RayTraceManager : MonoBehaviour
         }
         
         // Track counts for each frequency bin for debugging
-        int[] binCounts = new int[halfSize];
         
         // Build weighted distribution buffer (rayCount entries)
-        // Each entry is a frequency value (Hz), with frequencies appearing proportional to their magnitude
-        float[] distribution = new float[rayCount];
+        // Each entry is a frequency bin index, with frequencies appearing proportional to their magnitude
+        int[] distribution = new int[rayCount];
         int distributionIndex = 0;
+
+        // int test_total = 0;
         
         for (int i = 0; i < halfSize && distributionIndex < rayCount; i++)
         {
             // Convert bin index to frequency
-            float frequency = i * (float)sampleRate / fftResult.Length;
+            int frequencyBin = i;
             
             // Add this frequency proportional to its normalized magnitude
             int count = Mathf.RoundToInt(magnitudes[i] * rayCount);
-            binCounts[i] = count;
+            // test_total += count;
             
             for (int j = 0; j < count && distributionIndex < rayCount; j++)
             {
-                distribution[distributionIndex++] = frequency;
+                distribution[distributionIndex++] = frequencyBin;
             }
         }
         
@@ -407,21 +408,13 @@ public class RayTraceManager : MonoBehaviour
         while (distributionIndex < rayCount)
         {
             int randomBin = Random.Range(0, halfSize);
-            distribution[distributionIndex++] = randomBin * (float)sampleRate / fftResult.Length;
+            distribution[distributionIndex++] = randomBin;
             randomFills++;
         }
 
         // Debug log the distribution counts
-        // Debug.Log($"=== Frequency Distribution Counts (Total Rays: {rayCount}) ===");
-        // Debug.Log($"Random fills: {randomFills}");
-        // for (int i = 0; i < halfSize; i++)
-        // {
-        //     if (binCounts[i] > 0)
-        //     {
-        //         float frequency = i * (float)sampleRate / fftResult.Length;
-        //         Debug.Log($"Bin {i} ({frequency:F2} Hz): {binCounts[i]} rays ({(binCounts[i] / (float)rayCount * 100):F2}%)");
-        //     }
-        // }
+        // Debug.Log($"=== Frequency Distribution Counts (Total Rays: {rayCount}, Total Assigned: {test_total}, Random Fills: {randomFills}) ===");
+        // Debug.Log($"[{string.Join(", ", binCounts)}]");
         
         return distribution;
     }
@@ -444,11 +437,15 @@ public class RayTraceManager : MonoBehaviour
         int k_ifft = raytraceShader.FindKernel("IFFT");
 
         // After reading spectrogram, for each time slice:
-        for (int i = 1; i < chunkSamples/2; i++) {
-            complexSpectrogram[chunkSamples - i] = new Vector2(
-                complexSpectrogram[i].x,  // real part same
-                -complexSpectrogram[i].y  // imaginary part negated
-            );
+        for (int t = 0; t < spectrogramSize / chunkSamples; t++)
+        {
+            // Reconstruct negative frequencies for IFFT
+            for (int i = 1; i < chunkSamples/2; i++) {
+                complexSpectrogram[chunkSamples - i] = new Vector2(
+                    complexSpectrogram[i].x,  // real part same
+                    -complexSpectrogram[i].y  // imaginary part negated
+                );
+            }
         }
 
         float[] outputWaveform = new float[spectrogramSize];

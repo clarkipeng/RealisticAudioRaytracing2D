@@ -25,7 +25,7 @@ struct Wall {
 struct RayInfo { 
     float timeDelay; 
     float energy;
-    float frequency;
+    int frequencyBin;
     float2 hitPoint; 
 };
 
@@ -34,7 +34,7 @@ AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
 RWStructuredBuffer<float> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
-StructuredBuffer<float> FrequencyDistribution;
+StructuredBuffer<int> FrequencyDistribution;
 
 int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
@@ -61,7 +61,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     float totalDist = 0;
     float currentIOR = 1.0; 
     float curSpeed = speedOfSound;
-    float curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
+    int curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
     int wallDepth = 0;
 
     if (id.x < 100) 
@@ -83,7 +83,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                 info.timeDelay = accumTime + (distToListener / curSpeed);
                 float totalD = totalDist + distToListener;
                 info.energy = curEnergy / max(1.0, totalD * totalD);
-                info.frequency = curFreq;
+                info.frequencyBin = curFreq;
                 rayInfoBuffer.Append(info);
             }
         }
@@ -118,7 +118,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                     info.hitPoint = rayPos;
                     info.timeDelay = accumTime + (distList / speedOfSound);
                     info.energy = contrib;
-                    info.frequency = curFreq;
+                    info.frequencyBin = curFreq;
                     rayInfoBuffer.Append(info);
                 }
             }
@@ -170,7 +170,7 @@ void ProcessHits(uint3 id : SV_DispatchThreadID) {
     RayInfo hit = RawHits[id.x];
     int index = (int)(hit.timeDelay * SampleRate / ChunkSamples);
     if (index < SpectrogramSize && index >= 0)
-        Spectrogram[index * ChunkSamples + hit.frequency] += hit.energy;
+        Spectrogram[index * ChunkSamples + hit.frequencyBin] += hit.energy;
 }
 
 #pragma kernel TestSetSpectrogramAtCertainFreq
@@ -185,8 +185,6 @@ void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
     Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin] = 10.0;
     // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin + 1] = 5.0;
     // Spectrogram[id.x * ChunkSamples + TestSetSpectrogramFreqBin + 2] = 2.0;
-
-
 }
 
 #pragma kernel ClearSpectrogram
