@@ -11,7 +11,7 @@ public class RayTraceManager : MonoBehaviour
 
     [Header("Simulation")]
     [Range(10, 100000)] public int rayCount = 1000;
-    [Range(1, 10)] public int maxBounces = 5;
+    [Range(0, 10)] public int maxBounces = 5;
     public float speedOfSound = 343f;
     public bool dynamicObstacles = false;
 
@@ -48,19 +48,21 @@ public class RayTraceManager : MonoBehaviour
     public RenderTexture waveformTexture;
 
     public RenderTexture FFTTexture;
+    public RenderTexture SpectrogramFirstFreqBinTexture;
     List<Segment> activeSegments;
     Vector4[] debugRayPaths;
     float[] fullInputSamples;
     int activeSpectrogramIndex;
     int accumFrames;
-    int spectrogramSize => Mathf.CeilToInt(sampleRate * reverbDuration);
+    int spectrogramSize;
 
     float[] outputWaveform;
 
     struct RayInfo { public float timeDelay, energy; public int frequencyBin; public Vector2 hitPoint; }
 
     void Start()
-    {
+    {   
+        spectrogramSize = Mathf.CeilToInt(sampleRate * reverbDuration);
         UpdateGeometry();
         ResetSpectrogram();
 
@@ -83,6 +85,13 @@ public class RayTraceManager : MonoBehaviour
                 enableRandomWrite = true, filterMode = FilterMode.Point 
             };
             FFTTexture.Create();
+        }
+
+        if (SpectrogramFirstFreqBinTexture == null) {
+            SpectrogramFirstFreqBinTexture = new RenderTexture(1024, 256, 0) {
+                enableRandomWrite = true, filterMode = FilterMode.Point 
+            };
+            SpectrogramFirstFreqBinTexture.Create();
         }
 
         audioManager.StartStreaming(sampleRate);
@@ -344,6 +353,46 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
             ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
 
+            // Read first time interval of spectrogram and visualize it
+            float[] firstTimeIntervalData = new float[chunkSamples];
+            GetActiveSpectrogramBuffer().GetData(firstTimeIntervalData, 0, 0, chunkSamples);
+
+            // Convert real spectrogram values to complex format for DrawFFTDebug
+            Vector2[] spectrogramComplex = new Vector2[chunkSamples];
+            float spectrogramMaxValue = 0f;
+            for (int i = 0; i < chunkSamples; i++)
+            {
+                spectrogramComplex[i] = new Vector2(firstTimeIntervalData[i], 0f);
+                if (firstTimeIntervalData[i] > spectrogramMaxValue)
+                    spectrogramMaxValue = firstTimeIntervalData[i];
+            }
+
+            ComputeBuffer spectrogramDebugBuffer = ComputeHelper.CreateStructuredBuffer(spectrogramComplex);
+
+            int kSpectrogramDebug = raytraceShader.FindKernel("DrawFFTDebug");
+            raytraceShader.SetInt("FFTDataLength", chunkSamples);
+            raytraceShader.SetFloat("FFTDebugGain", spectrogramGain);
+            raytraceShader.SetFloat("FFTMaxValue", spectrogramMaxValue > 0f ? spectrogramMaxValue : 1f);
+
+            raytraceShader.SetBuffer(kSpectrogramDebug, "FFTData", spectrogramDebugBuffer);
+            raytraceShader.SetTexture(kSpectrogramDebug, "FFTDebugTexture", SpectrogramFirstFreqBinTexture);
+
+            ComputeHelper.Dispatch(raytraceShader, SpectrogramFirstFreqBinTexture.width, SpectrogramFirstFreqBinTexture.height, 1, kSpectrogramDebug);
+
+            ComputeHelper.Release(spectrogramDebugBuffer);
+
+            // Hit Statistics
+            int safeHitCount = Mathf.Min(hitCount, hitBuffer.count);
+            RayInfo[] hitData = new RayInfo[safeHitCount];
+            hitBuffer.GetData(hitData, 0, 0, safeHitCount);
+
+            float totalEnergy = 0f;
+            for (int i = 0; i < hitData.Length; i++) {
+                totalEnergy += hitData[i].energy;
+            }
+            Debug.Log($"Total energy from hits: {totalEnergy}");
+            Debug.Log($"Average energy per hit: {totalEnergy / hitData.Length}");
+
             // ===== DEBUG: Test Spectrogram (pulse) =====
             // int kp = raytraceShader.FindKernel("TestSetSpectrogramAtCertainFreq");
             // raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
@@ -443,10 +492,6 @@ public class RayTraceManager : MonoBehaviour
         Debug.Log($"=== Frequency Distribution Counts (Total Rays: {rayCount}, Total Assigned: {test_total}, Random Fills: {randomFills}) ===");
         Debug.Log($"[{string.Join(", ", binCounts)}]");
         
-        // Debug log the magnitudes
-        Debug.Log($"=== Frequency Magnitudes ===");
-        Debug.Log($"[{string.Join(", ", magnitudes)}]");
-
         return distribution;
     }
 
@@ -564,6 +609,12 @@ public class RayTraceManager : MonoBehaviour
             {
                 float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
                 GUI.DrawTexture(new Rect(10, 40 + Screen.height * 0.45f, w, h), FFTTexture);
+            }
+
+            if (SpectrogramFirstFreqBinTexture != null)
+            {
+                float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
+                GUI.DrawTexture(new Rect(10, 50 + Screen.height * 0.60f, w, h), SpectrogramFirstFreqBinTexture);
             }
         }
     }

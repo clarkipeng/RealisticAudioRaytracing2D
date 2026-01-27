@@ -52,7 +52,8 @@ bool checkVis(float2 start, float2 end, float dist) {
 [numthreads(64,1,1)]
 void Trace (uint3 id : SV_DispatchThreadID) {
     uint rng = id.x + rngStateOffset * 719393;
-    float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
+    // float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
+    float angle = 0.0;
     
     float2 rayDir = float2(cos(angle), sin(angle));
     float2 rayPos = sourcePos.xy;
@@ -161,7 +162,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     }
 }
 
-int ChunkSamples = 128;
+int ChunkSamples;
 
 #pragma kernel ProcessHits
 [numthreads(64, 1, 1)]
