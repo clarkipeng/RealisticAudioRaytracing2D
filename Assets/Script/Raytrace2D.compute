@@ -34,7 +34,7 @@ AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
 RWStructuredBuffer<float> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
-StructuredBuffer<int> FrequencyDistribution;
+StructuredBuffer<float> FrequencyDistribution;
 
 int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
@@ -52,17 +52,19 @@ bool checkVis(float2 start, float2 end, float dist) {
 [numthreads(64,1,1)]
 void Trace (uint3 id : SV_DispatchThreadID) {
     uint rng = id.x + rngStateOffset * 719393;
-    // float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
-    float angle = 0.0;
+    float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
+    // float angle = 0.0;
     
     float2 rayDir = float2(cos(angle), sin(angle));
     float2 rayPos = sourcePos.xy;
-    float curEnergy = inputGain;
+    // float curEnergy = inputGain;
+    float curEnergy = FrequencyDistribution[id.x % frequencyDistributionSize] * inputGain;
     float accumTime = 0;
     float totalDist = 0;
     float currentIOR = 1.0; 
     float curSpeed = speedOfSound;
-    int curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
+    // int curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
+    int curFreq = id.x;
     int wallDepth = 0;
 
     if (id.x < 100) 
@@ -181,8 +183,14 @@ int TestSetSpectrogramFreqBin;
 void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
     if (id.x * ChunkSamples + id.y >= (uint)SpectrogramSize) return;
 
-    if (id.y == TestSetSpectrogramFreqBin)
+    if (id.x == 0 && id.y == TestSetSpectrogramFreqBin)
         Spectrogram[id.x * ChunkSamples + id.y] = 40.0;
+    // if (id.x == 1 && id.y == TestSetSpectrogramFreqBin)
+    //     Spectrogram[id.x * ChunkSamples + id.y] = 25.0;
+    // if (id.x == 2 && id.y == TestSetSpectrogramFreqBin)
+    //     Spectrogram[id.x * ChunkSamples + id.y] = 16.0;
+    // if (id.x == 3 && id.y == TestSetSpectrogramFreqBin)
+    //     Spectrogram[id.x * ChunkSamples + id.y] = 9.0;
 }
 
 #pragma kernel ClearSpectrogram

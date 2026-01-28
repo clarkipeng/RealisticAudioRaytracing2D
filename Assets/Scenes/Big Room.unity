@@ -152,11 +152,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   raytraceShader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 100000
+  rayCount: 1024
   maxBounces: 1
   speedOfSound: 343
   dynamicObstacles: 1
-  inputClip: {fileID: 8300000, guid: b492a9c86a55f446f8f5bf9a6d1d3024, type: 3}
+  inputClip: {fileID: 8300000, guid: 9774d7c519f6140e1a01b40afc918025, type: 3}
   audioManager: {fileID: 1445243919}
   sampleRate: 48000
   chunkSamples: 1024

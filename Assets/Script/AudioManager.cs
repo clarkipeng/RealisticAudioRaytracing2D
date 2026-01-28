@@ -74,19 +74,18 @@ public class AudioManager : MonoBehaviour
         if (audio == null || audio.Length == 0) return writeHead;
 
         lock (bufferLock)
-        {
-
+        {        
             int writePos = (readHead + /*safetyBuffer*/ 0 + offset) % bufferSize;
             if (forcedWritePos.HasValue)
                 writePos = forcedWritePos.Value;
             
-            
             for (int i = 0; i < audio.Length; i++)
             {
-                ringBuffer[(writePos + i) % bufferSize] += audio[i];
+                int idx = writePos + i;
+                if (idx >= bufferSize)
+                    idx -= bufferSize;
+                ringBuffer[idx] += audio[i];
             }
-            
-            // Update writeHead to track latest write position
             writeHead = (writePos + audio.Length) % bufferSize;
         }
         return writeHead;
@@ -96,12 +95,14 @@ public class AudioManager : MonoBehaviour
     {
         lock (bufferLock)
         {
-            for (int i = 0; i < data.Length / channels; i++)
+            int samplesPerChannel = data.Length / channels;
+            for (int i = 0; i < samplesPerChannel; i++)
             {
                 float s = ringBuffer[readHead];
                 ringBuffer[readHead] = 0; // Clear after reading
-                readHead = (readHead + 1) % bufferSize;
-                for (int c = 0; c < channels; c++) 
+                readHead++;
+                if (readHead >= bufferSize) readHead -= bufferSize;
+                for (int c = 0; c < channels; c++)
                     data[i * channels + c] = s;
             }
         }
