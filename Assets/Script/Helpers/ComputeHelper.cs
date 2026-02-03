@@ -28,6 +28,11 @@ namespace Helpers
             int numGroupsX = Mathf.CeilToInt(numIterationsX / (float)threadGroupSizes.x);
             int numGroupsY = Mathf.CeilToInt(numIterationsY / (float)threadGroupSizes.y);
             int numGroupsZ = Mathf.CeilToInt(numIterationsZ / (float)threadGroupSizes.z);
+
+            if (numGroupsX == 0) numGroupsX = 1;
+            if (numGroupsY == 0) numGroupsY = 1;
+            if (numGroupsZ == 0) numGroupsZ = 1;
+
             cs.Dispatch(kernelIndex, numGroupsX, numGroupsY, numGroupsZ);
         }
 

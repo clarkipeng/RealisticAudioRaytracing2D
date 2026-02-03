@@ -34,7 +34,7 @@ AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
 RWStructuredBuffer<float> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
-StructuredBuffer<float> FrequencyDistribution;
+StructuredBuffer<int> FrequencyDistribution;
 
 int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
@@ -51,117 +51,123 @@ bool checkVis(float2 start, float2 end, float dist) {
 
 [numthreads(64,1,1)]
 void Trace (uint3 id : SV_DispatchThreadID) {
-    uint rng = id.x + rngStateOffset * 719393;
-    float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
-    // float angle = 0.0;
+    // uint rng = id.x + rngStateOffset * 719393;
+    // float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
+    // // float angle = 0.0;
     
-    float2 rayDir = float2(cos(angle), sin(angle));
-    float2 rayPos = sourcePos.xy;
+    // float2 rayDir = float2(cos(angle), sin(angle));
+    // float2 rayPos = sourcePos.xy;
     // float curEnergy = inputGain;
-    float curEnergy = FrequencyDistribution[id.x % frequencyDistributionSize] * inputGain;
-    float accumTime = 0;
-    float totalDist = 0;
-    float currentIOR = 1.0; 
-    float curSpeed = speedOfSound;
+    // // float curEnergy = FrequencyDistribution[id.x % frequencyDistributionSize] * inputGain;
+    // float accumTime = 0.0;
+    // float totalDist = 0.0;
+    // float currentIOR = 1.0; 
+    // float curSpeed = speedOfSound;
     // int curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
-    int curFreq = id.x;
-    int wallDepth = 0;
+    // int wallDepth = 0;
 
-    if (id.x < 100) 
-        debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, curEnergy, 0);
+    // if (id.x < 100) 
+    //     debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, curEnergy, 0);
 
-    for (int i = 0; i < maxBounceCount; i++) {
-        float closest = inf; int hitIdx = -1;
+    // for (int i = 0; i < maxBounceCount; i++) {
+    //     float closest = inf; int hitIdx = -1;
 
-        for (int w = 0; w < numWalls; w++) {
-            float d = intersect(rayPos, rayDir, walls[w].a, walls[w].b);
-            if (d < closest) { closest = d; hitIdx = w; }
-        }
+    //     for (int w = 0; w < numWalls; w++) {
+    //         float d = intersect(rayPos, rayDir, walls[w].a, walls[w].b);
+    //         if (d < closest) { closest = d; hitIdx = w; }
+    //     }
         
-        if (wallDepth == 0) {
-            float distToListener = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
-            if (distToListener < closest && distToListener < inf) {
-                RayInfo info;
-                info.hitPoint = rayPos + rayDir * distToListener; 
-                info.timeDelay = accumTime + (distToListener / curSpeed);
-                float totalD = totalDist + distToListener;
-                info.energy = curEnergy / max(1.0, totalD * totalD);
-                info.frequencyBin = curFreq;
-                rayInfoBuffer.Append(info);
-            }
-        }
+    //     if (wallDepth == 0) {
+    //         float distToListener = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
+    //         if (distToListener < closest && distToListener < inf) {
+    //             RayInfo info;
+    //             info.hitPoint = rayPos + rayDir * distToListener; 
+    //             info.timeDelay = accumTime + (distToListener / curSpeed);
+    //             float totalD = totalDist + distToListener;
+    //             // info.energy = curEnergy / max(1.0, totalD * totalD);
+    //             info.energy = 1.0;
+    //             info.frequencyBin = curFreq;
+    //             rayInfoBuffer.Append(info);
+    //         }
+    //     }
         
-        if (hitIdx == -1) {
-            if (id.x < (uint)debugRayCount) 
-                debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);
-            break;
-        }
+    //     if (hitIdx == -1) {
+    //         if (id.x < (uint)debugRayCount) 
+    //             debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);
+    //         break;
+    //     }
 
-        rayPos += rayDir * closest;
-        accumTime += closest / curSpeed;
-        totalDist += closest;
+    //     rayPos += rayDir * closest;
+    //     accumTime += closest / curSpeed;
+    //     totalDist += closest;
 
-        if (id.x < 100) 
-            debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
+    //     if (id.x < 100) 
+    //         debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
         
-        Wall wall = walls[hitIdx];
+    //     Wall wall = walls[hitIdx];
 
-        if (wallDepth == 0) {
-            float2 toList = listenerPos.xy - rayPos;
-            float distList = length(toList);
+    //     if (wallDepth == 0) {
+    //         float2 toList = listenerPos.xy - rayPos;
+    //         float distList = length(toList);
 
-            if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
-                float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
-                float cosT = max(0, dot(effN, toList / distList));
-                float totalD = totalDist + distList;
-                float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalD*totalD));
+    //         if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
+    //             float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
+    //             float cosT = max(0, dot(effN, toList / distList));
+    //             float totalD = totalDist + distList;
+    //             float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalD*totalD));
 
-                if (contrib > 1e-5) {
-                    RayInfo info;
-                    info.hitPoint = rayPos;
-                    info.timeDelay = accumTime + (distList / speedOfSound);
-                    info.energy = contrib;
-                    info.frequencyBin = curFreq;
-                    rayInfoBuffer.Append(info);
-                }
-            }
-        }
+    //             if (contrib > 1e-5) {
+    //                 RayInfo info;
+    //                 info.hitPoint = rayPos;
+    //                 info.timeDelay = accumTime + (distList / speedOfSound);
+    //                 info.energy = contrib;
+    //                 info.frequencyBin = curFreq;
+    //                 rayInfoBuffer.Append(info);
+    //             }
+    //         }
+    //     }
         
-        curEnergy *= (1.0 - wall.mat.absorption);
-        if (curEnergy < 1e-3) break;
+    //     curEnergy *= (1.0 - wall.mat.absorption);
+    //     if (curEnergy < 1e-3) break;
 
-        bool entering = dot(rayDir, wall.normal) < 0;
-        float2 n = entering ? wall.normal : -wall.normal;
-        float wallSpeed = speedOfSound / wall.mat.ior;
-        float nextSpeed = entering ? wallSpeed : ((wallDepth <= 1) ? speedOfSound : wallSpeed);
-        float eta = nextSpeed / curSpeed;
-        float rngVal = random(rng);
+    //     bool entering = dot(rayDir, wall.normal) < 0;
+    //     float2 n = entering ? wall.normal : -wall.normal;
+    //     float wallSpeed = speedOfSound / wall.mat.ior;
+    //     float nextSpeed = entering ? wallSpeed : ((wallDepth <= 1) ? speedOfSound : wallSpeed);
+    //     float eta = nextSpeed / curSpeed;
+    //     float rngVal = random(rng);
 
-        if (rngVal < wall.mat.transmission) {
-            float3 refr = Refract(float3(rayDir, 0), float3(n, 0), eta);
+    //     if (rngVal < wall.mat.transmission) {
+    //         float3 refr = Refract(float3(rayDir, 0), float3(n, 0), eta);
             
-            if (length(refr) > 0) {
-                float2 nextDir = refr.xy;
-                if (wall.mat.scattering > 0) {
-                    float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering;
-                    float s = sin(jitter), c = cos(jitter);
-                    nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
-                }
-                rayDir = normalize(nextDir);
-                curSpeed = nextSpeed;
-                if (entering) wallDepth++; else wallDepth = max(0, wallDepth - 1);
-                rayPos += rayDir * eps;
-                continue;
-            }
-        }
+    //         if (length(refr) > 0) {
+    //             float2 nextDir = refr.xy;
+    //             if (wall.mat.scattering > 0) {
+    //                 float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering;
+    //                 float s = sin(jitter), c = cos(jitter);
+    //                 nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
+    //             }
+    //             rayDir = normalize(nextDir);
+    //             curSpeed = nextSpeed;
+    //             if (entering) wallDepth++; else wallDepth = max(0, wallDepth - 1);
+    //             rayPos += rayDir * eps;
+    //             continue;
+    //         }
+    //     }
 
-        float2 specularDir = reflect(rayDir, n);
-        float diffAng = asin(2.0 * random(rng) - 1.0);
-        float s = sin(diffAng), c = cos(diffAng);
-        float2 diffuseDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
-        rayDir = normalize(lerp(specularDir, diffuseDir, wall.mat.scattering));
-        rayPos += n * eps;
-    }
+    //     float2 specularDir = reflect(rayDir, n);
+    //     float diffAng = asin(2.0 * random(rng) - 1.0);
+    //     float s = sin(diffAng), c = cos(diffAng);
+    //     float2 diffuseDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
+    //     rayDir = normalize(lerp(specularDir, diffuseDir, wall.mat.scattering));
+    //     rayPos += n * eps;
+    // }
+    RayInfo info;
+    info.hitPoint = float2(0,0);
+    info.timeDelay = 0.0;
+    info.energy = 10.0;
+    info.frequencyBin = FrequencyDistribution[id.x];
+    rayInfoBuffer.Append(info);
 }
 
 int ChunkSamples;
@@ -192,6 +198,7 @@ void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
     // if (id.x == 3 && id.y == TestSetSpectrogramFreqBin)
     //     Spectrogram[id.x * ChunkSamples + id.y] = 9.0;
 }
+
 
 #pragma kernel ClearSpectrogram
 [numthreads(256, 1, 1)]
