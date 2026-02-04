@@ -152,7 +152,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   raytraceShader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 100000
+  rayCount: 20000
   maxBounces: 1
   speedOfSound: 343
   dynamicObstacles: 1
@@ -160,7 +160,7 @@ MonoBehaviour:
   audioManager: {fileID: 1445243919}
   sampleRate: 48000
   chunkSamples: 1024
-  inputGain: 10
+  inputGain: 100000
   reverbDuration: 1.5
   loop: 0
   source: {fileID: 1860376488}
@@ -175,7 +175,7 @@ MonoBehaviour:
   showDebugTexture: 1
   debugRayCount: 100
   waveformGain: 1000000
-  spectrogramGain: 1000000
+  spectrogramGain: 10000
   waveformTexture: {fileID: 0}
   FFTTexture: {fileID: 0}
   SpectrogramFirstFreqBinTexture: {fileID: 0}
@@ -1242,7 +1242,7 @@ Transform:
   m_GameObject: {fileID: 1860376486}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -3.72, y: -3.61, z: 0}
+  m_LocalPosition: {x: -153.2, y: 46.1, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

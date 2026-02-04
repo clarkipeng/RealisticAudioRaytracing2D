@@ -153,8 +153,8 @@ public class RayTraceManager : MonoBehaviour
     {
         int len = Mathf.CeilToInt(sampleRate * reverbDuration);
         activeSpectrogramIndex = 0;
-        ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPing, len);
-        ComputeHelper.CreateStructuredBuffer<float>(ref spectrogramBufferPong, len);
+        ComputeHelper.CreateStructuredBuffer<uint>(ref spectrogramBufferPing, len);
+        ComputeHelper.CreateStructuredBuffer<uint>(ref spectrogramBufferPong, len);
     }
 
     ComputeBuffer GetActiveSpectrogramBuffer()
@@ -510,7 +510,8 @@ public class RayTraceManager : MonoBehaviour
 
         // Debug log the distribution counts
         // Debug.Log($"=== Frequency Distribution Counts (Total Rays: {rayCount}, Total Assigned: {test_total}, Random Fills: {randomFills}) ===");
-        // // Shuffle(distribution);
+        
+       Shuffle(distribution);
         // Debug.Log($"[{string.Join(", ", binCounts)}]");
         
         
