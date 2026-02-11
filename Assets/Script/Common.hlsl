@@ -3,7 +3,8 @@
 
 static const float eps = 1e-4;
 static const float inf = 1e8;
-static const float PI = 3.14159265;
+// static const float PI = 3.14159265;
+#define PI 3.14159265359
 
 float random(inout uint state) {
     state = state * 747796405 + 2891336453;
@@ -46,7 +47,6 @@ float3 Refract(float3 i, float3 n, float eta) {
 #pragma kernel FFT
 #pragma kernel IFFT
 
-#define PI 3.14159265359
 
 // Change this to modify FFT size
 #define WINDOW_SIZE 1024

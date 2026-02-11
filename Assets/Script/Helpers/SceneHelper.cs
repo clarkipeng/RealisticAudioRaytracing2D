@@ -11,6 +11,8 @@ public struct AudioMat
     public float scattering;
     public float transmission;
     public float ior;
+    public float damping;
+    public float padding;
 }
 [StructLayout(LayoutKind.Sequential)]
 public struct Segment
@@ -101,11 +103,13 @@ public static class SceneToData2D
         //default material can be added
         AcousticSurface surface = obj.GetComponent<AcousticSurface>();
         AudioMaterial mat = surface.material;
-        AudioMat ret;
-        ret.absorption = mat.absorption;
-        ret.scattering = mat.scattering;
-        ret.transmission = mat.transmission;
-        ret.ior = mat.ior;
+        AudioMatData data = mat.GetShaderData();
+        AudioMat ret = new AudioMat();
+        ret.absorption = data.absorption;
+        ret.scattering = data.scattering;
+        ret.transmission = data.transmission;
+        ret.ior = data.ior;
+        ret.damping = data.damping;
         return ret;
     }
 }
