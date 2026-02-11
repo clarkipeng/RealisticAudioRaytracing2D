@@ -174,8 +174,8 @@ int ChunkSamples;
 
 // Atomic float add using compare-exchange loop
 void AtomicAddFloat(uint index, float value) {
-    uint newVal, prevVal = 0, curVal;
-    [allow_uav_condition]
+    uint prevVal = Spectrogram[index];
+    uint curVal;
     while (true) {
         InterlockedCompareExchange(Spectrogram[index], prevVal, 
             asuint(asfloat(prevVal) + value), curVal);
