@@ -56,7 +56,7 @@ bool checkVis(float2 start, float2 end, float dist) {
     return true;
 }
 
-// Updated:  
+// Returns how much energy a wall absorbs from a ray at a given frequency.
 float getFrequencyAbsorption(AudioMat mat, int freqBin, float refFreq) { 
     float freqRatio = max(1.0, (float)freqBin) / max(1.0, refFreq);
     float exponent = lerp(0.5, 1.0, 1.0 - mat.transmission);

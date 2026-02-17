@@ -345,6 +345,7 @@ public class RayTraceManager : MonoBehaviour
         raytraceShader.SetFloat("speedOfSound", speedOfSound);
         raytraceShader.SetFloat("inputGain", inputGain);
         raytraceShader.SetFloat("diffractionFactor", 0.5f);
+        raytraceShader.SetFloat("AbsorptionReferenceFreq", 1000f);
 
         raytraceShader.SetInt("maxBounceCount", maxBounces);
         raytraceShader.SetInt("rngStateOffset", Time.frameCount);
