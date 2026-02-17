@@ -2,7 +2,6 @@
 
 #include "Common.hlsl"
 
-
 float4 sourcePos;
 float4 listenerPos;
 float inputGain;
@@ -10,6 +9,8 @@ float listenerRadius, speedOfSound;
 int rayCount, debugRayCount, maxBounceCount, numWalls;
 uint rngStateOffset;
 int frequencyDistributionSize;
+
+float absorptionReferenceFreq;
 
 struct AudioMat {
     float absorption;
@@ -53,6 +54,15 @@ bool checkVis(float2 start, float2 end, float dist) {
         if (d < dist - 0.1) return false; 
     }
     return true;
+}
+
+// Updated:  
+float getFrequencyAbsorption(AudioMat mat, int freqBin, float refFreq) { 
+    float freqRatio = max(1.0, (float)freqBin) / max(1.0, refFreq);
+    float exponent = lerp(0.5, 1.0, 1.0 - mat.transmission);
+    float freqScale = pow(freqRatio, exponent);
+
+    return saturate(mat.absorption * freqScale);
 }
 
 [numthreads(64,1,1)]
@@ -280,8 +290,23 @@ void ProcessHits(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)HitCount) return;
     RayInfo hit = RawHits[id.x];
     int index = (int)(hit.timeDelay * SampleRate / ChunkSamples);
-    if (index < SpectrogramSize && index >= 0)
+    if (index < SpectrogramSize && index >= 0) {
+        // Apply frequency-dependent absorption before writing to spectrogram
+        float scaledEnergy = hit.energy;
+        if (numWalls > 0) { 
+            Wall nearestWall = walls[0];
+            float bestDist = inf;
+            for (int w = 0; w < numWalls; w++) {
+                float2 wallMid = (walls[w].a + walls[w].b) * 0.5;
+                float d = length(hit.hitPoint - wallMid);
+                if (d < bestDist) { bestDist = d; nearestWall = walls[w]; }
+            }
+            float absorption = getFrequencyAbsorption( 
+                nearestWall.mat, hit.frequencyBin, AbsorptionReferenceFreq);
+            scaledEnergy *= (1.0 - absorption);
+        }             
         AtomicAddFloat(index * ChunkSamples + hit.frequencyBin, hit.energy);
+    }
 }
 
 #pragma kernel TestSetSpectrogramAtCertainFreq
