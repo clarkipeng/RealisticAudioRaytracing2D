@@ -169,7 +169,7 @@ public class RayTraceManager : MonoBehaviour
         Debug.Log("Starting audio streaming and processing.");
         fullInputSamples = LoadSample(inputClip);
         ResetSpectrogram();
-        float delayBetweenChunks = (float)chunkSamples / sampleRate;
+        float delayBetweenChunks = (float)chunkSamples / sampleRate * 0.5f;
 
         StartCoroutine(StreamChunks(delayBetweenChunks));
         
@@ -189,16 +189,15 @@ public class RayTraceManager : MonoBehaviour
             Debug.Log($"StreamChunks iteration - Time since last call: {timeSinceLastIteration:F4}s (expected: {delayBetweenChunks:F4}s)");
             lastIterationTime = iterationStartTime;
 
-            int samplesToProcess = Mathf.Min(chunkSamples, totalSamples - offset);
+            int samplesToProcess = Mathf.Min(chunkSamples / 2, totalSamples - offset);
             float[] chunk = new float[samplesToProcess];
             System.Array.Copy(fullInputSamples, offset, chunk, 0, samplesToProcess);
-            offset += samplesToProcess;
+            offset += samplesToProcess; // 50% overlap for smoother transitions
 
             // Simulation should be ran here
             // First the simulation takes the FFT of the chunk, then runs the raytracing
             // based on the distribution of frequencies in the chunk
             RunSimulation(chunk);
-            // TestSpectrogramBuffer(); // TEMP for testing
 
             // After simulation is done, we need to process the spectrogram
             // and queue it to the audio manager
@@ -207,6 +206,8 @@ public class RayTraceManager : MonoBehaviour
             // Calculate remaining time to wait, accounting for processing duration
             float processingTime = Time.realtimeSinceStartup - iterationStartTime;
             float remainingWait = delayBetweenChunks - processingTime;
+
+            Debug.Log($"offset: {offset}, total samples: {fullInputSamples.Length}, remaining wait time: {remainingWait:F4}s");
 
             // yield return new WaitForSeconds(delayBetweenChunks);
             if (remainingWait > 0)
@@ -305,6 +306,7 @@ public class RayTraceManager : MonoBehaviour
 
         raytraceShader.SetBuffer(kdfft, "FFTData", inputBuffer);
         raytraceShader.SetTexture(kdfft, "FFTDebugTexture", FFTTexture);
+
         ComputeHelper.Dispatch(raytraceShader, FFTTexture.width, FFTTexture.height, 1, kdfft);
         ComputeHelper.Release(inputBuffer);
         
@@ -554,8 +556,6 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetBuffer(k_stifft, "Spectrogram", currentBuffer);
             raytraceShader.SetBuffer(k_stifft, "WaveformOut", waveformOutBuffer);
 
-            // IMPORTANT: this kernel's X dimension is thread-groups (one group per time frame).
-            // ComputeHelper.Dispatch interprets the parameter as *threads/iterations* and would under-dispatch.
             raytraceShader.Dispatch(k_stifft, timeSteps, 1, 1);
 
             // Clear any tail samples (spectrogramSize may not be divisible by chunkSamples)
