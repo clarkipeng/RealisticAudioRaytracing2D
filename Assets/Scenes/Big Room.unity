@@ -152,7 +152,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   raytraceShader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 20000
+  rayCount: 2500
   maxBounces: 4
   speedOfSound: 343
   dynamicObstacles: 1
@@ -160,7 +160,7 @@ MonoBehaviour:
   audioManager: {fileID: 1445243919}
   sampleRate: 48000
   chunkSamples: 1024
-  inputGain: 100000
+  inputGain: 1000
   reverbDuration: 1.5
   loop: 0
   source: {fileID: 1860376488}

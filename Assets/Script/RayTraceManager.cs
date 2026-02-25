@@ -47,6 +47,10 @@ public class RayTraceManager : MonoBehaviour
         inputBuffer,
         spectrogramDebugBuffer;
 
+    int? chunkPosBegin = null;
+
+    double lastTime = 0.0;
+
     RenderTexture spectrogramTexture;
     public RenderTexture waveformTexture;
 
@@ -58,8 +62,6 @@ public class RayTraceManager : MonoBehaviour
     int activeSpectrogramIndex;
     int accumFrames;
     int spectrogramSize;
-
-    int? audioWritePos = null;
 
     float[] outputWaveform;
 
@@ -119,26 +121,19 @@ public class RayTraceManager : MonoBehaviour
             return;
         }
 
-        // ===== Kernel Call: Draw Spectrogram =====
-        // int kd = raytraceShader.FindKernel("DrawSpectrogram");
-        // raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
-        // raytraceShader.SetInt("ChunkSamples", chunkSamples);
-        // raytraceShader.SetInt("TexWidth", spectrogramTexture.width);
-        // raytraceShader.SetInt("TexHeight", spectrogramTexture.height);
-        // raytraceShader.SetInt("accumCount", accumFrames);
-        // raytraceShader.SetFloat("DebugGain", spectrogramGain);
-        // raytraceShader.SetTexture(kd, "DebugTexture", spectrogramTexture);
-        // raytraceShader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
-        // ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
-
+        double timeNow = Time.realtimeSinceStartup;
+        float deltaTime = (float)(timeNow - lastTime);
+        Debug.Log($"Time delta: {deltaTime:F4}s");
+        lastTime = timeNow;
     }
 
     void FixedUpdate()
     {
         if (!source || !listener || !raytraceShader) return;
 
-        // Simulation should be run before each audio chunk
-        // RunSimulation(); 
+
+
+        
     }
 
     void QueueSineWave(float frequency, float duration)
@@ -180,6 +175,7 @@ public class RayTraceManager : MonoBehaviour
     {
         int totalSamples = fullInputSamples.Length;
         int offset = 0;
+        int startingPoint = -1;
         float lastIterationTime = Time.realtimeSinceStartup;
 
         while (offset < totalSamples)
@@ -197,12 +193,28 @@ public class RayTraceManager : MonoBehaviour
             // Simulation should be ran here
             // First the simulation takes the FFT of the chunk, then runs the raytracing
             // based on the distribution of frequencies in the chunk
+
             RunSimulation(chunk);
-            // TestSpectrogramBuffer(); // TEMP for testing
+
+            float timeAfterProcessing = Time.realtimeSinceStartup;
+            float processingDuration = timeAfterProcessing - iterationStartTime;
+
+            Debug.Log($"Run Simulation in {processingDuration:F4}s for chunk of {samplesToProcess} samples.");
 
             // After simulation is done, we need to process the spectrogram
             // and queue it to the audio manager
-            ProcessAndQueueSpectrogram(audioWritePos);
+
+            if (startingPoint == -1) {
+                ProcessAndQueueSpectrogram();
+                startingPoint = chunkPosBegin != null ? chunkPosBegin.Value : -1;
+            }
+            else
+            {
+                ProcessAndQueueSpectrogram(startingPoint);
+                // ProcessAndQueueSpectrogram();
+                startingPoint += chunkSamples;
+            }
+
 
             // Calculate remaining time to wait, accounting for processing duration
             float processingTime = Time.realtimeSinceStartup - iterationStartTime;
@@ -211,6 +223,7 @@ public class RayTraceManager : MonoBehaviour
             // yield return new WaitForSeconds(delayBetweenChunks);
             if (remainingWait > 0)
             {
+                // yield return null;
                 yield return new WaitForSeconds(remainingWait);
             }
             else
@@ -509,7 +522,7 @@ public class RayTraceManager : MonoBehaviour
         // return magnitudes;
     }
 
-    void ProcessAndQueueSpectrogram(int? audioWritePos = null)
+    void ProcessAndQueueSpectrogram(int? startingPoint = null)
     {
         // Read the accumulated spectrogram from the current active buffer
         ComputeBuffer currentBuffer = GetActiveSpectrogramBuffer();
@@ -569,7 +582,7 @@ public class RayTraceManager : MonoBehaviour
 
             // Read back and queue
             waveformOutBuffer.GetData(outputWaveform);
-            audioManager.QueueAudioChunk(outputWaveform, 0, audioWritePos);
+            chunkPosBegin = audioManager.QueueAudioChunk(outputWaveform, 0, startingPoint);
         }
 
         // Draw Waveform for Debugging

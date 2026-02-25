@@ -71,7 +71,7 @@ public class AudioManager : MonoBehaviour
     /// </summary>
     public int QueueAudioChunk(float[] audio, int offset = 0, int? forcedWritePos = null)
     {
-        if (audio == null || audio.Length == 0) return writeHead;
+        if (audio == null || audio.Length == 0) return readHead;
 
         lock (bufferLock)
         {        
@@ -88,7 +88,7 @@ public class AudioManager : MonoBehaviour
             }
             writeHead = (writePos + audio.Length) % bufferSize;
         }
-        return writeHead;
+        return readHead;
     }
 
     void OnAudioFilterRead(float[] data, int channels)
