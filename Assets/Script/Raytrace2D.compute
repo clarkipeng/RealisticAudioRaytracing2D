@@ -2,6 +2,7 @@
 
 #include "Common.hlsl"
 
+int ChunkSamples;
 
 float4 sourcePos;
 float4 listenerPos;
@@ -60,7 +61,8 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     uint rng = id.x + rngStateOffset * 719393;
     float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
     int curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
-    float wavelength = speedOfSound / curFreq;
+    float actualFreqHz = max(1.0, (float)curFreq * (float)SampleRate / (float)ChunkSamples);
+    float wavelength = speedOfSound / actualFreqHz;
     float diffractionThreshold = wavelength * diffractionFactor;
     
     float2 rayDir = float2(cos(angle), sin(angle));
@@ -177,7 +179,8 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         accumTime += closest / curSpeed;
         
         Wall wall = walls[hitIdx];
-        float currentDamping = (wallDepth == 0) ? AIR_ATTENUATION : walls[hitIdx].mat.damping;
+        float freqMultiplier = 1.0 + (actualFreqHz / 2000.0);
+        float currentDamping = (wallDepth == 0) ? AIR_ATTENUATION : (walls[hitIdx].mat.damping * freqMultiplier);
         curEnergy *= exp(-currentDamping * closest);
         curEnergy *= (1.0 - wall.mat.absorption);
 
@@ -208,7 +211,9 @@ void Trace (uint3 id : SV_DispatchThreadID) {
 
         bool entering = dot(rayDir, wall.normal) < 0;
         float2 n = entering ? wall.normal : -wall.normal;
-        float wallSpeed = speedOfSound / wall.mat.ior;
+        
+        float iorMultiplier = 1.0 + (actualFreqHz / 10000.0) * 0.1; // 10% shift at 10kHz
+        float wallSpeed = speedOfSound / (wall.mat.ior * iorMultiplier);
         
         float nextSpeed = entering ? wallSpeed : speedOfSound; 
         float eta = nextSpeed / curSpeed;
@@ -217,8 +222,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         float R0 = 1.0 - wall.mat.transmission; 
         float cosTheta = abs(dot(rayDir, n)); 
         
-        // schlick's approximation
-        float fresnel = R0 + (1.0 - R0) * pow(1.0 - cosTheta, 5.0);
+        float fresnel = R0 + (1.0 - R0) * pow(saturate(1.0 - cosTheta), 5.0);
         float rngVal = random(rng);
 
         // transmission
@@ -259,8 +263,6 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     // info.frequencyBin = FrequencyDistribution[id.x % frequencyDistributionSize];
     // rayInfoBuffer.Append(info);
 }
-
-int ChunkSamples;
 
 // Atomic float add using compare-exchange loop
 void AtomicAddFloat(uint index, float value) {
