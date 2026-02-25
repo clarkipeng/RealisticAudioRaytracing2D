@@ -305,7 +305,7 @@ void ProcessHits(uint3 id : SV_DispatchThreadID) {
                 nearestWall.mat, hit.frequencyBin, AbsorptionReferenceFreq);
             scaledEnergy *= (1.0 - absorption);
         }             
-        AtomicAddFloat(index * ChunkSamples + hit.frequencyBin, hit.energy);
+        AtomicAddFloat(index * ChunkSamples + hit.frequencyBin, scaledEnergy);
     }
 }
 
