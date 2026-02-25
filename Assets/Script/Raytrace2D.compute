@@ -57,207 +57,207 @@ bool checkVis(float2 start, float2 end, float dist) {
 
 [numthreads(64,1,1)]
 void Trace (uint3 id : SV_DispatchThreadID) {
-    // uint rng = id.x + rngStateOffset * 719393;
-    // float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
-    // int curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
-    // float wavelength = speedOfSound / curFreq;
-    // float diffractionThreshold = wavelength * diffractionFactor;
+    uint rng = id.x + rngStateOffset * 719393;
+    float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
+    int curFreq = FrequencyDistribution[id.x % frequencyDistributionSize];
+    float wavelength = speedOfSound / curFreq;
+    float diffractionThreshold = wavelength * diffractionFactor;
     
-    // float2 rayDir = float2(cos(angle), sin(angle));
-    // float2 rayPos = sourcePos.xy;
-    // float curEnergy = inputGain;
-    // float accumTime = 0;
-    // float currentIOR = 1.0; 
-    // float curSpeed = speedOfSound; 
-    // int wallDepth = 0;
+    float2 rayDir = float2(cos(angle), sin(angle));
+    float2 rayPos = sourcePos.xy;
+    float curEnergy = inputGain;
+    float accumTime = 0;
+    float currentIOR = 1.0; 
+    float curSpeed = speedOfSound; 
+    int wallDepth = 0;
 
-    // if (id.x < 100) 
-    //     debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, curEnergy, 0);
+    if (id.x < 100) 
+        debugRays[id.x * (maxBounceCount + 1)] = float4(rayPos, curEnergy, 0);
 
-    // for (int i = 0; i < maxBounceCount; i++) {
-    //     float closest = inf; int hitIdx = -1;
+    for (int i = 0; i < maxBounceCount; i++) {
+        float closest = inf; int hitIdx = -1;
 
-    //     float closestApproachT = inf;
-    //     float closestApproachDist = inf;
-    //     float2 closestCorner = float2(0, 0);
+        float closestApproachT = inf;
+        float closestApproachDist = inf;
+        float2 closestCorner = float2(0, 0);
 
-    //     for (int w = 0; w < numWalls; w++) {
-    //         float d = intersect(rayPos, rayDir, walls[w].a, walls[w].b);
-    //         if (d < closest) { closest = d; hitIdx = w; }
+        for (int w = 0; w < numWalls; w++) {
+            float d = intersect(rayPos, rayDir, walls[w].a, walls[w].b);
+            if (d < closest) { closest = d; hitIdx = w; }
 
-    //         float2 toA = walls[w].a - rayPos;
-    //         float2 toB = walls[w].b - rayPos;
-    //         float distToA = length(toA);
-    //         float distToB = length(toB);
+            float2 toA = walls[w].a - rayPos;
+            float2 toB = walls[w].b - rayPos;
+            float distToA = length(toA);
+            float distToB = length(toB);
             
-    //         float tA = dot(toA, rayDir);  // Distance along ray to closest approach to corner A
-    //         float tB = dot(toB, rayDir);  // Distance along ray to closest approach to corner B
+            float tA = dot(toA, rayDir);  // Distance along ray to closest approach to corner A
+            float tB = dot(toB, rayDir);  // Distance along ray to closest approach to corner B
             
-    //         // Only consider corners ahead of the ray (t > 0) AND not already within threshold
-    //         if (tA > eps && distToA > diffractionThreshold) {
-    //             float2 approachPointA = rayPos + rayDir * tA;
-    //             float perpDistA = length(walls[w].a - approachPointA);
+            // Only consider corners ahead of the ray (t > 0) AND not already within threshold
+            if (tA > eps && distToA > diffractionThreshold) {
+                float2 approachPointA = rayPos + rayDir * tA;
+                float perpDistA = length(walls[w].a - approachPointA);
                 
-    //             if (perpDistA < closestApproachDist && perpDistA < diffractionThreshold) {
-    //                 if (checkVis(rayPos, walls[w].a, distToA)) {
-    //                     closestApproachT = tA;
-    //                     closestApproachDist = perpDistA;
-    //                     closestCorner = walls[w].a;
-    //                 }
-    //             }
-    //         }
-    //         if (tB > eps && distToB > diffractionThreshold) {
-    //             float2 approachPointB = rayPos + rayDir * tB;
-    //             float perpDistB = length(walls[w].b - approachPointB);
+                if (perpDistA < closestApproachDist && perpDistA < diffractionThreshold) {
+                    if (checkVis(rayPos, walls[w].a, distToA)) {
+                        closestApproachT = tA;
+                        closestApproachDist = perpDistA;
+                        closestCorner = walls[w].a;
+                    }
+                }
+            }
+            if (tB > eps && distToB > diffractionThreshold) {
+                float2 approachPointB = rayPos + rayDir * tB;
+                float perpDistB = length(walls[w].b - approachPointB);
                 
-    //             if (perpDistB < closestApproachDist && perpDistB < diffractionThreshold) {
-    //                 if (checkVis(rayPos, walls[w].b, distToB)) {
-    //                     closestApproachT = tB;
-    //                     closestApproachDist = perpDistB;
-    //                     closestCorner = walls[w].b;
-    //                 }
-    //             }
-    //         }
-    //     }
+                if (perpDistB < closestApproachDist && perpDistB < diffractionThreshold) {
+                    if (checkVis(rayPos, walls[w].b, distToB)) {
+                        closestApproachT = tB;
+                        closestApproachDist = perpDistB;
+                        closestCorner = walls[w].b;
+                    }
+                }
+            }
+        }
         
-    //     if (wallDepth == 0) {
-    //         float distList = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
-    //         if (distList < closest && distList < inf) {
-    //             RayInfo info = (RayInfo)0;
-    //             info.hitPoint = rayPos + rayDir * distList; 
-    //             info.timeDelay = accumTime + (distList / curSpeed);
-    //             info.energy = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
-    //             info.frequencyBin = curFreq;
-    //             rayInfoBuffer.Append(info);
-    //         }
+        if (wallDepth == 0) {
+            float distList = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
+            if (distList < closest && distList < inf) {
+                RayInfo info = (RayInfo)0;
+                info.hitPoint = rayPos + rayDir * distList; 
+                info.timeDelay = accumTime + (distList / curSpeed);
+                info.energy = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
+                info.frequencyBin = curFreq;
+                rayInfoBuffer.Append(info);
+            }
             
-    //         // diffraction
-    //         if (closestApproachT < closest && closestApproachDist < diffractionThreshold) {
-    //             float2 approachPoint = rayPos + rayDir * closestApproachT;
+            // diffraction
+            if (closestApproachT < closest && closestApproachDist < diffractionThreshold) {
+                float2 approachPoint = rayPos + rayDir * closestApproachT;
                 
-    //             if (id.x < (uint)debugRayCount) 
-    //                 debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(approachPoint, curEnergy, 0);
+                if (id.x < (uint)debugRayCount) 
+                    debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(approachPoint, curEnergy, 0);
                 
-    //             rayPos = approachPoint;
-    //             accumTime += closestApproachT / curSpeed;
+                rayPos = approachPoint;
+                accumTime += closestApproachT / curSpeed;
                 
-    //             float2 toCorner = normalize(closestCorner - rayPos);
-    //             float t = 1.0 - (closestApproachDist / diffractionThreshold);
-    //             rayDir = normalize(rayDir * (1.0 - t) + toCorner * t);
-    //             curEnergy *= t;
+                float2 toCorner = normalize(closestCorner - rayPos);
+                float t = 1.0 - (closestApproachDist / diffractionThreshold);
+                rayDir = normalize(rayDir * (1.0 - t) + toCorner * t);
+                curEnergy *= t;
                 
-    //             float2 toList = listenerPos.xy - rayPos;
-    //             float distList = length(toList);
+                float2 toList = listenerPos.xy - rayPos;
+                float distList = length(toList);
                 
-    //             // Note: No wall.normal here - diffraction is omnidirectional from the corner
-    //             if (checkVis(rayPos, listenerPos.xy, distList)) {
-    //                 float contrib = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / max(1, distList));
+                // Note: No wall.normal here - diffraction is omnidirectional from the corner
+                if (checkVis(rayPos, listenerPos.xy, distList)) {
+                    float contrib = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / max(1, distList));
 
-    //                 if (contrib > 1e-5) {
-    //                     RayInfo info = (RayInfo)0;
-    //                     info.hitPoint = rayPos;
-    //                     info.timeDelay = accumTime + (distList / speedOfSound);
-    //                     info.energy = contrib;
-    //                     info.frequencyBin = curFreq;
-    //                     rayInfoBuffer.Append(info);
-    //                 }
-    //             }
-    //             continue;
-    //         }
-    //     }
+                    if (contrib > 1e-5) {
+                        RayInfo info = (RayInfo)0;
+                        info.hitPoint = rayPos;
+                        info.timeDelay = accumTime + (distList / speedOfSound);
+                        info.energy = contrib;
+                        info.frequencyBin = curFreq;
+                        rayInfoBuffer.Append(info);
+                    }
+                }
+                continue;
+            }
+        }
         
-    //     // No hit and no diffraction - ray escapes
-    //     if (hitIdx == -1) {
-    //         if (id.x < (uint)debugRayCount) 
-    //             debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);
-    //         break;
-    //     }
+        // No hit and no diffraction - ray escapes
+        if (hitIdx == -1) {
+            if (id.x < (uint)debugRayCount) 
+                debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);
+            break;
+        }
 
-    //     rayPos += rayDir * closest;
-    //     accumTime += closest / curSpeed;
+        rayPos += rayDir * closest;
+        accumTime += closest / curSpeed;
         
-    //     Wall wall = walls[hitIdx];
-    //     float currentDamping = (wallDepth == 0) ? AIR_ATTENUATION : walls[hitIdx].mat.damping;
-    //     curEnergy *= exp(-currentDamping * closest);
-    //     curEnergy *= (1.0 - wall.mat.absorption);
+        Wall wall = walls[hitIdx];
+        float currentDamping = (wallDepth == 0) ? AIR_ATTENUATION : walls[hitIdx].mat.damping;
+        curEnergy *= exp(-currentDamping * closest);
+        curEnergy *= (1.0 - wall.mat.absorption);
 
-    //     if (id.x < 100) 
-    //         debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
+        if (id.x < 100) 
+            debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
         
-    //     if (wallDepth == 0) {
-    //         float2 toList = listenerPos.xy - rayPos;
-    //         float distList = length(toList);
+        if (wallDepth == 0) {
+            float2 toList = listenerPos.xy - rayPos;
+            float distList = length(toList);
 
-    //         if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
-    //             float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
-    //             float cosT = max(0, dot(effN, toList / distList));
-    //             float contrib = curEnergy * (cosT * 0.5) * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
+            if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
+                float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
+                float cosT = max(0, dot(effN, toList / distList));
+                float contrib = curEnergy * (cosT * 0.5) * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
 
-    //             if (contrib > 1e-5) {
-    //                 RayInfo info = (RayInfo)0;
-    //                 info.hitPoint = rayPos;
-    //                 info.timeDelay = accumTime + (distList / speedOfSound);
-    //                 info.energy = contrib;
-    //                 info.frequencyBin = curFreq;
-    //                 rayInfoBuffer.Append(info);
-    //             }
-    //         }
-    //     }
+                if (contrib > 1e-5) {
+                    RayInfo info = (RayInfo)0;
+                    info.hitPoint = rayPos;
+                    info.timeDelay = accumTime + (distList / speedOfSound);
+                    info.energy = contrib;
+                    info.frequencyBin = curFreq;
+                    rayInfoBuffer.Append(info);
+                }
+            }
+        }
         
-    //     if (curEnergy < 1e-5) break; //save compute
+        if (curEnergy < 1e-5) break; //save compute
 
-    //     bool entering = dot(rayDir, wall.normal) < 0;
-    //     float2 n = entering ? wall.normal : -wall.normal;
-    //     float wallSpeed = speedOfSound / wall.mat.ior;
+        bool entering = dot(rayDir, wall.normal) < 0;
+        float2 n = entering ? wall.normal : -wall.normal;
+        float wallSpeed = speedOfSound / wall.mat.ior;
         
-    //     float nextSpeed = entering ? wallSpeed : speedOfSound; 
-    //     float eta = nextSpeed / curSpeed;
+        float nextSpeed = entering ? wallSpeed : speedOfSound; 
+        float eta = nextSpeed / curSpeed;
         
-    //     // fresnel reflection calculation
-    //     float R0 = 1.0 - wall.mat.transmission; 
-    //     float cosTheta = abs(dot(rayDir, n)); 
+        // fresnel reflection calculation
+        float R0 = 1.0 - wall.mat.transmission; 
+        float cosTheta = abs(dot(rayDir, n)); 
         
-    //     // schlick's approximation
-    //     float fresnel = R0 + (1.0 - R0) * pow(1.0 - cosTheta, 5.0);
-    //     float rngVal = random(rng);
+        // schlick's approximation
+        float fresnel = R0 + (1.0 - R0) * pow(1.0 - cosTheta, 5.0);
+        float rngVal = random(rng);
 
-    //     // transmission
-    //     if (rngVal > fresnel) {
-    //         float3 refr = Refract(float3(rayDir, 0), float3(n, 0), eta);
+        // transmission
+        if (rngVal > fresnel) {
+            float3 refr = Refract(float3(rayDir, 0), float3(n, 0), eta);
             
-    //         // (<= 0 means TIR)
-    //         if (length(refr) > 0) {
-    //             float2 nextDir = refr.xy;
+            // (<= 0 means TIR)
+            if (length(refr) > 0) {
+                float2 nextDir = refr.xy;
                 
-    //             float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering * 0.5; // Reduced jitter for refraction
-    //             float s = sin(jitter), c = cos(jitter);
-    //             nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
+                float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering * 0.5; // Reduced jitter for refraction
+                float s = sin(jitter), c = cos(jitter);
+                nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
 
-    //             rayDir = normalize(nextDir);
-    //             curSpeed = nextSpeed;
-    //             if (entering) wallDepth++; else wallDepth = max(0, wallDepth - 1);
-    //             rayPos += rayDir * eps;
-    //             continue; // Skip the reflection code below
-    //         }
-    //     }
+                rayDir = normalize(nextDir);
+                curSpeed = nextSpeed;
+                if (entering) wallDepth++; else wallDepth = max(0, wallDepth - 1);
+                rayPos += rayDir * eps;
+                continue; // Skip the reflection code below
+            }
+        }
 
-    //     // reflection
-    //     // either < fresnel or TIR
-    //     float2 specularDir = reflect(rayDir, n);
+        // reflection
+        // either < fresnel or TIR
+        float2 specularDir = reflect(rayDir, n);
         
-    //     float diffAng = asin(2.0 * random(rng) - 1.0);
-    //     float s = sin(diffAng), c = cos(diffAng);
-    //     float2 diffuseDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
+        float diffAng = asin(2.0 * random(rng) - 1.0);
+        float s = sin(diffAng), c = cos(diffAng);
+        float2 diffuseDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
         
-    //     rayDir = normalize(lerp(specularDir, diffuseDir, wall.mat.scattering));
-    //     rayPos += n * eps;
-    // }
-    RayInfo info = (RayInfo)0;
-    info.hitPoint = float2(0,0);
-    info.timeDelay = 0.0;
-    info.energy = 100;
-    info.frequencyBin = FrequencyDistribution[id.x % frequencyDistributionSize];
-    rayInfoBuffer.Append(info);
+        rayDir = normalize(lerp(specularDir, diffuseDir, wall.mat.scattering));
+        rayPos += n * eps;
+    }
+    // RayInfo info = (RayInfo)0;
+    // info.hitPoint = float2(0,0);
+    // info.timeDelay = 0.0;
+    // info.energy = 100;
+    // info.frequencyBin = FrequencyDistribution[id.x % frequencyDistributionSize];
+    // rayInfoBuffer.Append(info);
 }
 
 int ChunkSamples;
