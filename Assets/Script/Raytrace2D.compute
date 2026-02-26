@@ -37,9 +37,10 @@ struct RayInfo {
 StructuredBuffer<Wall> walls;
 AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
-RWStructuredBuffer<uint> Spectrogram;
+RWStructuredBuffer<uint2> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
 StructuredBuffer<int> FrequencyDistribution;
+StructuredBuffer<float2> InitialSpectrum;
 
 int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
@@ -264,15 +265,24 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     // rayInfoBuffer.Append(info);
 }
 
-// Atomic float add using compare-exchange loop
-void AtomicAddFloat(uint index, float value) {
-    uint newVal, prevVal = 0, curVal;
+// Atomic complex float add using compare-exchange loops
+void AtomicAddComplex(uint index, float2 value) {
+    uint prevValX = 0, curValX;
     [allow_uav_condition]
     while (true) {
-        InterlockedCompareExchange(Spectrogram[index], prevVal, 
-            asuint(asfloat(prevVal) + value), curVal);
-        if (curVal == prevVal) break;
-        prevVal = curVal;
+        InterlockedCompareExchange(Spectrogram[index].x, prevValX, 
+            asuint(asfloat(prevValX) + value.x), curValX);
+        if (curValX == prevValX) break;
+        prevValX = curValX;
+    }
+
+    uint prevValY = 0, curValY;
+    [allow_uav_condition]
+    while (true) {
+        InterlockedCompareExchange(Spectrogram[index].y, prevValY, 
+            asuint(asfloat(prevValY) + value.y), curValY);
+        if (curValY == prevValY) break;
+        prevValY = curValY;
     }
 }
 
@@ -281,9 +291,20 @@ void AtomicAddFloat(uint index, float value) {
 void ProcessHits(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)HitCount) return;
     RayInfo hit = RawHits[id.x];
-    int index = (int)(hit.timeDelay * SampleRate / ChunkSamples);
+    
+    float actualFreqHz = max(1.0, (float)hit.frequencyBin * (float)SampleRate / (float)ChunkSamples);
+    float tBin = (float)ChunkSamples / (float)SampleRate;
+    
+    int index = (int)(hit.timeDelay / tBin);
+    float subBinDelay = hit.timeDelay - (index * tBin);
+    
+    float phaseShift = -2.0 * PI * actualFreqHz * subBinDelay;
+    
+    float2 initial_comp = InitialSpectrum[hit.frequencyBin];
+    float2 hit_comp = complex_mult(initial_comp, complex_exp(phaseShift)) * hit.energy;
+
     if (index < SpectrogramSize && index >= 0)
-        AtomicAddFloat(index * ChunkSamples + hit.frequencyBin, hit.energy);
+        AtomicAddComplex(index * ChunkSamples + hit.frequencyBin, hit_comp);
 }
 
 #pragma kernel TestSetSpectrogramAtCertainFreq
@@ -294,7 +315,7 @@ void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
     if (id.x * ChunkSamples + id.y >= (uint)SpectrogramSize) return;
 
     if (id.x == 0 && id.y == TestSetSpectrogramFreqBin)
-        Spectrogram[id.x * ChunkSamples + id.y] = asuint(40.0);
+        Spectrogram[id.x * ChunkSamples + id.y] = uint2(asuint(40.0), asuint(0.0));
     // if (id.x == 1 && id.y == TestSetSpectrogramFreqBin)
     //     Spectrogram[id.x * ChunkSamples + id.y] = 25.0;
     // if (id.x == 2 && id.y == TestSetSpectrogramFreqBin)
@@ -308,7 +329,7 @@ void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
 [numthreads(256, 1, 1)]
 void ClearSpectrogram(uint3 id : SV_DispatchThreadID) {
     if (id.x < (uint)SpectrogramSize)
-        Spectrogram[id.x] = asuint(0.0);
+        Spectrogram[id.x] = uint2(asuint(0.0), asuint(0.0));
 }
 
 #pragma kernel DrawSpectrogram
@@ -336,7 +357,9 @@ void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
     float amp = 0;
     if (timeIndex < TimeSteps && freqIndex < NumFrequencyBins) {
         int spectrogramIndex = timeIndex * NumFrequencyBins + freqIndex;
-        amp = asfloat(Spectrogram[spectrogramIndex]) / max(1, accumCount);
+        uint2 spec = Spectrogram[spectrogramIndex];
+        float2 specComp = float2(asfloat(spec.x), asfloat(spec.y));
+        amp = length(specComp) / max(1, accumCount);
     }
     
     // Color based on amplitude (heat map style)
@@ -528,8 +551,9 @@ void SpectrogramToWaveformIFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 gro
 
     uint baseIndex = timeIndex * (uint)ChunkSamples;
 
-    // 1) Load real-only spectrum into shared memory
-    sharedData[idx] = float2(asfloat(Spectrogram[baseIndex + idx]), 0.0);
+    // 1) Load complex spectrum into shared memory
+    uint2 specAtomic = Spectrogram[baseIndex + idx];
+    sharedData[idx] = float2(asfloat(specAtomic.x), asfloat(specAtomic.y));
     GroupMemoryBarrierWithGroupSync();
 
     // 2) Enforce conjugate symmetry for real time-domain signal
