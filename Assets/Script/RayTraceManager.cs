@@ -21,8 +21,12 @@ public class RayTraceManager : MonoBehaviour
     public AudioManager audioManager;
     public int sampleRate = 48000;
     public int chunkSamples = 1024;
-    [Range(0.1f, 1000000f)] public float inputGain = 1.0f;
-    [Range(0.1f, 5.0f)] public float reverbDuration = 5f;
+    [Range(0.1f, 1000000f)] public float inputGain = 1f;
+
+    public bool loopAudio = true;
+
+    [Header("UI & Visualization")]
+    public float reverbDuration = 5f;
     public bool loop = true;
 
     [Header("Scene")]
@@ -44,8 +48,7 @@ public class RayTraceManager : MonoBehaviour
         waveformOutBuffer,
         argsBuffer,
         frequencyDistributionBuffer,
-        inputBuffer,
-        spectrogramDebugBuffer;
+        inputBuffer;
 
     int? chunkPosBegin = null;
 
@@ -65,8 +68,6 @@ public class RayTraceManager : MonoBehaviour
     RenderTexture spectrogramTexture;
     public RenderTexture waveformTexture;
 
-    public RenderTexture FFTTexture;
-    public RenderTexture SpectrogramFirstFreqBinTexture;
     List<Segment> activeSegments;
     Vector4[] debugRayPaths;
     float[] fullInputSamples;
@@ -76,7 +77,12 @@ public class RayTraceManager : MonoBehaviour
 
     float[] outputWaveform;
 
-    struct RayInfo { public float timeDelay, energy; public int frequencyBin; public float padding; public Vector2 hitPoint; }
+    struct RayInfo { public float timeDelay, energy; public int frequencyBin; public float roomFreqHz; public Vector2 hitPoint; }
+    
+    Vector3 lastSourcePos;
+    Vector3 lastListenerPos;
+    Vector3 sourceVel;
+    Vector3 listenerVel;
 
     void Start()
     {
@@ -98,25 +104,17 @@ public class RayTraceManager : MonoBehaviour
             waveformTexture.Create();
         }
 
-        if (FFTTexture == null) {
-            FFTTexture = new RenderTexture(1024, 256, 0) {
-                enableRandomWrite = true, filterMode = FilterMode.Point 
-            };
-            FFTTexture.Create();
-        }
-
-        if (SpectrogramFirstFreqBinTexture == null) {
-            SpectrogramFirstFreqBinTexture = new RenderTexture(1024, 256, 0) {
-                enableRandomWrite = true, filterMode = FilterMode.Point 
-            };
-            SpectrogramFirstFreqBinTexture.Create();
-        }
-
         audioManager.StartStreaming(sampleRate);
     }
 
     void Update()
     {
+        float dt = Time.deltaTime > 0 ? Time.deltaTime : 0.016f;
+        sourceVel = (source.position - lastSourcePos) / dt;
+        listenerVel = (listener.position - lastListenerPos) / dt;
+        lastSourcePos = source.position;
+        lastListenerPos = listener.position;
+
         if (Input.GetKeyDown(KeyCode.R)) { Debug.Log("R pressed - Resetting"); ResetSpectrogram(); accumFrames = 0; }
         if (Input.GetKeyDown(KeyCode.Q)) { Debug.Log("Q pressed - Queueing sine"); QueueSineWave(440f, 1.0f); }
         if (Input.GetKeyDown(KeyCode.Space)) {
@@ -163,8 +161,16 @@ public class RayTraceManager : MonoBehaviour
         }
         else if (isStreaming && currentChunkIndex >= precomputedChunks.Count)
         {
-            isStreaming = false;
-            Debug.Log("Finished streaming and processing chunks!");
+            if (loopAudio)
+            {
+                currentChunkIndex = 0;
+                startingPoint = -1;
+            }
+            else
+            {
+                isStreaming = false;
+                Debug.Log("Finished streaming and processing chunks!");
+            }
         }
 
         double timeNow = Time.realtimeSinceStartup;
@@ -316,6 +322,8 @@ public class RayTraceManager : MonoBehaviour
 
         raytraceShader.SetVector("sourcePos", source.position);
         raytraceShader.SetVector("listenerPos", listener.position);
+        raytraceShader.SetVector("sourceVel", sourceVel);
+        raytraceShader.SetVector("listenerVel", listenerVel);
 
         raytraceShader.SetFloat("listenerRadius", listenerRadius);
         raytraceShader.SetFloat("speedOfSound", speedOfSound);
@@ -383,36 +391,6 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetBuffer(kp, "InitialSpectrum", initialSpectrumBuffer);
             ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
         }
-
-        // Read first time interval of spectrogram and visualize it
-        // We'll read Vector2 because the spectrogram is now vector2
-        Vector2[] firstTimeIntervalData = new Vector2[chunkSamples];
-        GetActiveSpectrogramBuffer().GetData(firstTimeIntervalData, 0, 0, chunkSamples);
-
-        // Convert real spectrogram values to complex format for DrawFFTDebug
-        Vector2[] spectrogramComplex = new Vector2[chunkSamples];
-        float spectrogramMaxValue = 0f;
-        for (int i = 0; i < chunkSamples; i++)
-        {
-            spectrogramComplex[i] = firstTimeIntervalData[i];
-            float mag = spectrogramComplex[i].magnitude;
-            if (mag > spectrogramMaxValue)
-                spectrogramMaxValue = mag;
-        }
-
-        ComputeHelper.CreateStructuredBuffer(ref spectrogramDebugBuffer, spectrogramComplex);
-
-        int kSpectrogramDebug = raytraceShader.FindKernel("DrawFFTDebug");
-        raytraceShader.SetInt("FFTDataLength", chunkSamples);
-        raytraceShader.SetFloat("FFTDebugGain", spectrogramGain);
-        raytraceShader.SetFloat("FFTMaxValue", spectrogramMaxValue > 0f ? spectrogramMaxValue : 1f);
-
-        raytraceShader.SetBuffer(kSpectrogramDebug, "FFTData", spectrogramDebugBuffer);
-        raytraceShader.SetTexture(kSpectrogramDebug, "FFTDebugTexture", SpectrogramFirstFreqBinTexture);
-        ComputeHelper.Dispatch(raytraceShader, SpectrogramFirstFreqBinTexture.width, SpectrogramFirstFreqBinTexture.height, 1, kSpectrogramDebug);
-        
-        ComputeHelper.Release(spectrogramDebugBuffer);
-
         accumFrames++;
     }
 
@@ -614,30 +592,6 @@ public class RayTraceManager : MonoBehaviour
                 GUI.Label(new Rect(10 + w + 5, yPos, h, 20), "Waveform", labelStyle);
                 GUI.matrix = matrixBackup;
             }
-
-            if (FFTTexture != null)
-            {
-                float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
-                float yPos = 40 + Screen.height * 0.45f;
-                GUI.DrawTexture(new Rect(10, yPos, w, h), FFTTexture);
-
-                Matrix4x4 matrixBackup = GUI.matrix;
-                GUIUtility.RotateAroundPivot(90, new Vector2(10 + w + 5, yPos));
-                GUI.Label(new Rect(10 + w + 5, yPos, h, 20), "FFT Input", labelStyle);
-                GUI.matrix = matrixBackup;
-            }
-
-            if (SpectrogramFirstFreqBinTexture != null)
-            {
-                float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
-                float yPos = 50 + Screen.height * 0.60f;
-                GUI.DrawTexture(new Rect(10, yPos, w, h), SpectrogramFirstFreqBinTexture);
-
-                Matrix4x4 matrixBackup = GUI.matrix;
-                GUIUtility.RotateAroundPivot(90, new Vector2(10 + w + 5, yPos));
-                GUI.Label(new Rect(10 + w + 5, yPos, h, 20), "First Freq Bin", labelStyle);
-                GUI.matrix = matrixBackup;
-            }
         }
     }
 
@@ -671,6 +625,5 @@ public class RayTraceManager : MonoBehaviour
             array[j] = temp;
         }
     }
-
-    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, spectrogramDebugBuffer, initialSpectrumBuffer);
+    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, initialSpectrumBuffer);
 }
