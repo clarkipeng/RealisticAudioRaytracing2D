@@ -47,6 +47,21 @@ public class RayTraceManager : MonoBehaviour
         inputBuffer,
         spectrogramDebugBuffer;
 
+    int? chunkPosBegin = null;
+
+    double lastTime = 0.0;
+
+    struct FFTChunk {
+        public int[] frequencyDistribution;
+        public Vector2[] spectrum;
+    }
+    List<FFTChunk> precomputedChunks = new List<FFTChunk>();
+    int currentChunkIndex = 0;
+    bool isStreaming = false;
+    float delayBetweenChunks;
+    float nextChunkTime = 0f;
+    int startingPoint = -1;
+
     RenderTexture spectrogramTexture;
     public RenderTexture waveformTexture;
 
@@ -58,8 +73,6 @@ public class RayTraceManager : MonoBehaviour
     int activeSpectrogramIndex;
     int accumFrames;
     int spectrogramSize;
-
-    int? audioWritePos = null;
 
     float[] outputWaveform;
 
@@ -119,26 +132,45 @@ public class RayTraceManager : MonoBehaviour
             return;
         }
 
-        // ===== Kernel Call: Draw Spectrogram =====
-        // int kd = raytraceShader.FindKernel("DrawSpectrogram");
-        // raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
-        // raytraceShader.SetInt("ChunkSamples", chunkSamples);
-        // raytraceShader.SetInt("TexWidth", spectrogramTexture.width);
-        // raytraceShader.SetInt("TexHeight", spectrogramTexture.height);
-        // raytraceShader.SetInt("accumCount", accumFrames);
-        // raytraceShader.SetFloat("DebugGain", spectrogramGain);
-        // raytraceShader.SetTexture(kd, "DebugTexture", spectrogramTexture);
-        // raytraceShader.SetBuffer(kd, "Spectrogram", GetActiveSpectrogramBuffer());
-        // ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
+        if (isStreaming && currentChunkIndex < precomputedChunks.Count)
+        {
+            if (Time.realtimeSinceStartup >= nextChunkTime)
+            {
+                float iterationStartTime = Time.realtimeSinceStartup;
+                FFTChunk chunk = precomputedChunks[currentChunkIndex];
+                
+                RunRaytracing(chunk);
 
-    }
+                if (startingPoint == -1) {
+                    RunSimulation();
+                    startingPoint = chunkPosBegin != null ? chunkPosBegin.Value : -1;
+                }
+                else {
+                    RunSimulation(startingPoint);
+                    startingPoint += chunkSamples;
+                }
 
-    void FixedUpdate()
-    {
-        if (!source || !listener || !raytraceShader) return;
+                currentChunkIndex++;
+                float processingTime = Time.realtimeSinceStartup - iterationStartTime;
+                float remainingWait = delayBetweenChunks - processingTime;
+                
+                if (remainingWait > 0) {
+                    nextChunkTime = Time.realtimeSinceStartup + remainingWait;
+                } else {
+                    nextChunkTime = Time.realtimeSinceStartup; // Catch up
+                }
+            }
+        }
+        else if (isStreaming && currentChunkIndex >= precomputedChunks.Count)
+        {
+            isStreaming = false;
+            Debug.Log("Finished streaming and processing chunks!");
+        }
 
-        // Simulation should be run before each audio chunk
-        // RunSimulation(); 
+        double timeNow = Time.realtimeSinceStartup;
+        float deltaTime = (float)(timeNow - lastTime);
+        // Debug.Log($"Time delta: {deltaTime:F4}s");
+        lastTime = timeNow;
     }
 
     void QueueSineWave(float frequency, float duration)
@@ -155,8 +187,8 @@ public class RayTraceManager : MonoBehaviour
     {
         int len = Mathf.CeilToInt(sampleRate * reverbDuration);
         activeSpectrogramIndex = 0;
-        ComputeHelper.CreateStructuredBuffer<uint>(ref spectrogramBufferPing, len);
-        ComputeHelper.CreateStructuredBuffer<uint>(ref spectrogramBufferPong, len);
+        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPing, len);
+        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPong, len);
     }
 
     ComputeBuffer GetActiveSpectrogramBuffer()
@@ -169,58 +201,56 @@ public class RayTraceManager : MonoBehaviour
         Debug.Log("Starting audio streaming and processing.");
         fullInputSamples = LoadSample(inputClip);
         ResetSpectrogram();
-        float delayBetweenChunks = (float)chunkSamples / sampleRate * 0.5f;
-
-        StartCoroutine(StreamChunks(delayBetweenChunks));
         
+        delayBetweenChunks = (float)chunkSamples / sampleRate;
+        PrecomputeAllFFTs();
+        
+        currentChunkIndex = 0;
+        startingPoint = -1;
+        isStreaming = true;
+        nextChunkTime = Time.realtimeSinceStartup;
     }
 
-    // Breaks the full input samples into chunks and processes them and plays them over time
-    IEnumerator StreamChunks(float delayBetweenChunks)
+    void PrecomputeAllFFTs()
     {
+        precomputedChunks.Clear();
         int totalSamples = fullInputSamples.Length;
         int offset = 0;
-        float lastIterationTime = Time.realtimeSinceStartup;
+
+        int k_fft = raytraceShader.FindKernel("FFT");
+        if (k_fft < 0) { Debug.LogError("FFT kernel not found in Raytrace2D.compute!"); return; }
 
         while (offset < totalSamples)
         {
-            float iterationStartTime = Time.realtimeSinceStartup;
-            float timeSinceLastIteration = iterationStartTime - lastIterationTime;
-            Debug.Log($"StreamChunks iteration - Time since last call: {timeSinceLastIteration:F4}s (expected: {delayBetweenChunks:F4}s)");
-            lastIterationTime = iterationStartTime;
-
-            int samplesToProcess = Mathf.Min(chunkSamples / 2, totalSamples - offset);
-            float[] chunk = new float[samplesToProcess];
+            int samplesToProcess = Mathf.Min(chunkSamples, totalSamples - offset);
+            float[] chunk = new float[chunkSamples];
             System.Array.Copy(fullInputSamples, offset, chunk, 0, samplesToProcess);
-            offset += samplesToProcess; // 50% overlap for smoother transitions
 
-            // Simulation should be ran here
-            // First the simulation takes the FFT of the chunk, then runs the raytracing
-            // based on the distribution of frequencies in the chunk
-            RunSimulation(chunk);
-
-            // After simulation is done, we need to process the spectrogram
-            // and queue it to the audio manager
-            ProcessAndQueueSpectrogram(audioWritePos);
-
-            // Calculate remaining time to wait, accounting for processing duration
-            float processingTime = Time.realtimeSinceStartup - iterationStartTime;
-            float remainingWait = delayBetweenChunks - processingTime;
-
-            Debug.Log($"offset: {offset}, total samples: {fullInputSamples.Length}, remaining wait time: {remainingWait:F4}s");
-
-            // yield return new WaitForSeconds(delayBetweenChunks);
-            if (remainingWait > 0)
+            Vector2[] complexSamples = new Vector2[chunkSamples];
+            for (int i = 0; i < chunkSamples; i++)
             {
-                yield return new WaitForSeconds(remainingWait);
+                complexSamples[i] = new Vector2(chunk[i], 0f);
             }
-            else
-            {
-                // Processing took longer than the chunk duration - we're falling behind
-                Debug.LogWarning($"Processing took {processingTime:F4}s, exceeding chunk duration {delayBetweenChunks:F4}s by {-remainingWait:F4}s");
-                yield return null; // Still yield to prevent freezing, but continue immediately
-            }
+
+            ComputeHelper.CreateStructuredBuffer(ref inputBuffer, complexSamples);
+
+            raytraceShader.SetBuffer(k_fft, "Data", inputBuffer);
+            ComputeHelper.Dispatch(raytraceShader, 1, 1, 1, k_fft);
+
+            Vector2[] fftResult = new Vector2[chunkSamples];
+            inputBuffer.GetData(fftResult);
+            
+            int[] freqDist = BuildFrequencyDistribution(fftResult);
+            
+            precomputedChunks.Add(new FFTChunk {
+                frequencyDistribution = freqDist,
+                spectrum = fftResult
+            });
+
+            offset += samplesToProcess;
+            ComputeHelper.Release(inputBuffer);
         }
+        Debug.Log($"Precomputed {precomputedChunks.Count} FFT chunks.");
     }
 
     void TestSpectrogramBuffer()
@@ -268,68 +298,12 @@ public class RayTraceManager : MonoBehaviour
         return resampled;
     }
 
-    void RunSimulation(float[] inputSamples)
+    ComputeBuffer initialSpectrumBuffer;
+
+    void RunRaytracing(FFTChunk chunk)
     {
-        // Debug.Log($"Running simulation for chunk of {inputSamples.Length} samples.");
-        // Compute FFT of input samples
-        int k_fft = raytraceShader.FindKernel("FFT");
-
-        // Convert float samples to complex numbers (Vector2)
-        Vector2[] complexSamples = new Vector2[inputSamples.Length];
-        for (int i = 0; i < inputSamples.Length; i++)
-        {
-            complexSamples[i] = new Vector2(inputSamples[i], 0f); // real part = sample, imaginary part = 0
-        }
-
-        ComputeHelper.CreateStructuredBuffer(ref inputBuffer, complexSamples);
-
-        raytraceShader.SetBuffer(k_fft, "Data", inputBuffer);
-        ComputeHelper.Dispatch(raytraceShader, inputSamples.Length / chunkSamples, 1, 1, k_fft);
-
-        // Synchronous readback (blocks until GPU finishes)
-        Vector2[] fftResult = new Vector2[inputSamples.Length];
-        inputBuffer.GetData(fftResult);
-
-        // Get FFT max magnitude for debugging
-        float maxMagnitude = 0f;
-        for (int i = 0; i < fftResult.Length / 2; i++)
-        {
-            float mag = Mathf.Sqrt(fftResult[i].x * fftResult[i].x + fftResult[i].y * fftResult[i].y);
-            if (mag > maxMagnitude) maxMagnitude = mag;
-        }
-        
-        // ===== Draw FFT for Debugging =====
-        int kdfft = raytraceShader.FindKernel("DrawFFTDebug");
-        raytraceShader.SetInt("FFTDataLength", inputSamples.Length);
-        raytraceShader.SetFloat("FFTDebugGain", 1000f);
-        raytraceShader.SetFloat("FFTMaxValue", maxMagnitude);
-
-        raytraceShader.SetBuffer(kdfft, "FFTData", inputBuffer);
-        raytraceShader.SetTexture(kdfft, "FFTDebugTexture", FFTTexture);
-
-        ComputeHelper.Dispatch(raytraceShader, FFTTexture.width, FFTTexture.height, 1, kdfft);
-        ComputeHelper.Release(inputBuffer);
-        
-        // Build weighted frequency distribution from FFT magnitudes
-        int[] frequencyDistribution = BuildFrequencyDistribution(fftResult);
-
-        ComputeHelper.CreateStructuredBuffer(ref frequencyDistributionBuffer, frequencyDistribution);
-
-        int[] test = new int[frequencyDistribution.Length];
-        frequencyDistributionBuffer.GetData(test);
-
-        // Count occurrences of each unique integer
-        Dictionary<int, int> counts_old = new Dictionary<int, int>();
-        foreach (int val in test)
-        {
-            if (counts_old.ContainsKey(val))
-                counts_old[val]++;
-            else
-                counts_old[val] = 1;
-        }
-
-        string countsStr = string.Join(", ", counts_old.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value}"));
-        Debug.Log($"Frequency Distribution Counts before hits: {countsStr}");
+        ComputeHelper.CreateStructuredBuffer(ref frequencyDistributionBuffer, chunk.frequencyDistribution);
+        ComputeHelper.CreateStructuredBuffer(ref initialSpectrumBuffer, chunk.spectrum);
 
         ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
         ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
@@ -354,7 +328,7 @@ public class RayTraceManager : MonoBehaviour
         raytraceShader.SetInt("rayCount", rayCount);
         raytraceShader.SetInt("debugRayCount", debugRayCount);
         raytraceShader.SetInt("accumFrames", accumFrames);
-        raytraceShader.SetInt("frequencyDistributionSize", frequencyDistribution.Length);
+        raytraceShader.SetInt("frequencyDistributionSize", chunk.frequencyDistribution.Length);
 
         raytraceShader.SetBuffer(k, "walls", wallBuffer);
         raytraceShader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
@@ -406,11 +380,13 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetInt("HitCount", safeHitCount);
             raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
             raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
+            raytraceShader.SetBuffer(kp, "InitialSpectrum", initialSpectrumBuffer);
             ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
         }
 
         // Read first time interval of spectrogram and visualize it
-        float[] firstTimeIntervalData = new float[chunkSamples];
+        // We'll read Vector2 because the spectrogram is now vector2
+        Vector2[] firstTimeIntervalData = new Vector2[chunkSamples];
         GetActiveSpectrogramBuffer().GetData(firstTimeIntervalData, 0, 0, chunkSamples);
 
         // Convert real spectrogram values to complex format for DrawFFTDebug
@@ -418,9 +394,10 @@ public class RayTraceManager : MonoBehaviour
         float spectrogramMaxValue = 0f;
         for (int i = 0; i < chunkSamples; i++)
         {
-            spectrogramComplex[i] = new Vector2(firstTimeIntervalData[i], 0f);
-            if (firstTimeIntervalData[i] > spectrogramMaxValue)
-                spectrogramMaxValue = firstTimeIntervalData[i];
+            spectrogramComplex[i] = firstTimeIntervalData[i];
+            float mag = spectrogramComplex[i].magnitude;
+            if (mag > spectrogramMaxValue)
+                spectrogramMaxValue = mag;
         }
 
         ComputeHelper.CreateStructuredBuffer(ref spectrogramDebugBuffer, spectrogramComplex);
@@ -511,7 +488,7 @@ public class RayTraceManager : MonoBehaviour
         // return magnitudes;
     }
 
-    void ProcessAndQueueSpectrogram(int? audioWritePos = null)
+    void RunSimulation(int? startingPoint = null)
     {
         // Read the accumulated spectrogram from the current active buffer
         ComputeBuffer currentBuffer = GetActiveSpectrogramBuffer();
@@ -569,7 +546,7 @@ public class RayTraceManager : MonoBehaviour
 
             // Read back and queue
             waveformOutBuffer.GetData(outputWaveform);
-            audioManager.QueueAudioChunk(outputWaveform, 0, audioWritePos);
+            chunkPosBegin = audioManager.QueueAudioChunk(outputWaveform, 0, startingPoint);
         }
 
         // Draw Waveform for Debugging
@@ -693,5 +670,5 @@ public class RayTraceManager : MonoBehaviour
         }
     }
 
-    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, spectrogramDebugBuffer);
+    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, spectrogramDebugBuffer, initialSpectrumBuffer);
 }
