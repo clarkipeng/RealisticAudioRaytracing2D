@@ -160,7 +160,7 @@ MonoBehaviour:
   audioManager: {fileID: 1445243919}
   sampleRate: 48000
   chunkSamples: 1024
-  inputGain: 237164
+  inputGain: 10000
   loopAudio: 0
   reverbDuration: 1.5
   loop: 0

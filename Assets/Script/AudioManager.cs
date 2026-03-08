@@ -80,14 +80,16 @@ public class AudioManager : MonoBehaviour
             int writePos = safeStart;
             if (forcedWritePos.HasValue) {
                 writePos = (forcedWritePos.Value % bufferSize);
-                if ((writePos < safeStart && (writePos > (safeStart + bufferSize / 2) % bufferSize))
-                    || (writePos > safeStart && writePos > (safeStart + bufferSize / 2) % bufferSize))
+
+                Debug.Log($"QueueAudioChunk with forcedWritePos {forcedWritePos.Value % bufferSize}, ending at {(safeStart + bufferSize / 2) % bufferSize}, safeStart: {safeStart}.");
+                if ( (((safeStart + bufferSize / 2) % bufferSize) > safeStart) && (writePos < safeStart || writePos > (safeStart + bufferSize / 2) % bufferSize)
+                    || (((safeStart + bufferSize / 2) % bufferSize) < safeStart) && (writePos < safeStart && writePos > (safeStart + bufferSize / 2) % bufferSize))
                 {   
                     if (writePos < safeStart)
                     {
                         audioStartPos += safeStart - writePos;
                     }
-                    else {
+                    else if (writePos > safeStart) {
                         audioStartPos += bufferSize - writePos + safeStart;
                     }
                     writePos = safeStart;
