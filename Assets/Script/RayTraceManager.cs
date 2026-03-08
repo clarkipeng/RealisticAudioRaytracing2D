@@ -23,11 +23,11 @@ public class RayTraceManager : MonoBehaviour
     public int chunkSamples = 1024;
     [Range(0.1f, 1000000f)] public float inputGain = 1f;
 
-    public bool loopAudio = true;
+    public bool loopAudio = false;
 
     [Header("UI & Visualization")]
     public float reverbDuration = 5f;
-    public bool loop = true;
+    public bool loop = false;
 
     [Header("Scene")]
     public Transform source, listener;
@@ -50,8 +50,6 @@ public class RayTraceManager : MonoBehaviour
         frequencyDistributionBuffer,
         inputBuffer;
 
-    int? chunkPosBegin = null;
-
     double lastTime = 0.0;
 
     struct FFTChunk {
@@ -64,6 +62,7 @@ public class RayTraceManager : MonoBehaviour
     float delayBetweenChunks;
     float nextChunkTime = 0f;
     int startingPoint = -1;
+    int audioStartingPoint = 0;
 
     RenderTexture spectrogramTexture;
     public RenderTexture waveformTexture;
@@ -130,6 +129,7 @@ public class RayTraceManager : MonoBehaviour
             return;
         }
 
+        // Debug.Log($"Update: isStreaming={isStreaming}, currentChunkIndex={currentChunkIndex}, precomputedChunks={precomputedChunks.Count}, nextChunkTime={nextChunkTime:F2}");
         if (isStreaming && currentChunkIndex < precomputedChunks.Count)
         {
             if (Time.realtimeSinceStartup >= nextChunkTime)
@@ -138,17 +138,11 @@ public class RayTraceManager : MonoBehaviour
                 FFTChunk chunk = precomputedChunks[currentChunkIndex];
                 
                 RunRaytracing(chunk);
-
-                if (startingPoint == -1) {
-                    RunSimulation();
-                    startingPoint = chunkPosBegin != null ? chunkPosBegin.Value : -1;
-                }
-                else {
-                    RunSimulation(startingPoint);
-                    startingPoint += chunkSamples;
-                }
+                
+                RunSimulation();
 
                 currentChunkIndex++;
+
                 float processingTime = Time.realtimeSinceStartup - iterationStartTime;
                 float remainingWait = delayBetweenChunks - processingTime;
                 
@@ -213,6 +207,7 @@ public class RayTraceManager : MonoBehaviour
         
         currentChunkIndex = 0;
         startingPoint = -1;
+        audioStartingPoint = 0;
         isStreaming = true;
         nextChunkTime = Time.realtimeSinceStartup;
     }
@@ -224,7 +219,6 @@ public class RayTraceManager : MonoBehaviour
         int offset = 0;
 
         int k_fft = raytraceShader.FindKernel("FFT");
-        if (k_fft < 0) { Debug.LogError("FFT kernel not found in Raytrace2D.compute!"); return; }
 
         while (offset < totalSamples)
         {
@@ -362,26 +356,26 @@ public class RayTraceManager : MonoBehaviour
             int safeHitCount = Mathf.Min(hitCount, hitBuffer.count);
             RayInfo[] hitData = new RayInfo[safeHitCount];
             hitBuffer.GetData(hitData, 0, 0, safeHitCount);
-            int[] test2 = new int[safeHitCount];
-            for (int i = 0; i < safeHitCount; i++)
-            {
-                test2[i] = hitData[i].frequencyBin;
-            }
-            // Count occurrences of each unique integer
-            Dictionary<int, int> counts = new Dictionary<int, int>();
-            foreach (int val in test2)
-            {
-                if (counts.ContainsKey(val))
-                    counts[val]++;
-                else
-                    counts[val] = 1;
-            }
+            // int[] test2 = new int[safeHitCount];
+            // for (int i = 0; i < safeHitCount; i++)
+            // {
+            //     test2[i] = hitData[i].frequencyBin;
+            // }
+            // // Count occurrences of each unique integer
+            // Dictionary<int, int> counts = new Dictionary<int, int>();
+            // foreach (int val in test2)
+            // {
+            //     if (counts.ContainsKey(val))
+            //         counts[val]++;
+            //     else
+            //         counts[val] = 1;
+            // }
 
-            string countsStr2 = string.Join(", ", counts.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value}"));
-            Debug.Log($"Frequency Distribution Counts After Hits: {countsStr2}");
+            // string countsStr2 = string.Join(", ", counts.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value}"));
+            // Debug.Log($"Frequency Distribution Counts After Hits: {countsStr2}");
 
 
-            Debug.Log($"Processing {safeHitCount} ray hits into spectrogram.");
+            // Debug.Log($"Processing {safeHitCount} ray hits into spectrogram.");
             int kp = raytraceShader.FindKernel("ProcessHits");
             raytraceShader.SetInt("SampleRate", sampleRate);
             raytraceShader.SetInt("ChunkSamples", chunkSamples);
@@ -444,7 +438,7 @@ public class RayTraceManager : MonoBehaviour
             }
         }
 
-        Debug.Log($"Filled {distributionIndex}, we have: {rayCount}");
+        // Debug.Log($"Filled {distributionIndex}, we have: {rayCount}");
 
         // Fill any remaining slots with audible frequencies (if rounding left gaps)
         int randomFills = 0;
@@ -466,7 +460,7 @@ public class RayTraceManager : MonoBehaviour
         // return magnitudes;
     }
 
-    void RunSimulation(int? startingPoint = null)
+    void RunSimulation()
     {
         // Read the accumulated spectrogram from the current active buffer
         ComputeBuffer currentBuffer = GetActiveSpectrogramBuffer();
@@ -526,7 +520,18 @@ public class RayTraceManager : MonoBehaviour
 
             // Read back and queue
             waveformOutBuffer.GetData(outputWaveform);
-            chunkPosBegin = audioManager.QueueAudioChunk(outputWaveform, 0, startingPoint);
+            if (startingPoint == -1)
+            {
+                (int, int) result = audioManager.QueueAudioChunk(outputWaveform, audioStartingPoint);
+                startingPoint = result.Item1 + chunkSamples;
+                audioStartingPoint = result.Item2;
+            }
+            else {
+                (int,int) result = audioManager.QueueAudioChunk(outputWaveform, audioStartingPoint, startingPoint);
+                startingPoint = result.Item1 + chunkSamples;
+                audioStartingPoint = result.Item2;
+            }
+            Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
         }
 
         // Draw Waveform for Debugging

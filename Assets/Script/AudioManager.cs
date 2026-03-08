@@ -16,6 +16,8 @@ public class AudioManager : MonoBehaviour
     [Range(0.1f, 100f)] public float waveformGain = 10.0f;
     public RenderTexture waveformTexture;
 
+    int safetyBuffer = 4096; // Minimum samples between read and write heads to avoid underrun
+
     float[] ringBuffer;
     int readHead, sampleRate, bufferSize;
     readonly object bufferLock = new object();
@@ -30,7 +32,7 @@ public class AudioManager : MonoBehaviour
     void Awake()
     {
         sampleRate = AudioSettings.outputSampleRate;
-        bufferSize = sampleRate * 4; // 4 second buffer
+        bufferSize = sampleRate * 8; // 8 second buffer
         ringBuffer = new float[bufferSize];
         
         var src = gameObject.AddComponent<AudioSource>();
@@ -57,6 +59,7 @@ public class AudioManager : MonoBehaviour
 
     public void StartStreaming(int audioSampleRate)
     {
+        Debug.Log($"AudioManager starting streaming with sample rate {audioSampleRate}.");
         sampleRate = audioSampleRate;
         lock (bufferLock) 
         { 
@@ -69,26 +72,42 @@ public class AudioManager : MonoBehaviour
     /// <summary>
     /// Add audio chunk to ring buffer just ahead of read position for immediate playback
     /// </summary>
-    public int QueueAudioChunk(float[] audio, int offset = 0, int? forcedWritePos = null)
+    public (int, int) QueueAudioChunk(float[] audio, int audioStartPos=0, int? forcedWritePos = null)
     {
-        if (audio == null || audio.Length == 0) return readHead;
-
         lock (bufferLock)
-        {        
-            int writePos = (readHead + /*safetyBuffer*/ 0 + offset) % bufferSize;
-            if (forcedWritePos.HasValue)
-                writePos = forcedWritePos.Value;
+        {
+            int safeStart = (readHead + safetyBuffer) % bufferSize;
+            int writePos = safeStart;
+            if (forcedWritePos.HasValue) {
+                writePos = (forcedWritePos.Value % bufferSize);
+                if ((writePos < safeStart && (writePos > (safeStart + bufferSize / 2) % bufferSize))
+                    || (writePos > safeStart && writePos > (safeStart + bufferSize / 2) % bufferSize))
+                {   
+                    if (writePos < safeStart)
+                    {
+                        audioStartPos += safeStart - writePos;
+                    }
+                    else {
+                        audioStartPos += bufferSize - writePos + safeStart;
+                    }
+                    writePos = safeStart;
+                }
+            }
             
-            for (int i = 0; i < audio.Length; i++)
+            // if (safeStart != writePos)
+            // {
+            //     Debug.Log($"writepos: {writePos}, safeStart: {safeStart}, audioStartPos: {audioStartPos}.");
+            // }
+            for (int i = 0; i < audio.Length - audioStartPos; i++)
             {
-                int idx = writePos + i;
-                if (idx >= bufferSize)
-                    idx -= bufferSize;
-                ringBuffer[idx] += audio[i];
+                int idx = (writePos + i) % bufferSize;
+                ringBuffer[idx] += audio[i + audioStartPos];
             }
             writeHead = (writePos + audio.Length) % bufferSize;
+
+            Debug.Log($"writePos: {writePos}, audioStartPos: {audioStartPos}, readHead: {readHead}, safeStart: {safeStart}.");
+            return (writePos, audioStartPos);
         }
-        return readHead;
     }
 
     void OnAudioFilterRead(float[] data, int channels)
