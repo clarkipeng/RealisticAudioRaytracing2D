@@ -44,6 +44,7 @@ RWStructuredBuffer<uint2> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
 StructuredBuffer<int> FrequencyDistribution;
 StructuredBuffer<float2> InitialSpectrum;
+StructuredBuffer<float> FrequencyBinCounts;
 
 int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
@@ -311,7 +312,11 @@ void ProcessHits(uint3 id : SV_DispatchThreadID) {
     float phaseShift = -2.0 * PI * hit.roomFreqHz * subBinDelay;
     
     float2 initial_comp = InitialSpectrum[hit.frequencyBin];
-    float2 hit_comp = complex_mult(initial_comp, complex_exp(phaseShift)) * (hit.energy / (float)rayCount);
+    // Normalize by per-bin ray count instead of total rayCount to avoid
+    // squaring the magnitude spectrum (rays are allocated proportionally
+    // to |X[f]|, so dividing by rayCount would apply the spectrum twice).
+    float binCount = max(1.0, FrequencyBinCounts[hit.frequencyBin]);
+    float2 hit_comp = complex_mult(initial_comp, complex_exp(phaseShift)) * (hit.energy / binCount);
 
     // Doppler: Compute relative velocity upon absorption by listener limits
     float2 incomingRayDir = normalize(listenerPos.xy - hit.hitPoint);

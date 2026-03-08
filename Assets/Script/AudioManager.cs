@@ -16,7 +16,7 @@ public class AudioManager : MonoBehaviour
     [Range(0.1f, 100f)] public float waveformGain = 10.0f;
     public RenderTexture waveformTexture;
 
-    int safetyBuffer = 4096; // Minimum samples between read and write heads to avoid underrun
+    int safetyBuffer = 8192; // Minimum samples between read and write heads to avoid underrun
 
     float[] ringBuffer;
     int readHead, sampleRate, bufferSize;
@@ -70,44 +70,32 @@ public class AudioManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Add audio chunk to ring buffer just ahead of read position for immediate playback
+    /// Add audio chunk to ring buffer. Without forcedWritePos, writes at safetyBuffer ahead of readHead.
+    /// With forcedWritePos, writes at the specified position for correct overlap-add alignment.
+    /// Samples that fall behind the safe zone are still written (they land on already-cleared positions)
+    /// to preserve overlap-add continuity rather than skipping audio and causing pops.
     /// </summary>
     public (int, int) QueueAudioChunk(float[] audio, int audioStartPos=0, int? forcedWritePos = null)
     {
         lock (bufferLock)
         {
             int safeStart = (readHead + safetyBuffer) % bufferSize;
-            int writePos = safeStart;
+            int writePos;
+            
             if (forcedWritePos.HasValue) {
-                writePos = (forcedWritePos.Value % bufferSize);
-
-                Debug.Log($"QueueAudioChunk with forcedWritePos {forcedWritePos.Value % bufferSize}, ending at {(safeStart + bufferSize / 2) % bufferSize}, safeStart: {safeStart}.");
-                if ( (((safeStart + bufferSize / 2) % bufferSize) > safeStart) && (writePos < safeStart || writePos > (safeStart + bufferSize / 2) % bufferSize)
-                    || (((safeStart + bufferSize / 2) % bufferSize) < safeStart) && (writePos < safeStart && writePos > (safeStart + bufferSize / 2) % bufferSize))
-                {   
-                    if (writePos < safeStart)
-                    {
-                        audioStartPos += safeStart - writePos;
-                    }
-                    else if (writePos > safeStart) {
-                        audioStartPos += bufferSize - writePos + safeStart;
-                    }
-                    writePos = safeStart;
-                }
+                writePos = ((forcedWritePos.Value % bufferSize) + bufferSize) % bufferSize;
+            } else {
+                writePos = safeStart;
             }
             
-            // if (safeStart != writePos)
-            // {
-            //     Debug.Log($"writepos: {writePos}, safeStart: {safeStart}, audioStartPos: {audioStartPos}.");
-            // }
-            for (int i = 0; i < audio.Length - audioStartPos; i++)
+            int samplesToWrite = audio.Length - audioStartPos;
+            for (int i = 0; i < samplesToWrite; i++)
             {
                 int idx = (writePos + i) % bufferSize;
                 ringBuffer[idx] += audio[i + audioStartPos];
             }
-            writeHead = (writePos + audio.Length) % bufferSize;
+            writeHead = (writePos + samplesToWrite) % bufferSize;
 
-            Debug.Log($"writePos: {writePos}, audioStartPos: {audioStartPos}, readHead: {readHead}, safeStart: {safeStart}.");
             return (writePos, audioStartPos);
         }
     }

@@ -48,6 +48,7 @@ public class RayTraceManager : MonoBehaviour
         waveformOutBuffer,
         argsBuffer,
         frequencyDistributionBuffer,
+        frequencyBinCountsBuffer,
         inputBuffer;
 
     double lastTime = 0.0;
@@ -55,6 +56,7 @@ public class RayTraceManager : MonoBehaviour
     struct FFTChunk {
         public int[] frequencyDistribution;
         public Vector2[] spectrum;
+        public float[] binCounts; // per-bin ray count for correct normalization
     }
     List<FFTChunk> precomputedChunks = new List<FFTChunk>();
     int currentChunkIndex = 0;
@@ -62,7 +64,6 @@ public class RayTraceManager : MonoBehaviour
     float delayBetweenChunks;
     float nextChunkTime = 0f;
     int startingPoint = -1;
-    int audioStartingPoint = 0;
 
     RenderTexture spectrogramTexture;
     public RenderTexture waveformTexture;
@@ -207,7 +208,6 @@ public class RayTraceManager : MonoBehaviour
         
         currentChunkIndex = 0;
         startingPoint = -1;
-        audioStartingPoint = 0;
         isStreaming = true;
         nextChunkTime = Time.realtimeSinceStartup;
     }
@@ -240,11 +240,12 @@ public class RayTraceManager : MonoBehaviour
             Vector2[] fftResult = new Vector2[chunkSamples];
             inputBuffer.GetData(fftResult);
             
-            int[] freqDist = BuildFrequencyDistribution(fftResult);
+            var (freqDist, binCounts) = BuildFrequencyDistribution(fftResult);
             
             precomputedChunks.Add(new FFTChunk {
                 frequencyDistribution = freqDist,
-                spectrum = fftResult
+                spectrum = fftResult,
+                binCounts = binCounts
             });
 
             offset += samplesToProcess;
@@ -304,6 +305,7 @@ public class RayTraceManager : MonoBehaviour
     {
         ComputeHelper.CreateStructuredBuffer(ref frequencyDistributionBuffer, chunk.frequencyDistribution);
         ComputeHelper.CreateStructuredBuffer(ref initialSpectrumBuffer, chunk.spectrum);
+        ComputeHelper.CreateStructuredBuffer(ref frequencyBinCountsBuffer, chunk.binCounts);
 
         ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
         ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
@@ -383,13 +385,15 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
             raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
             raytraceShader.SetBuffer(kp, "InitialSpectrum", initialSpectrumBuffer);
+            raytraceShader.SetBuffer(kp, "FrequencyBinCounts", frequencyBinCountsBuffer);
             ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
         }
         accumFrames++;
     }
 
     // Build a weighted frequency distribution from the FFT result (Bins)
-    int[] BuildFrequencyDistribution(Vector2[] fftResult)
+    // Returns (distribution, perBinCounts) where perBinCounts[i] = number of rays assigned to bin i
+    (int[], float[]) BuildFrequencyDistribution(Vector2[] fftResult)
     {
         // Only use first half of FFT (positive frequencies)
         int halfSize = fftResult.Length / 2;
@@ -411,53 +415,55 @@ public class RayTraceManager : MonoBehaviour
                 magnitudes[i] /= totalMagnitude;
         }
 
-        // Track counts for each frequency bin for debugging
-
         // Build weighted distribution buffer (rayCount entries)
         // Each entry is a frequency bin index, with frequencies appearing proportional to their magnitude
-
-        int[] binCounts = new int[halfSize];
+        // Use FloorToInt to avoid overflowing rayCount from rounding-up accumulation
         int[] distribution = new int[rayCount];
         int distributionIndex = 0;
 
-        int test_total = 0;
-
         for (int i = 0; i < halfSize && distributionIndex < rayCount; i++)
         {
-            // Convert bin index to frequency
-            int frequencyBin = i;
-
-            // Add this frequency proportional to its normalized magnitude
-            int count = Mathf.RoundToInt(magnitudes[i] * rayCount);
-            binCounts[i] = count;
-            test_total += count;
-
+            int count = Mathf.FloorToInt(magnitudes[i] * rayCount);
             for (int j = 0; j < count && distributionIndex < rayCount; j++)
             {
-                distribution[distributionIndex++] = frequencyBin;
+                distribution[distributionIndex++] = i;
             }
         }
 
-        // Debug.Log($"Filled {distributionIndex}, we have: {rayCount}");
-
-        // Fill any remaining slots with audible frequencies (if rounding left gaps)
-        int randomFills = 0;
+        // Fill remaining slots proportionally (from largest-magnitude bins)
+        // instead of purely random, to keep the distribution deterministic
+        int fillIdx = 0;
         while (distributionIndex < rayCount)
         {
-            int randomBin = Random.Range(0, halfSize);
-            distribution[distributionIndex++] = randomBin;
-            randomFills++;
+            // Find the bin with largest fractional remainder
+            float bestRemainder = -1f;
+            int bestBin = 0;
+            for (int i = 0; i < halfSize; i++)
+            {
+                float exact = magnitudes[i] * rayCount;
+                float remainder = exact - Mathf.Floor(exact);
+                if (remainder > bestRemainder)
+                {
+                    bestRemainder = remainder;
+                    bestBin = i;
+                }
+            }
+            distribution[distributionIndex++] = bestBin;
+            // Zero out the remainder for this bin so we pick the next best
+            magnitudes[bestBin] = Mathf.Floor(magnitudes[bestBin] * rayCount) / (float)rayCount;
+            fillIdx++;
         }
 
-        // Debug log the distribution counts
-        // Debug.Log($"=== Frequency Distribution Counts (Total Rays: {rayCount}, Total Assigned: {test_total}, Random Fills: {randomFills}) ===");
-
         Shuffle(distribution);
-        // Debug.Log($"[{string.Join(", ", binCounts)}]");
 
+        // Compute actual per-bin counts for correct normalization on the GPU
+        // This prevents the "magnitude squaring" bug where the spectrum is applied twice
+        // (once via weighted ray allocation, once via InitialSpectrum multiplication)
+        float[] perBinCounts = new float[halfSize];
+        for (int i = 0; i < rayCount; i++)
+            perBinCounts[distribution[i]] += 1f;
 
-        return distribution;
-        // return magnitudes;
+        return (distribution, perBinCounts);
     }
 
     void RunSimulation()
@@ -522,16 +528,16 @@ public class RayTraceManager : MonoBehaviour
             waveformOutBuffer.GetData(outputWaveform);
             if (startingPoint == -1)
             {
-                (int, int) result = audioManager.QueueAudioChunk(outputWaveform, audioStartingPoint);
+                // First chunk: place at the audio manager's safe write position
+                (int, int) result = audioManager.QueueAudioChunk(outputWaveform);
                 startingPoint = result.Item1 + chunkSamples;
-                audioStartingPoint = result.Item2;
             }
             else {
-                (int,int) result = audioManager.QueueAudioChunk(outputWaveform, audioStartingPoint, startingPoint);
-                startingPoint = result.Item1 + chunkSamples;
-                audioStartingPoint = result.Item2;
+                // Subsequent chunks: always advance by exactly chunkSamples
+                // to maintain correct overlap-add alignment
+                audioManager.QueueAudioChunk(outputWaveform, 0, startingPoint);
+                startingPoint += chunkSamples;
             }
-            Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
         }
 
         // Draw Waveform for Debugging
@@ -630,5 +636,5 @@ public class RayTraceManager : MonoBehaviour
             array[j] = temp;
         }
     }
-    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, initialSpectrumBuffer);
+    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, frequencyBinCountsBuffer, inputBuffer, initialSpectrumBuffer);
 }
