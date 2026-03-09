@@ -27,6 +27,8 @@ public class AudioManager : MonoBehaviour
 
     const string WaveformKernelName = "DrawRingBufferWaveform";
 
+    public bool paused = false;
+
     // Recording
     bool isRecording;
     List<float> recordingBuffer;
@@ -38,7 +40,7 @@ public class AudioManager : MonoBehaviour
     void Awake()
     {
         sampleRate = AudioSettings.outputSampleRate;
-        bufferSize = sampleRate * 8; // 8 second buffer
+        bufferSize = sampleRate * 16; // 16 second buffer
         ringBuffer = new float[bufferSize];
         
         var src = gameObject.AddComponent<AudioSource>();
@@ -113,6 +115,7 @@ public class AudioManager : MonoBehaviour
 
     void OnAudioFilterRead(float[] data, int channels)
     {
+        if (paused) return;
         lock (bufferLock)
         {
             int samplesPerChannel = data.Length / channels;
@@ -150,6 +153,12 @@ public class AudioManager : MonoBehaviour
                 Debug.Log($"Recording stopped. {recordingBuffer.Count} samples captured.");
                 SaveRecordingToWav();
             }
+        }
+
+        if (Input.GetKeyDown(KeyCode.P))
+        {
+            paused = !paused;
+            Debug.Log(paused ? "Audio paused." : "Audio resumed.");
         }
 
         if (showWaveform && shader != null)

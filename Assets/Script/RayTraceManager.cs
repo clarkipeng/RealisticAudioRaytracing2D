@@ -11,7 +11,7 @@ public class RayTraceManager : MonoBehaviour
     public ComputeShader raytraceShader;
 
     [Header("Simulation")]
-    [Range(10, 100000)] public int rayCount = 1000;
+    [Range(10, 1000000)] public int rayCount = 1000;
     [Range(0, 10)] public int maxBounces = 5;
     public float speedOfSound = 343f;
     public bool dynamicObstacles = false;
