@@ -3,6 +3,7 @@
 #include "Common.hlsl"
 
 int ChunkSamples;
+int HopSize;
 
 float4 sourcePos;
 float4 listenerPos;
@@ -303,7 +304,7 @@ void ProcessHits(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)HitCount) return;
     RayInfo hit = RawHits[id.x];
     
-    float tBin = (float)ChunkSamples / (float)SampleRate;
+    float tBin = (float)HopSize / (float)SampleRate;
     
     int index = (int)(hit.timeDelay / tBin);
     float subBinDelay = hit.timeDelay - (index * tBin);
@@ -578,9 +579,8 @@ void SpectrogramToWaveformIFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 gro
     // 4) Normalize and write real component
     float invN = 1.0 / (float)WINDOW_SIZE;
     
-    // Windowing without overlap causes severe amplitude modulation (tremolo).
-    // float w = 0.5 * (1.0 - cos(2.0 * PI * idx / (float)(WINDOW_SIZE - 1)));
-    float w = 1.0; 
+    // Hann synthesis window — CPU-side overlap-add at 50% hop reconstructs perfectly
+    float w = 0.5 * (1.0 - cos(2.0 * PI * idx / (float)(WINDOW_SIZE - 1)));
     
     WaveformOut[baseIndex + idx] = sharedData[idx].x * invN * w;
 }

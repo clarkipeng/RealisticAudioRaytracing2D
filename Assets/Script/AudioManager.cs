@@ -81,7 +81,6 @@ public class AudioManager : MonoBehaviour
             if (forcedWritePos.HasValue) {
                 writePos = (forcedWritePos.Value % bufferSize);
 
-                Debug.Log($"QueueAudioChunk with forcedWritePos {forcedWritePos.Value % bufferSize}, ending at {(safeStart + bufferSize / 2) % bufferSize}, safeStart: {safeStart}.");
                 if ( (((safeStart + bufferSize / 2) % bufferSize) > safeStart) && (writePos < safeStart || writePos > (safeStart + bufferSize / 2) % bufferSize)
                     || (((safeStart + bufferSize / 2) % bufferSize) < safeStart) && (writePos < safeStart && writePos > (safeStart + bufferSize / 2) % bufferSize))
                 {   
@@ -96,18 +95,12 @@ public class AudioManager : MonoBehaviour
                 }
             }
             
-            // if (safeStart != writePos)
-            // {
-            //     Debug.Log($"writepos: {writePos}, safeStart: {safeStart}, audioStartPos: {audioStartPos}.");
-            // }
             for (int i = 0; i < audio.Length - audioStartPos; i++)
             {
                 int idx = (writePos + i) % bufferSize;
                 ringBuffer[idx] += audio[i + audioStartPos];
             }
             writeHead = (writePos + audio.Length) % bufferSize;
-
-            Debug.Log($"writePos: {writePos}, audioStartPos: {audioStartPos}, readHead: {readHead}, safeStart: {safeStart}.");
             return (writePos, audioStartPos);
         }
     }

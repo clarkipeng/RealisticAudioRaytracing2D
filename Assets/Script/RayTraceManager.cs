@@ -73,8 +73,10 @@ public class RayTraceManager : MonoBehaviour
     int activeSpectrogramIndex;
     int accumFrames;
     int spectrogramSize;
+    int hopSize;
 
     float[] outputWaveform;
+    float[] olaOutput;
 
     struct RayInfo { public float timeDelay, energy; public int frequencyBin; public float roomFreqHz; public Vector2 hitPoint; }
     
@@ -85,7 +87,9 @@ public class RayTraceManager : MonoBehaviour
 
     void Start()
     {
-        spectrogramSize = Mathf.CeilToInt(sampleRate * reverbDuration);
+        hopSize = chunkSamples / 2;
+        int numTimeSteps = Mathf.CeilToInt(sampleRate * reverbDuration / (float)hopSize);
+        spectrogramSize = numTimeSteps * chunkSamples;
         UpdateGeometry();
         ResetSpectrogram();
 
@@ -185,10 +189,9 @@ public class RayTraceManager : MonoBehaviour
 
     void ResetSpectrogram()
     {
-        int len = Mathf.CeilToInt(sampleRate * reverbDuration);
         activeSpectrogramIndex = 0;
-        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPing, len);
-        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPong, len);
+        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPing, spectrogramSize);
+        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPong, spectrogramSize);
     }
 
     ComputeBuffer GetActiveSpectrogramBuffer()
@@ -202,7 +205,7 @@ public class RayTraceManager : MonoBehaviour
         fullInputSamples = LoadSample(inputClip);
         ResetSpectrogram();
         
-        delayBetweenChunks = (float)chunkSamples / sampleRate;
+        delayBetweenChunks = (float)hopSize / sampleRate;
         PrecomputeAllFFTs();
         
         currentChunkIndex = 0;
@@ -220,16 +223,22 @@ public class RayTraceManager : MonoBehaviour
 
         int k_fft = raytraceShader.FindKernel("FFT");
 
+        // Precompute Hann window to reduce spectral leakage
+        float[] hannWindow = new float[chunkSamples];
+        for (int i = 0; i < chunkSamples; i++)
+            hannWindow[i] = 0.5f * (1.0f - Mathf.Cos(2.0f * Mathf.PI * i / (chunkSamples - 1)));
+
         while (offset < totalSamples)
         {
             int samplesToProcess = Mathf.Min(chunkSamples, totalSamples - offset);
             float[] chunk = new float[chunkSamples];
             System.Array.Copy(fullInputSamples, offset, chunk, 0, samplesToProcess);
 
+            // Apply Hann window before FFT to reduce spectral leakage
             Vector2[] complexSamples = new Vector2[chunkSamples];
             for (int i = 0; i < chunkSamples; i++)
             {
-                complexSamples[i] = new Vector2(chunk[i], 0f);
+                complexSamples[i] = new Vector2(chunk[i] * hannWindow[i], 0f);
             }
 
             ComputeHelper.CreateStructuredBuffer(ref inputBuffer, complexSamples);
@@ -247,7 +256,7 @@ public class RayTraceManager : MonoBehaviour
                 spectrum = fftResult
             });
 
-            offset += samplesToProcess;
+            offset += hopSize; // 50% overlap for proper STFT analysis
             ComputeHelper.Release(inputBuffer);
         }
         Debug.Log($"Precomputed {precomputedChunks.Count} FFT chunks.");
@@ -379,6 +388,7 @@ public class RayTraceManager : MonoBehaviour
             int kp = raytraceShader.FindKernel("ProcessHits");
             raytraceShader.SetInt("SampleRate", sampleRate);
             raytraceShader.SetInt("ChunkSamples", chunkSamples);
+            raytraceShader.SetInt("HopSize", hopSize);
             raytraceShader.SetInt("HitCount", safeHitCount);
             raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
             raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
@@ -518,28 +528,43 @@ public class RayTraceManager : MonoBehaviour
                 waveformOutBuffer.SetData(zeros, 0, written, tail);
             }
 
-            // Read back and queue
+            // Read back windowed IFFT frames and overlap-add on CPU
             waveformOutBuffer.GetData(outputWaveform);
+
+            int numTimeSteps = spectrogramSize / chunkSamples;
+            int olaLength = (numTimeSteps - 1) * hopSize + chunkSamples;
+            if (olaOutput == null || olaOutput.Length != olaLength)
+                olaOutput = new float[olaLength];
+            System.Array.Clear(olaOutput, 0, olaOutput.Length);
+
+            for (int t = 0; t < numTimeSteps; t++)
+            {
+                int srcOffset = t * chunkSamples;
+                int dstOffset = t * hopSize;
+                for (int s = 0; s < chunkSamples; s++)
+                    olaOutput[dstOffset + s] += outputWaveform[srcOffset + s];
+            }
+
             if (startingPoint == -1)
             {
-                (int, int) result = audioManager.QueueAudioChunk(outputWaveform, audioStartingPoint);
-                startingPoint = result.Item1 + chunkSamples;
+                (int, int) result = audioManager.QueueAudioChunk(olaOutput, audioStartingPoint);
+                startingPoint = result.Item1 + hopSize;
                 audioStartingPoint = result.Item2;
             }
             else {
-                (int,int) result = audioManager.QueueAudioChunk(outputWaveform, audioStartingPoint, startingPoint);
-                startingPoint = result.Item1 + chunkSamples;
+                (int,int) result = audioManager.QueueAudioChunk(olaOutput, audioStartingPoint, startingPoint);
+                startingPoint = result.Item1 + hopSize;
                 audioStartingPoint = result.Item2;
             }
             Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
         }
 
         // Draw Waveform for Debugging
-        if (waveformTexture != null)
+        if (waveformTexture != null && olaOutput != null)
         {
-            ComputeBuffer waveformBuffer = ComputeHelper.CreateStructuredBuffer(outputWaveform);
+            ComputeBuffer waveformBuffer = ComputeHelper.CreateStructuredBuffer(olaOutput);
             int kw = raytraceShader.FindKernel("DrawWaveform");
-            raytraceShader.SetInt("WaveformLength", outputWaveform.Length);
+            raytraceShader.SetInt("WaveformLength", olaOutput.Length);
             raytraceShader.SetInt("TexWidth", waveformTexture.width);
             raytraceShader.SetInt("TexHeight", waveformTexture.height);
             raytraceShader.SetFloat("DebugGain", waveformGain);
