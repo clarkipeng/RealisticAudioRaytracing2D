@@ -16,3 +16,4 @@ MonoBehaviour:
   density: 10
   porosity: 0.1
   rigidity: 0.2
+  overrideTrans: 1

@@ -1,4 +1,6 @@
 using UnityEngine;
+using System.Collections.Generic;
+using System.IO;
 using Helpers;
 
 public class AudioManager : MonoBehaviour
@@ -24,6 +26,10 @@ public class AudioManager : MonoBehaviour
     ComputeBuffer ringBufferGPU;
 
     const string WaveformKernelName = "DrawRingBufferWaveform";
+
+    // Recording
+    bool isRecording;
+    List<float> recordingBuffer;
 
     public int SampleRate => sampleRate;
     public int WriteHead => writeHead;
@@ -118,6 +124,9 @@ public class AudioManager : MonoBehaviour
                 if (readHead >= bufferSize) readHead -= bufferSize;
                 for (int c = 0; c < channels; c++)
                     data[i * channels + c] = s;
+
+                if (isRecording)
+                    recordingBuffer.Add(s);
             }
         }
     }
@@ -126,9 +135,74 @@ public class AudioManager : MonoBehaviour
     {
         bufferCapacity = bufferSize;
         readHead_Debug = readHead;
-        
+
+        if (Input.GetKeyDown(KeyCode.R))
+        {
+            if (!isRecording)
+            {
+                recordingBuffer = new List<float>();
+                isRecording = true;
+                Debug.Log("Recording started.");
+            }
+            else
+            {
+                isRecording = false;
+                Debug.Log($"Recording stopped. {recordingBuffer.Count} samples captured.");
+                SaveRecordingToWav();
+            }
+        }
+
         if (showWaveform && shader != null)
             DrawCyclingWaveform();
+    }
+
+    void SaveRecordingToWav()
+    {
+        if (recordingBuffer == null || recordingBuffer.Count == 0)
+        {
+            Debug.LogWarning("No recording data to save.");
+            return;
+        }
+
+        float[] samples = recordingBuffer.ToArray();
+        string path = Path.Combine(Application.dataPath, $"recording_{System.DateTime.Now:yyyyMMdd_HHmmss}.wav");
+
+        using (var fs = new FileStream(path, FileMode.Create))
+        using (var writer = new BinaryWriter(fs))
+        {
+            int channels = 1;
+            int bitsPerSample = 16;
+            int byteRate = sampleRate * channels * bitsPerSample / 8;
+            int blockAlign = channels * bitsPerSample / 8;
+            int dataSize = samples.Length * blockAlign;
+
+            // RIFF header
+            writer.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));
+            writer.Write(36 + dataSize);
+            writer.Write(System.Text.Encoding.ASCII.GetBytes("WAVE"));
+
+            // fmt chunk
+            writer.Write(System.Text.Encoding.ASCII.GetBytes("fmt "));
+            writer.Write(16);
+            writer.Write((short)1); // PCM
+            writer.Write((short)channels);
+            writer.Write(sampleRate);
+            writer.Write(byteRate);
+            writer.Write((short)blockAlign);
+            writer.Write((short)bitsPerSample);
+
+            // data chunk
+            writer.Write(System.Text.Encoding.ASCII.GetBytes("data"));
+            writer.Write(dataSize);
+
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float clamped = Mathf.Clamp(samples[i], -1f, 1f);
+                writer.Write((short)(clamped * 32767f));
+            }
+        }
+
+        Debug.Log($"Recording saved to {path}");
     }
     
     void DrawCyclingWaveform()

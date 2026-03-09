@@ -28,6 +28,8 @@ public class AudioMaterial : ScriptableObject
     [Range(0f, 1f)]
     public float rigidity = 0.9f;
 
+    public bool overrideTrans = false;
+
     public AudioMatData GetShaderData()
     {
         AudioMatData data = new AudioMatData();
@@ -43,6 +45,7 @@ public class AudioMaterial : ScriptableObject
         // R = ((Z2 - Z1) / (Z2 + Z1))^2
         float R = Mathf.Pow((impedanceMat - impedanceAir) / (impedanceMat + impedanceAir), 2.0f);
         data.transmission = 1.0f - R;
+        if (overrideTrans) data.transmission = 0.5f; // For testing purposes
 
         data.scattering = roughness;
         data.absorption = Mathf.Clamp01(porosity + (roughness * 0.1f));
