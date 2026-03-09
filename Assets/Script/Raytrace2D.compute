@@ -2,18 +2,26 @@
 
 #include "Common.hlsl"
 
+int ChunkSamples;
+
 float4 sourcePos;
 float4 listenerPos;
+float4 sourceVel;
+float4 listenerVel;
 float inputGain;
-float listenerRadius, speedOfSound;
+float listenerRadius;
+float speedOfSound;
 int rayCount, debugRayCount, maxBounceCount, numWalls;
 uint rngStateOffset;
+int frequencyDistributionSize;
 
 struct AudioMat {
     float absorption;
     float scattering;
     float transmission;
     float ior;
+    float damping;
+    float padding;
 };
 
 struct Wall { 
@@ -23,19 +31,25 @@ struct Wall {
 
 struct RayInfo { 
     float timeDelay; 
-    float energy; 
+    float energy;
+    int frequencyBin;
+    float roomFreqHz;
     float2 hitPoint; 
 };
 
 StructuredBuffer<Wall> walls;
 AppendStructuredBuffer<RayInfo> rayInfoBuffer;
 RWStructuredBuffer<float4> debugRays;
-RWStructuredBuffer<float> ImpulseResponse;
+RWStructuredBuffer<uint2> Spectrogram;
 StructuredBuffer<RayInfo> RawHits;
+StructuredBuffer<int> FrequencyDistribution;
+StructuredBuffer<float2> InitialSpectrum;
 
-int SampleRate, ImpulseLength, HitCount, accumCount;
+int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
 float DebugGain;
+static const float AIR_ATTENUATION = 0.002;
+float diffractionFactor;
 
 bool checkVis(float2 start, float2 end, float dist) {
     float2 dir = (end - start) / dist;
@@ -50,12 +64,20 @@ bool checkVis(float2 start, float2 end, float dist) {
 void Trace (uint3 id : SV_DispatchThreadID) {
     uint rng = id.x + rngStateOffset * 719393;
     float angle = ((id.x + random(rng)) / rayCount) * 2 * PI;
-    
     float2 rayDir = float2(cos(angle), sin(angle));
+    
+    int curFreqIdx = FrequencyDistribution[id.x % frequencyDistributionSize];
+    float sourceFreqHz = max(1.0, (float)curFreqIdx * (float)SampleRate / (float)ChunkSamples);
+    
+    float sourceVelAlongRay = dot(sourceVel.xy, rayDir);
+    float roomFreqHz = sourceFreqHz * speedOfSound / max(1.0, speedOfSound - sourceVelAlongRay);
+    
+    float wavelength = speedOfSound / roomFreqHz;
+    float diffractionThreshold = wavelength * diffractionFactor;
+    
     float2 rayPos = sourcePos.xy;
     float curEnergy = inputGain;
     float accumTime = 0;
-    float totalDist = 0;
     float currentIOR = 1.0; 
     float curSpeed = speedOfSound; 
     int wallDepth = 0;
@@ -66,23 +88,98 @@ void Trace (uint3 id : SV_DispatchThreadID) {
     for (int i = 0; i < maxBounceCount; i++) {
         float closest = inf; int hitIdx = -1;
 
+        float closestApproachT = inf;
+        float closestApproachDist = inf;
+        float2 closestCorner = float2(0, 0);
+
         for (int w = 0; w < numWalls; w++) {
             float d = intersect(rayPos, rayDir, walls[w].a, walls[w].b);
             if (d < closest) { closest = d; hitIdx = w; }
-        }
-        
-        if (wallDepth == 0) {
-            float distToListener = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
-            if (distToListener < closest && distToListener < inf) {
-                RayInfo info;
-                info.hitPoint = rayPos + rayDir * distToListener; 
-                info.timeDelay = accumTime + (distToListener / curSpeed);
-                float totalD = totalDist + distToListener;
-                info.energy = curEnergy / max(1.0, totalD * totalD);
-                rayInfoBuffer.Append(info);
+
+            float2 toA = walls[w].a - rayPos;
+            float2 toB = walls[w].b - rayPos;
+            float distToA = length(toA);
+            float distToB = length(toB);
+            
+            float tA = dot(toA, rayDir);  // Distance along ray to closest approach to corner A
+            float tB = dot(toB, rayDir);  // Distance along ray to closest approach to corner B
+            
+            // Only consider corners ahead of the ray (t > 0) AND not already within threshold
+            if (tA > eps && distToA > diffractionThreshold) {
+                float2 approachPointA = rayPos + rayDir * tA;
+                float perpDistA = length(walls[w].a - approachPointA);
+                
+                if (perpDistA < closestApproachDist && perpDistA < diffractionThreshold) {
+                    if (checkVis(rayPos, walls[w].a, distToA)) {
+                        closestApproachT = tA;
+                        closestApproachDist = perpDistA;
+                        closestCorner = walls[w].a;
+                    }
+                }
+            }
+            if (tB > eps && distToB > diffractionThreshold) {
+                float2 approachPointB = rayPos + rayDir * tB;
+                float perpDistB = length(walls[w].b - approachPointB);
+                
+                if (perpDistB < closestApproachDist && perpDistB < diffractionThreshold) {
+                    if (checkVis(rayPos, walls[w].b, distToB)) {
+                        closestApproachT = tB;
+                        closestApproachDist = perpDistB;
+                        closestCorner = walls[w].b;
+                    }
+                }
             }
         }
         
+        if (wallDepth == 0) {
+            float distList = intersectCircle(rayPos, rayDir, listenerPos.xy, listenerRadius);
+            if (distList < closest && distList < inf) {
+                RayInfo info = (RayInfo)0;
+                info.hitPoint = rayPos + rayDir * distList; 
+                info.timeDelay = accumTime + (distList / curSpeed);
+                info.energy = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
+                info.frequencyBin = curFreqIdx;
+                info.roomFreqHz = roomFreqHz;
+                rayInfoBuffer.Append(info);
+            }
+            
+            // diffraction
+            if (closestApproachT < closest && closestApproachDist < diffractionThreshold) {
+                float2 approachPoint = rayPos + rayDir * closestApproachT;
+                
+                if (id.x < (uint)debugRayCount) 
+                    debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(approachPoint, curEnergy, 0);
+                
+                rayPos = approachPoint;
+                accumTime += closestApproachT / curSpeed;
+                
+                float2 toCorner = normalize(closestCorner - rayPos);
+                float t = 1.0 - (closestApproachDist / diffractionThreshold);
+                rayDir = normalize(rayDir * (1.0 - t) + toCorner * t);
+                curEnergy *= t;
+                
+                float2 toList = listenerPos.xy - rayPos;
+                float distList = length(toList);
+                
+                // Note: No wall.normal here - diffraction is omnidirectional from the corner
+                if (checkVis(rayPos, listenerPos.xy, distList)) {
+                    float contrib = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / max(1, distList));
+
+                    if (contrib > 1e-5) {
+                        RayInfo info = (RayInfo)0;
+                        info.hitPoint = rayPos;
+                        info.timeDelay = accumTime + (distList / speedOfSound);
+                        info.energy = contrib;
+                        info.frequencyBin = curFreqIdx;
+                        info.roomFreqHz = roomFreqHz;
+                        rayInfoBuffer.Append(info);
+                    }
+                }
+                continue;
+            }
+        }
+        
+        // No hit and no diffraction - ray escapes
         if (hitIdx == -1) {
             if (id.x < (uint)debugRayCount) 
                 debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos + rayDir * 20.0, 0, 0);
@@ -91,13 +188,16 @@ void Trace (uint3 id : SV_DispatchThreadID) {
 
         rayPos += rayDir * closest;
         accumTime += closest / curSpeed;
-        totalDist += closest;
+        
+        Wall wall = walls[hitIdx];
+        float freqMultiplier = 1.0 + (roomFreqHz / 2000.0);
+        float currentDamping = (wallDepth == 0) ? AIR_ATTENUATION : (walls[hitIdx].mat.damping * freqMultiplier);
+        curEnergy *= exp(-currentDamping * closest);
+        curEnergy *= (1.0 - wall.mat.absorption);
 
         if (id.x < 100) 
             debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
         
-        Wall wall = walls[hitIdx];
-
         if (wallDepth == 0) {
             float2 toList = listenerPos.xy - rayPos;
             float distList = length(toList);
@@ -105,85 +205,382 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
                 float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
                 float cosT = max(0, dot(effN, toList / distList));
-                float totalD = totalDist + distList;
-                float contrib = curEnergy * (1.0 - wall.mat.absorption) * (cosT * 0.5) * (1.0 / (totalD*totalD));
+                float contrib = curEnergy * (cosT * 0.5) * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
 
                 if (contrib > 1e-5) {
-                    RayInfo info;
+                    RayInfo info = (RayInfo)0;
                     info.hitPoint = rayPos;
                     info.timeDelay = accumTime + (distList / speedOfSound);
                     info.energy = contrib;
+                    info.frequencyBin = curFreqIdx;
+                    info.roomFreqHz = roomFreqHz;
                     rayInfoBuffer.Append(info);
                 }
             }
         }
         
-        curEnergy *= (1.0 - wall.mat.absorption);
-        if (curEnergy < 1e-3) break;
+        if (curEnergy < 1e-5) break; //save compute
 
         bool entering = dot(rayDir, wall.normal) < 0;
         float2 n = entering ? wall.normal : -wall.normal;
-        float wallSpeed = speedOfSound / wall.mat.ior;
-        float nextSpeed = entering ? wallSpeed : ((wallDepth <= 1) ? speedOfSound : wallSpeed);
+        
+        float iorMultiplier = 1.0 + (roomFreqHz / 10000.0) * 0.1; // 10% shift at 10kHz
+        float wallSpeed = speedOfSound / (wall.mat.ior * iorMultiplier);
+        
+        float nextSpeed = entering ? wallSpeed : speedOfSound; 
         float eta = nextSpeed / curSpeed;
+        
+        // fresnel reflection calculation
+        float R0 = 1.0 - wall.mat.transmission; 
+        float cosTheta = abs(dot(rayDir, n)); 
+        
+        float fresnel = R0 + (1.0 - R0) * pow(saturate(1.0 - cosTheta), 5.0);
         float rngVal = random(rng);
 
-        if (rngVal < wall.mat.transmission) {
+        // transmission
+        if (rngVal > fresnel) {
             float3 refr = Refract(float3(rayDir, 0), float3(n, 0), eta);
             
+            // (<= 0 means TIR)
             if (length(refr) > 0) {
                 float2 nextDir = refr.xy;
-                if (wall.mat.scattering > 0) {
-                    float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering;
-                    float s = sin(jitter), c = cos(jitter);
-                    nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
-                }
+                
+                float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering * 0.5; // Reduced jitter for refraction
+                float s = sin(jitter), c = cos(jitter);
+                nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
+
                 rayDir = normalize(nextDir);
                 curSpeed = nextSpeed;
                 if (entering) wallDepth++; else wallDepth = max(0, wallDepth - 1);
                 rayPos += rayDir * eps;
-                continue;
+                continue; // Skip the reflection code below
             }
         }
 
+        // reflection
+        // either < fresnel or TIR
         float2 specularDir = reflect(rayDir, n);
+        
         float diffAng = asin(2.0 * random(rng) - 1.0);
         float s = sin(diffAng), c = cos(diffAng);
         float2 diffuseDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
+        
         rayDir = normalize(lerp(specularDir, diffuseDir, wall.mat.scattering));
         rayPos += n * eps;
     }
+    // RayInfo info = (RayInfo)0;
+    // info.hitPoint = float2(0,0);
+    // info.timeDelay = 0.0;
+    // info.energy = 100;
+    // info.frequencyBin = FrequencyDistribution[id.x % frequencyDistributionSize];
+    // rayInfoBuffer.Append(info);
 }
+
+// Atomic complex float add using compare-exchange loops
+void AtomicAddComplex(uint index, float2 value) {
+    uint prevValX = 0, curValX;
+    [allow_uav_condition]
+    while (true) {
+        InterlockedCompareExchange(Spectrogram[index].x, prevValX, 
+            asuint(asfloat(prevValX) + value.x), curValX);
+        if (curValX == prevValX) break;
+        prevValX = curValX;
+    }
+
+    uint prevValY = 0, curValY;
+    [allow_uav_condition]
+    while (true) {
+        InterlockedCompareExchange(Spectrogram[index].y, prevValY, 
+            asuint(asfloat(prevValY) + value.y), curValY);
+        if (curValY == prevValY) break;
+        prevValY = curValY;
+    }
+}
+
 #pragma kernel ProcessHits
 [numthreads(64, 1, 1)]
 void ProcessHits(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)HitCount) return;
     RayInfo hit = RawHits[id.x];
-    int index = (int)(hit.timeDelay * SampleRate);
-    if (index < ImpulseLength && index >= 0)
-        ImpulseResponse[index] = ImpulseResponse[index] + hit.energy; 
+    
+    float tBin = (float)ChunkSamples / (float)SampleRate;
+    
+    int index = (int)(hit.timeDelay / tBin);
+    float subBinDelay = hit.timeDelay - (index * tBin);
+    
+    float phaseShift = -2.0 * PI * hit.roomFreqHz * subBinDelay;
+    
+    float2 initial_comp = InitialSpectrum[hit.frequencyBin];
+    float2 hit_comp = complex_mult(initial_comp, complex_exp(phaseShift)) * (hit.energy / (float)rayCount);
+
+    // Doppler: Compute relative velocity upon absorption by listener limits
+    float2 incomingRayDir = normalize(listenerPos.xy - hit.hitPoint);
+    float listenerVelAlongRay = dot(listenerVel.xy, incomingRayDir);
+    float observedFreqHz = hit.roomFreqHz * max(1.0, speedOfSound - listenerVelAlongRay) / speedOfSound;
+
+    float exactBin = observedFreqHz * (float)ChunkSamples / (float)SampleRate;
+    int centerBin = round(exactBin);
+
+    // Sinc interpolation splat to prevent exact bin pitch quantization
+    int minBin = max(0, centerBin - 2);
+    int maxBin = min(ChunkSamples / 2 - 1, centerBin + 2);
+
+    for (int bin = minBin; bin <= maxBin; bin++) {
+        float delta = exactBin - (float)bin;
+        
+        // Exact DTFT coefficients of an off-bin sinusoid
+        float sinc = (delta == 0.0) ? 1.0 : sin(PI * delta) / (PI * delta);
+        float phaseRot = -PI * delta; 
+        
+        float2 sinc_comp = float2(sinc * cos(phaseRot), sinc * sin(phaseRot));
+        float2 shifted_comp = complex_mult(hit_comp, sinc_comp);
+        
+        int specIndex = index * ChunkSamples + bin;
+        if (specIndex < SpectrogramSize && index >= 0) {
+            AtomicAddComplex(specIndex, shifted_comp);
+        }
+    }
 }
 
-#pragma kernel ClearImpulse
+#pragma kernel TestSetSpectrogramAtCertainFreq
+int TestSetSpectrogramFreqBin;
+
+[numthreads(64, 1, 1)]
+void TestSetSpectrogramAtCertainFreq(uint3 id : SV_DispatchThreadID) {
+    if (id.x * ChunkSamples + id.y >= (uint)SpectrogramSize) return;
+
+    if (id.x == 0 && id.y == TestSetSpectrogramFreqBin)
+        Spectrogram[id.x * ChunkSamples + id.y] = uint2(asuint(40.0), asuint(0.0));
+    // if (id.x == 1 && id.y == TestSetSpectrogramFreqBin)
+    //     Spectrogram[id.x * ChunkSamples + id.y] = 25.0;
+    // if (id.x == 2 && id.y == TestSetSpectrogramFreqBin)
+    //     Spectrogram[id.x * ChunkSamples + id.y] = 16.0;
+    // if (id.x == 3 && id.y == TestSetSpectrogramFreqBin)
+    //     Spectrogram[id.x * ChunkSamples + id.y] = 9.0;
+}
+
+
+#pragma kernel ClearSpectrogram
 [numthreads(256, 1, 1)]
-void ClearImpulse(uint3 id : SV_DispatchThreadID) {
-    if (id.x < (uint)ImpulseLength)
-        ImpulseResponse[id.x] = 0.0;
+void ClearSpectrogram(uint3 id : SV_DispatchThreadID) {
+    if (id.x < (uint)SpectrogramSize)
+        Spectrogram[id.x] = uint2(asuint(0.0), asuint(0.0));
 }
 
-#pragma kernel DrawIR
+#pragma kernel DrawSpectrogram
+#pragma kernel DrawWaveform
 
 RWTexture2D<float4> DebugTexture; 
+StructuredBuffer<float> WaveformData;
+int WaveformLength;
+int FFTLength;
 
 [numthreads(8, 8, 1)]
-void DrawIR(uint3 id : SV_DispatchThreadID) {
+void DrawSpectrogram(uint3 id : SV_DispatchThreadID) {
+    int NumFrequencyBins = ChunkSamples;
+    int TimeSteps = SpectrogramSize / ChunkSamples;
+
     if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
     float uvX = id.x / (float)TexWidth;
-    int index = (int)(uvX * ImpulseLength);
+    float uvY = id.y / (float)TexHeight;
+
+    // X axis = time, Y axis = frequency
+    int timeIndex = (int)(uvX * TimeSteps);
+    int freqIndex = (int)(uvY * NumFrequencyBins);
+
     float amp = 0;
-    if (index < ImpulseLength) amp = ImpulseResponse[index] / accumCount;
-    float h = (float)TexHeight;
-    float y = (0.1*h) + (amp * DebugGain * h);
-    float4 col = (id.y < y && id.y > 0.1*h) ? float4(0, 1, 0, 1) : float4(0, 0, 0, 1);
+    if (timeIndex < TimeSteps && freqIndex < NumFrequencyBins) {
+        int spectrogramIndex = timeIndex * NumFrequencyBins + freqIndex;
+        uint2 spec = Spectrogram[spectrogramIndex];
+        float2 specComp = float2(asfloat(spec.x), asfloat(spec.y));
+        amp = length(specComp) / max(1, accumCount);
+    }
+    
+    // Color based on amplitude (heat map style)
+    float intensity = saturate(amp * DebugGain);
+    float4 col = float4(intensity, intensity * 0.5, 0, 1);
     DebugTexture[id.xy] = col;
+}
+
+[numthreads(8, 8, 1)]
+void DrawWaveform(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
+    // Clear to dark background
+    float4 col = float4(0.05, 0.05, 0.1, 1);
+    
+    // Map x to waveform sample index
+    if (WaveformLength > 0) {
+        float u = id.x / (float)max(1, TexWidth - 1);
+        int sampleIndex = (int)(u * (WaveformLength - 1));
+        sampleIndex = clamp(sampleIndex, 0, WaveformLength - 1);
+        
+        float amp = WaveformData[sampleIndex];
+        float ampScaled = saturate(abs(amp) * DebugGain * 50.0);
+        
+        // Centered waveform
+        float midY = (TexHeight - 1) * 0.5;
+        float waveY = midY + amp * midY;
+        float dist = abs((float)id.y - waveY);
+        float thickness = 1.5; // pixels
+        
+        if (dist <= thickness) {
+            col = float4(0.1, 0.8, 1.0, 1);
+        } else {
+            // Subtle glow based on amplitude
+            float glow = saturate(1.0 - dist / (thickness + 6.0)) * ampScaled;
+            col += float4(0.1, 0.4, 0.6, 0) * glow;
+        }
+    }
+    
+    DebugTexture[id.xy] = col;
+}
+
+// ===== Ring Buffer Waveform Visualization =====
+#pragma kernel DrawRingBufferWaveform
+
+StructuredBuffer<float> RingBufferData;
+int RingBufferSize;
+int RingBufferReadHead;
+int RingBufferWriteHead;
+float WaveformGain;
+
+[numthreads(8, 8, 1)]
+void DrawRingBufferWaveform(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)TexWidth || id.y >= (uint)TexHeight) return;
+    
+    // Background color
+    float4 col = float4(0.05, 0.05, 0.1, 1);
+    
+    if (RingBufferSize > 0) {
+        // Map x coordinate to position in ring buffer
+        // Display from readHead to writeHead (or full buffer if wrapping)
+        float u = id.x / (float)max(1, TexWidth - 1);
+        
+        // Calculate sample index in ring buffer
+        // We want to visualize the buffer cyclically, showing what's queued
+        int bufferSpan = RingBufferSize;
+        int sampleOffset = (int)(u * bufferSpan);
+        int sampleIndex = (RingBufferReadHead + sampleOffset) % RingBufferSize;
+        
+        float amp = RingBufferData[sampleIndex];
+        float ampScaled = saturate(abs(amp) * WaveformGain);
+        
+        // Centered waveform
+        float midY = (TexHeight - 1) * 0.5;
+        float waveY = midY + amp * WaveformGain * midY * 0.8; // Scale to fit
+        float dist = abs((float)id.y - waveY);
+        float thickness = 1.5;
+        
+        // Draw waveform line
+        if (dist <= thickness) {
+            col = float4(0.1, 0.8, 1.0, 1);
+        } else {
+            // Subtle glow
+            float glow = saturate(1.0 - dist / (thickness + 6.0)) * ampScaled;
+            col += float4(0.1, 0.4, 0.6, 0) * glow;
+        }
+        
+        // Highlight read/write head positions
+        int readHeadPixel = ((RingBufferReadHead - RingBufferReadHead) * TexWidth) / RingBufferSize;
+        int writeHeadPixel = ((RingBufferWriteHead - RingBufferReadHead + RingBufferSize) % RingBufferSize * TexWidth) / RingBufferSize;
+        
+        // Read head marker (green vertical line)
+        if (abs((int)id.x - readHeadPixel) <= 1) {
+            col = lerp(col, float4(0, 1, 0, 1), 0.5);
+        }
+        
+        // Write head marker (red vertical line)
+        if (abs((int)id.x - writeHeadPixel) <= 1) {
+            col = lerp(col, float4(1, 0, 0, 1), 0.5);
+        }
+    }
+    
+    // col = float4(1,0,0, 1);
+    DebugTexture[id.xy] = col;
+}
+
+// ===== Spectrogram -> Waveform (GPU ST-IFFT) =====
+// Converts the accumulated spectrogram (time-major, ChunkSamples frequency bins per frame)
+// into a time-domain waveform by performing an IFFT per time frame.
+//
+// Notes:
+// - This kernel does NOT modify the existing FFT/IFFT kernels in Common.hlsl.
+// - Assumes ChunkSamples == WINDOW_SIZE (1024) so it can reuse the same radix-2 implementation.
+// - Matches the current CPU behavior: no windowing, no overlap, writes contiguous chunks.
+
+#pragma kernel SpectrogramToWaveformIFFT
+
+RWStructuredBuffer<float> WaveformOut;
+
+[numthreads(WINDOW_SIZE, 1, 1)]
+void SpectrogramToWaveformIFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
+    uint idx = groupThreadID.x;
+    uint timeIndex = groupID.x;
+
+    uint timeSteps = (ChunkSamples > 0) ? (uint)(SpectrogramSize / ChunkSamples) : 0;
+    if (timeIndex >= timeSteps) return;
+
+    uint baseIndex = timeIndex * (uint)ChunkSamples;
+
+    // 1) Load complex spectrum into shared memory
+    uint2 specAtomic = Spectrogram[baseIndex + idx];
+    sharedData[idx] = float2(asfloat(specAtomic.x), asfloat(specAtomic.y));
+    GroupMemoryBarrierWithGroupSync();
+
+    // 2) Enforce conjugate symmetry for real time-domain signal
+    //    (mirrors the CPU-side reconstruction pattern)
+    if (idx > 0 && idx < (WINDOW_SIZE / 2)) {
+        float2 val = sharedData[idx];
+        sharedData[WINDOW_SIZE - idx] = float2(val.x, -val.y);
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // 3) In-place IFFT (same algorithm as the IFFT kernel, but local to this kernel)
+    int n = WINDOW_SIZE;
+    int bits = (int)log2((float)n);
+
+    // Bit-reversal
+    uint rev = reversebits(idx) >> (32 - bits);
+    if (idx < rev) {
+        float2 temp = sharedData[idx];
+        sharedData[idx] = sharedData[rev];
+        sharedData[rev] = temp;
+    }
+    GroupMemoryBarrierWithGroupSync();
+
+    // IFFT stages
+    for (int s = 1; s <= bits; s++) {
+        int m = 1 << s;
+        int m2 = m >> 1;
+
+        int k = (idx / m2) * m;
+        int j = idx % m2;
+
+        if (j < m2) {
+            float angle = 2.0 * PI * j / m;
+            float2 w = complex_exp(angle);
+
+            int i1 = k + j;
+            int i2 = k + j + m2;
+
+            float2 u = sharedData[i1];
+            float2 t = complex_mult(w, sharedData[i2]);
+
+            sharedData[i1] = u + t;
+            sharedData[i2] = u - t;
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+    }
+
+    // 4) Normalize and write real component
+    float invN = 1.0 / (float)WINDOW_SIZE;
+    
+    // Windowing without overlap causes severe amplitude modulation (tremolo).
+    // float w = 0.5 * (1.0 - cos(2.0 * PI * idx / (float)(WINDOW_SIZE - 1)));
+    float w = 1.0; 
+    
+    WaveformOut[baseIndex + idx] = sharedData[idx].x * invN * w;
 }
