@@ -152,17 +152,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   raytraceShader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 50000
+  rayCount: 25000
   maxBounces: 5
   speedOfSound: 343
   dynamicObstacles: 1
-  inputClip: {fileID: 8300000, guid: babfe7405b9058e47a2ab7942e7a6721, type: 3}
+  inputClip: {fileID: 8300000, guid: 9774d7c519f6140e1a01b40afc918025, type: 3}
   audioManager: {fileID: 1445243919}
   sampleRate: 48000
   chunkSamples: 1024
-  inputGain: 10000
+  inputGain: 100000
   loopAudio: 0
-  reverbDuration: 1.5
+  reverbDuration: 3
   loop: 1
   source: {fileID: 1860376488}
   listener: {fileID: 849675356}
@@ -672,7 +672,7 @@ Transform:
   m_GameObject: {fileID: 849675352}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -3.68, z: 0}
+  m_LocalPosition: {x: 17.11, y: 1.52, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -803,8 +803,8 @@ Transform:
   m_GameObject: {fileID: 863865497}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: 0.7068626, w: 0.7073508}
-  m_LocalPosition: {x: -11.8, y: 7.18, z: 0}
-  m_LocalScale: {x: 100, y: 1, z: 1}
+  m_LocalPosition: {x: -9.9986, y: 7.1787, z: 0}
+  m_LocalScale: {x: 100, y: 4.6031246, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1338,7 +1338,7 @@ Transform:
   m_GameObject: {fileID: 1860376486}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -17.47, y: -2.41, z: 0}
+  m_LocalPosition: {x: -16.36, y: -0.57, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

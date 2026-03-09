@@ -153,14 +153,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   raytraceShader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
   rayCount: 25000
-  maxBounces: 4
+  maxBounces: 1
   speedOfSound: 343
   dynamicObstacles: 1
-  inputClip: {fileID: 8300000, guid: 9774d7c519f6140e1a01b40afc918025, type: 3}
+  inputClip: {fileID: 8300000, guid: babfe7405b9058e47a2ab7942e7a6721, type: 3}
   audioManager: {fileID: 1445243919}
   sampleRate: 48000
   chunkSamples: 1024
-  inputGain: 10000
+  inputGain: 183374
   loopAudio: 0
   reverbDuration: 1.5
   loop: 0
@@ -1242,7 +1242,7 @@ Transform:
   m_GameObject: {fileID: 1860376486}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.4, y: 28.6, z: 0}
+  m_LocalPosition: {x: 1.1, y: 16.3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1260,8 +1260,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3cc019edea948b640893688c96c0289e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  distance: 50
-  speed: 20
+  distance: 200
+  speed: 100
   direction: {x: 1, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
