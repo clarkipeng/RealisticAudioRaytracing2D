@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using Helpers;
 using UnityEngine.Rendering;
 
@@ -24,6 +23,13 @@ public class RayTraceManager : MonoBehaviour
     [Range(0.1f, 1000000f)] public float inputGain = 1f;
 
     public bool loopAudio = false;
+    public bool enableKeyboardShortcuts = true;
+
+    [Header("Precomputed Playback")]
+    public AudioSource precomputedPlaybackSource;
+    public AudioClip precomputedClip;
+    public bool autoPlayPrecomputed = true;
+    [Range(1, 64)] public int precomputeChunksPerFrame = 4;
 
     [Header("UI & Visualization")]
     public float reverbDuration = 5f;
@@ -50,8 +56,6 @@ public class RayTraceManager : MonoBehaviour
         frequencyDistributionBuffer,
         inputBuffer;
 
-    double lastTime = 0.0;
-
     struct FFTChunk {
         public int[] frequencyDistribution;
         public Vector2[] spectrum;
@@ -61,7 +65,7 @@ public class RayTraceManager : MonoBehaviour
     bool isStreaming = false;
     float delayBetweenChunks;
     float nextChunkTime = 0f;
-    int startingPoint = -1;
+    long startingPoint = -1;
     int audioStartingPoint = 0;
 
     RenderTexture spectrogramTexture;
@@ -77,6 +81,9 @@ public class RayTraceManager : MonoBehaviour
 
     float[] outputWaveform;
     float[] olaOutput;
+    bool isPrecomputing;
+    AudioClip preparedClip;
+    int preparedSampleRate;
 
     struct RayInfo { public float timeDelay, energy; public int frequencyBin; public float roomFreqHz; public Vector2 hitPoint; }
     
@@ -87,53 +94,55 @@ public class RayTraceManager : MonoBehaviour
 
     void Start()
     {
-        hopSize = chunkSamples / 2;
-        int numTimeSteps = Mathf.CeilToInt(sampleRate * reverbDuration / (float)hopSize);
-        spectrogramSize = numTimeSteps * chunkSamples;
+        if (chunkSamples != 1024)
+        {
+            Debug.LogWarning($"chunkSamples was {chunkSamples}, but the GPU FFT kernels use WINDOW_SIZE=1024. Forcing chunkSamples to 1024.");
+            chunkSamples = 1024;
+        }
+
+        InitializeSimulation();
         UpdateGeometry();
         ResetSpectrogram();
+        if (source != null) lastSourcePos = source.position;
+        if (listener != null) lastListenerPos = listener.position;
 
-        if (spectrogramTexture == null) {
-            spectrogramTexture = new RenderTexture(1024, 256, 0) {
-                enableRandomWrite = true, filterMode = FilterMode.Point 
-            };
-            spectrogramTexture.Create();
-        }
+        if (spectrogramTexture == null) spectrogramTexture = CreateDebugTexture();
+        if (waveformTexture == null) waveformTexture = CreateDebugTexture();
 
-        if (waveformTexture == null) {
-            waveformTexture = new RenderTexture(1024, 256, 0) {
-                enableRandomWrite = true, filterMode = FilterMode.Point 
-            };
-            waveformTexture.Create();
-        }
-
-        audioManager.StartStreaming(sampleRate);
+        if (audioManager != null)
+            audioManager.StartStreaming(sampleRate);
     }
 
     void Update()
     {
-        float dt = Time.deltaTime > 0 ? Time.deltaTime : 0.016f;
-        sourceVel = (source.position - lastSourcePos) / dt;
-        listenerVel = (listener.position - lastListenerPos) / dt;
-        lastSourcePos = source.position;
-        lastListenerPos = listener.position;
-
-        if (Input.GetKeyDown(KeyCode.R)) { Debug.Log("R pressed - Resetting"); ResetSpectrogram(); accumFrames = 0; }
-        if (Input.GetKeyDown(KeyCode.Q)) { Debug.Log("Q pressed - Queueing sine"); QueueSineWave(440f, 1.0f); }
-        if (Input.GetKeyDown(KeyCode.Space)) {
-            Debug.Log("Space pressed - Starting stream");
-            StartStreaming();
+        if (source != null && listener != null)
+        {
+            float dt = Time.deltaTime > 0 ? Time.deltaTime : 0.016f;
+            sourceVel = (source.position - lastSourcePos) / dt;
+            listenerVel = (listener.position - lastListenerPos) / dt;
+            lastSourcePos = source.position;
+            lastListenerPos = listener.position;
         }
 
-        // Debug: Check if ANY key is pressed
-        if (Input.anyKeyDown) Debug.Log($"A key was pressed this frame");
+        if (enableKeyboardShortcuts)
+        {
+            if (Input.GetKeyDown(KeyCode.R)) { Debug.Log("R pressed - Resetting"); ResetSimulation(); }
+            if (Input.GetKeyDown(KeyCode.Q)) { Debug.Log("Q pressed - Queueing sine"); QueueTestSineWave(); }
+            if (Input.GetKeyDown(KeyCode.Space)) {
+                Debug.Log("Space pressed - Starting stream");
+                StartStreaming();
+            }
+            if (Input.GetKeyDown(KeyCode.C)) {
+                Debug.Log("C pressed - Precomputing raytraced clip");
+                StartPrecomputedPlayback();
+            }
+        }
 
         if (spectrogramTexture == null || raytraceShader == null) {
             Debug.LogWarning("Spectrogram texture or raytrace shader not assigned.");
             return;
         }
 
-        // Debug.Log($"Update: isStreaming={isStreaming}, currentChunkIndex={currentChunkIndex}, precomputedChunks={precomputedChunks.Count}, nextChunkTime={nextChunkTime:F2}");
         if (isStreaming && currentChunkIndex < precomputedChunks.Count)
         {
             if (Time.realtimeSinceStartup >= nextChunkTime)
@@ -162,7 +171,7 @@ public class RayTraceManager : MonoBehaviour
             if (loopAudio)
             {
                 currentChunkIndex = 0;
-                startingPoint = -1;
+                audioStartingPoint = 0;
             }
             else
             {
@@ -171,14 +180,34 @@ public class RayTraceManager : MonoBehaviour
             }
         }
 
-        double timeNow = Time.realtimeSinceStartup;
-        float deltaTime = (float)(timeNow - lastTime);
-        // Debug.Log($"Time delta: {deltaTime:F4}s");
-        lastTime = timeNow;
     }
 
-    void QueueSineWave(float frequency, float duration)
+    void InitializeSimulation()
     {
+        hopSize = chunkSamples / 2;
+        spectrogramSize = Mathf.CeilToInt(sampleRate * reverbDuration / (float)hopSize) * chunkSamples;
+    }
+
+    RenderTexture CreateDebugTexture()
+    {
+        var texture = new RenderTexture(1024, 256, 0) {
+            enableRandomWrite = true,
+            filterMode = FilterMode.Point
+        };
+        texture.Create();
+        return texture;
+    }
+
+    public void QueueTestSineWave() => QueueSineWave(440f, 1.0f);
+
+    public void QueueSineWave(float frequency, float duration)
+    {
+        if (audioManager == null)
+        {
+            Debug.LogWarning("Cannot queue sine wave because AudioManager is not assigned.");
+            return;
+        }
+
         int totalSamples = Mathf.CeilToInt(sampleRate * duration);
         float[] samples = new float[totalSamples];
         for (int i = 0; i < totalSamples; i++)
@@ -187,11 +216,22 @@ public class RayTraceManager : MonoBehaviour
         audioManager.QueueAudioChunk(samples);
     }
 
+    public void ResetSimulation()
+    {
+        ResetPlaybackState();
+        ResetSpectrogram();
+        accumFrames = 0;
+        isStreaming = false;
+        isPrecomputing = false;
+    }
+
     void ResetSpectrogram()
     {
         activeSpectrogramIndex = 0;
         ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPing, spectrogramSize);
         ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPong, spectrogramSize);
+        ClearSpectrogramBuffer(spectrogramBufferPing);
+        ClearSpectrogramBuffer(spectrogramBufferPong);
     }
 
     ComputeBuffer GetActiveSpectrogramBuffer()
@@ -199,20 +239,148 @@ public class RayTraceManager : MonoBehaviour
         return activeSpectrogramIndex == 0 ? spectrogramBufferPing : spectrogramBufferPong;
     }
 
-    void StartStreaming()
+    public void StartStreaming()
     {
+        if (!CanProcessAudio(requireAudioManager: true)) return;
+
         Debug.Log("Starting audio streaming and processing.");
-        fullInputSamples = LoadSample(inputClip);
+        isPrecomputing = false;
         ResetSpectrogram();
         
         delayBetweenChunks = (float)hopSize / sampleRate;
+        PrepareCurrentClip();
+
+        ResetPlaybackState();
+        isStreaming = true;
+        nextChunkTime = Time.realtimeSinceStartup;
+    }
+
+    public void StopStreaming()
+    {
+        isStreaming = false;
+        isPrecomputing = false;
+    }
+
+    public void StartPrecomputedPlayback()
+    {
+        if (isPrecomputing)
+        {
+            Debug.LogWarning("Precomputation is already running.");
+            return;
+        }
+
+        if (!CanProcessAudio(requireAudioManager: false)) return;
+
+        StartCoroutine(PrecomputeAndPlay());
+    }
+
+    public void PrepareCurrentClip()
+    {
+        if (!CanProcessAudio(requireAudioManager: false)) return;
+        if (hopSize <= 0 || spectrogramSize <= 0)
+            InitializeSimulation();
+
+        if (preparedClip == inputClip && preparedSampleRate == sampleRate && precomputedChunks.Count > 0)
+            return;
+
+        fullInputSamples = LoadSample(inputClip);
         PrecomputeAllFFTs();
-        
+        preparedClip = inputClip;
+        preparedSampleRate = sampleRate;
+    }
+
+    IEnumerator PrecomputeAndPlay()
+    {
+        isPrecomputing = true;
+        isStreaming = false;
+        ResetPlaybackState();
+        accumFrames = 0;
+
+        Debug.Log("Precomputing raytraced audio clip.");
+        fullInputSamples = LoadSample(inputClip);
+        ResetSpectrogram();
+        PrecomputeAllFFTs();
+
+        int reverbSamples = Mathf.CeilToInt(sampleRate * reverbDuration) + chunkSamples;
+        float[] precomputedSamples = new float[fullInputSamples.Length + reverbSamples];
+
+        for (int i = 0; i < precomputedChunks.Count; i++)
+        {
+            currentChunkIndex = i;
+            RunRaytracing(precomputedChunks[i]);
+            float[] response = RunSimulation(queuePlayback: false, drawWaveform: showDebugTexture);
+            AddResponseToPrecomputedBuffer(precomputedSamples, response, i * hopSize);
+
+            if ((i + 1) % precomputeChunksPerFrame == 0)
+                yield return null;
+        }
+
+        precomputedClip = AudioClip.Create(
+            $"Raytraced_{inputClip.name}",
+            precomputedSamples.Length,
+            1,
+            sampleRate,
+            false
+        );
+        precomputedClip.SetData(precomputedSamples, 0);
+
+        if (autoPlayPrecomputed)
+            PlayPrecomputedClip();
+
+        isPrecomputing = false;
+        Debug.Log($"Finished precomputing {precomputedChunks.Count} chunks into {precomputedClip.length:F2}s of audio.");
+    }
+
+    void ResetPlaybackState()
+    {
         currentChunkIndex = 0;
         startingPoint = -1;
         audioStartingPoint = 0;
-        isStreaming = true;
-        nextChunkTime = Time.realtimeSinceStartup;
+    }
+
+    public void PlayPrecomputedClip()
+    {
+        if (precomputedClip == null)
+        {
+            Debug.LogWarning("No precomputed clip is available yet.");
+            return;
+        }
+
+        if (precomputedPlaybackSource == null)
+            precomputedPlaybackSource = gameObject.AddComponent<AudioSource>();
+
+        precomputedPlaybackSource.clip = precomputedClip;
+        precomputedPlaybackSource.loop = loopAudio;
+        precomputedPlaybackSource.Play();
+    }
+
+    bool CanProcessAudio(bool requireAudioManager)
+    {
+        if (raytraceShader == null)
+        {
+            Debug.LogWarning("Raytrace shader is not assigned.");
+            return false;
+        }
+
+        if (inputClip == null)
+        {
+            Debug.LogWarning("Input clip is not assigned.");
+            return false;
+        }
+
+        if (source == null || listener == null)
+        {
+            Debug.LogWarning("Source and listener transforms must be assigned.");
+            return false;
+        }
+
+        if (requireAudioManager && audioManager == null)
+        {
+            Debug.LogWarning("AudioManager is not assigned.");
+            return false;
+        }
+
+        return true;
     }
 
     void PrecomputeAllFFTs()
@@ -262,23 +430,11 @@ public class RayTraceManager : MonoBehaviour
         Debug.Log($"Precomputed {precomputedChunks.Count} FFT chunks.");
     }
 
-    void TestSpectrogramBuffer()
-    {
-        int kp = raytraceShader.FindKernel("TestSetSpectrogramAtCertainFreq");
-        raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
-        raytraceShader.SetInt("ChunkSamples", chunkSamples);
-        raytraceShader.SetInt("TestSetSpectrogramFreqBin", 16);
-        raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
-
-        ComputeHelper.Dispatch(raytraceShader, spectrogramSize / chunkSamples, chunkSamples, 1, kp);
-    }
-
     float[] LoadSample(AudioClip clip)
     {
         float[] raw = new float[clip.samples * clip.channels];
         clip.GetData(raw, 0);
 
-        // Convert to mono
         float[] mono = new float[clip.samples];
         for (int i = 0; i < clip.samples; i++)
         {
@@ -287,7 +443,6 @@ public class RayTraceManager : MonoBehaviour
             mono[i] = sum / clip.channels;
         }
 
-        // Resample if needed
         if (clip.frequency == sampleRate) return mono;
 
         float ratio = (float)clip.frequency / sampleRate;
@@ -303,7 +458,6 @@ public class RayTraceManager : MonoBehaviour
             resampled[i] = Mathf.Lerp(mono[idx0], mono[idx1], t);
         }
 
-        // Debug.Log($"Resampled audio from {clip.frequency}Hz to {sampleRate}Hz ({clip.samples} -> {newLength} samples)");
         return resampled;
     }
 
@@ -317,7 +471,7 @@ public class RayTraceManager : MonoBehaviour
         ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
         ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
 
-        if (wallBuffer == null || !wallBuffer.IsValid()) UpdateGeometry();
+        if (dynamicObstacles || wallBuffer == null || !wallBuffer.IsValid()) UpdateGeometry();
         if (argsBuffer == null || !argsBuffer.IsValid()) argsBuffer = new ComputeBuffer(1, sizeof(int) * 4, ComputeBufferType.IndirectArguments);
 
         int k = raytraceShader.FindKernel("Trace");
@@ -351,40 +505,15 @@ public class RayTraceManager : MonoBehaviour
         AsyncGPUReadback.Request(debugBuffer, r => { if (!r.hasError) debugRayPaths = r.GetData<Vector4>().ToArray(); });
         ComputeBuffer.CopyCount(hitBuffer, argsBuffer, 0);
 
-        int[] argsData = new int[4];  // Match the actual buffer size
+        int[] argsData = new int[4];
         argsBuffer.GetData(argsData);
-        int hitCount = argsData[0];  // Only the first int is the counter
+        int hitCount = argsData[0];
 
-        // Ray hit processing
         if (hitBuffer == null || spectrogramTexture == null) return;
 
-        // Process Hits
         if (hitCount > 0)
         {
-
             int safeHitCount = Mathf.Min(hitCount, hitBuffer.count);
-            RayInfo[] hitData = new RayInfo[safeHitCount];
-            hitBuffer.GetData(hitData, 0, 0, safeHitCount);
-            // int[] test2 = new int[safeHitCount];
-            // for (int i = 0; i < safeHitCount; i++)
-            // {
-            //     test2[i] = hitData[i].frequencyBin;
-            // }
-            // // Count occurrences of each unique integer
-            // Dictionary<int, int> counts = new Dictionary<int, int>();
-            // foreach (int val in test2)
-            // {
-            //     if (counts.ContainsKey(val))
-            //         counts[val]++;
-            //     else
-            //         counts[val] = 1;
-            // }
-
-            // string countsStr2 = string.Join(", ", counts.OrderBy(kv => kv.Key).Select(kv => $"{kv.Key}:{kv.Value}"));
-            // Debug.Log($"Frequency Distribution Counts After Hits: {countsStr2}");
-
-
-            // Debug.Log($"Processing {safeHitCount} ray hits into spectrogram.");
             int kp = raytraceShader.FindKernel("ProcessHits");
             raytraceShader.SetInt("SampleRate", sampleRate);
             raytraceShader.SetInt("ChunkSamples", chunkSamples);
@@ -398,13 +527,9 @@ public class RayTraceManager : MonoBehaviour
         accumFrames++;
     }
 
-    // Build a weighted frequency distribution from the FFT result (Bins)
     int[] BuildFrequencyDistribution(Vector2[] fftResult)
     {
-        // Only use first half of FFT (positive frequencies)
         int halfSize = fftResult.Length / 2;
-
-        // Calculate magnitudes for each frequency bin
         float[] magnitudes = new float[halfSize];
         float totalMagnitude = 0f;
 
@@ -414,67 +539,63 @@ public class RayTraceManager : MonoBehaviour
             totalMagnitude += magnitudes[i];
         }
 
-        // Normalize magnitudes
         if (totalMagnitude > 0)
         {
             for (int i = 0; i < halfSize; i++)
                 magnitudes[i] /= totalMagnitude;
         }
 
-        // Track counts for each frequency bin for debugging
-
-        // Build weighted distribution buffer (rayCount entries)
-        // Each entry is a frequency bin index, with frequencies appearing proportional to their magnitude
-
-        int[] binCounts = new int[halfSize];
         int[] distribution = new int[rayCount];
         int distributionIndex = 0;
 
-        int test_total = 0;
-
         for (int i = 0; i < halfSize && distributionIndex < rayCount; i++)
         {
-            // Convert bin index to frequency
-            int frequencyBin = i;
-
-            // Add this frequency proportional to its normalized magnitude
             int count = Mathf.RoundToInt(magnitudes[i] * rayCount);
-            binCounts[i] = count;
-            test_total += count;
 
             for (int j = 0; j < count && distributionIndex < rayCount; j++)
             {
-                distribution[distributionIndex++] = frequencyBin;
+                distribution[distributionIndex++] = i;
             }
         }
 
-        // Debug.Log($"Filled {distributionIndex}, we have: {rayCount}");
-
-        // Fill any remaining slots with audible frequencies (if rounding left gaps)
-        int randomFills = 0;
         while (distributionIndex < rayCount)
-        {
-            int randomBin = Random.Range(0, halfSize);
-            distribution[distributionIndex++] = randomBin;
-            randomFills++;
-        }
-
-        // Debug log the distribution counts
-        // Debug.Log($"=== Frequency Distribution Counts (Total Rays: {rayCount}, Total Assigned: {test_total}, Random Fills: {randomFills}) ===");
+            distribution[distributionIndex++] = Random.Range(0, halfSize);
 
         Shuffle(distribution);
-        // Debug.Log($"[{string.Join(", ", binCounts)}]");
-
-
         return distribution;
-        // return magnitudes;
     }
 
-    void RunSimulation()
+    float[] RunSimulation(bool queuePlayback = true, bool drawWaveform = true)
     {
-        // Read the accumulated spectrogram from the current active buffer
         ComputeBuffer currentBuffer = GetActiveSpectrogramBuffer();
+        DrawSpectrogram(currentBuffer);
 
+        if (chunkSamples != 1024)
+        {
+            Debug.LogWarning($"SpectrogramToWaveformIFFT kernel assumes chunkSamples==1024 (WINDOW_SIZE). Current chunkSamples={chunkSamples}. Skipping GPU IFFT.");
+            AdvanceSpectrogramBuffer();
+            return null;
+        }
+
+        int timeSteps = spectrogramSize / chunkSamples;
+        if (timeSteps <= 0)
+        {
+            Debug.LogWarning($"SpectrogramToWaveformIFFT: timeSteps was {timeSteps} (spectrogramSize={spectrogramSize}, chunkSamples={chunkSamples}). Skipping.");
+            AdvanceSpectrogramBuffer();
+            return null;
+        }
+
+        RunSpectrogramIfft(currentBuffer, timeSteps);
+        OverlapAdd(timeSteps);
+        if (queuePlayback) QueueOutputWaveform();
+        if (drawWaveform) DrawWaveform(olaOutput);
+
+        AdvanceSpectrogramBuffer();
+        return olaOutput;
+    }
+
+    void DrawSpectrogram(ComputeBuffer buffer)
+    {
         int kd = raytraceShader.FindKernel("DrawSpectrogram");
         raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
         raytraceShader.SetInt("ChunkSamples", chunkSamples);
@@ -483,88 +604,65 @@ public class RayTraceManager : MonoBehaviour
         raytraceShader.SetInt("accumCount", accumFrames);
         raytraceShader.SetFloat("DebugGain", spectrogramGain);
         raytraceShader.SetTexture(kd, "DebugTexture", spectrogramTexture);
-        raytraceShader.SetBuffer(kd, "Spectrogram", currentBuffer);
+        raytraceShader.SetBuffer(kd, "Spectrogram", buffer);
         ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
+    }
 
-        if (chunkSamples != 1024)
+    void RunSpectrogramIfft(ComputeBuffer spectrogram, int timeSteps)
+    {
+        if (waveformOutBuffer == null || !waveformOutBuffer.IsValid() || waveformOutBuffer.count != spectrogramSize)
         {
-            Debug.LogWarning($"SpectrogramToWaveformIFFT kernel assumes chunkSamples==1024 (WINDOW_SIZE). Current chunkSamples={chunkSamples}. Skipping GPU IFFT.");
-        }
-        else
-        {
-            int timeSteps = spectrogramSize / chunkSamples;
-            if (timeSteps <= 0)
-            {
-                Debug.LogWarning($"SpectrogramToWaveformIFFT: timeSteps was {timeSteps} (spectrogramSize={spectrogramSize}, chunkSamples={chunkSamples}). Skipping.");
-                return;
-            }
-
-            // Allocate/reuse output buffer
-            if (waveformOutBuffer == null || !waveformOutBuffer.IsValid() || waveformOutBuffer.count != spectrogramSize)
-            {
-                ComputeHelper.Release(waveformOutBuffer);
-                waveformOutBuffer = new ComputeBuffer(spectrogramSize, sizeof(float));
-            }
-
-            if (outputWaveform == null || outputWaveform.Length != spectrogramSize)
-                outputWaveform = new float[spectrogramSize];
-
-            int k_stifft = raytraceShader.FindKernel("SpectrogramToWaveformIFFT");
-            raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
-            raytraceShader.SetInt("ChunkSamples", chunkSamples);
-            raytraceShader.SetBuffer(k_stifft, "Spectrogram", currentBuffer);
-            raytraceShader.SetBuffer(k_stifft, "WaveformOut", waveformOutBuffer);
-
-            // IMPORTANT: this kernel's X dimension is thread-groups (one group per time frame).
-            // ComputeHelper.Dispatch interprets the parameter as *threads/iterations* and would under-dispatch.
-            raytraceShader.Dispatch(k_stifft, timeSteps, 1, 1);
-
-            // Clear any tail samples (spectrogramSize may not be divisible by chunkSamples)
-            int written = timeSteps * chunkSamples;
-            int tail = spectrogramSize - written;
-            if (tail > 0)
-            {
-                float[] zeros = new float[tail];
-                waveformOutBuffer.SetData(zeros, 0, written, tail);
-            }
-
-            // Read back windowed IFFT frames and overlap-add on CPU
-            waveformOutBuffer.GetData(outputWaveform);
-
-            int numTimeSteps = spectrogramSize / chunkSamples;
-            int olaLength = (numTimeSteps - 1) * hopSize + chunkSamples;
-            if (olaOutput == null || olaOutput.Length != olaLength)
-                olaOutput = new float[olaLength];
-            System.Array.Clear(olaOutput, 0, olaOutput.Length);
-
-            for (int t = 0; t < numTimeSteps; t++)
-            {
-                int srcOffset = t * chunkSamples;
-                int dstOffset = t * hopSize;
-                for (int s = 0; s < chunkSamples; s++)
-                    olaOutput[dstOffset + s] += outputWaveform[srcOffset + s];
-            }
-
-            if (startingPoint == -1)
-            {
-                (int, int) result = audioManager.QueueAudioChunk(olaOutput, audioStartingPoint);
-                startingPoint = result.Item1 + hopSize;
-                audioStartingPoint = result.Item2;
-            }
-            else {
-                (int,int) result = audioManager.QueueAudioChunk(olaOutput, audioStartingPoint, startingPoint);
-                startingPoint = result.Item1 + hopSize;
-                audioStartingPoint = result.Item2;
-            }
-            Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
+            ComputeHelper.Release(waveformOutBuffer);
+            waveformOutBuffer = new ComputeBuffer(spectrogramSize, sizeof(float));
         }
 
-        // Draw Waveform for Debugging
-        if (waveformTexture != null && olaOutput != null)
+        if (outputWaveform == null || outputWaveform.Length != spectrogramSize)
+            outputWaveform = new float[spectrogramSize];
+
+        int k = raytraceShader.FindKernel("SpectrogramToWaveformIFFT");
+        raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+        raytraceShader.SetInt("ChunkSamples", chunkSamples);
+        raytraceShader.SetBuffer(k, "Spectrogram", spectrogram);
+        raytraceShader.SetBuffer(k, "WaveformOut", waveformOutBuffer);
+        raytraceShader.Dispatch(k, timeSteps, 1, 1);
+        waveformOutBuffer.GetData(outputWaveform);
+    }
+
+    void OverlapAdd(int timeSteps)
+    {
+        int length = (timeSteps - 1) * hopSize + chunkSamples;
+        if (olaOutput == null || olaOutput.Length != length) olaOutput = new float[length];
+        System.Array.Clear(olaOutput, 0, olaOutput.Length);
+
+        for (int t = 0; t < timeSteps; t++)
         {
-            ComputeBuffer waveformBuffer = ComputeHelper.CreateStructuredBuffer(olaOutput);
+            int src = t * chunkSamples;
+            int dst = t * hopSize;
+            for (int s = 0; s < chunkSamples; s++) olaOutput[dst + s] += outputWaveform[src + s];
+        }
+    }
+
+    void QueueOutputWaveform()
+    {
+        (long writePos, int startPos) = startingPoint == -1
+            ? audioManager.QueueAudioChunk(olaOutput, audioStartingPoint)
+            : audioManager.QueueAudioChunk(olaOutput, audioStartingPoint, startingPoint);
+
+        startingPoint = writePos + hopSize;
+        audioStartingPoint = startPos;
+        Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
+    }
+
+    void DrawWaveform(float[] waveform)
+    {
+        if (waveformTexture == null || waveform == null) return;
+
+        ComputeBuffer waveformBuffer = null;
+        try
+        {
+            waveformBuffer = ComputeHelper.CreateStructuredBuffer(waveform);
             int kw = raytraceShader.FindKernel("DrawWaveform");
-            raytraceShader.SetInt("WaveformLength", olaOutput.Length);
+            raytraceShader.SetInt("WaveformLength", waveform.Length);
             raytraceShader.SetInt("TexWidth", waveformTexture.width);
             raytraceShader.SetInt("TexHeight", waveformTexture.height);
             raytraceShader.SetFloat("DebugGain", waveformGain);
@@ -572,16 +670,37 @@ public class RayTraceManager : MonoBehaviour
             raytraceShader.SetTexture(kw, "DebugTexture", waveformTexture);
             ComputeHelper.Dispatch(raytraceShader, waveformTexture.width, waveformTexture.height, 1, kw);
         }
+        finally
+        {
+            ComputeHelper.Release(waveformBuffer);
+        }
+    }
 
-        // Switch buffers for next chunk (ping-pong)
+    void AdvanceSpectrogramBuffer()
+    {
         activeSpectrogramIndex = 1 - activeSpectrogramIndex;
+        ClearSpectrogramBuffer(GetActiveSpectrogramBuffer());
+    }
 
-        // Clear the new active buffer for fresh accumulation
+    void ClearSpectrogramBuffer(ComputeBuffer buffer)
+    {
+        if (raytraceShader == null || buffer == null || !buffer.IsValid())
+            return;
+
         int kClear = raytraceShader.FindKernel("ClearSpectrogram");
 
         raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
-        raytraceShader.SetBuffer(kClear, "Spectrogram", GetActiveSpectrogramBuffer());
+        raytraceShader.SetBuffer(kClear, "Spectrogram", buffer);
         ComputeHelper.Dispatch(raytraceShader, spectrogramSize, 1, 1, kClear);
+    }
+
+    void AddResponseToPrecomputedBuffer(float[] target, float[] response, int startSample)
+    {
+        if (target == null || response == null || startSample >= target.Length) return;
+
+        int available = Mathf.Min(response.Length, target.Length - startSample);
+        for (int i = 0; i < available; i++)
+            target[startSample + i] += response[i];
     }
 
     void UpdateGeometry()

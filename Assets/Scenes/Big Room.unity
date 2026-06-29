@@ -152,8 +152,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   raytraceShader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 1000000
-  maxBounces: 10
+  rayCount: 243758
+  maxBounces: 4
   speedOfSound: 343
   dynamicObstacles: 1
   inputClip: {fileID: 8300000, guid: 9774d7c519f6140e1a01b40afc918025, type: 3}

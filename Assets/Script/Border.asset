@@ -13,6 +13,7 @@ MonoBehaviour:
   m_Name: Border
   m_EditorClassIdentifier: 
   roughness: 0.5
-  density: 2400
-  porosity: 0.558
-  rigidity: 0.376
+  density: 8000
+  porosity: 0.234
+  rigidity: 0.697
+  overrideTrans: 0

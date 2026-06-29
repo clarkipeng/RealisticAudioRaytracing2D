@@ -152,7 +152,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   raytraceShader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 25000
+  rayCount: 252091
   maxBounces: 5
   speedOfSound: 343
   dynamicObstacles: 1
@@ -1005,6 +1005,7 @@ MonoBehaviour:
   waveformTextureSize: {x: 1024, y: 256}
   waveformGain: 10
   waveformTexture: {fileID: 0}
+  paused: 0
 --- !u!4 &1445243920
 Transform:
   m_ObjectHideFlags: 0

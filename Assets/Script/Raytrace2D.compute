@@ -17,12 +17,16 @@ uint rngStateOffset;
 int frequencyDistributionSize;
 
 struct AudioMat {
-    float absorption;
-    float scattering;
-    float transmission;
-    float ior;
-    float damping;
-    float padding;
+    float4 absorptionLow;
+    float4 absorptionHigh;
+    float4 scatteringLow;
+    float4 scatteringHigh;
+    float4 transmissionLow;
+    float4 transmissionHigh;
+    float4 iorLow;
+    float4 iorHigh;
+    float4 dampingLow;
+    float4 dampingHigh;
 };
 
 struct Wall { 
@@ -49,8 +53,64 @@ StructuredBuffer<float2> InitialSpectrum;
 int SampleRate, SpectrogramSize, HitCount, accumCount;
 int TexWidth, TexHeight;
 float DebugGain;
-static const float AIR_ATTENUATION = 0.002;
 float diffractionFactor;
+
+static const float4 OCTAVE_BANDS_LOW = float4(125.0, 250.0, 500.0, 1000.0);
+static const float4 OCTAVE_BANDS_HIGH = float4(2000.0, 4000.0, 8000.0, 16000.0);
+
+float GetBandValue(float4 low, float4 high, int band) {
+    if (band == 0) return low.x;
+    if (band == 1) return low.y;
+    if (band == 2) return low.z;
+    if (band == 3) return low.w;
+    if (band == 4) return high.x;
+    if (band == 5) return high.y;
+    if (band == 6) return high.z;
+    return high.w;
+}
+
+float SampleOctaveBands(float4 low, float4 high, float freqHz) {
+    float f = clamp(freqHz, OCTAVE_BANDS_LOW.x, OCTAVE_BANDS_HIGH.w);
+    float logF = log2(f);
+    float baseLog = log2(OCTAVE_BANDS_LOW.x);
+    float bandPos = clamp(logF - baseLog, 0.0, 7.0);
+    int lowerBand = (int)floor(bandPos);
+    int upperBand = min(lowerBand + 1, 7);
+    float t = bandPos - (float)lowerBand;
+    return lerp(GetBandValue(low, high, lowerBand), GetBandValue(low, high, upperBand), t);
+}
+
+float MaterialAbsorption(AudioMat mat, float freqHz) {
+    return saturate(SampleOctaveBands(mat.absorptionLow, mat.absorptionHigh, freqHz));
+}
+
+float MaterialScattering(AudioMat mat, float freqHz) {
+    return saturate(SampleOctaveBands(mat.scatteringLow, mat.scatteringHigh, freqHz));
+}
+
+float MaterialTransmission(AudioMat mat, float freqHz) {
+    return saturate(SampleOctaveBands(mat.transmissionLow, mat.transmissionHigh, freqHz));
+}
+
+float MaterialIor(AudioMat mat, float freqHz) {
+    return max(0.001, SampleOctaveBands(mat.iorLow, mat.iorHigh, freqHz));
+}
+
+float MaterialDamping(AudioMat mat, float freqHz) {
+    return max(0.0, SampleOctaveBands(mat.dampingLow, mat.dampingHigh, freqHz));
+}
+
+float AirAttenuationPerMeter(float freqHz) {
+    // Approximate 20 C / 50% RH octave-band atmospheric absorption in dB/m,
+    // converted to nepers/m for exp(-alpha * distance).
+    float4 lowDbPerM = float4(0.0001, 0.0003, 0.0007, 0.0015);
+    float4 highDbPerM = float4(0.0035, 0.0100, 0.0320, 0.1100);
+    return SampleOctaveBands(lowDbPerM, highDbPerM, freqHz) / 8.685889638;
+}
+
+float AirLoss(float distance, float freqHz) {
+    return exp(-AirAttenuationPerMeter(freqHz) * distance);
+}
 
 bool checkVis(float2 start, float2 end, float dist) {
     float2 dir = (end - start) / dist;
@@ -138,7 +198,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                 RayInfo info = (RayInfo)0;
                 info.hitPoint = rayPos + rayDir * distList; 
                 info.timeDelay = accumTime + (distList / curSpeed);
-                info.energy = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
+                info.energy = curEnergy * AirLoss(distList, roomFreqHz) * (1.0 / (max(1,distList)));
                 info.frequencyBin = curFreqIdx;
                 info.roomFreqHz = roomFreqHz;
                 rayInfoBuffer.Append(info);
@@ -164,7 +224,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
                 
                 // Note: No wall.normal here - diffraction is omnidirectional from the corner
                 if (checkVis(rayPos, listenerPos.xy, distList)) {
-                    float contrib = curEnergy * exp(-AIR_ATTENUATION * distList) * (1.0 / max(1, distList));
+                    float contrib = curEnergy * AirLoss(distList, roomFreqHz) * (1.0 / max(1, distList));
 
                     if (contrib > 1e-5) {
                         RayInfo info = (RayInfo)0;
@@ -191,10 +251,14 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         accumTime += closest / curSpeed;
         
         Wall wall = walls[hitIdx];
-        float freqMultiplier = 1.0 + (roomFreqHz / 2000.0);
-        float currentDamping = (wallDepth == 0) ? AIR_ATTENUATION : (walls[hitIdx].mat.damping * freqMultiplier);
+        float absorption = MaterialAbsorption(wall.mat, roomFreqHz);
+        float scattering = MaterialScattering(wall.mat, roomFreqHz);
+        float transmission = MaterialTransmission(wall.mat, roomFreqHz);
+        float materialIor = MaterialIor(wall.mat, roomFreqHz);
+        float materialDamping = MaterialDamping(wall.mat, roomFreqHz);
+        float currentDamping = (wallDepth == 0) ? AirAttenuationPerMeter(roomFreqHz) : materialDamping;
         curEnergy *= exp(-currentDamping * closest);
-        curEnergy *= (1.0 - wall.mat.absorption);
+        curEnergy *= (1.0 - absorption);
 
         if (id.x < 100) 
             debugRays[id.x * (maxBounceCount + 1) + (i + 1)] = float4(rayPos, curEnergy, 0);
@@ -206,7 +270,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             if (checkVis(rayPos + wall.normal * eps, listenerPos.xy, distList)) {
                 float2 effN = dot(rayDir, wall.normal) > 0 ? -wall.normal : wall.normal;
                 float cosT = max(0, dot(effN, toList / distList));
-                float contrib = curEnergy * (cosT * 0.5) * exp(-AIR_ATTENUATION * distList) * (1.0 / (max(1,distList)));
+                float contrib = curEnergy * (cosT * 0.5) * AirLoss(distList, roomFreqHz) * (1.0 / (max(1,distList)));
 
                 if (contrib > 1e-5) {
                     RayInfo info = (RayInfo)0;
@@ -226,13 +290,13 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         float2 n = entering ? wall.normal : -wall.normal;
         
         float iorMultiplier = 1.0 + (roomFreqHz / 10000.0) * 0.1; // 10% shift at 10kHz
-        float wallSpeed = speedOfSound / (wall.mat.ior * iorMultiplier);
+        float wallSpeed = speedOfSound / (materialIor * iorMultiplier);
         
         float nextSpeed = entering ? wallSpeed : speedOfSound; 
         float eta = nextSpeed / curSpeed;
         
         // fresnel reflection calculation
-        float R0 = 1.0 - wall.mat.transmission; 
+        float R0 = 1.0 - transmission; 
         float cosTheta = abs(dot(rayDir, n)); 
         
         float fresnel = R0 + (1.0 - R0) * pow(saturate(1.0 - cosTheta), 5.0);
@@ -246,7 +310,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
             if (length(refr) > 0) {
                 float2 nextDir = refr.xy;
                 
-                float jitter = (random(rng) - 0.5) * 2.0 * wall.mat.scattering * 0.5; // Reduced jitter for refraction
+                float jitter = (random(rng) - 0.5) * 2.0 * scattering * 0.5; // Reduced jitter for refraction
                 float s = sin(jitter), c = cos(jitter);
                 nextDir = float2(nextDir.x * c - nextDir.y * s, nextDir.x * s + nextDir.y * c);
 
@@ -266,7 +330,7 @@ void Trace (uint3 id : SV_DispatchThreadID) {
         float s = sin(diffAng), c = cos(diffAng);
         float2 diffuseDir = float2(n.x * c - n.y * s, n.x * s + n.y * c);
         
-        rayDir = normalize(lerp(specularDir, diffuseDir, wall.mat.scattering));
+        rayDir = normalize(lerp(specularDir, diffuseDir, scattering));
         rayPos += n * eps;
     }
     // RayInfo info = (RayInfo)0;

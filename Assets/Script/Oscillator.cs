@@ -3,37 +3,82 @@ using UnityEngine;
 public class Oscillator : MonoBehaviour
 {
     public float distance = 5f;
-    public float speed = 200f;
+    public bool limitDistance = true;
+    public float speed = 5f;
     public Vector3 direction = Vector3.right;
     public bool moving = false;
+    public KeyCode toggleKey = KeyCode.M;
+    public RaytracedAudioSource raytracedAudioSource;
+    public RayTraceManager rayTraceManager;
+    public bool startAudioOnMove = true;
+    public bool startAudioOnlyOnce = true;
     
-    private Vector3 startPosition;
+    Vector3 startPosition;
+    bool startedAudio;
 
     void Start()
     {
         startPosition = transform.position;
+        if (direction.sqrMagnitude < 1e-6f) direction = Vector3.right;
         direction = direction.normalized;
+        if (raytracedAudioSource == null)
+            raytracedAudioSource = GetComponent<RaytracedAudioSource>();
     }
 
     void Update()
     {
+        if (Input.GetKeyDown(toggleKey))
+            ToggleMoving();
+
         if (moving)
         {
-            float offset = speed * Time.deltaTime;
+            if (!limitDistance)
+            {
+                transform.position += direction * (speed * Time.deltaTime);
+                return;
+            }
+
+            float traveled = Vector3.Dot(transform.position - startPosition, direction);
+            float remaining = distance - traveled;
+            if (remaining <= 0f)
+            {
+                transform.position = startPosition + direction * distance;
+                moving = false;
+                return;
+            }
+
+            float offset = Mathf.Min(speed * Time.deltaTime, remaining);
             transform.position += direction * offset;
         }
+    }
 
-        if (Input.GetKeyDown(KeyCode.Space))
+    public void ToggleMoving()
+    {
+        if (!moving)
         {
-            moving = !moving;
+            if (limitDistance)
+            {
+                float traveled = Vector3.Dot(transform.position - startPosition, direction);
+                if (traveled >= distance - 0.001f)
+                    transform.position = startPosition;
+            }
+
+            StartAudioIfNeeded();
         }
 
+        moving = !moving;
+    }
 
-        Debug.Log($"Current position: {transform.position}, start position: {startPosition}, distance: {startPosition.x + distance}.");
-        if (transform.position.x > startPosition.x + distance)
-        {
-            transform.position = startPosition;
-            moving = false;
-        }
+    void StartAudioIfNeeded()
+    {
+        if (!startAudioOnMove) return;
+        if (startAudioOnlyOnce && startedAudio) return;
+
+        if (raytracedAudioSource != null)
+            raytracedAudioSource.Play();
+        else if (rayTraceManager != null)
+            rayTraceManager.StartStreaming();
+
+        startedAudio = true;
     }
 }

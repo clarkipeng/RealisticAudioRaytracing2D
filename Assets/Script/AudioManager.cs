@@ -9,6 +9,11 @@ public class AudioManager : MonoBehaviour
     public int writeHead;
     public int readHead_Debug;
     public int bufferCapacity;
+    public long writeSampleCursor_Debug;
+    public long readSampleCursor_Debug;
+    public int writeLoopCount_Debug;
+    public int readLoopCount_Debug;
+    public int underrunCount_Debug;
     
     [Header("Waveform Visualization")]
     public ComputeShader shader;
@@ -22,6 +27,9 @@ public class AudioManager : MonoBehaviour
 
     float[] ringBuffer;
     int readHead, sampleRate, bufferSize;
+    long readSampleCursor;
+    long writeSampleCursor;
+    long nextUnderrunLogSample;
     readonly object bufferLock = new object();
     ComputeBuffer ringBufferGPU;
 
@@ -36,6 +44,7 @@ public class AudioManager : MonoBehaviour
     public int SampleRate => sampleRate;
     public int WriteHead => writeHead;
     public int ReadHead { get { lock (bufferLock) return readHead; } }
+    public bool IsRecording => isRecording;
 
     void Awake()
     {
@@ -73,6 +82,9 @@ public class AudioManager : MonoBehaviour
         { 
             readHead = 0;
             writeHead = 0;
+            readSampleCursor = 0;
+            writeSampleCursor = 0;
+            underrunCount_Debug = 0;
             System.Array.Clear(ringBuffer, 0, ringBuffer.Length); 
         }
     }
@@ -80,38 +92,49 @@ public class AudioManager : MonoBehaviour
     /// <summary>
     /// Add audio chunk to ring buffer just ahead of read position for immediate playback
     /// </summary>
-    public (int, int) QueueAudioChunk(float[] audio, int audioStartPos=0, int? forcedWritePos = null)
+    public (long, int) QueueAudioChunk(float[] audio, int audioStartPos=0, long? forcedWritePos = null)
     {
+        if (audio == null || audio.Length == 0)
+            return (writeSampleCursor, audioStartPos);
+
         lock (bufferLock)
         {
-            int safeStart = (readHead + safetyBuffer) % bufferSize;
-            int writePos = safeStart;
-            if (forcedWritePos.HasValue) {
-                writePos = (forcedWritePos.Value % bufferSize);
+            long safeStart = readSampleCursor + safetyBuffer;
+            long writePos = forcedWritePos ?? safeStart;
 
-                if ( (((safeStart + bufferSize / 2) % bufferSize) > safeStart) && (writePos < safeStart || writePos > (safeStart + bufferSize / 2) % bufferSize)
-                    || (((safeStart + bufferSize / 2) % bufferSize) < safeStart) && (writePos < safeStart && writePos > (safeStart + bufferSize / 2) % bufferSize))
-                {   
-                    if (writePos < safeStart)
-                    {
-                        audioStartPos += safeStart - writePos;
-                    }
-                    else if (writePos > safeStart) {
-                        audioStartPos += bufferSize - writePos + safeStart;
-                    }
-                    writePos = safeStart;
-                }
-            }
-            
-            for (int i = 0; i < audio.Length - audioStartPos; i++)
+            if (writePos < safeStart)
             {
-                int idx = (writePos + i) % bufferSize;
+                long skippedSamples = safeStart - writePos;
+                audioStartPos += skippedSamples > int.MaxValue ? int.MaxValue : (int)skippedSamples;
+                writePos = safeStart;
+                LogUnderrun($"Audio computation is behind playback by {skippedSamples} samples; skipping ahead to avoid writing in the past.");
+            }
+
+            audioStartPos = Mathf.Clamp(audioStartPos, 0, audio.Length);
+            int samplesToWrite = audio.Length - audioStartPos;
+            if (samplesToWrite <= 0)
+                return (writePos, audioStartPos);
+
+            long maxWritableEnd = readSampleCursor + bufferSize;
+            if (writePos + samplesToWrite > maxWritableEnd)
+            {
+                samplesToWrite = Mathf.Max(0, (int)(maxWritableEnd - writePos));
+                Debug.LogWarning($"Audio queue is more than one ring buffer ahead; truncating chunk to {samplesToWrite} samples.");
+            }
+
+            for (int i = 0; i < samplesToWrite; i++)
+            {
+                int idx = Mod(writePos + i, bufferSize);
                 ringBuffer[idx] += audio[i + audioStartPos];
             }
-            writeHead = (writePos + audio.Length) % bufferSize;
+
+            writeSampleCursor = System.Math.Max(writeSampleCursor, writePos + samplesToWrite);
+            writeHead = Mod(writeSampleCursor, bufferSize);
             return (writePos, audioStartPos);
         }
     }
+
+    static int Mod(long value, int modulus) => (int)((value % modulus + modulus) % modulus);
 
     void OnAudioFilterRead(float[] data, int channels)
     {
@@ -121,10 +144,14 @@ public class AudioManager : MonoBehaviour
             int samplesPerChannel = data.Length / channels;
             for (int i = 0; i < samplesPerChannel; i++)
             {
+                if (readSampleCursor >= writeSampleCursor)
+                    LogUnderrun($"Audio read cursor passed write cursor at sample {readSampleCursor}. Computation is too slow or audio has not been queued yet.");
+
                 float s = ringBuffer[readHead];
                 ringBuffer[readHead] = 0; // Clear after reading
                 readHead++;
                 if (readHead >= bufferSize) readHead -= bufferSize;
+                readSampleCursor++;
                 for (int c = 0; c < channels; c++)
                     data[i * channels + c] = s;
 
@@ -138,31 +165,57 @@ public class AudioManager : MonoBehaviour
     {
         bufferCapacity = bufferSize;
         readHead_Debug = readHead;
+        readSampleCursor_Debug = readSampleCursor;
+        writeSampleCursor_Debug = writeSampleCursor;
+        readLoopCount_Debug = bufferSize > 0 ? (int)(readSampleCursor / bufferSize) : 0;
+        writeLoopCount_Debug = bufferSize > 0 ? (int)(writeSampleCursor / bufferSize) : 0;
 
         if (Input.GetKeyDown(KeyCode.R))
-        {
-            if (!isRecording)
-            {
-                recordingBuffer = new List<float>();
-                isRecording = true;
-                Debug.Log("Recording started.");
-            }
-            else
-            {
-                isRecording = false;
-                Debug.Log($"Recording stopped. {recordingBuffer.Count} samples captured.");
-                SaveRecordingToWav();
-            }
-        }
+            ToggleRecording();
 
         if (Input.GetKeyDown(KeyCode.P))
-        {
-            paused = !paused;
-            Debug.Log(paused ? "Audio paused." : "Audio resumed.");
-        }
+            TogglePause();
 
         if (showWaveform && shader != null)
             DrawCyclingWaveform();
+    }
+
+    public void TogglePause()
+    {
+        paused = !paused;
+        Debug.Log(paused ? "Audio paused." : "Audio resumed.");
+    }
+
+    void LogUnderrun(string message)
+    {
+        underrunCount_Debug++;
+        if (readSampleCursor < nextUnderrunLogSample)
+            return;
+
+        nextUnderrunLogSample = readSampleCursor + sampleRate / 2;
+        Debug.LogWarning(message);
+    }
+
+    public void ToggleRecording()
+    {
+        if (isRecording)
+        {
+            StopRecordingAndSave();
+            return;
+        }
+
+        recordingBuffer = new List<float>();
+        isRecording = true;
+        Debug.Log("Recording started.");
+    }
+
+    public void StopRecordingAndSave()
+    {
+        if (!isRecording) return;
+
+        isRecording = false;
+        Debug.Log($"Recording stopped. {recordingBuffer.Count} samples captured.");
+        SaveRecordingToWav();
     }
 
     void SaveRecordingToWav()
