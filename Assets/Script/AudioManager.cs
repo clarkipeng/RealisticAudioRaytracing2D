@@ -227,7 +227,10 @@ public class AudioManager : MonoBehaviour
         }
 
         float[] samples = recordingBuffer.ToArray();
-        string path = Path.Combine(Application.dataPath, $"recording_{System.DateTime.Now:yyyyMMdd_HHmmss}.wav");
+        string projectRoot = Directory.GetParent(Application.dataPath).FullName;
+        string recordingDirectory = Path.Combine(projectRoot, "Recordings");
+        Directory.CreateDirectory(recordingDirectory);
+        string path = Path.Combine(recordingDirectory, $"recording_{System.DateTime.Now:yyyyMMdd_HHmmss}.wav");
 
         using (var fs = new FileStream(path, FileMode.Create))
         using (var writer = new BinaryWriter(fs))

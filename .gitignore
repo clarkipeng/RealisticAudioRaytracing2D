@@ -17,6 +17,8 @@
 
 # Recordings can get excessive in size
 /[Rr]ecordings/
+/[Aa]ssets/recording_*.wav
+/[Aa]ssets/recording_*.wav.meta
 
 # Uncomment this line if you wish to ignore the asset store tools plugin
 # /[Aa]ssets/AssetStoreTools*

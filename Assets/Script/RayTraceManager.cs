@@ -42,6 +42,7 @@ public class RayTraceManager : MonoBehaviour
 
     [Header("Debug")]
     public bool showDebugTexture = true;
+    public bool verboseAudioDebug = false;
     [Range(5, 100)] public int debugRayCount = 100;
     [Range(1, 1000000)] public float waveformGain = 1000.0f;
     [Range(1, 1000000)] public float spectrogramGain = 1000.0f;
@@ -650,7 +651,8 @@ public class RayTraceManager : MonoBehaviour
 
         startingPoint = writePos + hopSize;
         audioStartingPoint = startPos;
-        Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
+        if (verboseAudioDebug)
+            Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
     }
 
     void DrawWaveform(float[] waveform)
