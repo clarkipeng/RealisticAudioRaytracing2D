@@ -662,6 +662,7 @@ public static partial class TakeChecks
             GpuDirectChecks(); GpuBatches(); BinauralStreaming(AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute"));
             var direct=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
             BvhChecks(direct);
+            OfflineBatchChecks(direct);
             StreamingMatchesOffline(direct); StreamingMatchesOffline(direct,TakeRender.DelayFilter.WindowedSinc);
             Debug.Log("ACOUSTIC_GPU_FFT_PASS: "+SystemInfo.graphicsDeviceType);
             Debug.Log("ACOUSTIC_GPU_DIRECT_PASS: 2D/3D transformed geometry and multiple pairs");

@@ -1,9 +1,48 @@
 using System;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 public static partial class TakeChecks
 {
+    static void OfflineBatchChecks(ComputeShader shader)
+    {
+        string input=Path.Combine(directory,"offline-batch-input");var scene=Scene(2);var state=States(2);
+        scene.materials=new[]{new AcousticTake.MaterialDefinition {name="opaque",frequencies=new float[0],absorption=new float[0],scattering=new float[0]}};
+        state[0].flags|=AcousticTake.StateFlags.Geometry;
+        var geometry=new[]{new AcousticTake.Primitive {a=new Vector3(.5f,-1,-1),b=new Vector3(.5f,1,-1),c=new Vector3(.5f,0,1)}};
+        var pcm=new float[113];for(int i=0;i<pcm.Length;i++)pcm[i]=Mathf.Sin(i*.13f)*.1f;
+        using(var writer=new AcousticTake.Writer(input,8000,scene,geometry,new[]{pcm}))
+        {
+            for(int f=0;f<8;f++)
+            {
+                state[0].rotation=Quaternion.Euler(0,f*37,f*13);state[0].position=new Vector3(f*.17f,f*.04f,0);
+                state[1].position=new Vector3(1,f*.1f,0);state[2].position=new Vector3(-1,f*.2f,0);
+                state[1].flags=AcousticTake.StateFlags.Listener|AcousticTake.StateFlags.Active|(f==4?AcousticTake.StateFlags.Cut:0);
+                writer.Append(f*167,state);
+            }
+            writer.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
+            writer.Append(new AcousticTake.VoiceEvent {sample=300,action=AcousticTake.VoiceAction.Gain,gain=.5f});
+            writer.Append(new AcousticTake.VoiceEvent {sample=1100,action=AcousticTake.VoiceAction.Stop});writer.Complete();
+        }
+        using var take=AcousticTake.Open(input);
+        foreach(bool bvh in new[]{false,true})foreach(var filter in new[]{TakeRender.DelayFilter.Linear,TakeRender.DelayFilter.WindowedSinc})
+        {
+            TakeRender.Report reference=null;
+            foreach(int capacity in new[]{1,3,8,64})
+            {
+                var settings=new TakeRender.Settings {useBvh=bvh,responseStepSamples=31,maximumResponsesPerBatch=capacity,
+                    listenerOutput=TakeRender.ListenerOutput.Binaural,delayFilter=filter,sincRadius=2,tailSamples=53,transitionSamples=4};
+                var result=TakeRender.RenderDirect(take,settings,Path.Combine(directory,"batch-"+bvh+"-"+filter+"-"+capacity),null,shader);
+                if(reference==null)reference=result;
+                else
+                {
+                    Check(result.responseHash==reference.responseHash,"Offline batch sizes preserve response bytes, including the final partial batch.");
+                    for(int listener=0;listener<2;listener++)Check(result.audioHashes[listener]==reference.audioHashes[listener],"Offline batching preserves moving stereo output, cuts, events and tails.");
+                }
+            }
+        }
+    }
     static void BvhChecks(ComputeShader shader=null)
     {
         var random=new System.Random(62831);

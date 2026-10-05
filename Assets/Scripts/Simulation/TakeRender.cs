@@ -47,6 +47,7 @@ public static partial class TakeRender
         public long pairPrimitiveTestUpperBound;
         public Settings settings;
         public int sampleRate, sourceCount, listenerCount, responseCount, objectCount, primitiveCount;
+        public int responseBatchCapacity;
         public long outputSamples, preparedPcmBytes, workingNumericBytes;
         public double preparationSeconds,wallSeconds, solveSeconds, evaluationSeconds, audioSeconds, writeSeconds, maximumSolveSeconds;
         public string backend = "CPU";
@@ -162,9 +163,14 @@ public static partial class TakeRender
         for (int s=0; s<signals.Length; s++) signals[s]=Signal.FromTake(take,s,pcm[scene.sources[s].clipIndex]);
         var mixer=new Mixer(scene,metadata.sampleRate,settings,signals);
         var block=new float[checked(settings.responseStepSamples*scene.listeners.Length*settings.ChannelsPerListener)];
-        using (var solver=new DirectSolver(scene,take.Geometry,settings,shader))
+        int batchCapacity=shader==null || !SystemInfo.supportsAsyncGPUReadback ? 1:(int)Math.Min(settings.maximumResponsesPerBatch,(length-1)/settings.responseStepSamples+1);
+        var batchStates=batchCapacity==1 ? state:new AcousticTake.State[checked(state.Length*batchCapacity)];
+        var batchPaths=batchCapacity==1 ? response:new DirectPath[checked(response.Length*batchCapacity)];
+        report.responseBatchCapacity=batchCapacity;
+        using (var solver=new DirectSolver(scene,take.Geometry,settings,shader,batchCapacity))
         {
-            report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+(long)state.Length*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+mixer.NumericBytes;
+            report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+(long)state.Length*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+mixer.NumericBytes+
+                (batchCapacity==1?0:(long)batchStates.Length*80+(long)batchPaths.Length*DirectPathStride);
             report.backend=solver.Backend;
             report.preparationSeconds=watch.Elapsed.TotalSeconds;
             var outputs=new List<BinaryWriter>();
@@ -177,29 +183,44 @@ public static partial class TakeRender
                 }
                 using (var writer=new BinaryWriter(File.Create(Path.Combine(outputDirectory,"responses.bin"))))
                 {
-                    for (long sample=0; sample<length; sample+=settings.responseStepSamples)
+                    for (long first=0; first<length; first+=(long)batchCapacity*settings.responseStepSamples)
                     {
+                        int frames=(int)Math.Min(batchCapacity,(length-first-1)/settings.responseStepSamples+1);
                         long start=Stopwatch.GetTimestamp();
-                        take.Evaluate(Math.Min(sample,metadata.durationSamples),state);
+                        for(int f=0;f<frames;f++)
+                        {
+                            take.Evaluate(Math.Min(first+(long)f*settings.responseStepSamples,metadata.durationSamples),state);
+                            if(batchCapacity>1)Array.Copy(state,0,batchStates,f*state.Length,state.Length);
+                        }
                         report.evaluationSeconds+=Elapsed(start);
                         start=Stopwatch.GetTimestamp();
-                        solver.Solve(state,response);
+                        if(batchCapacity==1)solver.Solve(state,response);
+                        else
+                        {
+                            solver.BeginSolve(batchStates,frames);
+                            if(!solver.TryComplete(batchPaths,true))throw new InvalidOperationException("Offline response batch did not complete.");
+                        }
                         double solveTime=Elapsed(start);
                         report.solveSeconds+=solveTime; report.maximumSolveSeconds=Math.Max(report.maximumSolveSeconds,solveTime);
-                        mixer.SetResponse(sample,response,state,settings.transitionSamples>0 && take.HasCut(sample-settings.responseStepSamples,sample));
-                        start=Stopwatch.GetTimestamp();
-                        writer.Write(sample);
-                        foreach (var path in response) WritePath(writer,path);
-                        report.responseCount++;
-                        int count=(int)Math.Min(settings.responseStepSamples,length-sample);
-                        report.writeSeconds+=Elapsed(start);
-                        start=Stopwatch.GetTimestamp(); mixer.Render(sample,count,block);
-                        report.audioSeconds+=Elapsed(start);
-                        start=Stopwatch.GetTimestamp();
-                        for (int n=0; n<count; n++) for (int l=0; l<outputs.Count; l++) for(int ear=0;ear<settings.ChannelsPerListener;ear++)
-                            outputs[l].Write(block[(n*outputs.Count+l)*settings.ChannelsPerListener+ear]);
-                        report.writeSeconds+=Elapsed(start);
-                        progress?.Invoke((float)((double)(sample+count)/length));
+                        for(int f=0;f<frames;f++)
+                        {
+                            long sample=first+(long)f*settings.responseStepSamples;
+                            if(batchCapacity>1) {Array.Copy(batchStates,f*state.Length,state,0,state.Length);Array.Copy(batchPaths,f*response.Length,response,0,response.Length);}
+                            mixer.SetResponse(sample,response,state,settings.transitionSamples>0 && take.HasCut(sample-settings.responseStepSamples,sample));
+                            start=Stopwatch.GetTimestamp();
+                            writer.Write(sample);
+                            foreach (var path in response) WritePath(writer,path);
+                            report.responseCount++;
+                            int count=(int)Math.Min(settings.responseStepSamples,length-sample);
+                            report.writeSeconds+=Elapsed(start);
+                            start=Stopwatch.GetTimestamp(); mixer.Render(sample,count,block);
+                            report.audioSeconds+=Elapsed(start);
+                            start=Stopwatch.GetTimestamp();
+                            for (int n=0; n<count; n++) for (int l=0; l<outputs.Count; l++) for(int ear=0;ear<settings.ChannelsPerListener;ear++)
+                                outputs[l].Write(block[(n*outputs.Count+l)*settings.ChannelsPerListener+ear]);
+                            report.writeSeconds+=Elapsed(start);
+                            progress?.Invoke((float)((double)(sample+count)/length));
+                        }
                     }
                 }
             }
