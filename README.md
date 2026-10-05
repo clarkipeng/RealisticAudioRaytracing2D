@@ -26,7 +26,7 @@ Enable **StationDemo → Retain Full Reference** before Play only when comparing
 
 **Tools → Acoustics → Run take checks** validates formats and the core simulation/audio contracts. **Test station recording and replay** exercises boarding, jumping, saving, export, reconstruction and actual scene replay. `TakeChecks.StartStationLifecycleCheck(true)` extends that check through three station laps. Tests write their results under `Recordings/`; they retain full references intentionally.
 
-Current and historical [validation results](docs/cleanup-results.md) cover three-lap replay, different measured frame cadences, core/GPU checks and a standalone Mac recording. They establish repeatability on the tested build/platform, not general physics determinism.
+Current and historical [validation results](docs/cleanup-results.md) cover three-lap replay, different measured frame cadences, 397 core checks plus GPU checks, reconstruction in a fresh Editor from a clean Git checkout, and a standalone Mac recording. They establish repeatability on the tested build/platform, not general physics determinism.
 
 ## Record a scene
 
