@@ -1,0 +1,138 @@
+{
+  "date": "2026-10-05",
+  "scope": "Correctness smoke renders with variable Editor scheduling; no speedup claim. Same previously reconstructed station input, no gameplay reconstruction included.",
+  "durationSeconds": 21.176598639455783,
+  "sourceInput": ".context/spectral-renderer/comparison-223907-inputs",
+  "shaderAndDsp": {
+    "solverContract": "geometric-spectral-preview-v2",
+    "dspContract": "causal-wola-interpolated-hrtf-v2",
+    "csharpModule": "82809f85-32a8-4001-bb3b-f9baa2dcfcd7",
+    "shaderName": "Direct",
+    "shaderDependencyHash": "031068f1542b6e2f49f1eb906fafa086",
+    "unityVersion": "6000.4.1f1",
+    "buildGuid": "00000000000000000000000000000000"
+  },
+  "settings": {
+    "responseStepSamples": 512,
+    "speedOfSound": 343.0,
+    "referenceDistance": 1.0,
+    "minimumDistance": 0.10000000149011612,
+    "tailSamples": 44100,
+    "transitionSamples": 512,
+    "delayFilter": 0,
+    "listenerOutput": 1,
+    "sincRadius": 16,
+    "maximumDelaySeconds": 10.0,
+    "maximumSignalEvents": 4096,
+    "maximumPendingObservations": 16,
+    "maximumResponsesPerBatch": 64,
+    "useBvh": true,
+    "transport": 1,
+    "raysPerPair": 512,
+    "maxBounces": 5,
+    "diffractionFactor": 0.5,
+    "airAbsorption": true,
+    "fftSize": 1024,
+    "spectralHop": 256
+  },
+  "responseSteps": {
+    "low": 2048,
+    "high": 512
+  },
+  "checks": {
+    "ok": true,
+    "core": 2159,
+    "transport": 9686,
+    "module": "82809f85-32a8-4001-bb3b-f9baa2dcfcd7"
+  },
+  "runs": [
+    {
+      "output": ".context/material-head-fixes/comparison-231437",
+      "low": {
+        "wallSeconds": 11.1668968,
+        "preparationSeconds": 0.7847196,
+        "evaluationSeconds": 0.1711804,
+        "solveSeconds": 0.6145096,
+        "audioSeconds": 8.834871300000005,
+        "writeSeconds": 0.7573021000000012,
+        "audioHashes": [
+          "9a15bd993d18ab9ba9eb3893f8338677bc4e3612d3568bd1271416cf52730d48"
+        ],
+        "peak": 0.02649473026394844
+      },
+      "high": {
+        "wallSeconds": 9.6964885,
+        "preparationSeconds": 0.3571475,
+        "evaluationSeconds": 0.1852587,
+        "solveSeconds": 2.0685505999999996,
+        "audioSeconds": 6.773643200000011,
+        "writeSeconds": 0.30496519999999977,
+        "audioHashes": [
+          "ae1a9c6621e023ddba7aac51a109784bd105163065a92425973dc2bac03d5fd5"
+        ],
+        "peak": 0.02649473212659359
+      }
+    },
+    {
+      "output": ".context/material-head-fixes/comparison-231526",
+      "low": {
+        "wallSeconds": 12.058848099999999,
+        "preparationSeconds": 0.7108508,
+        "evaluationSeconds": 0.07425899999999999,
+        "solveSeconds": 0.9741891999999999,
+        "audioSeconds": 9.78724149999999,
+        "writeSeconds": 0.5027103999999996,
+        "audioHashes": [
+          "9a15bd993d18ab9ba9eb3893f8338677bc4e3612d3568bd1271416cf52730d48"
+        ],
+        "peak": 0.02649473026394844
+      },
+      "high": {
+        "wallSeconds": 14.8447517,
+        "preparationSeconds": 0.8477,
+        "evaluationSeconds": 0.33243789999999995,
+        "solveSeconds": 2.0118423,
+        "audioSeconds": 10.937499499999971,
+        "writeSeconds": 0.7019412000000013,
+        "audioHashes": [
+          "ae1a9c6621e023ddba7aac51a109784bd105163065a92425973dc2bac03d5fd5"
+        ],
+        "peak": 0.02649473212659359
+      }
+    },
+    {
+      "output": ".context/material-head-fixes/comparison-231554",
+      "low": {
+        "wallSeconds": 6.3517227,
+        "preparationSeconds": 0.3625832,
+        "evaluationSeconds": 0.04311400000000001,
+        "solveSeconds": 0.538186,
+        "audioSeconds": 5.072575100000005,
+        "writeSeconds": 0.32699590000000106,
+        "audioHashes": [
+          "9a15bd993d18ab9ba9eb3893f8338677bc4e3612d3568bd1271416cf52730d48"
+        ],
+        "peak": 0.02649473026394844
+      },
+      "high": {
+        "wallSeconds": 10.6740686,
+        "preparationSeconds": 0.3695903,
+        "evaluationSeconds": 0.1886058,
+        "solveSeconds": 2.0682462000000004,
+        "audioSeconds": 6.956136400000006,
+        "writeSeconds": 1.0780711000000005,
+        "audioHashes": [
+          "ae1a9c6621e023ddba7aac51a109784bd105163065a92425973dc2bac03d5fd5"
+        ],
+        "peak": 0.02649473212659359
+      }
+    }
+  ],
+  "medianWallSeconds": {
+    "low": 11.1668968,
+    "high": 10.6740686
+  },
+  "sameQualityAudioHashesMatchAcrossRuns": true,
+  "allWaveSamplesFinite": true,
+  "note": "Second command exceeded its 25-second CLI deadline, but the Unity job completed and its completion manifest and outputs were verified."
+}

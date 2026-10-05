@@ -99,7 +99,7 @@ public static partial class TakeDemo
         manager.showDebugTexture=false; manager.enableKeyboardShortcuts=false;
         manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Binaural;
         manager.directSettings.transport=TakeRender.Transport.Raytraced; manager.directSettings.useBvh=true;
-        manager.directSettings.responseStepSamples=1024; manager.directSettings.transitionSamples=0;
+        manager.directSettings.responseStepSamples=1024; manager.directSettings.transitionSamples=512;
         manager.directSettings.tailSamples=manager.sampleRate;
         manager.monitorLeadSamples=16384;
         manager.audioManager=host.AddComponent<AudioManager>(); manager.audioManager.showWaveform=false; manager.audioManager.rayTraceManager=manager;

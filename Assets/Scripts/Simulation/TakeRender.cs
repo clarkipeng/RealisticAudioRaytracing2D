@@ -161,7 +161,7 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="geometric-spectral-preview-v1";report.provenance.solverContract=report.method;report.provenance.dspContract="causal-wola-directional-hrtf-v1";
+            report.method="geometric-spectral-preview-v2";report.provenance.solverContract=report.method;report.provenance.dspContract="causal-wola-interpolated-hrtf-v2";
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
             report.transportDescription="Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. WOLA synthesis has declared FFT latency.";
         }
@@ -393,7 +393,7 @@ public static partial class TakeRender
                 {
                     int listener=scene.listeners[pair%scene.listeners.Length];
                     Vector3 local=Quaternion.Inverse(state[listener].rotation)*(Vector3)paths[pair].direction;
-                    int direction=hrtf.Nearest(local);
+                    var direction=hrtf.Interpolate(local);
                     // Compose the fractional-delay FIR and HRIR once per response.
                     for(int ear=0;ear<2;ear++) for(int k=0;k<hrtf.Taps;k++) for(int t=0;t<delayTaps;t++)
                         weights[(pair*2+ear)*taps+hrtf.Taps-1-k+t]+=delayWeights[t]*hrtf.Coefficient(direction,ear,k);

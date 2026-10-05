@@ -12,29 +12,36 @@ internal sealed class SpectralAudio
     readonly long[] historyKeys;
     readonly Vector2[] work,output;
     readonly Vector2[][] earFilters;
+    readonly Hrtf hrtf;
+    readonly Quaternion[] headRotations;
+    readonly int transition;
+    int fade;
     readonly float[] window,overlap;
     const int FrequencySupport=9; // Truncated Dirichlet interpolation for fractional Doppler bins.
-    readonly Vector2[] transfers;
-    readonly long[] delays;
-    readonly int[] firstBins,counts;
+    Vector2[] transfers,oldTransfers;
+    long[] delays,oldDelays;
+    int[] firstBins,counts,oldFirstBins,oldCounts;
     long responseSample;bool hasResponse;
-    readonly bool[] enabled;
-    readonly RayTransport.Path[] paths;
+    bool[] enabled,oldEnabled;
+    RayTransport.Path[] paths,oldPaths;
     long cursor;
     public long NumericBytes {get;}
     public SpectralAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals)
     {
-        this.rate=rate;this.signals=signals;size=settings.fftSize;hop=settings.spectralHop;bins=size/2+1;
+        this.rate=rate;this.signals=signals;transition=settings.transitionSamples;size=settings.fftSize;hop=settings.spectralHop;bins=size/2+1;
         channels=settings.ChannelsPerListener;listeners=scene.listeners.Length;pairs=scene.sources.Length*listeners;
+        headRotations=new Quaternion[listeners];
         slots=checked(bins+settings.raysPerPair*settings.maxBounces);
         paths=new RayTransport.Path[checked(pairs*slots)];transfers=new Vector2[checked(paths.Length*channels*FrequencySupport)];
         delays=new long[paths.Length];firstBins=new int[paths.Length];counts=new int[paths.Length];enabled=new bool[listeners];
+        oldPaths=new RayTransport.Path[paths.Length];oldTransfers=new Vector2[transfers.Length];oldDelays=new long[paths.Length];
+        oldFirstBins=new int[paths.Length];oldCounts=new int[paths.Length];oldEnabled=new bool[listeners];
         historyFrames=checked((int)Math.Ceiling(settings.maximumDelaySeconds*rate/hop)+2);
         historyKeys=new long[historyFrames];Array.Fill(historyKeys,long.MinValue);
         history=new Vector2[signals.Length][];for(int i=0;i<history.Length;i++)history[i]=new Vector2[checked(historyFrames*bins)];
         work=new Vector2[size];output=new Vector2[checked(listeners*channels*size)];window=new float[size];overlap=new float[output.Length];
         for(int i=0;i<size;i++)window[i]=Mathf.Sqrt((1-Mathf.Cos(2*Mathf.PI*i/size))*hop/size);
-        var hrtf=channels==2?Hrtf.Load(rate):null;
+        hrtf=channels==2?Hrtf.Load(rate):null;
         earFilters=new Vector2[hrtf==null?1:checked(hrtf.DirectionCount*2)][];
         for(int ear=0;ear<earFilters.Length;ear++)
         {
@@ -47,22 +54,33 @@ internal sealed class SpectralAudio
             }
             Fft(work,false);earFilters[ear]=new Vector2[bins];Array.Copy(work,earFilters[ear],bins);
         }
-        NumericBytes=paths.Length*32L+enabled.Length+historyFrames*8L+signals.Length*(long)historyFrames*bins*8+
-            work.Length*8L+output.Length*8L+(window.Length+overlap.Length)*4L+transfers.Length*8L+paths.Length*16L+earFilters.Length*(long)bins*8;
+        NumericBytes=headRotations.Length*16L+paths.Length*64L+enabled.Length*2L+historyFrames*8L+signals.Length*(long)historyFrames*bins*8+
+            work.Length*8L+output.Length*8L+(window.Length+overlap.Length)*4L+transfers.Length*16L+paths.Length*32L+earFilters.Length*(long)bins*8;
     }
     public void SetResponse(long sample,bool cut,RayTransport.Path[] response,int offset,AcousticTake.Scene scene,AcousticTake.State[] state)
     {
         if(response==null || offset<0 || response.Length-offset<paths.Length)throw new ArgumentException("Missing directional ray response.");
         foreach(var pose in state)cut|=(pose.flags&AcousticTake.StateFlags.Cut)!=0;
         double seconds=(double)(sample-responseSample)/rate;
+        (paths,oldPaths)=(oldPaths,paths);(transfers,oldTransfers)=(oldTransfers,transfers);(delays,oldDelays)=(oldDelays,delays);
+        (firstBins,oldFirstBins)=(oldFirstBins,firstBins);(counts,oldCounts)=(oldCounts,counts);(enabled,oldEnabled)=(oldEnabled,enabled);
+        fade=hasResponse && !cut?transition:0;
+        for(int l=0;l<listeners;l++)headRotations[l]=Quaternion.Inverse(state[scene.listeners[l]].rotation);
+        int previousPair=-1;var previousDirection=Vector4.zero;var blend=default(Hrtf.Blend);
         for(int i=0;i<paths.Length;i++)
         {
-            var next=response[offset+i];var previous=paths[i];
+            var next=response[offset+i];var previous=oldPaths[i];
             float ratio=hasResponse && !cut && seconds>0 && previous.pressureGain!=0 && next.pressureGain!=0 && previous.frequencyBin==next.frequencyBin ?
                 (float)(1-(next.delaySeconds-previous.delaySeconds)/seconds):1;
             paths[i]=next;counts[i]=0;
             if(next.pressureGain==0)continue;
             int bin=checked((int)next.frequencyBin);
+            int pair=i/slots;
+            if(hrtf!=null && (pair!=previousPair || !next.direction.Equals(previousDirection)))
+            {
+                blend=hrtf.Interpolate(headRotations[pair%listeners]*(Vector3)next.direction);
+                previousPair=pair;previousDirection=next.direction;
+            }
             if(bin>=bins || !float.IsFinite(next.pressureGain) || !float.IsFinite(next.delaySeconds) || next.delaySeconds<0)
                 throw new InvalidOperationException("Invalid spectral arrival.");
             if(!float.IsFinite(ratio) || ratio<=0)continue;
@@ -81,8 +99,10 @@ internal sealed class SpectralAudio
                 var weight=Multiply(amplitude,new Vector2((float)(magnitude*Math.Cos(angle)),(float)(magnitude*Math.Sin(angle))));
                 for(int ear=0;ear<channels;ear++)
                 {
-                    int filter=channels==1?0:checked((int)next.hrtfIndex*2+ear);
-                    transfers[(i*channels+ear)*FrequencySupport+at-first]=Multiply(weight,earFilters[filter][at]);
+                    var filter=channels==1?Vector2.right:
+                        earFilters[blend.a*2+ear][at]*blend.weights.x+earFilters[blend.b*2+ear][at]*blend.weights.y+
+                        earFilters[blend.c*2+ear][at]*blend.weights.z+earFilters[blend.d*2+ear][at]*blend.weights.w;
+                    transfers[(i*channels+ear)*FrequencySupport+at-first]=Multiply(weight,filter);
                 }
             }
         }
@@ -99,7 +119,7 @@ internal sealed class SpectralAudio
             for(int l=0;l<listeners;l++)for(int ear=0;ear<channels;ear++)
             {
                 int index=(l*channels+ear)*size+at;
-                float value=enabled[l]?overlap[index]:0;
+                float value=(enabled[l] || (fade>0 && oldEnabled[l]))?overlap[index]:0;
                 if(!float.IsFinite(value))throw new InvalidOperationException("Non-finite spectral audio.");
                 pcm[(n*listeners+l)*channels+ear]=value;overlap[index]=0;
             }
@@ -114,26 +134,33 @@ internal sealed class SpectralAudio
             Fft(work,false);Array.Copy(work,0,history[s],ring*bins,bins);
         }
         historyKeys[ring]=frame;Array.Clear(output,0,output.Length);
-        for(int pair=0;pair<pairs;pair++)
-        {
-            int source=pair/listeners,listener=pair%listeners;if(!enabled[listener])continue;
-            for(int i=0;i<slots;i++)
-            {
-                int index=pair*slots+i;if(counts[index]==0)continue;
-                int bin=(int)paths[index].frequencyBin;long inputFrame=frame-delays[index];
-                if(inputFrame<0)continue;
-                int inputSlot=(int)(inputFrame%historyFrames);if(historyKeys[inputSlot]!=inputFrame)continue;
-                var value=history[source][inputSlot*bins+bin];
-                for(int ear=0;ear<channels;ear++)for(int k=0;k<counts[index];k++)
-                    output[(listener*channels+ear)*size+firstBins[index]+k]+=Multiply(value,transfers[(index*channels+ear)*FrequencySupport+k]);
-            }
-        }
+        float blend=fade==0?1:Mathf.Clamp01((float)(sample-responseSample)/fade);
+        Accumulate(frame,blend,paths,transfers,delays,firstBins,counts,enabled);
+        if(blend<1)Accumulate(frame,1-blend,oldPaths,oldTransfers,oldDelays,oldFirstBins,oldCounts,oldEnabled);
         for(int c=0;c<listeners*channels;c++)
         {
             Array.Copy(output,c*size,work,0,bins);work[0].y=work[size/2].y=0;
             for(int k=1;k<size/2;k++)work[size-k]=new Vector2(work[k].x,-work[k].y);
             Fft(work,true);
             for(int i=0;i<size;i++)overlap[c*size+(int)((sample+i)%size)]+=work[i].x*window[i];
+        }
+    }
+    void Accumulate(long frame,float blend,RayTransport.Path[] arrivals,Vector2[] coefficients,long[] lag,int[] first,int[] lengths,bool[] active)
+    {
+        if(blend==0)return;
+        for(int pair=0;pair<pairs;pair++)
+        {
+            int source=pair/listeners,listener=pair%listeners;if(!active[listener])continue;
+            for(int i=0;i<slots;i++)
+            {
+                int index=pair*slots+i;if(lengths[index]==0)continue;
+                int bin=(int)arrivals[index].frequencyBin;long inputFrame=frame-lag[index];
+                if(inputFrame<0)continue;
+                int inputSlot=(int)(inputFrame%historyFrames);if(historyKeys[inputSlot]!=inputFrame)continue;
+                var value=history[source][inputSlot*bins+bin]*blend;
+                for(int ear=0;ear<channels;ear++)for(int k=0;k<lengths[index];k++)
+                    output[(listener*channels+ear)*size+first[index]+k]+=Multiply(value,coefficients[(index*channels+ear)*FrequencySupport+k]);
+            }
         }
     }
     static Vector2 Multiply(Vector2 a,Vector2 b)=>new Vector2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);

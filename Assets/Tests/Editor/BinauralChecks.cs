@@ -17,6 +17,7 @@ public static partial class TakeChecks
     }
     static void BinauralChecks()
     {
+        HrtfInterpolation();
         var hrtf=Hrtf.Load(44100); var right=EarImpulse(Vector3.right,Quaternion.identity,44100);
         var left=EarImpulse(Vector3.left,Quaternion.identity,44100);
         var turned=EarImpulse(Vector3.right,Quaternion.Euler(0,180,0),44100);
@@ -67,6 +68,32 @@ public static partial class TakeChecks
         }
         var monoDevice=new AudioManager.PcmQueue(8,44100,null,2); monoDevice.Publish(0,new float[8],4,2); monoDevice.Consume(new float[4],1);
         Check(monoDevice.ChannelMismatchSamples==4,"Unsupported device channel layout is counted.");
+    }
+
+    static void HrtfInterpolation()
+    {
+        var hrtf=Hrtf.Load(44100);float measuredError=0;
+        for(int i=0;i<hrtf.DirectionCount;i++)
+        {
+            var blend=hrtf.Interpolate(hrtf.Direction(i));
+            Near(blend.weights.x+blend.weights.y+blend.weights.z+blend.weights.w,1,"HRTF weights preserve gain",1e-6f);
+            for(int ear=0;ear<2;ear++)for(int k=0;k<hrtf.Taps;k++)
+                measuredError=Mathf.Max(measuredError,Mathf.Abs(hrtf.Coefficient(blend,ear,k)-hrtf.Coefficient(i,ear,k)));
+        }
+        Near(measuredError,0,"Interpolation reproduces every measured HRIR",2e-5f);
+        // Halfway between front and five degrees is the half-weighted measured pair.
+        var halfway=EarImpulse(Quaternion.Euler(0,2.5f,0)*Vector3.forward,Quaternion.identity,44100);
+        int front=hrtf.Nearest(Vector3.forward),next=hrtf.Nearest(Quaternion.Euler(0,5,0)*Vector3.forward);float error=0;
+        for(int ear=0;ear<2;ear++)for(int k=0;k<hrtf.Taps;k++)
+            error=Mathf.Max(error,Mathf.Abs(halfway[k*2+ear]-.5f*(hrtf.Coefficient(front,ear,k)+hrtf.Coefficient(next,ear,k))));
+        Near(error,0,"Direct binaural output interpolates between measured directions",1e-6f);
+        foreach(float yaw in new[]{2.5f,5f,177.5f,180f,357.5f})foreach(float pitch in new[]{0f,-10f,-40f,-80f,-90f,40f})
+        {
+            var a=hrtf.Interpolate(Quaternion.Euler(pitch-.0001f,yaw-.0001f,0)*Vector3.forward);
+            var b=hrtf.Interpolate(Quaternion.Euler(pitch+.0001f,yaw+.0001f,0)*Vector3.forward);float jump=0;
+            for(int ear=0;ear<2;ear++)for(int k=0;k<hrtf.Taps;k++)jump=Mathf.Max(jump,Mathf.Abs(hrtf.Coefficient(a,ear,k)-hrtf.Coefficient(b,ear,k)));
+            Check(jump<.0002f,"No filter jump across azimuth/elevation cell edges or rear seam: yaw="+yaw+", pitch="+pitch+", jump="+jump);
+        }
     }
 
     static void BinauralStreaming(ComputeShader shader=null)

@@ -11,9 +11,17 @@ public sealed class Hrtf
     static readonly Dictionary<int,Hrtf> cache=new Dictionary<int,Hrtf>();
     readonly Vector3[] directions;
     readonly float[] filters;
+    readonly float[] elevations;
+    readonly int[][] rings;
+    readonly float[][] azimuths;
+    public struct Blend
+    {
+        public int a,b,c,d;
+        public Vector4 weights;
+    }
     public int Taps {get;private set;}
     public string Hash {get;private set;}
-    public long NumericBytes => (long)directions.Length*12+(long)filters.Length*4;
+    public long NumericBytes => (long)directions.Length*20+(long)(filters.Length+elevations.Length)*4;
     public static Hrtf Load(int rate)
     {
         if(rate<=0) throw new ArgumentOutOfRangeException(nameof(rate));
@@ -44,7 +52,46 @@ public sealed class Hrtf
                 }
             }
         }
+        // Use the measured elevation rings and their individual azimuth grids.
+        // Circular interpolation also covers the rear seam; no angular snapping.
+        var groups=new SortedDictionary<float,List<int>>();
+        for(int i=0;i<directions.Length;i++)
+        {
+            float elevation=Mathf.Asin(Mathf.Clamp(directions[i].y,-1,1));
+            if(!groups.TryGetValue(elevation,out var ring))groups.Add(elevation,ring=new List<int>());
+            ring.Add(i);
+        }
+        elevations=new float[groups.Count];rings=new int[groups.Count][];azimuths=new float[groups.Count][];
+        int row=0;
+        foreach(var group in groups)
+        {
+            group.Value.Sort((a,b)=>Azimuth(directions[a]).CompareTo(Azimuth(directions[b])));
+            elevations[row]=group.Key;rings[row]=group.Value.ToArray();azimuths[row]=new float[group.Value.Count];
+            for(int i=0;i<rings[row].Length;i++)azimuths[row][i]=Azimuth(directions[rings[row][i]]);
+            row++;
+        }
     }
+    static float Azimuth(Vector3 direction)=>Mathf.Atan2(direction.x,direction.z);
+    public Blend Interpolate(Vector3 direction)
+    {
+        direction=direction.sqrMagnitude<1e-12f?Vector3.forward:direction.normalized;
+        float elevation=Mathf.Asin(Mathf.Clamp(direction.y,-1,1)),azimuth=Azimuth(direction);
+        int upper=Array.BinarySearch(elevations,elevation);if(upper<0)upper=~upper;
+        upper=Math.Min(upper,elevations.Length-1);int lower=Math.Max(0,upper-1);
+        float t=lower==upper?0:Mathf.InverseLerp(elevations[lower],elevations[upper],elevation);
+        Around(lower,azimuth,out int a,out int b,out float x);Around(upper,azimuth,out int c,out int d,out float y);
+        return new Blend {a=a,b=b,c=c,d=d,weights=new Vector4((1-t)*(1-x),(1-t)*x,t*(1-y),t*y)};
+    }
+    void Around(int row,float angle,out int a,out int b,out float t)
+    {
+        var grid=azimuths[row];int upper=Array.BinarySearch(grid,angle);if(upper<0)upper=~upper;
+        int lower=(upper+grid.Length-1)%grid.Length;upper%=grid.Length;
+        a=rings[row][lower];b=rings[row][upper];
+        float span=Mathf.Repeat(grid[upper]-grid[lower],2*Mathf.PI);
+        t=span==0?0:Mathf.Clamp01(Mathf.Repeat(angle-grid[lower],2*Mathf.PI)/span);
+    }
+    public float Coefficient(Blend blend,int ear,int tap)=>blend.weights.x*Coefficient(blend.a,ear,tap)+
+        blend.weights.y*Coefficient(blend.b,ear,tap)+blend.weights.z*Coefficient(blend.c,ear,tap)+blend.weights.w*Coefficient(blend.d,ear,tap);
     // Symmetric windowed-sinc coefficient conversion; retain filter time origin and DC scale.
     static float Resample(float[] input,double at,double ratio)
     {

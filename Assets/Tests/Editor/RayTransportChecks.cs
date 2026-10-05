@@ -21,7 +21,7 @@ public static partial class TakeChecks
         try
         {
             var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-            TransportMaterials();TransportGeometry(shader);SpectralIdentity(shader);SpectralDoppler(shader);
+            TransportMaterials();TransportGeometry(shader);TransportMedia(shader);TransportNativeVolumes(shader);SpectralIdentity(shader);SpectralDoppler(shader);SpectralTransitions(shader);SpectralHeadTurns(shader);
             SpectralStreaming(shader,AcousticTake.Dimension.Spatial3D);SpectralStreaming(shader,AcousticTake.Dimension.Planar2D);
             Debug.Log("ACOUSTIC_TRANSPORT_PASS: "+checks+" checks on "+SystemInfo.graphicsDeviceType);
         }
@@ -100,16 +100,168 @@ public static partial class TakeChecks
             }
             scene.materials[0].absorption[0]=0;
         }
-        // Head orientation chooses the same KEMAR direction as the time-domain renderer.
-        scene.dimension=AcousticTake.Dimension.Spatial3D;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;
+        // World-space arrival direction survives transport; ear interpolation uses
+        // each listener's orientation in the shared DSP, rather than GPU snapping.
+        scene.dimension=AcousticTake.Dimension.Spatial3D;scene.objects[2].primitiveCount=0;
         foreach(float turn in new[]{0f,90f,180f,270f})
         {
             state[1].rotation=Quaternion.Euler(0,turn,0);
             using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
             solver.Solve(state,direct);var rays=Arrivals(solver);
-            int expected=Hrtf.Load(8000).Nearest(Quaternion.Inverse(state[1].rotation)*(Vector3)direct[0].direction);
-            Check(ArrivalField<uint>(rays,10,"hrtfIndex")==expected,"Ray arrivals follow head rotation");
+            Near(Vector3.Distance((Vector3)ArrivalField<Vector4>(rays,10,"direction"),(Vector3)direct[0].direction),0,"Transport retains world arrival direction");
         }
+    }
+    static AcousticTake.Primitive[] TransportBox(AcousticTake.Dimension dimension,int owner,int material,float half)
+    {
+        var geometry=new List<AcousticTake.Primitive>();
+        if(dimension==AcousticTake.Dimension.Planar2D)
+        {
+            var v=new[]{new Vector3(-half,-half,0),new Vector3(half,-half,0),new Vector3(half,half,0),new Vector3(-half,half,0)};
+            for(int i=0;i<4;i++)geometry.Add(new AcousticTake.Primitive {objectIndex=owner,materialIndex=material,a=v[i],b=v[(i+1)%4]});
+        }
+        else
+        {
+            var v=new Vector3[8];for(int i=0;i<8;i++)v[i]=new Vector3((i&1)==0?-half:half,(i&2)==0?-half:half,(i&4)==0?-half:half);
+            int[] indices={0,2,3,0,3,1,4,5,7,4,7,6,0,1,5,0,5,4,2,6,7,2,7,3,0,4,6,0,6,2,1,3,7,1,7,5};
+            for(int i=0;i<indices.Length;i+=3)geometry.Add(new AcousticTake.Primitive {objectIndex=owner,materialIndex=material,a=v[indices[i]],b=v[indices[i+1]],c=v[indices[i+2]]});
+        }
+        return geometry.ToArray();
+    }
+    static void TransportMedia(ComputeShader shader)
+    {
+        foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})foreach(bool bvh in new[]{false,true})
+        {
+            var scene=Scene(3);scene.dimension=dimension;scene.listeners=new[]{1};
+            scene.materials=new[]{
+                new AcousticTake.MaterialDefinition {frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{1f},ior=new[]{.5f},damping=new[]{.1f}},
+                new AcousticTake.MaterialDefinition {frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{1f},ior=new[]{2f},damping=new[]{.3f}}};
+            var outer=TransportBox(dimension,2,0,2);var inner=TransportBox(dimension,3,1,1);
+            var geometry=new List<AcousticTake.Primitive>(outer);geometry.AddRange(inner);
+            scene.objects[2].primitiveCount=outer.Length;scene.objects[3].primitiveStart=outer.Length;scene.objects[3].primitiveCount=inner.Length;
+            var state=States(3);state[2].position=state[3].position=Vector3.zero;
+            state[2].flags=state[3].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+            var settings=SpectralSettings();settings.speedOfSound=1000;settings.useBvh=bvh;settings.maxBounces=1;
+            void Direct(float source,float listener,float time,float attenuation,string name)
+            {
+                state[0].position=Vector3.right*source;state[1].position=Vector3.right*listener;
+                using var solver=new DirectSolver(scene,geometry.ToArray(),settings,shader,sampleRate:8000);
+                solver.Solve(state,new TakeRender.DirectPath[1]);var rays=Arrivals(solver);
+                Near(ArrivalField<float>(rays,10,"delaySeconds"),time,name+" travel time "+dimension,1e-7f);
+                Near(ArrivalField<float>(rays,10,"pressureGain"),Mathf.Exp(-attenuation)/Mathf.Max(1,Mathf.Abs(listener-source)),name+" pressure loss",1e-5f);
+            }
+            Direct(-3,3,.007f,.8f,"Nested slabs restore outer medium");
+            Direct(0,3,.0035f,.4f,"Source starts inside inner solid");
+            Direct(-3,0,.0035f,.4f,"Listener ends inside inner solid");
+            Direct(-.5f,.5f,.002f,.3f,"Both endpoints inside solid");
+            state[3].flags=0;Direct(-3,3,.004f,.4f,"Inactive inner medium is absent");
+            state[2].position=Vector3.right*5;Direct(-3,3,.006f,0,"Moved volume no longer intersects path");
+            state[2].position=Vector3.zero;
+            // Reverse all winding: geometry still bounds the same physical medium.
+            for(int i=0;i<geometry.Count;i++){var p=geometry[i];(p.a,p.b)=(p.b,p.a);geometry[i]=p;}
+            Direct(-3,3,.004f,.4f,"Reversed closed winding");
+            // A sheet has zero thickness and must not turn the rest of space into its material.
+            geometry.RemoveRange(1,geometry.Count-1);scene.objects[2].primitiveCount=1;scene.objects[3].primitiveCount=0;
+            geometry[0]=new AcousticTake.Primitive {objectIndex=2,a=new Vector3(0,-4,-4),b=new Vector3(0,4,-4),c=new Vector3(0,0,4)};
+            Direct(-3,3,.006f,0,"Open sheet leaves air speed unchanged");
+            // A reflected path entirely inside one solid uses its speed and damping
+            // for both legs, including the final connection to the listener.
+            geometry=new List<AcousticTake.Primitive>(TransportBox(dimension,2,0,1));scene.objects[2].primitiveCount=geometry.Count;
+            scene.materials[0].transmission[0]=0;state[0].position=state[1].position=Vector3.zero;
+            using var reflected=new DirectSolver(scene,geometry.ToArray(),settings,shader,sampleRate:8000);
+            reflected.Solve(state,new TakeRender.DirectPath[1]);var paths=Arrivals(reflected);int audible=0;
+            for(int i=65;i<paths.Length;i++)
+            {
+                float gain=ArrivalField<float>(paths,i,"pressureGain");if(gain==0)continue;audible++;
+                var direction=(Vector3)ArrivalField<Vector4>(paths,i,"direction");float cosine=Mathf.Max(Mathf.Abs(direction.x),Mathf.Abs(direction.y),Mathf.Abs(direction.z)),distance=1/cosine;
+                Near(ArrivalField<float>(paths,i,"delaySeconds"),distance/1000,"Reflected interior travel time",1e-7f);
+                Near(gain,.5f*cosine*(65f/settings.raysPerPair)*Mathf.Exp(-.1f*2*distance)/(2*distance),"Reflected interior damping",1e-5f);
+            }
+            Check(audible>0,"Interior reflection fixture exercised actual rays");
+        }
+    }
+    static void TransportNativeVolumes(ComputeShader shader)
+    {
+        var material=ScriptableObject.CreateInstance<AudioMaterial>();
+        try
+        {
+            foreach(var type in new[]{typeof(BoxCollider),typeof(SphereCollider),typeof(CapsuleCollider),typeof(BoxCollider2D),typeof(CircleCollider2D),typeof(CapsuleCollider2D)})
+            {
+                var obj=new GameObject("Volume fixture");
+                try
+                {
+                    obj.AddComponent(type);var dimension=typeof(Collider2D).IsAssignableFrom(type)?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D;
+                    var bindings=new List<RayTraceManager.TakeObjectBinding> {new RayTraceManager.TakeObjectBinding {id="solid",transform=obj.transform,geometry=true}};
+                    foreach(float scale in new[]{1f,-1f})
+                    {
+                        obj.transform.localScale=new Vector3(scale,1,1);
+                        // Curved 3D collider export requires uniform absolute scale.
+                        var exported=SceneToTake.Compile(bindings,dimension,.01f,material,Array.Empty<Transform>(),Array.Empty<AudioClip>(),Array.Empty<Transform>(),out var geometry);
+                        var scene=Scene(2);scene.dimension=dimension;scene.listeners=new[]{1};scene.objects[2].primitiveCount=geometry.Length;
+                        for(int i=0;i<geometry.Length;i++)geometry[i].objectIndex=2;
+                        scene.materials=new[]{new AcousticTake.MaterialDefinition {frequencies=new[]{0f,4000f},absorption=new[]{0f,0f},scattering=new[]{0f,0f},
+                            transmission=new[]{1f,1f},ior=new[]{.5f,1.5f},damping=new[]{.1f,.1f}}};
+                        var state=States(2);state[0].position=Vector3.down*.1f;state[1].position=Vector3.up*.1f;state[2].position=Vector3.zero;
+                        state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+                        var settings=SpectralSettings();settings.speedOfSound=1000;
+                        using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8000);
+                        solver.Solve(state,new TakeRender.DirectPath[1]);var paths=Arrivals(solver);
+                        foreach(int bin in new[]{0,16,32,64})
+                        {
+                            Near(ArrivalField<float>(paths,bin,"delaySeconds"),.2f*(.5f+bin/64f)/1000,"Native "+type.Name+" volume, mirrored scale and frequency-dependent speed",1e-7f);
+                            Near(ArrivalField<float>(paths,bin,"pressureGain"),Mathf.Exp(-.02f),"Native volume damping",1e-5f);
+                        }
+                    }
+                }
+                finally {UnityEngine.Object.DestroyImmediate(obj);}
+            }
+        }
+        finally {UnityEngine.Object.DestroyImmediate(material);}
+    }
+    static void SpectralTransitions(ComputeShader shader)
+    {
+        var scene=Scene();var state=States();state[1].position=Vector3.zero;
+        foreach(bool cut in new[]{false,true})
+        {
+            var settings=SpectralSettings();settings.responseStepSamples=512;settings.transitionSamples=64;
+            var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
+            var mixer=new TakeRender.Mixer(scene,8000,settings,new[]{signal});
+            using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
+            var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);var rays=Arrivals(solver);
+            var set=typeof(TakeRender.Mixer).GetMethod("SetResponse",BindingFlags.Instance|BindingFlags.NonPublic);
+            set.Invoke(mixer,new object[]{0L,direct,state,false,rays,0});var output=new float[1024];mixer.Render(0,512,output);
+            Array.Clear(rays,0,rays.Length);set.Invoke(mixer,new object[]{512L,direct,state,cut,rays,0});mixer.Render(512,512,output);
+            for(int n=0;n<512;n++)
+            {
+                int sample=512+n;float expected=0;
+                for(int frame=sample/settings.spectralHop*settings.spectralHop;frame>sample-settings.fftSize;frame-=settings.spectralHop)
+                {
+                    float gain=frame<512?1:cut?0:Mathf.Clamp01(1-(frame-512)/64f);
+                    expected+=(1-Mathf.Cos(2*Mathf.PI*(sample-frame)/settings.fftSize))*settings.spectralHop/settings.fftSize*gain;
+                }
+                Near(output[n],expected,"Spectral response fade follows normalized overlapping windows; cut resets fade",2e-5f);
+            }
+        }
+    }
+    static void SpectralHeadTurns(ComputeShader shader)
+    {
+        var scene=Scene();var state=States();state[0].position=Vector3.forward;state[1].position=Vector3.zero;
+        var settings=SpectralSettings();settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.responseStepSamples=512;
+        float[] Render(float turn)
+        {
+            state[1].rotation=Quaternion.Euler(0,turn,0);
+            var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1});
+            var mixer=new TakeRender.Mixer(scene,8000,settings,new[]{signal});
+            using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
+            var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);
+            var set=typeof(TakeRender.Mixer).GetMethod("SetResponse",BindingFlags.Instance|BindingFlags.NonPublic);
+            set.Invoke(mixer,new object[]{0L,direct,state,false,Arrivals(solver),0});var output=new float[1024];mixer.Render(0,512,output);return output;
+        }
+        var a=Render(2.499f);var b=Render(2.501f);float jump=0,signalPeak=0;
+        for(int i=0;i<a.Length;i++){jump=Mathf.Max(jump,Mathf.Abs(a[i]-b[i]));signalPeak=Mathf.Max(signalPeak,Mathf.Abs(a[i]));}
+        Check(signalPeak>.001f && jump<signalPeak*.001f,"Spectral ear output is continuous across the old nearest-direction boundary");
+        a=Render(90);b=Render(-90);float symmetry=0;
+        for(int i=0;i<a.Length;i+=2){symmetry=Mathf.Max(symmetry,Mathf.Abs(a[i]-b[i+1]));symmetry=Mathf.Max(symmetry,Mathf.Abs(a[i+1]-b[i]));}
+        Near(symmetry,0,"Spectral head rotation preserves left/right convention",1e-6f);
     }
     static void SpectralIdentity(ComputeShader shader)
     {
@@ -175,7 +327,7 @@ public static partial class TakeChecks
             }
             foreach(var e in events)writer.Append(e);writer.Complete();
         }
-        using var take=AcousticTake.Open(path);var settings=SpectralSettings();settings.listenerOutput=TakeRender.ListenerOutput.Binaural;
+        using var take=AcousticTake.Open(path);var settings=SpectralSettings();settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=64;
         var report=TakeRender.RenderDirect(take,settings,path+"-render",shader:shader);
         var samples=new[]{new List<float>(),new List<float>()};Action<long,float[],int> collect=(at,block,count)=>{for(int n=0;n<count;n++)for(int l=0;l<2;l++)for(int ear=0;ear<2;ear++)samples[l].Add(block[n*4+l*2+ear]);};
         var left=new AcousticTake.State[4];var right=new AcousticTake.State[4];take.ReadStoredFrame(0,left);

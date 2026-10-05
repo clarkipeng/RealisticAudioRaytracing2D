@@ -1840,7 +1840,7 @@ MonoBehaviour:
     referenceDistance: 1
     minimumDistance: 0.1
     tailSamples: 44100
-    transitionSamples: 0
+    transitionSamples: 512
     delayFilter: 0
     listenerOutput: 1
     sincRadius: 16

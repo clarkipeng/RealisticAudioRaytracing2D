@@ -54,7 +54,9 @@ public class AudioMaterial : ScriptableObject
     [Range(0f, 1f)] public float[] absorptionBands = DefaultArray(0.1f);
     [Range(0f, 1f)] public float[] scatteringBands = DefaultArray(0.5f);
     [Range(0f, 1f)] public float[] transmissionBands = DefaultArray(0.05f);
+    [Tooltip("Acoustic index = air speed / material speed. Values below 1 mean faster sound inside a closed solid; open sheets have no interior distance.")]
     [Min(0.001f)] public float[] iorBands = DefaultArray(343f / 5405f);
+    [Tooltip("Interior pressure attenuation in nepers per metre: gain = exp(-damping * distance).")]
     [Min(0f)] public float[] dampingBands = DefaultArray(0.05f);
 
     public AudioMatData GetShaderData()
