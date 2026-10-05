@@ -1768,6 +1768,7 @@ MonoBehaviour:
   carriageSpacing: 7.2
   doorSpeed: 1.8
   stationDwell: 10
+  retainFullReference: 0
   doorOpen: 0
 --- !u!114 &1303114735
 MonoBehaviour:
@@ -1781,6 +1782,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a2b430a59924455e84d12c6a2e3434d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AudioManager
+  shader: {fileID: 0}
+  showWaveform: 0
+  waveformTextureSize: {x: 1024, y: 256}
+  waveformGain: 10
+  waveformTexture: {fileID: 0}
   writeHead: 0
   readHead_Debug: 0
   bufferCapacity: 0
@@ -1789,12 +1795,7 @@ MonoBehaviour:
   writeLoopCount_Debug: 0
   readLoopCount_Debug: 0
   underrunCount_Debug: 0
-  shader: {fileID: 0}
   rayTraceManager: {fileID: 1303114736}
-  showWaveform: 0
-  waveformTextureSize: {x: 1024, y: 256}
-  waveformGain: 10
-  waveformTexture: {fileID: 0}
   paused: 0
 --- !u!114 &1303114736
 MonoBehaviour:
@@ -1808,8 +1809,31 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2913e124272014f598570cc1c30f24bc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RayTraceManager
+  raytraceShader: {fileID: 0}
+  rayCount: 1000
+  maxBounces: 5
+  speedOfSound: 343
+  dynamicObstacles: 0
+  inputClip: {fileID: 8300000, guid: babfe7405b9058e47a2ab7942e7a6721, type: 3}
+  chunkSamples: 1024
+  inputGain: 1
+  loopAudio: 0
+  enableKeyboardShortcuts: 0
+  precomputedPlaybackSource: {fileID: 0}
+  precomputedClip: {fileID: 0}
+  autoPlayPrecomputed: 1
+  precomputeChunksPerFrame: 4
+  reverbDuration: 5
+  loop: 0
+  listenerRadius: 0.5
+  showDebugTexture: 0
+  verboseAudioDebug: 0
+  debugRayCount: 100
+  waveformGain: 1000
+  spectrogramGain: 1000
+  waveformTexture: {fileID: 0}
   useTakeRenderer: 1
-  directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
+  directShader: {fileID: 0}
   directSettings:
     responseStepSamples: 512
     speedOfSound: 343
@@ -1825,7 +1849,7 @@ MonoBehaviour:
     maximumPendingObservations: 16
     maximumResponsesPerBatch: 64
   monitorListener: 0
-  monitorLeadSamples: 24000
+  monitorLeadSamples: 8192
   monitorCapacitySamples: 96000
   liveDiagnostics:
     backend: 
@@ -2028,34 +2052,11 @@ MonoBehaviour:
   replayMotionWriters: []
   takePath: /Users/clarkpeng/UnityGames/realisticaudioraytracing2d/Recordings/station-20261004-194631-729
   replaySeconds: 12.515555555555556
-  raytraceShader: {fileID: 0}
-  rayCount: 1000
-  maxBounces: 5
-  speedOfSound: 343
-  dynamicObstacles: 0
-  inputClip: {fileID: 8300000, guid: babfe7405b9058e47a2ab7942e7a6721, type: 3}
   audioManager: {fileID: 1303114735}
   sampleRate: 44100
-  chunkSamples: 1024
-  inputGain: 1
-  loopAudio: 0
-  enableKeyboardShortcuts: 0
-  precomputedPlaybackSource: {fileID: 0}
-  precomputedClip: {fileID: 0}
-  autoPlayPrecomputed: 1
-  precomputeChunksPerFrame: 4
-  reverbDuration: 5
-  loop: 0
   source: {fileID: 2511441257486857512}
   listener: {fileID: 250148662}
-  listenerRadius: 0.5
   obstacleObjects: []
-  showDebugTexture: 0
-  verboseAudioDebug: 0
-  debugRayCount: 100
-  waveformGain: 1000
-  spectrogramGain: 1000
-  waveformTexture: {fileID: 0}
 --- !u!4 &1303114737
 Transform:
   m_ObjectHideFlags: 0

@@ -95,11 +95,11 @@ public static partial class TakeDemo
         manager.useTakeRenderer=true; manager.takeRoot=world; manager.takeDimension=AcousticTake.Dimension.Spatial3D;
         manager.sampleRate=AudioSettings.outputSampleRate;
         manager.takeDefaultMaterial=AssetDatabase.LoadAssetAtPath<AudioMaterial>("Assets/Materials/Material.asset");
-        manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
+        manager.directShader=null; // Small direct scene: CPU avoids GPU readback latency.
         manager.showDebugTexture=false; manager.enableKeyboardShortcuts=false;
         manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Binaural;
         manager.directSettings.responseStepSamples=512; manager.directSettings.transitionSamples=64;
-        manager.monitorLeadSamples=24000;
+        manager.monitorLeadSamples=8192;
         manager.audioManager=host.AddComponent<AudioManager>(); manager.audioManager.showWaveform=false; manager.audioManager.rayTraceManager=manager;
         var horn=StationSource(train,"Train horn",new Vector3(0,4,1.8f),AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/train_horn.mp3"),manager,true);
         var signal=StationSource(world,"Room signal",new Vector3(5.6f,2.1f,13.98f),StationSignal(),manager,true);

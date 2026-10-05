@@ -129,10 +129,10 @@ public partial class RayTraceManager
         if (takeObjects.Count == 0) throw new InvalidOperationException("Register objects before recording.");
     }
 
-    public void BeginTakeRecording(string directory)
+    public void BeginTakeRecording(string directory, bool retainPayloads=true)
     {
         if (string.IsNullOrEmpty(directory)) throw new ArgumentException("Choose a take directory.");
-        BeginCapture(directory);
+        BeginCapture(directory,retainPayloads);
     }
     public void BeginLiveSimulation()
     {
@@ -145,7 +145,7 @@ public partial class RayTraceManager
         if(!externalCaptureClock)throw new InvalidOperationException("Begin input playback before replaying observations.");
         if(final)EndCapture(sample);else CaptureTakeState(sample);
     }
-    void BeginCapture(string directory)
+    void BeginCapture(string directory, bool retainPayloads=true)
     {
         RequireIdle();
         if (Application.isPlaying && !isActiveAndEnabled) throw new InvalidOperationException("The session manager must stay active while capturing.");
@@ -179,7 +179,7 @@ public partial class RayTraceManager
         for (int i=0; i<clips.Count; i++)
         {
             int clipIndex=scene.sources[i].clipIndex;
-            if (pcm[clipIndex] == null) pcm[clipIndex]=LoadSample(clips[i]);
+            if (pcm[clipIndex] == null) pcm[clipIndex]=LoadSample(clips[i],sampleRate);
         }
         captureSources = sources.ToArray();
         var captureClips=clips.ToArray(); captureObjects=new Transform[takeObjects.Count];
@@ -198,14 +198,14 @@ public partial class RayTraceManager
             if (directory!=null)
             {
                 takePath=Path.GetFullPath(directory);
-                takeWriter=new AcousticTake.Writer(takePath,sampleRate,scene,geometry,pcm);
+                takeWriter=new AcousticTake.Writer(takePath,sampleRate,scene,geometry,pcm,retainPayloads);
                 takeWriter.Metadata.observationPolicy="first-observation-per-audio-sample";
             }
             if (useTakeRenderer)
             {
                 var settings=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(directSettings));
                 sessionAudio=audioManager;
-                if (directory!=null) playbackCapture=new AudioManager.PlaybackCapture(Path.Combine(takePath,"monitor"),sampleRate,monitorCapacitySamples,
+                if (directory!=null && retainPayloads) playbackCapture=new AudioManager.PlaybackCapture(Path.Combine(takePath,"monitor"),sampleRate,monitorCapacitySamples,
                     liveDiagnostics.deviceBufferSamples,monitorLeadSamples,monitorListener,settings,directShader);
                 monitorQueue=new AudioManager.PcmQueue(monitorCapacitySamples,sampleRate,playbackCapture,settings.ChannelsPerListener);
                 if (monitorLeadSamples<0 || monitorLeadSamples>monitorCapacitySamples) throw new ArgumentOutOfRangeException(nameof(monitorLeadSamples));

@@ -1,0 +1,766 @@
+using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+using Helpers;
+using UnityEngine.Rendering;
+
+public partial class RayTraceManager : MonoBehaviour
+{
+    [Header("Shaders")]
+    public ComputeShader raytraceShader;
+
+    [Header("Simulation")]
+    [Range(10, 1000000)] public int rayCount = 1000;
+    [Range(0, 10)] public int maxBounces = 5;
+    public float speedOfSound = 343f;
+    public bool dynamicObstacles = false;
+
+    [Header("Audio")]
+    public AudioClip inputClip;
+    public int chunkSamples = 1024;
+    [Range(0.1f, 1000000f)] public float inputGain = 1f;
+
+    public bool loopAudio = false;
+    public bool enableKeyboardShortcuts = true;
+
+    [Header("Precomputed Playback")]
+    public AudioSource precomputedPlaybackSource;
+    public AudioClip precomputedClip;
+    public bool autoPlayPrecomputed = true;
+    [Range(1, 64)] public int precomputeChunksPerFrame = 4;
+
+    [Header("UI & Visualization")]
+    public float reverbDuration = 5f;
+    public bool loop = false;
+
+    [Header("Scene")]
+    [Range(0.1f, 5f)] public float listenerRadius = 0.5f;
+
+    [Header("Debug")]
+    public bool showDebugTexture = true;
+    public bool verboseAudioDebug = false;
+    [Range(5, 100)] public int debugRayCount = 100;
+    [Range(1, 1000000)] public float waveformGain = 1000.0f;
+    [Range(1, 1000000)] public float spectrogramGain = 1000.0f;
+
+    ComputeBuffer wallBuffer,
+        hitBuffer,
+        debugBuffer,
+        spectrogramBufferPing,
+        spectrogramBufferPong,
+        waveformOutBuffer,
+        argsBuffer,
+        frequencyDistributionBuffer,
+        inputBuffer;
+
+    struct FFTChunk {
+        public int[] frequencyDistribution;
+        public Vector2[] spectrum;
+    }
+    List<FFTChunk> precomputedChunks = new List<FFTChunk>();
+    int currentChunkIndex = 0;
+    bool isStreaming = false;
+    float delayBetweenChunks;
+    float nextChunkTime = 0f;
+    long startingPoint = -1;
+    int audioStartingPoint = 0;
+
+    RenderTexture spectrogramTexture;
+    public RenderTexture waveformTexture;
+
+    List<Segment> activeSegments;
+    Vector4[] debugRayPaths;
+    float[] fullInputSamples;
+    int activeSpectrogramIndex;
+    int accumFrames;
+    int spectrogramSize;
+    int hopSize;
+
+    float[] outputWaveform;
+    float[] olaOutput;
+    bool isPrecomputing;
+    AudioClip preparedClip;
+    int preparedSampleRate;
+
+    struct RayInfo { public float timeDelay, energy; public int frequencyBin; public float roomFreqHz; public Vector2 hitPoint; }
+
+    Vector3 lastSourcePos;
+    Vector3 lastListenerPos;
+    Vector3 sourceVel;
+    Vector3 listenerVel;
+    Coroutine legacyPrecompute;
+
+    void StartLegacy()
+    {
+        if (useTakeRenderer || raytraceShader == null) return; // Capture/replay does not require the legacy GPU renderer.
+        InitializeSimulation();
+        UpdateGeometry();
+        ResetSpectrogram();
+        if (source != null) lastSourcePos = source.position;
+        if (listener != null) lastListenerPos = listener.position;
+
+        if (spectrogramTexture == null) spectrogramTexture = CreateDebugTexture();
+        if (waveformTexture == null) waveformTexture = CreateDebugTexture();
+
+        if (audioManager != null)
+            audioManager.StartStreaming(sampleRate);
+    }
+
+    void UpdateLegacy()
+    {
+        if (useTakeRenderer || Mode!=SessionMode.Idle || raytraceShader == null) return;
+        if (source != null && listener != null)
+        {
+            float dt = Time.deltaTime > 0 ? Time.deltaTime : 0.016f;
+            sourceVel = (source.position - lastSourcePos) / dt;
+            listenerVel = (listener.position - lastListenerPos) / dt;
+            lastSourcePos = source.position;
+            lastListenerPos = listener.position;
+        }
+
+        if (enableKeyboardShortcuts)
+        {
+            if (Input.GetKeyDown(KeyCode.R)) { Debug.Log("R pressed - Resetting"); ResetSimulation(); }
+            if (Input.GetKeyDown(KeyCode.Q)) { Debug.Log("Q pressed - Queueing sine"); QueueTestSineWave(); }
+            if (Input.GetKeyDown(KeyCode.Space)) {
+                Debug.Log("Space pressed - Starting stream");
+                StartStreaming();
+            }
+            if (Input.GetKeyDown(KeyCode.C)) {
+                Debug.Log("C pressed - Precomputing raytraced clip");
+                StartPrecomputedPlayback();
+            }
+        }
+
+        if (spectrogramTexture == null || raytraceShader == null) {
+            Debug.LogWarning("Spectrogram texture or raytrace shader not assigned.");
+            return;
+        }
+
+        if (isStreaming && currentChunkIndex < precomputedChunks.Count)
+        {
+            if (Time.realtimeSinceStartup >= nextChunkTime)
+            {
+                float iterationStartTime = Time.realtimeSinceStartup;
+                FFTChunk chunk = precomputedChunks[currentChunkIndex];
+
+                RunRaytracing(chunk);
+
+                RunSimulation();
+
+                currentChunkIndex++;
+
+                float processingTime = Time.realtimeSinceStartup - iterationStartTime;
+                float remainingWait = delayBetweenChunks - processingTime;
+
+                if (remainingWait > 0) {
+                    nextChunkTime = Time.realtimeSinceStartup + remainingWait;
+                } else {
+                    nextChunkTime = Time.realtimeSinceStartup; // Catch up
+                }
+            }
+        }
+        else if (isStreaming && currentChunkIndex >= precomputedChunks.Count)
+        {
+            if (loopAudio)
+            {
+                currentChunkIndex = 0;
+                audioStartingPoint = 0;
+            }
+            else
+            {
+                isStreaming = false;
+                Debug.Log("Finished streaming and processing chunks!");
+            }
+        }
+
+    }
+
+    void InitializeSimulation()
+    {
+        // Sources can prepare in Start before this manager's late execution order.
+        if (chunkSamples != 1024)
+        {
+            Debug.LogWarning($"chunkSamples was {chunkSamples}, but the GPU FFT kernels use WINDOW_SIZE=1024. Forcing chunkSamples to 1024.");
+            chunkSamples = 1024;
+        }
+        hopSize = chunkSamples / 2;
+        spectrogramSize = Mathf.CeilToInt(sampleRate * reverbDuration / (float)hopSize) * chunkSamples;
+    }
+
+    RenderTexture CreateDebugTexture()
+    {
+        var texture = new RenderTexture(1024, 256, 0) {
+            enableRandomWrite = true,
+            filterMode = FilterMode.Point
+        };
+        texture.Create();
+        return texture;
+    }
+
+    public void QueueTestSineWave() => QueueSineWave(440f, 1.0f);
+
+    public void QueueSineWave(float frequency, float duration)
+    {
+        if (audioManager == null)
+        {
+            Debug.LogWarning("Cannot queue sine wave because AudioManager is not assigned.");
+            return;
+        }
+
+        int totalSamples = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[totalSamples];
+        for (int i = 0; i < totalSamples; i++)
+            samples[i] = Mathf.Sin(2 * Mathf.PI * frequency * i / sampleRate);
+
+        audioManager.QueueAudioChunk(samples);
+    }
+
+    public void ResetSimulation()
+    {
+        ResetPlaybackState();
+        ResetSpectrogram();
+        accumFrames = 0;
+        isStreaming = false;
+        isPrecomputing = false;
+    }
+
+    void ResetSpectrogram()
+    {
+        activeSpectrogramIndex = 0;
+        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPing, spectrogramSize);
+        ComputeHelper.CreateStructuredBuffer<Vector2>(ref spectrogramBufferPong, spectrogramSize);
+        ClearSpectrogramBuffer(spectrogramBufferPing);
+        ClearSpectrogramBuffer(spectrogramBufferPong);
+    }
+
+    ComputeBuffer GetActiveSpectrogramBuffer()
+    {
+        return activeSpectrogramIndex == 0 ? spectrogramBufferPing : spectrogramBufferPong;
+    }
+
+    public void StartStreaming()
+    {
+        if (captureScene!=null) { RecordLegacyVoice(AcousticTake.VoiceAction.Play); return; }
+        if (useTakeRenderer)
+        {
+            BeginLiveSimulation(); RecordLegacyVoice(AcousticTake.VoiceAction.Play); return;
+        }
+        RequireLegacyIdle();
+        if (!CanProcessAudio(requireAudioManager: true)) return;
+
+        Debug.Log("Starting audio streaming and processing.");
+        StopStreaming();
+        ResetSpectrogram();
+
+        delayBetweenChunks = (float)hopSize / sampleRate;
+        PrepareCurrentClip();
+
+        ResetPlaybackState();
+        isStreaming = true;
+        nextChunkTime = Time.realtimeSinceStartup;
+        RecordLegacyVoice(AcousticTake.VoiceAction.Play);
+    }
+
+    public void StopStreaming()
+    {
+        if (legacyPrecompute!=null) { StopCoroutine(legacyPrecompute); legacyPrecompute=null; }
+        if (precomputedPlaybackSource!=null) precomputedPlaybackSource.Stop();
+        if (isStreaming || captureScene!=null) RecordLegacyVoice(AcousticTake.VoiceAction.Stop);
+        isStreaming = false;
+        isPrecomputing = false;
+    }
+
+    public void StartPrecomputedPlayback()
+    {
+        RequireLegacyIdle();
+        if (isPrecomputing)
+        {
+            Debug.LogWarning("Precomputation is already running.");
+            return;
+        }
+
+        if (!CanProcessAudio(requireAudioManager: false)) return;
+
+        legacyPrecompute=StartCoroutine(PrecomputeAndPlay());
+    }
+
+    public void PrepareCurrentClip()
+    {
+        if (useTakeRenderer) return;
+        RequireLegacyIdle();
+        if (!CanProcessAudio(requireAudioManager: false)) return;
+        if (hopSize <= 0 || spectrogramSize <= 0)
+            InitializeSimulation();
+
+        if (preparedClip == inputClip && preparedSampleRate == sampleRate && precomputedChunks.Count > 0)
+            return;
+
+        fullInputSamples = LoadSample(inputClip,sampleRate);
+        PrecomputeAllFFTs();
+        preparedClip = inputClip;
+        preparedSampleRate = sampleRate;
+    }
+
+    IEnumerator PrecomputeAndPlay()
+    {
+        isPrecomputing = true;
+        isStreaming = false;
+        ResetPlaybackState();
+        accumFrames = 0;
+
+        Debug.Log("Precomputing raytraced audio clip.");
+        fullInputSamples = LoadSample(inputClip,sampleRate);
+        ResetSpectrogram();
+        PrecomputeAllFFTs();
+
+        int reverbSamples = Mathf.CeilToInt(sampleRate * reverbDuration) + chunkSamples;
+        float[] precomputedSamples = new float[fullInputSamples.Length + reverbSamples];
+
+        for (int i = 0; i < precomputedChunks.Count; i++)
+        {
+            currentChunkIndex = i;
+            RunRaytracing(precomputedChunks[i]);
+            float[] response = RunSimulation(queuePlayback: false, drawWaveform: showDebugTexture);
+            AddResponseToPrecomputedBuffer(precomputedSamples, response, i * hopSize);
+
+            if ((i + 1) % precomputeChunksPerFrame == 0)
+                yield return null;
+        }
+
+        precomputedClip = AudioClip.Create(
+            $"Raytraced_{inputClip.name}",
+            precomputedSamples.Length,
+            1,
+            sampleRate,
+            false
+        );
+        precomputedClip.SetData(precomputedSamples, 0);
+
+        if (autoPlayPrecomputed)
+            PlayPrecomputedClip();
+
+        isPrecomputing = false; legacyPrecompute=null;
+        Debug.Log($"Finished precomputing {precomputedChunks.Count} chunks into {precomputedClip.length:F2}s of audio.");
+    }
+
+    void ResetPlaybackState()
+    {
+        currentChunkIndex = 0;
+        startingPoint = -1;
+        audioStartingPoint = 0;
+    }
+
+    public void PlayPrecomputedClip()
+    {
+        RequireLegacyIdle();
+        if (precomputedClip == null)
+        {
+            Debug.LogWarning("No precomputed clip is available yet.");
+            return;
+        }
+
+        if (precomputedPlaybackSource == null)
+            precomputedPlaybackSource = gameObject.AddComponent<AudioSource>();
+
+        precomputedPlaybackSource.clip = precomputedClip;
+        precomputedPlaybackSource.loop = loopAudio;
+        precomputedPlaybackSource.Play();
+    }
+
+    bool CanProcessAudio(bool requireAudioManager)
+    {
+        if (raytraceShader == null)
+        {
+            Debug.LogWarning("Raytrace shader is not assigned.");
+            return false;
+        }
+
+        if (inputClip == null)
+        {
+            Debug.LogWarning("Input clip is not assigned.");
+            return false;
+        }
+
+        if (source == null || listener == null)
+        {
+            Debug.LogWarning("Source and listener transforms must be assigned.");
+            return false;
+        }
+
+        if (requireAudioManager && audioManager == null)
+        {
+            Debug.LogWarning("AudioManager is not assigned.");
+            return false;
+        }
+
+        return true;
+    }
+
+    void PrecomputeAllFFTs()
+    {
+        precomputedChunks.Clear();
+        int totalSamples = fullInputSamples.Length;
+        int offset = 0;
+
+        int k_fft = raytraceShader.FindKernel("FFT");
+
+        // Precompute Hann window to reduce spectral leakage
+        float[] hannWindow = new float[chunkSamples];
+        for (int i = 0; i < chunkSamples; i++)
+            hannWindow[i] = 0.5f * (1.0f - Mathf.Cos(2.0f * Mathf.PI * i / (chunkSamples - 1)));
+
+        while (offset < totalSamples)
+        {
+            int samplesToProcess = Mathf.Min(chunkSamples, totalSamples - offset);
+            float[] chunk = new float[chunkSamples];
+            System.Array.Copy(fullInputSamples, offset, chunk, 0, samplesToProcess);
+
+            // Apply Hann window before FFT to reduce spectral leakage
+            Vector2[] complexSamples = new Vector2[chunkSamples];
+            for (int i = 0; i < chunkSamples; i++)
+            {
+                complexSamples[i] = new Vector2(chunk[i] * hannWindow[i], 0f);
+            }
+
+            ComputeHelper.CreateStructuredBuffer(ref inputBuffer, complexSamples);
+
+            raytraceShader.SetBuffer(k_fft, "Data", inputBuffer);
+            ComputeHelper.Dispatch(raytraceShader, 1, 1, 1, k_fft);
+
+            Vector2[] fftResult = new Vector2[chunkSamples];
+            inputBuffer.GetData(fftResult);
+
+            int[] freqDist = BuildFrequencyDistribution(fftResult);
+
+            precomputedChunks.Add(new FFTChunk {
+                frequencyDistribution = freqDist,
+                spectrum = fftResult
+            });
+
+            offset += hopSize; // 50% overlap for proper STFT analysis
+            ComputeHelper.Release(inputBuffer);
+        }
+        Debug.Log($"Precomputed {precomputedChunks.Count} FFT chunks.");
+    }
+
+
+    ComputeBuffer initialSpectrumBuffer;
+
+    void RunRaytracing(FFTChunk chunk)
+    {
+        ComputeHelper.CreateStructuredBuffer(ref frequencyDistributionBuffer, chunk.frequencyDistribution);
+        ComputeHelper.CreateStructuredBuffer(ref initialSpectrumBuffer, chunk.spectrum);
+
+        ComputeHelper.CreateStructuredBuffer<Vector4>(ref debugBuffer, debugRayCount * (maxBounces + 1));
+        ComputeHelper.CreateAppendBuffer<RayInfo>(ref hitBuffer, rayCount * maxBounces);
+
+        if (dynamicObstacles || wallBuffer == null || !wallBuffer.IsValid()) UpdateGeometry();
+        if (argsBuffer == null || !argsBuffer.IsValid()) argsBuffer = new ComputeBuffer(1, sizeof(int) * 4, ComputeBufferType.IndirectArguments);
+
+        int k = raytraceShader.FindKernel("Trace");
+        hitBuffer.SetCounterValue(0);
+
+        raytraceShader.SetVector("sourcePos", source.position);
+        raytraceShader.SetVector("listenerPos", listener.position);
+        raytraceShader.SetVector("sourceVel", sourceVel);
+        raytraceShader.SetVector("listenerVel", listenerVel);
+
+        raytraceShader.SetFloat("listenerRadius", listenerRadius);
+        raytraceShader.SetFloat("speedOfSound", speedOfSound);
+        raytraceShader.SetFloat("inputGain", inputGain);
+        raytraceShader.SetFloat("diffractionFactor", 0.5f);
+
+        raytraceShader.SetInt("maxBounceCount", maxBounces);
+        raytraceShader.SetInt("rngStateOffset", Time.frameCount);
+        raytraceShader.SetInt("numWalls", activeSegments.Count);
+        raytraceShader.SetInt("rayCount", rayCount);
+        raytraceShader.SetInt("debugRayCount", debugRayCount);
+        raytraceShader.SetInt("accumFrames", accumFrames);
+        raytraceShader.SetInt("frequencyDistributionSize", chunk.frequencyDistribution.Length);
+
+        raytraceShader.SetBuffer(k, "walls", wallBuffer);
+        raytraceShader.SetBuffer(k, "rayInfoBuffer", hitBuffer);
+        raytraceShader.SetBuffer(k, "debugRays", debugBuffer);
+        raytraceShader.SetBuffer(k, "FrequencyDistribution", frequencyDistributionBuffer);
+
+        ComputeHelper.Dispatch(raytraceShader, rayCount, 1, 1, k);
+
+        AsyncGPUReadback.Request(debugBuffer, r => { if (!r.hasError) debugRayPaths = r.GetData<Vector4>().ToArray(); });
+        ComputeBuffer.CopyCount(hitBuffer, argsBuffer, 0);
+
+        int[] argsData = new int[4];
+        argsBuffer.GetData(argsData);
+        int hitCount = argsData[0];
+
+        if (hitBuffer == null || spectrogramTexture == null) return;
+
+        if (hitCount > 0)
+        {
+            int safeHitCount = Mathf.Min(hitCount, hitBuffer.count);
+            int kp = raytraceShader.FindKernel("ProcessHits");
+            raytraceShader.SetInt("SampleRate", sampleRate);
+            raytraceShader.SetInt("ChunkSamples", chunkSamples);
+            raytraceShader.SetInt("HopSize", hopSize);
+            raytraceShader.SetInt("HitCount", safeHitCount);
+            raytraceShader.SetBuffer(kp, "RawHits", hitBuffer);
+            raytraceShader.SetBuffer(kp, "Spectrogram", GetActiveSpectrogramBuffer());
+            raytraceShader.SetBuffer(kp, "InitialSpectrum", initialSpectrumBuffer);
+            ComputeHelper.Dispatch(raytraceShader, hitCount, 1, 1, kp);
+        }
+        accumFrames++;
+    }
+
+    int[] BuildFrequencyDistribution(Vector2[] fftResult)
+    {
+        int halfSize = fftResult.Length / 2;
+        float[] magnitudes = new float[halfSize];
+        float totalMagnitude = 0f;
+
+        for (int i = 0; i < halfSize; i++)
+        {
+            magnitudes[i] = Mathf.Sqrt(fftResult[i].x * fftResult[i].x + fftResult[i].y * fftResult[i].y);
+            totalMagnitude += magnitudes[i];
+        }
+
+        if (totalMagnitude > 0)
+        {
+            for (int i = 0; i < halfSize; i++)
+                magnitudes[i] /= totalMagnitude;
+        }
+
+        int[] distribution = new int[rayCount];
+        int distributionIndex = 0;
+
+        for (int i = 0; i < halfSize && distributionIndex < rayCount; i++)
+        {
+            int count = Mathf.RoundToInt(magnitudes[i] * rayCount);
+
+            for (int j = 0; j < count && distributionIndex < rayCount; j++)
+            {
+                distribution[distributionIndex++] = i;
+            }
+        }
+
+        while (distributionIndex < rayCount)
+            distribution[distributionIndex++] = Random.Range(0, halfSize);
+
+        Shuffle(distribution);
+        return distribution;
+    }
+
+    float[] RunSimulation(bool queuePlayback = true, bool drawWaveform = true)
+    {
+        ComputeBuffer currentBuffer = GetActiveSpectrogramBuffer();
+        DrawSpectrogram(currentBuffer);
+
+        if (chunkSamples != 1024)
+        {
+            Debug.LogWarning($"SpectrogramToWaveformIFFT kernel assumes chunkSamples==1024 (WINDOW_SIZE). Current chunkSamples={chunkSamples}. Skipping GPU IFFT.");
+            AdvanceSpectrogramBuffer();
+            return null;
+        }
+
+        int timeSteps = spectrogramSize / chunkSamples;
+        if (timeSteps <= 0)
+        {
+            Debug.LogWarning($"SpectrogramToWaveformIFFT: timeSteps was {timeSteps} (spectrogramSize={spectrogramSize}, chunkSamples={chunkSamples}). Skipping.");
+            AdvanceSpectrogramBuffer();
+            return null;
+        }
+
+        RunSpectrogramIfft(currentBuffer, timeSteps);
+        OverlapAdd(timeSteps);
+        if (queuePlayback) QueueOutputWaveform();
+        if (drawWaveform) DrawWaveform(olaOutput);
+
+        AdvanceSpectrogramBuffer();
+        return olaOutput;
+    }
+
+    void DrawSpectrogram(ComputeBuffer buffer)
+    {
+        int kd = raytraceShader.FindKernel("DrawSpectrogram");
+        raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+        raytraceShader.SetInt("ChunkSamples", chunkSamples);
+        raytraceShader.SetInt("TexWidth", spectrogramTexture.width);
+        raytraceShader.SetInt("TexHeight", spectrogramTexture.height);
+        raytraceShader.SetInt("accumCount", accumFrames);
+        raytraceShader.SetFloat("DebugGain", spectrogramGain);
+        raytraceShader.SetTexture(kd, "DebugTexture", spectrogramTexture);
+        raytraceShader.SetBuffer(kd, "Spectrogram", buffer);
+        ComputeHelper.Dispatch(raytraceShader, spectrogramTexture.width, spectrogramTexture.height, 1, kd);
+    }
+
+    void RunSpectrogramIfft(ComputeBuffer spectrogram, int timeSteps)
+    {
+        if (waveformOutBuffer == null || !waveformOutBuffer.IsValid() || waveformOutBuffer.count != spectrogramSize)
+        {
+            ComputeHelper.Release(waveformOutBuffer);
+            waveformOutBuffer = new ComputeBuffer(spectrogramSize, sizeof(float));
+        }
+
+        if (outputWaveform == null || outputWaveform.Length != spectrogramSize)
+            outputWaveform = new float[spectrogramSize];
+
+        int k = raytraceShader.FindKernel("SpectrogramToWaveformIFFT");
+        raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+        raytraceShader.SetInt("ChunkSamples", chunkSamples);
+        raytraceShader.SetBuffer(k, "Spectrogram", spectrogram);
+        raytraceShader.SetBuffer(k, "WaveformOut", waveformOutBuffer);
+        raytraceShader.Dispatch(k, timeSteps, 1, 1);
+        waveformOutBuffer.GetData(outputWaveform);
+    }
+
+    void OverlapAdd(int timeSteps)
+    {
+        int length = (timeSteps - 1) * hopSize + chunkSamples;
+        if (olaOutput == null || olaOutput.Length != length) olaOutput = new float[length];
+        System.Array.Clear(olaOutput, 0, olaOutput.Length);
+
+        for (int t = 0; t < timeSteps; t++)
+        {
+            int src = t * chunkSamples;
+            int dst = t * hopSize;
+            for (int s = 0; s < chunkSamples; s++) olaOutput[dst + s] += outputWaveform[src + s];
+        }
+    }
+
+    void QueueOutputWaveform()
+    {
+        (long writePos, int startPos) = startingPoint == -1
+            ? audioManager.QueueAudioChunk(olaOutput, audioStartingPoint)
+            : audioManager.QueueAudioChunk(olaOutput, audioStartingPoint, startingPoint);
+
+        startingPoint = writePos + hopSize;
+        audioStartingPoint = startPos;
+        if (verboseAudioDebug)
+            Debug.Log($"New startingPos: {startingPoint}, audio starting point {audioStartingPoint}.");
+    }
+
+    void DrawWaveform(float[] waveform)
+    {
+        if (waveformTexture == null || waveform == null) return;
+
+        ComputeBuffer waveformBuffer = null;
+        try
+        {
+            waveformBuffer = ComputeHelper.CreateStructuredBuffer(waveform);
+            int kw = raytraceShader.FindKernel("DrawWaveform");
+            raytraceShader.SetInt("WaveformLength", waveform.Length);
+            raytraceShader.SetInt("TexWidth", waveformTexture.width);
+            raytraceShader.SetInt("TexHeight", waveformTexture.height);
+            raytraceShader.SetFloat("DebugGain", waveformGain);
+            raytraceShader.SetBuffer(kw, "WaveformData", waveformBuffer);
+            raytraceShader.SetTexture(kw, "DebugTexture", waveformTexture);
+            ComputeHelper.Dispatch(raytraceShader, waveformTexture.width, waveformTexture.height, 1, kw);
+        }
+        finally
+        {
+            ComputeHelper.Release(waveformBuffer);
+        }
+    }
+
+    void AdvanceSpectrogramBuffer()
+    {
+        activeSpectrogramIndex = 1 - activeSpectrogramIndex;
+        ClearSpectrogramBuffer(GetActiveSpectrogramBuffer());
+    }
+
+    void ClearSpectrogramBuffer(ComputeBuffer buffer)
+    {
+        if (raytraceShader == null || buffer == null || !buffer.IsValid())
+            return;
+
+        int kClear = raytraceShader.FindKernel("ClearSpectrogram");
+
+        raytraceShader.SetInt("SpectrogramSize", spectrogramSize);
+        raytraceShader.SetBuffer(kClear, "Spectrogram", buffer);
+        ComputeHelper.Dispatch(raytraceShader, spectrogramSize, 1, 1, kClear);
+    }
+
+    void AddResponseToPrecomputedBuffer(float[] target, float[] response, int startSample)
+    {
+        if (target == null || response == null || startSample >= target.Length) return;
+
+        int available = Mathf.Min(response.Length, target.Length - startSample);
+        for (int i = 0; i < available; i++)
+            target[startSample + i] += response[i];
+    }
+
+    void UpdateGeometry()
+    {
+        activeSegments = SceneToData2D.GetSegmentsFromColliders(obstacleObjects);
+        ComputeHelper.CreateStructuredBuffer(ref wallBuffer, activeSegments);
+    }
+
+    void OnGUI()
+    {
+        if (showDebugTexture)
+        {
+            // Create a style for labels with visible text
+            GUIStyle labelStyle = new GUIStyle(GUI.skin.label);
+            labelStyle.normal.textColor = Color.white;
+            labelStyle.fontSize = 10;
+            labelStyle.fontStyle = FontStyle.Bold;
+
+            if (spectrogramTexture != null)
+            {
+                float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
+                GUI.DrawTexture(new Rect(10, 10, w, h), spectrogramTexture);
+
+                Matrix4x4 matrixBackup = GUI.matrix;
+                GUIUtility.RotateAroundPivot(90, new Vector2(10 + w + 5, 10));
+                GUI.Label(new Rect(10 + w + 5, 10, h, 20), "Spectrogram", labelStyle);
+                GUI.matrix = matrixBackup;
+            }
+
+            if (waveformTexture != null)
+            {
+                float w = Screen.width * 0.4f, h = Screen.height * 0.15f;
+                float yPos = 20 + Screen.height * 0.15f;
+                GUI.DrawTexture(new Rect(10, yPos, w, h), waveformTexture);
+
+                Matrix4x4 matrixBackup = GUI.matrix;
+                GUIUtility.RotateAroundPivot(90, new Vector2(10 + w + 5, yPos));
+                GUI.Label(new Rect(10 + w + 5, yPos, h, 20), "Waveform", labelStyle);
+                GUI.matrix = matrixBackup;
+            }
+        }
+    }
+
+    void OnDrawGizmos()
+    {
+        if (useTakeRenderer || !source || !listener) return;
+        Gizmos.color = Color.green; Gizmos.DrawWireSphere(source.position, 0.2f);
+        Gizmos.color = Color.cyan; Gizmos.DrawWireSphere(listener.position, listenerRadius);
+        if (activeSegments != null) { Gizmos.color = Color.red; foreach (var seg in activeSegments) Gizmos.DrawLine(seg.start, seg.end); }
+        if (debugRayPaths != null && debugRayPaths.Length >= debugRayCount * (maxBounces + 1))
+        {
+            int stride = maxBounces + 1;
+            for (int i = 0; i < debugRayCount; i++)
+                for (int b = 0; b < maxBounces - 1; b++)
+                {
+                    Vector4 p1 = debugRayPaths[i * stride + b], p2 = debugRayPaths[i * stride + b + 1];
+                    if (p2.sqrMagnitude == 0) break;
+                    Gizmos.color = Color.Lerp(new Color(1, 0.5f, 0, 0.1f), new Color(1, 1, 0, 0.8f), p1.z);
+                    Gizmos.DrawLine(new Vector3(p1.x, p1.y, source.position.z - 5), new Vector3(p2.x, p2.y, source.position.z - 5));
+                }
+        }
+    }
+
+    void Shuffle<T>(T[] array)
+    {
+        for (int i = array.Length - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            T temp = array[i];
+            array[i] = array[j];
+            array[j] = temp;
+        }
+    }
+    void DisposeLegacy()
+    {
+        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, initialSpectrumBuffer);
+    }
+}

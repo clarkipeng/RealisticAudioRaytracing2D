@@ -9,13 +9,17 @@ public static partial class TakeChecks
 {
     const string StationTestKey="Acoustics.StationLifecycleCheck";
     [MenuItem("Tools/Acoustics/Test station recording and replay")]
-    public static void StartStationLifecycleCheck()
+    public static void StartStationLifecycleCheck() => StartStationLifecycleCheck(false);
+    public static void StartStationLifecycleCheck(bool endurance,bool compareFrameRates=false)
     {
         if(Application.isPlaying)throw new InvalidOperationException("Run this check from Edit mode in the saved station scene.");
         var station=UnityEngine.Object.FindAnyObjectByType<StationDemo>();
         if(station==null || station.gameObject.scene.isDirty || string.IsNullOrEmpty(station.gameObject.scene.path))
             throw new InvalidOperationException("Open and save the station scene before running this check.");
         File.Delete("Recordings/station-lifecycle-result.txt");
+        SessionState.SetBool(StationTestKey+".Endurance",endurance);
+        SessionState.SetBool(StationTestKey+".Rates",endurance || compareFrameRates);
+        EditorApplication.ExecuteMenuItem("Window/General/Game");
         SessionState.SetBool(StationTestKey,true);EditorApplication.isPlaying=true;
     }
     [InitializeOnLoadMethod]
@@ -23,13 +27,18 @@ public static partial class TakeChecks
     {
         EditorApplication.playModeStateChanged+=state=> {
             if(state!=PlayModeStateChange.EnteredPlayMode || !SessionState.GetBool(StationTestKey,false))return;
-            SessionState.EraseBool(StationTestKey);StationLifecycleCheck();
+            SessionState.EraseBool(StationTestKey);
+            UnityEngine.Object.FindAnyObjectByType<StationDemo>().retainFullReference=true;
+            bool endurance=SessionState.GetBool(StationTestKey+".Endurance",false);SessionState.EraseBool(StationTestKey+".Endurance");
+            bool rates=SessionState.GetBool(StationTestKey+".Rates",false);SessionState.EraseBool(StationTestKey+".Rates");
+            StationLifecycleCheck(endurance,rates);
         };
     }
     static async Task StationTicks(StationDemo station,int count)
     {long end=station.Tick+count;while(station.Tick<end)await Task.Delay(5);}
-    static async void StationLifecycleCheck()
+    static async void StationLifecycleCheck(bool endurance,bool compareFrameRates)
     {
+        int previousRate=Application.targetFrameRate,previousSync=QualitySettings.vSyncCount;
         string result="Recordings/station-lifecycle-result.txt";
         try
         {
@@ -44,10 +53,16 @@ public static partial class TakeChecks
             d.SubmitInput(Vector2.zero,new Vector2(20,-15),true);await StationTicks(d,60);
             d.SubmitInput(Vector2.up,new Vector2(-20,15));await StationTicks(d,12);
             d.SubmitInput(Vector2.zero,Vector2.zero);await StationTicks(d,35);
+            if(endurance)for(int lap=0;lap<3;lap++)
+            {
+                while(!d.AtStation)await Task.Delay(5);
+                if(lap<2)while(d.AtStation)await Task.Delay(5);
+            }
             d.SaveRecording();while(d.Busy)await Task.Delay(5);
+            d.manager.StopLiveSimulation();while(d.manager.Mode!=RayTraceManager.SessionMode.Idle)await Task.Delay(5);
             string compact=Path.Combine(path,"input-only");StationRecording.ExportInputs(path,compact);
             long bytes=Directory.GetFiles(compact).Sum(f=>new FileInfo(f).Length);
-            string rebuilt=await CompactReplayChecks.VerifyLive(compact);
+            string rebuilt=StationReplay.Reconstruct(compact,Path.Combine(compact,"rebuilt"));
             using(var a=AcousticTake.Open(path))using(var b=AcousticTake.Open(rebuilt))
             {
                 if(a.Metadata.stateHash!=b.Metadata.stateHash || a.Metadata.eventHash!=b.Metadata.eventHash)throw new Exception("Input reconstruction drifted.");
@@ -57,8 +72,33 @@ public static partial class TakeChecks
             var audio=TakeComparison.CompareWave(Path.Combine(path,"check-audio/listener-0.wav"),Path.Combine(rebuilt,"check-audio/listener-0.wav"));
             if(!audio.exactMatch || audio.referenceRms<=0)throw new Exception("Reconstructed audio differs.");
             File.WriteAllText(Path.Combine(path,"check-audio.json"),JsonUtility.ToJson(audio,true));
+            foreach(int frameRate in compareFrameRates?new[]{5,30}:new[]{60})d=await CheckSceneReplay(d,compact,path,frameRate);
+            var diagnostics=d.manager.liveDiagnostics;
+            File.WriteAllText(Path.Combine(path,"replay-live.json"),JsonUtility.ToJson(diagnostics,true));
+            File.WriteAllText(result,"PASS: states/events, stereo reconstruction and input-only scene replay. Export bytes: "+bytes+
+                ". Replay underrun/late/overflow samples: "+diagnostics.underrunSamples+" / "+diagnostics.lateSamples+" / "+diagnostics.overflowSamples+"\n"+path);
+        }
+        catch(Exception e) {Directory.CreateDirectory("Recordings");File.WriteAllText(result,"FAIL: "+e);Debug.LogException(e);}
+        finally {Application.targetFrameRate=previousRate;QualitySettings.vSyncCount=previousSync;EditorApplication.isPlaying=false;}
+    }
+
+    static async Task<StationDemo> CheckSceneReplay(StationDemo d,string compact,string path,int frameRate)
+    {
+        // Editor background updates can ignore targetFrameRate; enforce the test's maximum cadence.
+        var timer=System.Diagnostics.Stopwatch.StartNew();long next=0;
+        EditorApplication.CallbackFunction throttle=()=> {
+            long wait=next-timer.ElapsedMilliseconds;
+            if(wait>0)System.Threading.Thread.Sleep((int)wait);
+            next=timer.ElapsedMilliseconds+1000/frameRate;
+        };
+        EditorApplication.update+=throttle;
+        try
+        {
+            var prior=d;
+            Application.targetFrameRate=frameRate;QualitySettings.vSyncCount=0;
             d.ReplayInputs(compact);
-            do {await Task.Delay(5);d=UnityEngine.Object.FindAnyObjectByType<StationDemo>();}while(d==null || !d.IsInputReplay);
+            do {await Task.Delay(5);d=UnityEngine.Object.FindAnyObjectByType<StationDemo>();}while(d==null || d==prior || !d.IsInputReplay);
+            int startFrame=Time.frameCount;double startTime=Time.realtimeSinceStartupAsDouble;
             var telemetry=new System.Text.StringBuilder("sample,tick,read,written,underrun\n");
             while(!d.InputReplayFinished || d.manager.Mode!=RayTraceManager.SessionMode.Idle)
             {
@@ -66,23 +106,46 @@ public static partial class TakeChecks
                 if(queue!=null)telemetry.AppendLine(d.manager.LiveSample+","+d.Tick+","+queue.ReadSample+","+queue.WrittenSample+","+queue.UnderrunSamples);
                 await Task.Delay(5);
             }
-            File.WriteAllText(Path.Combine(path,"replay-timing.csv"),telemetry.ToString());
+            File.WriteAllText(Path.Combine(path,"replay-timing-"+frameRate+".csv"),telemetry.ToString());
             using(var take=AcousticTake.Open(path))
             {
                 var states=new AcousticTake.State[take.Metadata.scene.objects.Length];take.ReadStoredFrame(take.Metadata.frameCount-1,states);
                 for(int i=0;i<states.Length;i++)if(!states[i].position.Equals(d.manager.takeObjects[i].transform.position))throw new Exception("Scene replay drifted.");
             }
-            var diagnostics=d.manager.liveDiagnostics;
-            File.WriteAllText(Path.Combine(path,"replay-live.json"),JsonUtility.ToJson(diagnostics,true));
-            File.WriteAllText(result,"PASS: states/events, stereo reconstruction and input-only scene replay. Export bytes: "+bytes+
-                ". Replay underrun/late/overflow samples: "+diagnostics.underrunSamples+" / "+diagnostics.lateSamples+" / "+diagnostics.overflowSamples+"\n"+path);
+        File.WriteAllText(Path.Combine(path,"replay-live-"+frameRate+".json"),JsonUtility.ToJson(d.manager.liveDiagnostics,true));
+        File.WriteAllText(Path.Combine(path,"replay-fps-"+frameRate+".txt"),((Time.frameCount-startFrame)/(Time.realtimeSinceStartupAsDouble-startTime)).ToString("F2"));
+        return d;
         }
-        catch(Exception e) {Directory.CreateDirectory("Recordings");File.WriteAllText(result,"FAIL: "+e);Debug.LogException(e);}
-        finally {EditorApplication.isPlaying=false;}
+        finally {EditorApplication.update-=throttle;}
+    }
+
+    static void CompactPayloads()
+    {
+        string compact=Path.Combine(directory,"compact-payloads");
+        string reference=Path.Combine(directory,"reference-payloads");
+        foreach(bool retain in new[]{false,true})
+        using(var writer=new AcousticTake.Writer(retain?reference:compact,1000,Scene(),
+            new[]{new AcousticTake.Primitive {a=Vector3.zero,b=Vector3.right,c=Vector3.up}},new[]{new[]{1f,2f,3f}},retain))
+        {
+            writer.Append(0,States());writer.Append(0,States());writer.Append(80,States());
+            writer.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1});writer.Complete();
+        }
+        var a=AcousticTake.ReadManifest(compact);var b=AcousticTake.ReadManifest(reference);
+        Check(Directory.GetFiles(compact).Length==2,"Compact take writes metadata/events only; station adds input/timing files.");
+        Check(a.sceneHash==b.sceneHash && a.eventHash==b.eventHash,"Omitted payloads retain exactly the same identity hashes.");
+        Check(a.frameCount==2 && a.durationSamples==80 && string.IsNullOrEmpty(a.stateHash),"Compact timing/counts remain valid without pose serialization.");
+        using(var writer=new AcousticTake.Writer(Path.Combine(directory,"invalid-compact"),1000,Scene(),
+            new AcousticTake.Primitive[0],new[]{new[]{1f}},false))
+        {
+            var invalid=States();invalid[0].position.x=float.NaN;
+            Reject(()=>writer.Append(0,invalid),"Compact capture still rejects invalid scene state.");
+            Reject(writer.Complete,"A failed compact observation cannot finalize.");
+        }
     }
 
     static void StationInputs()
     {
+        CompactPayloads();
         string path=Path.Combine(directory,"station-inputs");
         using(var writer=Writer("station-inputs",Scene()))
         {

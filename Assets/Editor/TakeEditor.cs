@@ -23,7 +23,7 @@ public sealed class TakeEditor : Editor
     {
         var manager=(RayTraceManager)target;
         var station=manager.GetComponent<StationDemo>();
-        using (new EditorGUI.DisabledScope(manager.Mode!=RayTraceManager.SessionMode.Idle && !manager.IsReplayingTake)) DrawDefaultInspector();
+        using (new EditorGUI.DisabledScope(manager.Mode!=RayTraceManager.SessionMode.Idle && !manager.IsReplayingTake)) DrawConfiguration(manager);
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Recorded takes",EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(manager.TakeStatus+" ("+manager.Mode+")",MessageType.Info);
@@ -91,7 +91,7 @@ public sealed class TakeEditor : Editor
                 string output=Path.Combine(manager.takePath,"direct-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
                 try
                 {
-                    using (var take=AcousticTake.Open(manager.takePath))
+                    using (var take=StationReplay.Open(manager.takePath,output))
                         TakeRender.RenderDirect(take,renderSettings,output,p =>
                         {
                             if (EditorUtility.DisplayCancelableProgressBar("Rendering recorded take",output,p)) throw new OperationCanceledException();
@@ -115,7 +115,7 @@ public sealed class TakeEditor : Editor
                 string output=Path.Combine(manager.takePath,"comparison-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
                 try
                 {
-                    using (var take=AcousticTake.Open(manager.takePath))
+                    using (var take=StationReplay.Open(manager.takePath,output))
                         TakeComparison.Run(take,renderSettings,high,output,renderShader,p=>
                         { if (EditorUtility.DisplayCancelableProgressBar("Comparing temporal budgets",output,p)) throw new OperationCanceledException(); },checkReference ? referenceCheck:null);
                     Debug.Log("Comparison saved to "+output,manager);
@@ -124,6 +124,20 @@ public sealed class TakeEditor : Editor
                 finally { EditorUtility.ClearProgressBar(); }
             });
 
+    }
+
+    void DrawConfiguration(RayTraceManager manager)
+    {
+        if(!manager.useTakeRenderer) {DrawDefaultInspector();return;}
+        serializedObject.Update();
+        foreach(string name in new[]{"useTakeRenderer","audioManager","directShader","directSettings","monitorListener",
+            "monitorLeadSamples","monitorCapacitySamples","takeDimension","takeRoot","takeDefaultMaterial","takeCurveTolerance",
+            "takeObjects","takeSources","takeListeners","replayMotionWriters","takePath","replaySeconds"})
+            EditorGUILayout.PropertyField(serializedObject.FindProperty(name),true);
+        serializedObject.ApplyModifiedProperties();
+        using(new EditorGUI.DisabledScope(true))EditorGUILayout.PropertyField(serializedObject.FindProperty("liveDiagnostics"),true);
+        int rate=Application.isPlaying?AudioSettings.outputSampleRate:manager.sampleRate;
+        EditorGUILayout.LabelField("Monitoring lead",(1000.0*manager.monitorLeadSamples/rate).ToString("F1")+" ms + device latency");
     }
 
     static void Run(Action action)
@@ -156,7 +170,8 @@ public static class TakeBatch
             var job=JsonUtility.FromJson<Job>(File.ReadAllText(path));
             if (job == null || string.IsNullOrEmpty(job.take) || string.IsNullOrEmpty(job.output)) throw new ArgumentException("Job requires take and output paths.");
             string root=Path.GetDirectoryName(path);
-            using (var take=AcousticTake.Open(Path.GetFullPath(Path.Combine(root,job.take))))
+            string output=Path.GetFullPath(Path.Combine(root,job.output));
+            using (var take=StationReplay.Open(Path.GetFullPath(Path.Combine(root,job.take)),output))
             {
                 ComputeShader shader=null;
                 if (!string.IsNullOrEmpty(job.shader))
@@ -164,7 +179,6 @@ public static class TakeBatch
                     shader=AssetDatabase.LoadAssetAtPath<ComputeShader>(job.shader);
                     if (shader==null) throw new ArgumentException("Cannot load job shader asset: "+job.shader);
                 }
-                string output=Path.GetFullPath(Path.Combine(root,job.output));
                 object report=job.comparison==null ? (object)TakeRender.RenderDirect(take,job.settings,output,null,shader):TakeComparison.Run(take,job.settings,job.comparison,output,shader,null,job.referenceCheck);
                 Debug.Log(JsonUtility.ToJson(report,true));
             }
@@ -176,5 +190,22 @@ public static class TakeBatch
             if (Application.isBatchMode) EditorApplication.Exit(1);
             else throw;
         }
+    }
+}
+
+[CustomEditor(typeof(AudioManager))]
+public sealed class AudioOutputEditor : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        var audio=(AudioManager)target;
+        if(audio.rayTraceManager==null || !audio.rayTraceManager.useTakeRenderer){DrawDefaultInspector();return;}
+        serializedObject.Update();
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("rayTraceManager"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("paused"));
+        serializedObject.ApplyModifiedProperties();
+        var queue=audio.OutputQueue;
+        if(queue!=null)EditorGUILayout.HelpBox("Buffered: "+Math.Max(0,queue.WrittenSample-queue.ReadSample)+
+            " samples. Underrun / late / overflow: "+queue.UnderrunSamples+" / "+queue.LateSamples+" / "+queue.OverflowSamples,MessageType.None);
     }
 }

@@ -322,7 +322,7 @@ public sealed class AcousticTake : IDisposable
         long lastSample = -1, lastEventSample = -1;
         bool closed, failed;
 
-        public Writer(string directory, int sampleRate, Scene scene, Primitive[] geometry, float[][] pcm)
+        public Writer(string directory, int sampleRate, Scene scene, Primitive[] geometry, float[][] pcm, bool retainPayloads = true)
         {
             if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
             ValidateScene(scene);
@@ -330,24 +330,34 @@ public sealed class AcousticTake : IDisposable
             if (Directory.Exists(directory)) throw new IOException("Take output directory already exists.");
             DirectoryPath = directory;
             Directory.CreateDirectory(directory);
-            using (var w = new BinaryWriter(File.Create(Path.Combine(directory, "geometry.bin"))))
+            scene.geometryHash = Payload("geometry.bin", retainPayloads, w => {
                 foreach (var p in geometry)
                 { WriteVector(w, p.a); WriteVector(w, p.b); WriteVector(w, p.c); w.Write(p.objectIndex); w.Write(p.materialIndex); }
-            scene.geometryHash = HashFile(Path.Combine(directory, "geometry.bin"));
+            });
             for (int i = 0; i < pcm.Length; i++)
             {
                 scene.clips[i].file = "clip-" + i + ".f32";
                 scene.clips[i].samples = pcm[i].Length;
-                string file = Path.Combine(directory, scene.clips[i].file);
-                using (var w = new BinaryWriter(File.Create(file))) foreach (float value in pcm[i])
-                { RequireFinite(value); w.Write(value); }
-                scene.clips[i].sha256 = HashFile(file);
+                scene.clips[i].sha256 = Payload(scene.clips[i].file, retainPayloads, w => {
+                    foreach (float value in pcm[i]) { RequireFinite(value); w.Write(value); }
+                });
             }
             Metadata = new Manifest { scene = scene, sampleRate = sampleRate, captureProvenance=Provenance.Capture(),
                 sceneHash = HashText(JsonUtility.ToJson(scene)) };
             File.WriteAllText(Path.Combine(directory, "take.json"), JsonUtility.ToJson(Metadata, true));
-            states = new BinaryWriter(File.Create(Path.Combine(directory, "states.bin")));
+            if (retainPayloads) states = new BinaryWriter(File.Create(Path.Combine(directory, "states.bin")));
             events = new BinaryWriter(File.Create(Path.Combine(directory, "events.bin")));
+        }
+
+        string Payload(string file, bool retain, Action<BinaryWriter> write)
+        {
+            using (var sha=SHA256.Create())
+            using (var stream=retain ? File.Create(Path.Combine(DirectoryPath,file)) : Stream.Null)
+            using (var hashing=new CryptoStream(stream,sha,CryptoStreamMode.Write))
+            using (var writer=new BinaryWriter(hashing))
+            {
+                write(writer); writer.Flush(); hashing.FlushFinalBlock(); return Hex(sha.Hash);
+            }
         }
 
         public bool Append(long sample, State[] frame)
@@ -360,20 +370,20 @@ public sealed class AcousticTake : IDisposable
             if (sample == lastSample)
             {
                 Metadata.coalescedObservations++;
-                states.BaseStream.Position -= 8L + StateBytes * (long)frame.Length;
+                if (states!=null) states.BaseStream.Position -= 8L + StateBytes * (long)frame.Length;
             }
             // A failed overwrite can leave a full-length but partial row. Never finalize it.
             failed = true;
-            states.Write(sample);
+            states?.Write(sample);
             foreach (var s in frame)
             {
                 WriteVector(states, s.position);
                 RequireFinite(s.rotation.x); RequireFinite(s.rotation.y); RequireFinite(s.rotation.z); RequireFinite(s.rotation.w);
                 float norm=s.rotation.x*s.rotation.x+s.rotation.y*s.rotation.y+s.rotation.z*s.rotation.z+s.rotation.w*s.rotation.w;
                 if (Mathf.Abs(norm-1)>0.001f) throw new InvalidDataException("Pose rotation must be a unit quaternion.");
-                states.Write(s.rotation.x); states.Write(s.rotation.y); states.Write(s.rotation.z); states.Write(s.rotation.w);
+                states?.Write(s.rotation.x); states?.Write(s.rotation.y); states?.Write(s.rotation.z); states?.Write(s.rotation.w);
                 WriteVector(states, s.velocity); WriteVector(states, s.angularVelocity);
-                WriteVector(states, s.acceleration); WriteVector(states, s.angularAcceleration); states.Write((uint)s.flags);
+                WriteVector(states, s.acceleration); WriteVector(states, s.angularAcceleration); states?.Write((uint)s.flags);
             }
             bool added = sample != lastSample;
             if (added) Metadata.frameCount++;
@@ -397,11 +407,11 @@ public sealed class AcousticTake : IDisposable
         {
             if (closed) throw new ObjectDisposedException(nameof(Writer));
             if (failed || lastSample < 0 || lastEventSample > lastSample) throw new InvalidOperationException("Capture requires successful frames and a final state after all events.");
-            if (states.BaseStream.Length != Metadata.frameCount*(8L+StateBytes*(long)Metadata.scene.objects.Length))
+            if (states!=null && states.BaseStream.Length != Metadata.frameCount*(8L+StateBytes*(long)Metadata.scene.objects.Length))
                 throw new InvalidDataException("A frame write failed; capture cannot be completed.");
             Dispose();
             Metadata.durationSamples = lastSample;
-            Metadata.stateHash = HashFile(Path.Combine(DirectoryPath, "states.bin"));
+            Metadata.stateHash = states==null ? null:HashFile(Path.Combine(DirectoryPath, "states.bin"));
             Metadata.eventHash = HashFile(Path.Combine(DirectoryPath, "events.bin"));
             Metadata.complete = true;
             string temp = Path.Combine(DirectoryPath, "take.complete.json");
@@ -412,7 +422,7 @@ public sealed class AcousticTake : IDisposable
         public void Dispose()
         {
             if (closed) return;
-            closed = true; states.Dispose(); events.Dispose();
+            closed = true; states?.Dispose(); events.Dispose();
         }
     }
 
@@ -459,5 +469,5 @@ public sealed class AcousticTake : IDisposable
     }
     static Vector3 ReadVector(BinaryReader reader) { return new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()); }
     static void WriteVector(BinaryWriter writer, Vector3 v)
-    { RequireFinite(v.x); RequireFinite(v.y); RequireFinite(v.z); writer.Write(v.x); writer.Write(v.y); writer.Write(v.z); }
+    { RequireFinite(v.x); RequireFinite(v.y); RequireFinite(v.z); writer?.Write(v.x); writer?.Write(v.y); writer?.Write(v.z); }
 }

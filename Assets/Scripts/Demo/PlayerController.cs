@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
@@ -11,15 +12,19 @@ public class PlayerController : MonoBehaviour
 
     CharacterController controller;
     float verticalSpeed;
+    int groundMask;
     public Transform Ground { get; private set; }
     Vector3 groundLocalPoint, previousGroundPoint, airborneVelocity;
     Quaternion previousGroundRotation;
     public void Simulate(Vector2 input,bool jump,float seconds) => Move(input,jump,seconds);
 
-    void Awake()
+    void Awake() => Initialize();
+    public void Initialize()
     {
         controller = GetComponent<CharacterController>();
         controller.minMoveDistance = 0;
+        groundMask=0;
+        for(int layer=0;layer<32;layer++)if(!Physics.GetIgnoreLayerCollision(gameObject.layer,layer))groundMask|=1<<layer;
     }
 
     void Update()
@@ -57,6 +62,15 @@ public class PlayerController : MonoBehaviour
         Ground=null;
         var flags = controller.Move(motion * deltaTime);
         if ((flags & CollisionFlags.Above) != 0 && verticalSpeed > 0) verticalSpeed = 0;
+        // Explicit queries work in both live and Editor physics scenes; collision callbacks do not.
+        if(verticalSpeed<=0 && (flags&CollisionFlags.Below)!=0)
+        {
+            float skin=controller.skinWidth;
+            Vector3 foot=transform.TransformPoint(controller.center)-Vector3.up*(controller.height*.5f-controller.radius);
+            if(gameObject.scene.GetPhysicsScene().SphereCast(foot,Mathf.Max(.001f,controller.radius-skin),Vector3.down,
+                out var hit,3*skin,groundMask,QueryTriggerInteraction.Ignore) && hit.normal.y>=Mathf.Cos(controller.slopeLimit*Mathf.Deg2Rad))
+                Ground=hit.transform;
+        }
         if(Ground!=null)
         {
             groundLocalPoint=Ground.InverseTransformPoint(transform.position);
@@ -65,8 +79,4 @@ public class PlayerController : MonoBehaviour
         else if(grounded && !jump) airborneVelocity=groundVelocity;
     }
 
-    void OnControllerColliderHit(ControllerColliderHit hit)
-    {
-        if(verticalSpeed<=0 && hit.normal.y>=Mathf.Cos(controller.slopeLimit*Mathf.Deg2Rad)) Ground=hit.collider.transform;
-    }
 }

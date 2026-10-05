@@ -19,6 +19,8 @@ public sealed class StationDemo : MonoBehaviour
     public double TrainDistance => route!=null ? trainDistance%route.Length:trainDistance;
     public bool AtStation {get;private set;}=true;
     public float DwellRemaining {get;private set;}
+    [Tooltip("Also save full poses, geometry, source PCM and monitored audio for verification.")]
+    public bool retainFullReference;
     public bool doorOpen;
     public bool Busy {get;private set;}
     Vector3 doorStart;
@@ -44,7 +46,7 @@ public sealed class StationDemo : MonoBehaviour
         ConfigureControls(); Tick=0; pending=default;
         trainDistance=nextStopDistance=startDistance; AtStation=true;
         DwellRemaining=stationDwell; CurrentTrainSpeed=0; PlaceTrain(); doorStart=door.localPosition;
-        look.Initialize(); Physics.SyncTransforms();
+        walker.Initialize(); look.Initialize(); Physics.SyncTransforms();
     }
     void ConfigureControls()
     {
@@ -71,8 +73,9 @@ public sealed class StationDemo : MonoBehaviour
             }
             else
             {
-                string path=Path.GetFullPath(Path.Combine(Application.dataPath,"..","Recordings","station-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff")));
-                manager.BeginTakeRecording(path); StartSceneSounds();
+                string root=Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath,"..","Recordings")) : Path.Combine(Application.persistentDataPath,"Recordings");
+                string path=Path.Combine(root,"station-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
+                manager.BeginTakeRecording(path,retainFullReference); StartSceneSounds();
             }
         });
     }

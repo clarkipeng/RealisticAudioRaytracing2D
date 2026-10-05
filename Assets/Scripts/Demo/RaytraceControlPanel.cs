@@ -50,6 +50,12 @@ public class RaytraceControlPanel : MonoBehaviour
             sensitivity.onValueChanged.AddListener(value=> {look.sensitivity=value; sensitivityLabel.text="Mouse sensitivity: "+value.ToString("F0");});
             return;
         }
+        if(rayTraceManager!=null && rayTraceManager.useTakeRenderer)
+        {
+            AddButton(panel,"Start preview",rayTraceManager.BeginLiveSimulation);
+            AddButton(panel,"Stop preview",rayTraceManager.StopLiveSimulation);
+            return;
+        }
         AddButton(panel, "Stream", () => rayTraceManager?.StartStreaming());
         AddButton(panel, "Stop", () => rayTraceManager?.StopStreaming());
         AddButton(panel, "Precompute", () => rayTraceManager?.StartPrecomputedPlayback());

@@ -28,7 +28,7 @@ public sealed class StationRecording : IDisposable
         public Vector3 doorOffset;
         public static Settings From(StationDemo d) => new Settings { cruise=d.trainSpeed,acceleration=d.trainAcceleration,
             dwell=d.stationDwell,spacing=d.carriageSpacing,doorSpeed=d.doorSpeed,doorOffset=d.doorOpenOffset,
-            walkSpeed=d.Walker.speed,gravity=d.Walker.gravity,jumpHeight=d.Walker.jumpHeight,startDistance=d.startDistance };
+            walkSpeed=d.player.GetComponent<PlayerController>().speed,gravity=d.player.GetComponent<PlayerController>().gravity,jumpHeight=d.player.GetComponent<PlayerController>().jumpHeight,startDistance=d.startDistance };
         public void Apply(StationDemo d)
         {
             d.trainSpeed=cruise; d.trainAcceleration=acceleration; d.stationDwell=dwell; d.carriageSpacing=spacing;
@@ -158,7 +158,7 @@ public sealed class StationRecording : IDisposable
             }
             catch { Dispose(); throw; }
         }
-        public void ValidateScene(StationDemo station)
+        public void ValidateScene(StationDemo station,bool liveOutput=true)
         {
             if(Metadata.scene!=station.gameObject.scene.path || Metadata.codeModule!=typeof(StationDemo).Assembly.ManifestModule.ModuleVersionId.ToString() ||
                 Metadata.unityVersion!=Application.unityVersion || Metadata.platform!=Application.platform+" / "+SystemInfo.processorType)
@@ -168,7 +168,7 @@ public sealed class StationRecording : IDisposable
                 throw new InvalidDataException("The saved scene/assets have changed since this recording.");
 #endif
             if(!Metadata.settings.Equals(Settings.From(station)) || Time.fixedDeltaTime!=Metadata.stepSeconds ||
-                AudioSettings.outputSampleRate!=TakeMetadata.sampleRate)
+                (liveOutput && AudioSettings.outputSampleRate!=TakeMetadata.sampleRate))
                 throw new InvalidDataException("Restore the recorded motion settings, fixed step and output sample rate before replaying.");
         }
         public Input Read(long tick)
