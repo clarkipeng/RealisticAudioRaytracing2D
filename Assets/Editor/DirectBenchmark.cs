@@ -70,7 +70,7 @@ public static class DirectBenchmark
                         opened=timer.Elapsed.TotalSeconds;
                         rendered=TakeRender.RenderDirect(take,configuration,path,null,which<2 ? null:shader);
                     }
-                    var sample=new Sample {name=name,output=path,repetition=iteration,totalSeconds=timer.Elapsed.TotalSeconds,openSeconds=opened,render=rendered};
+                    var sample=new Sample {name=name,output=iteration==0?path:null,repetition=iteration,totalSeconds=timer.Elapsed.TotalSeconds,openSeconds=opened,render=rendered};
                     if(iteration>=0)
                     {
                         var previous=report.samples.Find(s=>s.name==name);
@@ -80,6 +80,7 @@ public static class DirectBenchmark
                     }
                     File.WriteAllText(reportPath,JsonUtility.ToJson(report,true));
                     UnityEngine.Debug.Log("ACOUSTIC_BENCHMARK "+name+" "+iteration+": "+sample.totalSeconds.ToString("F3")+" s");
+                    if(iteration!=0)Directory.Delete(path,true); // Keep one inspectable output, not duplicate benchmark WAVs.
                 }
             }
             foreach(string name in names)
