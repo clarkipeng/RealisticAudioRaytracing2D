@@ -18,7 +18,7 @@ public static partial class TakeChecks
         try
         {
             RoundTripAndCuts(); InvalidFiles(); Motion(); Materials(); Geometry(); DirectPaths(); AudioEventsAndTail(); ManagerCapture(); ReplayRestoresScene(); CaptureMutation(); GuardSnapshots(); ColliderProxyGuard(); StreamingMatchesOffline(); StreamingMatchesOffline(null,TakeRender.DelayFilter.WindowedSinc); QueueDeadlines(); LongSampleClock(); BoundedHistory(); DelayFilters(); PlayedOutput(); ConcurrentOutputCapture(); ReferenceQuality(); BinauralChecks(); BinauralStreaming(); ComparisonInspection(); ComparisonViews(); StationLoopMotion();
-            StationInputs();
+            StationInputs(); BvhChecks();
             Debug.Log("ACOUSTIC_CHECKS_DIR: "+directory);
             Debug.Log("ACOUSTIC_CHECKS_PASS: "+checks+" checks");
             if (Application.isBatchMode) EditorApplication.Exit(0);
@@ -661,6 +661,7 @@ public static partial class TakeChecks
             finally { UnityEngine.Object.DestroyImmediate(host); UnityEngine.Object.DestroyImmediate(clip); }
             GpuDirectChecks(); GpuBatches(); BinauralStreaming(AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute"));
             var direct=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
+            BvhChecks(direct);
             StreamingMatchesOffline(direct); StreamingMatchesOffline(direct,TakeRender.DelayFilter.WindowedSinc);
             Debug.Log("ACOUSTIC_GPU_FFT_PASS: "+SystemInfo.graphicsDeviceType);
             Debug.Log("ACOUSTIC_GPU_DIRECT_PASS: 2D/3D transformed geometry and multiple pairs");

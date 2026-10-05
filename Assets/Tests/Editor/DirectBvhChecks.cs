@@ -1,0 +1,58 @@
+using System;
+using UnityEditor;
+using UnityEngine;
+
+public static partial class TakeChecks
+{
+    static void BvhChecks(ComputeShader shader=null)
+    {
+        var random=new System.Random(62831);
+        float Coordinate() => (float)(random.NextDouble()*12-6);
+        Vector3 Point() => new Vector3(Coordinate(),Coordinate(),Coordinate());
+        foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
+        foreach(int count in new[]{0,1,4,5,257})
+        {
+            var scene=new AcousticTake.Scene {dimension=dimension,objects=new AcousticTake.ObjectDefinition[8],
+                sources=new[]{new AcousticTake.SourceDefinition {objectIndex=4},new AcousticTake.SourceDefinition {objectIndex=5}},listeners=new[]{6,7}};
+            var geometry=new AcousticTake.Primitive[count];
+            for(int i=0;i<count;i++)
+            {
+                var center=Point();geometry[i]=new AcousticTake.Primitive {objectIndex=i%4,a=center,b=center+Point()*.4f,c=center+Point()*.4f};
+            }
+            if(count>0)geometry[0]=new AcousticTake.Primitive {objectIndex=0,a=new Vector3(0,-1,-1),b=new Vector3(0,1,-1),c=new Vector3(0,0,1)};
+            var state=new AcousticTake.State[8];var expected=new TakeRender.DirectPath[4];var actual=new TakeRender.DirectPath[4];
+            var settings=new TakeRender.Settings {useBvh=true};
+            using var oracle=new DirectSolver(scene,geometry,new TakeRender.Settings(),shader,3);
+            using var accelerated=new DirectSolver(scene,geometry,settings,shader,3);
+            var batch=new AcousticTake.State[24];var expectedBatch=new TakeRender.DirectPath[12];var actualBatch=new TakeRender.DirectPath[12];
+            for(int frame=0;frame<12;frame++)
+            {
+                for(int i=0;i<state.Length;i++)state[i]=new AcousticTake.State {position=i<4?new Vector3(frame*.13f*i,0,0):Point(),
+                    rotation=Quaternion.Euler(dimension==AcousticTake.Dimension.Planar2D?0:frame*3,0,frame*11),
+                    flags=AcousticTake.StateFlags.Active|(i<4?AcousticTake.StateFlags.Geometry:i<6?AcousticTake.StateFlags.Source:AcousticTake.StateFlags.Listener)};
+                state[4].position=new Vector3(-2,0,0);state[6].position=frame==0?state[4].position:new Vector3(2,0,0);
+                if(frame==2)state[0].flags&=~AcousticTake.StateFlags.Active;
+                if(frame==3)state[1].flags&=~AcousticTake.StateFlags.Geometry;
+                oracle.Solve(state,expected);accelerated.Solve(state,actual);
+                for(int p=0;p<actual.Length;p++)Check(actual[p].Equals(expected[p]),"BVH preserves brute-force response ("+dimension+", "+count+", frame "+frame+").");
+                Array.Copy(state,0,batch,(frame%3)*8,8);
+                if(frame%3==2)
+                {
+                    oracle.BeginSolve(batch,3);accelerated.BeginSolve(batch,3);
+                    oracle.TryComplete(expectedBatch,true);accelerated.TryComplete(actualBatch,true);
+                    for(int p=0;p<actualBatch.Length;p++)Check(actualBatch[p].Equals(expectedBatch[p]),"Each BVH batch frame owns the correct refitted bounds.");
+                }
+            }
+            if(shader==null)
+            {
+                accelerated.Solve(state,actual);int updates=accelerated.BvhUpdates;
+                long before=GC.GetAllocatedBytesForCurrentThread();
+                for(int i=0;i<10;i++)accelerated.Solve(state,actual);
+                Check(GC.GetAllocatedBytesForCurrentThread()==before,"Warmed BVH solves allocate no managed memory.");
+                Check(accelerated.BvhUpdates==updates,"Unchanged geometry does not refit when only a query repeats.");
+                state[4].position+=Vector3.one;accelerated.Solve(state,actual);
+                Check(accelerated.BvhUpdates==updates,"Moving endpoints do not refit geometry.");
+            }
+        }
+    }
+}

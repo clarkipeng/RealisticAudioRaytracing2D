@@ -27,6 +27,11 @@ public sealed class DirectSolver : IDisposable
     readonly AcousticTake.State[] cpuState;
     readonly TakeRender.DirectPath[] cpuPaths;
     readonly GpuState[] packed;
+    readonly DirectBvh bvh;
+    readonly DirectBvh.Node[] packedNodes;
+    ComputeBuffer bvhNodes,bvhIndices;
+    int uploadedBvhFrames;
+    bool uploadedBvhOrder;
     ComputeBuffer primitives,states,sources,listeners,responses;
     readonly TakeRender.DirectPath[] completedPaths;
     readonly Action<AsyncGPUReadbackRequest> completion;
@@ -41,8 +46,11 @@ public sealed class DirectSolver : IDisposable
     public long PairPrimitiveUpperBound {get;private set;}
     public int SolveCount {get;private set;}
     public string Backend => shader==null ? "CPU":"GPU-"+SystemInfo.graphicsDeviceType;
-    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*48);
-    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*48*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames;
+    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*48)+(bvh?.NumericBytes??0)+(packedNodes==null?0:(long)packedNodes.Length*48);
+    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*48*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames+(bvh==null?0:(long)Math.Max(1,bvh.Nodes.Length)*48*maximumFrames+(long)Math.Max(1,geometry.Length)*4);
+    public double BvhBuildSeconds => bvh?.BuildSeconds??0;
+    public double BvhUpdateSeconds => bvh?.UpdateSeconds??0;
+    public int BvhUpdates => bvh?.UpdateCount??0;
     public double UploadSeconds {get;private set;}
     public double DispatchReadbackSeconds {get;private set;}
 
@@ -54,14 +62,16 @@ public sealed class DirectSolver : IDisposable
         this.maximumFrames=maximumFrames;
         completedPaths=new TakeRender.DirectPath[checked(pairs*maximumFrames)]; completion=CompleteReadback;
         cpuState=new AcousticTake.State[scene.objects.Length]; cpuPaths=new TakeRender.DirectPath[pairs];
+        if(settings.useBvh)bvh=new DirectBvh(scene,geometry);
         if (shader==null) return;
         if (!SystemInfo.supportsComputeShaders || pairs==0) throw new InvalidOperationException("Direct GPU solve requires compute support and source/listener pairs.");
-        if (Marshal.SizeOf<GpuPrimitive>()!=64 || Marshal.SizeOf<GpuState>()!=48 || Marshal.SizeOf<TakeRender.DirectPath>()!=TakeRender.DirectPathStride)
+        if (Marshal.SizeOf<GpuPrimitive>()!=64 || Marshal.SizeOf<GpuState>()!=48 || Marshal.SizeOf<DirectBvh.Node>()!=48 || Marshal.SizeOf<TakeRender.DirectPath>()!=TakeRender.DirectPathStride)
             throw new InvalidOperationException("Direct solver GPU ABI mismatch.");
         this.shader=UnityEngine.Object.Instantiate(shader);
         try
         {
-            kernel=this.shader.FindKernel(scene.dimension==AcousticTake.Dimension.Planar2D ? "Direct2D":"Direct3D");
+            kernel=this.shader.FindKernel((scene.dimension==AcousticTake.Dimension.Planar2D ? "Direct2D":"Direct3D")+(bvh==null?"":"Bvh"));
+            if(!this.shader.IsSupported(kernel))throw new NotSupportedException("The selected direct compute kernel cannot run on this device.");
             var data=new GpuPrimitive[Math.Max(1,geometry.Length)];
             for (int i=0; i<geometry.Length; i++) data[i]=new GpuPrimitive {a=geometry[i].a,b=geometry[i].b,c=geometry[i].c,
                 objectIndex=(uint)geometry[i].objectIndex,materialIndex=(uint)geometry[i].materialIndex};
@@ -75,6 +85,13 @@ public sealed class DirectSolver : IDisposable
             this.shader.SetBuffer(kernel,"Primitives",primitives); this.shader.SetBuffer(kernel,"States",states);
             this.shader.SetBuffer(kernel,"Sources",sources); this.shader.SetBuffer(kernel,"Listeners",listeners);
             this.shader.SetBuffer(kernel,"Responses",responses);
+            if(bvh!=null)
+            {
+                packedNodes=new DirectBvh.Node[checked(Math.Max(1,bvh.Nodes.Length)*maximumFrames)];
+                bvhNodes=new ComputeBuffer(packedNodes.Length,48);bvhIndices=new ComputeBuffer(Math.Max(1,geometry.Length),4);
+                this.shader.SetBuffer(kernel,"BvhNodes",bvhNodes);this.shader.SetBuffer(kernel,"BvhIndices",bvhIndices);
+                this.shader.SetInt("BvhNodeCount",bvh.Nodes.Length);
+            }
             this.shader.SetInt("PrimitiveCount",geometry.Length); this.shader.SetInt("PairCount",pairs);
             this.shader.SetInt("ListenerCount",scene.listeners.Length);
             this.shader.SetInt("ObjectCount",scene.objects.Length);
@@ -92,7 +109,7 @@ public sealed class DirectSolver : IDisposable
             if (disposed || pending) throw new InvalidOperationException("Solver is disposed or has pending work.");
             if (state.Length!=scene.objects.Length || output.Length!=pairs) throw new ArgumentException("Direct solve shape mismatch.");
             activeFrames=1;
-            if (shader==null) { TakeRender.SolveDirect(scene,geometry,state,settings,output); CountSolve(); return; }
+            if (shader==null) { SolveCpu(state,output); CountSolve(); return; }
             Upload(state,1);
             long start=Stopwatch.GetTimestamp(); shader.Dispatch(kernel,(pairs+63)/64,1,1); responses.GetData(output);
             DispatchReadbackSeconds+=TakeRender.Elapsed(start);
@@ -100,9 +117,26 @@ public sealed class DirectSolver : IDisposable
         }
     }
     void CountSolve() { SolveCount+=activeFrames; PairPrimitiveUpperBound+=checked((long)pairs*geometry.Length*activeFrames); }
+    void SolveCpu(AcousticTake.State[] state,TakeRender.DirectPath[] output)
+    {
+        bvh?.Update(state);TakeRender.SolveDirect(scene,geometry,state,settings,output,bvh);
+    }
     void Upload(AcousticTake.State[] state,int frames)
     {
         long start=Stopwatch.GetTimestamp();
+        if(bvh!=null)
+        {
+            bool upload=frames>1 || uploadedBvhFrames!=frames;
+            for(int f=0;f<frames;f++)
+            {
+                bool changed=bvh.Update(state,f*scene.objects.Length);
+                if(changed || upload)Array.Copy(bvh.Nodes,0,packedNodes,f*bvh.Nodes.Length,bvh.Nodes.Length);
+                upload|=changed;
+            }
+            if(!uploadedBvhOrder && geometry.Length>0) {bvhIndices.SetData(bvh.Indices);uploadedBvhOrder=true;}
+            if(upload && bvh.Nodes.Length>0)bvhNodes.SetData(packedNodes,0,0,frames*bvh.Nodes.Length);
+            uploadedBvhFrames=frames;
+        }
         for (int i=0;i<frames*scene.objects.Length;i++) packed[i]=new GpuState {position=state[i].position,
             rotation=new Vector4(state[i].rotation.x,state[i].rotation.y,state[i].rotation.z,state[i].rotation.w),flags=(uint)state[i].flags};
         states.SetData(packed,0,0,frames*scene.objects.Length); shader.SetInt("FrameCount",frames); UploadSeconds+=TakeRender.Elapsed(start);
@@ -122,7 +156,7 @@ public sealed class DirectSolver : IDisposable
                 for (int f=0;f<frames;f++)
                 {
                     Array.Copy(state,f*cpuState.Length,cpuState,0,cpuState.Length);
-                    TakeRender.SolveDirect(scene,geometry,cpuState,settings,cpuPaths);
+                    SolveCpu(cpuState,cpuPaths);
                     Array.Copy(cpuPaths,0,completedPaths,f*pairs,pairs);
                 }
                 completed=true;
@@ -166,6 +200,7 @@ public sealed class DirectSolver : IDisposable
         if (pending && shader!=null && !completed) request.WaitForCompletion();
         disposed=true; pending=false;
         primitives?.Dispose(); states?.Dispose(); sources?.Dispose(); listeners?.Dispose(); responses?.Dispose();
+        bvhNodes?.Dispose();bvhIndices?.Dispose();bvhNodes=bvhIndices=null;
         primitives=states=sources=listeners=responses=null;
         if (shader!=null) { if (Application.isPlaying) UnityEngine.Object.Destroy(shader); else UnityEngine.Object.DestroyImmediate(shader); }
     }

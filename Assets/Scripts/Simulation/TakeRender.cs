@@ -24,6 +24,7 @@ public static partial class TakeRender
         public int maximumSignalEvents=4096;
         public int maximumPendingObservations=16;
         public int maximumResponsesPerBatch=64;
+        public bool useBvh;
         public int DspLatencySamples => delayFilter==DelayFilter.WindowedSinc ? sincRadius:0;
         public long HistorySamples(int rate) => checked((long)Math.Ceiling((double)maximumDelaySeconds*rate)+2L*DspLatencySamples+2+(listenerOutput==ListenerOutput.Binaural ? Hrtf.Load(rate).Taps-1:0));
     }
@@ -50,6 +51,8 @@ public static partial class TakeRender
         public double preparationSeconds,wallSeconds, solveSeconds, evaluationSeconds, audioSeconds, writeSeconds, maximumSolveSeconds;
         public string backend = "CPU";
         public double uploadSeconds, dispatchReadbackSeconds;
+        public double bvhBuildSeconds,bvhUpdateSeconds;
+        public int bvhUpdates;
         public bool complete;
     }
 
@@ -69,6 +72,10 @@ public static partial class TakeRender
 
     public static void SolveDirect(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
         AcousticTake.State[] state, Settings settings, DirectPath[] output)
+        => SolveDirect(scene,geometry,state,settings,output,null);
+
+    internal static void SolveDirect(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
+        AcousticTake.State[] state, Settings settings, DirectPath[] output,DirectBvh bvh)
     {
         Validate(settings);
         if (state.Length != scene.objects.Length || output.Length != scene.sources.Length * scene.listeners.Length)
@@ -80,8 +87,8 @@ public static partial class TakeRender
             if (scene.dimension == AcousticTake.Dimension.Planar2D) { origin.z=0; end.z=0; }
             var displacement=end-origin;
             float distance=displacement.magnitude;
-            bool blocked=false;
-            foreach (var p in geometry)
+            bool blocked=bvh!=null && bvh.Blocked(origin,end,state);
+            if(bvh==null)foreach (var p in geometry)
             {
                 var pose=state[p.objectIndex];
                 if ((pose.flags & (AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry)) !=
@@ -105,7 +112,7 @@ public static partial class TakeRender
                 throw new InvalidOperationException("Non-finite direct response; check scene scale and solver settings.");
     }
 
-    static bool CrossesSegment(Vector3 o, Vector3 end, Vector3 a, Vector3 b)
+    internal static bool CrossesSegment(Vector3 o, Vector3 end, Vector3 a, Vector3 b)
     {
         var d=end-o; var edge=b-a; var q=a-o;
         double det=(double)d.x*edge.y-(double)d.y*edge.x;
@@ -115,7 +122,7 @@ public static partial class TakeRender
         return t>1e-6 && t<1-1e-6 && u>=0 && u<=1;
     }
 
-    static bool CrossesTriangle(Vector3 o, Vector3 direction, Vector3 a, Vector3 b, Vector3 c)
+    internal static bool CrossesTriangle(Vector3 o, Vector3 direction, Vector3 a, Vector3 b, Vector3 c)
     {
         var e1=b-a; var e2=c-a; var h=Vector3.Cross(direction,e2);
         double det=Vector3.Dot(e1,h);
@@ -199,6 +206,7 @@ public static partial class TakeRender
             finally { foreach (var output in outputs) output.Dispose(); }
             report.pairPrimitiveTestUpperBound=solver.PairPrimitiveUpperBound;
             report.uploadSeconds=solver.UploadSeconds; report.dispatchReadbackSeconds=solver.DispatchReadbackSeconds;
+            report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;
         }
         report.wallSeconds=watch.Elapsed.TotalSeconds;
         report.responseHash=AcousticTake.HashFile(Path.Combine(outputDirectory,"responses.bin"));

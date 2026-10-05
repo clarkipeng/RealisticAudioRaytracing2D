@@ -1,5 +1,7 @@
 #pragma kernel Direct2D
 #pragma kernel Direct3D
+#pragma kernel Direct2DBvh USE_BVH
+#pragma kernel Direct3DBvh USE_BVH
 
 struct Primitive { float4 a,b,c; uint4 indices; };
 struct State { float4 position,rotation; uint4 flags; };
@@ -32,6 +34,48 @@ bool Triangle(float3 o,float3 d,float3 a,float3 b,float3 c)
     float v=dot(d,q)/det, t=dot(e2,q)/det;
     return v>=0 && u+v<=1 && t>1e-6 && t<1-1e-6;
 }
+bool PrimitiveHit(uint i,uint stateOffset,float3 o,float3 d,bool planar)
+{
+    Primitive p=Primitives[i]; State s=States[stateOffset+p.indices.x];
+    if ((s.flags.x&3)!=3) return false;
+    float3 a=s.position.xyz+Rotate(s.rotation,p.a.xyz),b=s.position.xyz+Rotate(s.rotation,p.b.xyz);
+    return planar ? Segment(o.xy,d.xy,a.xy,b.xy):Triangle(o,d,a,b,s.position.xyz+Rotate(s.rotation,p.c.xyz));
+}
+#ifdef USE_BVH
+struct BvhNode { float4 boundsMin,boundsMax; uint4 links; };
+StructuredBuffer<BvhNode> BvhNodes;
+StructuredBuffer<uint> BvhIndices;
+uint BvhNodeCount;
+bool BoundsHit(BvhNode node,float3 o,float3 d,bool planar)
+{
+    float near=0,far=1;
+    for(uint axis=0;axis<(planar?2:3);axis++)
+    {
+        if(d[axis]==0) {if(o[axis]<node.boundsMin[axis] || o[axis]>node.boundsMax[axis])return false;continue;}
+        float a=(node.boundsMin[axis]-o[axis])/d[axis],b=(node.boundsMax[axis]-o[axis])/d[axis];
+        near=max(near,min(a,b));far=min(far,max(a,b));if(near>far)return false;
+    }
+    return true;
+}
+bool BvhBlocked(uint frame,uint stateOffset,float3 o,float3 d,bool planar)
+{
+    if(BvhNodeCount==0)return false;
+    // Balanced median splits of an int-sized primitive array need at most 31 pending nodes.
+    uint stack[32],depth=0,index=0;
+    while(true)
+    {
+        BvhNode node=BvhNodes[frame*BvhNodeCount+index];
+        if(BoundsHit(node,o,d,planar))
+        {
+            if(node.links.w==0) {stack[depth++]=node.links.y;index=node.links.x;continue;}
+            for(uint j=0;j<node.links.w;j++)if(PrimitiveHit(BvhIndices[node.links.z+j],stateOffset,o,d,planar))return true;
+        }
+        if(depth==0)return false;
+        index=stack[--depth];
+    }
+    return false;
+}
+#endif
 void Solve(uint pair,bool planar)
 {
     if (pair>=PairCount*FrameCount) return;
@@ -41,14 +85,15 @@ void Solve(uint pair,bool planar)
     if (planar) { o.z=0; end.z=0; }
     float3 d=end-o;
     bool blocked=false;
+#ifdef USE_BVH
+    blocked=BvhBlocked(frame,stateOffset,o,d,planar);
+#else
     for (uint i=0; i<PrimitiveCount; i++)
     {
-        Primitive p=Primitives[i]; State s=States[stateOffset+p.indices.x];
-        if ((s.flags.x&3)!=3) continue; // Active | Geometry
-        float3 a=s.position.xyz+Rotate(s.rotation,p.a.xyz),b=s.position.xyz+Rotate(s.rotation,p.b.xyz);
-        blocked=planar ? Segment(o.xy,d.xy,a.xy,b.xy):Triangle(o,d,a,b,s.position.xyz+Rotate(s.rotation,p.c.xyz));
+        blocked=PrimitiveHit(i,stateOffset,o,d,planar);
         if (blocked) break;
     }
+#endif
     float distance=length(d);
     DirectPath path=(DirectPath)0;
     path.direction=float4(distance>0 ? -d/distance:float3(0,0,0),0);
@@ -57,3 +102,5 @@ void Solve(uint pair,bool planar)
 }
 [numthreads(64,1,1)] void Direct2D(uint3 id:SV_DispatchThreadID) { Solve(id.x,true); }
 [numthreads(64,1,1)] void Direct3D(uint3 id:SV_DispatchThreadID) { Solve(id.x,false); }
+[numthreads(64,1,1)] void Direct2DBvh(uint3 id:SV_DispatchThreadID) { Solve(id.x,true); }
+[numthreads(64,1,1)] void Direct3DBvh(uint3 id:SV_DispatchThreadID) { Solve(id.x,false); }
