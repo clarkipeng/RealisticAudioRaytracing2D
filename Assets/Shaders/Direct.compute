@@ -1,0 +1,59 @@
+#pragma kernel Direct2D
+#pragma kernel Direct3D
+
+struct Primitive { float4 a,b,c; uint4 indices; };
+struct State { float4 position,rotation; uint4 flags; };
+StructuredBuffer<Primitive> Primitives;
+StructuredBuffer<State> States;
+StructuredBuffer<uint> Sources,Listeners;
+struct DirectPath { float4 direction; float2 response; float2 padding; };
+RWStructuredBuffer<DirectPath> Responses;
+uint PrimitiveCount,PairCount,ListenerCount,ObjectCount,FrameCount;
+float SpeedOfSound,ReferenceDistance,MinimumDistance;
+
+float3 Rotate(float4 q,float3 v) { return v+2*cross(q.xyz,cross(q.xyz,v)+q.w*v); }
+bool Segment(float2 o,float2 d,float2 a,float2 b)
+{
+    float2 e=b-a,q=a-o;
+    float det=d.x*e.y-d.y*e.x;
+    if (abs(det)<1e-12) return false;
+    float t=(q.x*e.y-q.y*e.x)/det, u=(q.x*d.y-q.y*d.x)/det;
+    return t>1e-6 && t<1-1e-6 && u>=0 && u<=1;
+}
+bool Triangle(float3 o,float3 d,float3 a,float3 b,float3 c)
+{
+    float3 e1=b-a,e2=c-a,h=cross(d,e2);
+    float det=dot(e1,h);
+    if (abs(det)<1e-12) return false;
+    float3 s=o-a;
+    float u=dot(s,h)/det;
+    if (u<0 || u>1) return false;
+    float3 q=cross(s,e1);
+    float v=dot(d,q)/det, t=dot(e2,q)/det;
+    return v>=0 && u+v<=1 && t>1e-6 && t<1-1e-6;
+}
+void Solve(uint pair,bool planar)
+{
+    if (pair>=PairCount*FrameCount) return;
+    uint frame=pair/PairCount, localPair=pair%PairCount, stateOffset=frame*ObjectCount;
+    float3 o=States[stateOffset+Sources[localPair/ListenerCount]].position.xyz;
+    float3 end=States[stateOffset+Listeners[localPair%ListenerCount]].position.xyz;
+    if (planar) { o.z=0; end.z=0; }
+    float3 d=end-o;
+    bool blocked=false;
+    for (uint i=0; i<PrimitiveCount; i++)
+    {
+        Primitive p=Primitives[i]; State s=States[stateOffset+p.indices.x];
+        if ((s.flags.x&3)!=3) continue; // Active | Geometry
+        float3 a=s.position.xyz+Rotate(s.rotation,p.a.xyz),b=s.position.xyz+Rotate(s.rotation,p.b.xyz);
+        blocked=planar ? Segment(o.xy,d.xy,a.xy,b.xy):Triangle(o,d,a,b,s.position.xyz+Rotate(s.rotation,p.c.xyz));
+        if (blocked) break;
+    }
+    float distance=length(d);
+    DirectPath path=(DirectPath)0;
+    path.direction=float4(distance>0 ? -d/distance:float3(0,0,0),0);
+    path.response=float2(distance/SpeedOfSound,blocked ? 0:ReferenceDistance/max(distance,MinimumDistance));
+    Responses[pair]=path;
+}
+[numthreads(64,1,1)] void Direct2D(uint3 id:SV_DispatchThreadID) { Solve(id.x,true); }
+[numthreads(64,1,1)] void Direct3D(uint3 id:SV_DispatchThreadID) { Solve(id.x,false); }
