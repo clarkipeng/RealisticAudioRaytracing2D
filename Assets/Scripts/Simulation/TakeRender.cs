@@ -24,6 +24,7 @@ public static partial class TakeRender
         public int maximumSignalEvents=4096;
         public int maximumPendingObservations=16;
         public int maximumResponsesPerBatch=64;
+        [Tooltip("Use a BVH for fixed geometry. Objects that move use direct intersection tests for the rest of the session.")]
         public bool useBvh;
         public int DspLatencySamples => delayFilter==DelayFilter.WindowedSinc ? sincRadius:0;
         public long HistorySamples(int rate) => checked((long)Math.Ceiling((double)maximumDelaySeconds*rate)+2L*DspLatencySamples+2+(listenerOutput==ListenerOutput.Binaural ? Hrtf.Load(rate).Taps-1:0));
@@ -53,7 +54,7 @@ public static partial class TakeRender
         public string backend = "CPU";
         public double uploadSeconds, dispatchReadbackSeconds;
         public double bvhBuildSeconds,bvhUpdateSeconds;
-        public int bvhUpdates;
+        public int bvhUpdates,bvhStaticPrimitives;
         public bool complete;
     }
 
@@ -227,7 +228,7 @@ public static partial class TakeRender
             finally { foreach (var output in outputs) output.Dispose(); }
             report.pairPrimitiveTestUpperBound=solver.PairPrimitiveUpperBound;
             report.uploadSeconds=solver.UploadSeconds; report.dispatchReadbackSeconds=solver.DispatchReadbackSeconds;
-            report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;
+            report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;report.bvhStaticPrimitives=solver.StaticPrimitiveCount;
         }
         report.wallSeconds=watch.Elapsed.TotalSeconds;
         report.responseHash=AcousticTake.HashFile(Path.Combine(outputDirectory,"responses.bin"));

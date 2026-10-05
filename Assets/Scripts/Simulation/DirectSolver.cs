@@ -28,10 +28,7 @@ public sealed class DirectSolver : IDisposable
     readonly TakeRender.DirectPath[] cpuPaths;
     readonly GpuState[] packed;
     readonly DirectBvh bvh;
-    readonly DirectBvh.Node[] packedNodes;
     ComputeBuffer bvhNodes,bvhIndices;
-    int uploadedBvhFrames;
-    bool uploadedBvhOrder;
     ComputeBuffer primitives,states,sources,listeners,responses;
     readonly TakeRender.DirectPath[] completedPaths;
     readonly Action<AsyncGPUReadbackRequest> completion;
@@ -46,11 +43,12 @@ public sealed class DirectSolver : IDisposable
     public long PairPrimitiveUpperBound {get;private set;}
     public int SolveCount {get;private set;}
     public string Backend => shader==null ? "CPU":"GPU-"+SystemInfo.graphicsDeviceType;
-    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*48)+(bvh?.NumericBytes??0)+(packedNodes==null?0:(long)packedNodes.Length*48);
-    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*48*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames+(bvh==null?0:(long)Math.Max(1,bvh.Nodes.Length)*48*maximumFrames+(long)Math.Max(1,geometry.Length)*4);
+    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*48)+(bvh?.NumericBytes??0);
+    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*48*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames+(bvh==null?0:(long)Math.Max(1,bvh.Nodes.Length)*48+(long)Math.Max(1,geometry.Length)*4);
     public double BvhBuildSeconds => bvh?.BuildSeconds??0;
     public double BvhUpdateSeconds => bvh?.UpdateSeconds??0;
     public int BvhUpdates => bvh?.UpdateCount??0;
+    public int StaticPrimitiveCount => bvh?.StaticPrimitiveCount??0;
     public double UploadSeconds {get;private set;}
     public double DispatchReadbackSeconds {get;private set;}
 
@@ -87,10 +85,8 @@ public sealed class DirectSolver : IDisposable
             this.shader.SetBuffer(kernel,"Responses",responses);
             if(bvh!=null)
             {
-                packedNodes=new DirectBvh.Node[checked(Math.Max(1,bvh.Nodes.Length)*maximumFrames)];
-                bvhNodes=new ComputeBuffer(packedNodes.Length,48);bvhIndices=new ComputeBuffer(Math.Max(1,geometry.Length),4);
+                bvhNodes=new ComputeBuffer(Math.Max(1,bvh.Nodes.Length),48);bvhIndices=new ComputeBuffer(Math.Max(1,geometry.Length),4);
                 this.shader.SetBuffer(kernel,"BvhNodes",bvhNodes);this.shader.SetBuffer(kernel,"BvhIndices",bvhIndices);
-                this.shader.SetInt("BvhNodeCount",bvh.Nodes.Length);
             }
             this.shader.SetInt("PrimitiveCount",geometry.Length); this.shader.SetInt("PairCount",pairs);
             this.shader.SetInt("ListenerCount",scene.listeners.Length);
@@ -126,16 +122,18 @@ public sealed class DirectSolver : IDisposable
         long start=Stopwatch.GetTimestamp();
         if(bvh!=null)
         {
-            bool upload=frames>1 || uploadedBvhFrames!=frames;
+            bool changed=false;
+            // Classify the entire batch first: an object that moves in any frame uses
+            // direct tests in every frame, so all frames can share one static tree.
             for(int f=0;f<frames;f++)
+                changed|=bvh.Update(state,f*scene.objects.Length);
+            if(changed)
             {
-                bool changed=bvh.Update(state,f*scene.objects.Length);
-                if(changed || upload)Array.Copy(bvh.Nodes,0,packedNodes,f*bvh.Nodes.Length,bvh.Nodes.Length);
-                upload|=changed;
+                if(geometry.Length>0)bvhIndices.SetData(bvh.Indices);
+                if(bvh.NodeCount>0)bvhNodes.SetData(bvh.Nodes,0,0,bvh.NodeCount);
+                shader.SetInt("BvhNodeCount",bvh.NodeCount);
+                shader.SetInt("StaticPrimitiveCount",bvh.StaticPrimitiveCount);
             }
-            if(!uploadedBvhOrder && geometry.Length>0) {bvhIndices.SetData(bvh.Indices);uploadedBvhOrder=true;}
-            if(upload && bvh.Nodes.Length>0)bvhNodes.SetData(packedNodes,0,0,frames*bvh.Nodes.Length);
-            uploadedBvhFrames=frames;
         }
         for (int i=0;i<frames*scene.objects.Length;i++) packed[i]=new GpuState {position=state[i].position,
             rotation=new Vector4(state[i].rotation.x,state[i].rotation.y,state[i].rotation.z,state[i].rotation.w),flags=(uint)state[i].flags};

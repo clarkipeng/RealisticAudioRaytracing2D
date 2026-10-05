@@ -45,6 +45,7 @@ public static partial class TakeChecks
     }
     static void BvhChecks(ComputeShader shader=null)
     {
+        StaticBvhChecks(shader);
         var random=new System.Random(62831);
         float Coordinate() => (float)(random.NextDouble()*12-6);
         Vector3 Point() => new Vector3(Coordinate(),Coordinate(),Coordinate());
@@ -66,8 +67,8 @@ public static partial class TakeChecks
             var batch=new AcousticTake.State[24];var expectedBatch=new TakeRender.DirectPath[12];var actualBatch=new TakeRender.DirectPath[12];
             for(int frame=0;frame<12;frame++)
             {
-                for(int i=0;i<state.Length;i++)state[i]=new AcousticTake.State {position=i<4?new Vector3(frame*.13f*i,0,0):Point(),
-                    rotation=Quaternion.Euler(dimension==AcousticTake.Dimension.Planar2D?0:frame*3,0,frame*11),
+                for(int i=0;i<state.Length;i++)state[i]=new AcousticTake.State {position=i<2?Vector3.zero:i<4?new Vector3(frame*.13f*i,0,0):Point(),
+                    rotation=i<2?Quaternion.identity:Quaternion.Euler(dimension==AcousticTake.Dimension.Planar2D?0:frame*3,0,frame*11),
                     flags=AcousticTake.StateFlags.Active|(i<4?AcousticTake.StateFlags.Geometry:i<6?AcousticTake.StateFlags.Source:AcousticTake.StateFlags.Listener)};
                 state[4].position=new Vector3(-2,0,0);state[6].position=frame==0?state[4].position:new Vector3(2,0,0);
                 if(frame==2)state[0].flags&=~AcousticTake.StateFlags.Active;
@@ -79,7 +80,7 @@ public static partial class TakeChecks
                 {
                     oracle.BeginSolve(batch,3);accelerated.BeginSolve(batch,3);
                     oracle.TryComplete(expectedBatch,true);accelerated.TryComplete(actualBatch,true);
-                    for(int p=0;p<actualBatch.Length;p++)Check(actualBatch[p].Equals(expectedBatch[p]),"Each BVH batch frame owns the correct refitted bounds.");
+                    for(int p=0;p<actualBatch.Length;p++)Check(actualBatch[p].Equals(expectedBatch[p]),"BVH batches share static bounds and test moving geometry at each frame's pose.");
                 }
             }
             if(shader==null)
@@ -88,10 +89,54 @@ public static partial class TakeChecks
                 long before=GC.GetAllocatedBytesForCurrentThread();
                 for(int i=0;i<10;i++)accelerated.Solve(state,actual);
                 Check(GC.GetAllocatedBytesForCurrentThread()==before,"Warmed BVH solves allocate no managed memory.");
-                Check(accelerated.BvhUpdates==updates,"Unchanged geometry does not refit when only a query repeats.");
+                Check(accelerated.BvhUpdates==updates,"Unchanged geometry does not rebuild when only a query repeats.");
                 state[4].position+=Vector3.one;accelerated.Solve(state,actual);
-                Check(accelerated.BvhUpdates==updates,"Moving endpoints do not refit geometry.");
+                Check(accelerated.BvhUpdates==updates,"Moving endpoints do not rebuild geometry.");
             }
+        }
+    }
+    static void StaticBvhChecks(ComputeShader shader)
+    {
+        foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
+        {
+            var scene=new AcousticTake.Scene {dimension=dimension,objects=new AcousticTake.ObjectDefinition[4],
+                sources=new[]{new AcousticTake.SourceDefinition {objectIndex=2}},listeners=new[]{3}};
+            var geometry=new AcousticTake.Primitive[2];
+            for(int i=0;i<2;i++)geometry[i]=new AcousticTake.Primitive {objectIndex=i,a=new Vector3(0,-1,-1),b=new Vector3(0,1,-1),c=new Vector3(0,0,1)};
+            var state=new AcousticTake.State[4];
+            for(int i=0;i<4;i++)state[i]=new AcousticTake.State {rotation=Quaternion.identity,flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry};
+            state[0].position=new Vector3(0,10,0);state[2].position=new Vector3(-2,0,0);state[3].position=new Vector3(2,0,0);
+            using var oracle=new DirectSolver(scene,geometry,new TakeRender.Settings(),shader,3);
+            using var accelerated=new DirectSolver(scene,geometry,new TakeRender.Settings {useBvh=true},shader,3);
+            var batch=new AcousticTake.State[12];var expected=new TakeRender.DirectPath[3];var actual=new TakeRender.DirectPath[3];
+            for(int f=0;f<3;f++)
+            {
+                // The object starts moving inside the first batch, then returns to its initial pose.
+                state[1].position=new Vector3(0,f==1?4:0,0);Array.Copy(state,0,batch,f*4,4);
+            }
+            oracle.BeginSolve(batch,3);accelerated.BeginSolve(batch,3);oracle.TryComplete(expected,true);accelerated.TryComplete(actual,true);
+            for(int f=0;f<3;f++)Check(actual[f].Equals(expected[f]),"First motion within a batch never uses stale static bounds.");
+            Check(actual[0].pressureGain==0 && actual[1].pressureGain>0 && actual[2].pressureGain==0,"Moving occluder changes visibility and remains correct when it returns.");
+            Check(accelerated.StaticPrimitiveCount==1,"Only the fixed object's primitive remains in the BVH.");
+            int builds=accelerated.BvhUpdates;
+            expected=new TakeRender.DirectPath[1];actual=new TakeRender.DirectPath[1];
+            for(int f=0;f<6;f++)
+            {
+                state[1].position=new Vector3(0,f%2==0?4:0,0);
+                oracle.Solve(state,expected);accelerated.Solve(state,actual);
+                Check(actual[0].Equals(expected[0]),"Ongoing motion uses the current pose outside the BVH.");
+            }
+            Check(accelerated.BvhUpdates==builds,"Moving and stopping known dynamic geometry never rebuilds the static tree.");
+            state[1].flags&=~AcousticTake.StateFlags.Active;
+            state[2].position+=Vector3.up*10;state[3].position+=Vector3.up*10;
+            oracle.Solve(state,expected);accelerated.Solve(state,actual);
+            Check(actual[0].Equals(expected[0]) && actual[0].pressureGain==0,"The retained static wall still occludes moving endpoints.");
+            state[0].flags&=~AcousticTake.StateFlags.Geometry;
+            oracle.Solve(state,expected);accelerated.Solve(state,actual);
+            Check(actual[0].Equals(expected[0]) && actual[0].pressureGain>0 && accelerated.BvhUpdates==builds,"Static visibility flags change without rebuilding bounds.");
+            state[0].flags|=AcousticTake.StateFlags.Geometry;state[0].position+=Vector3.up*10;
+            oracle.Solve(state,expected);accelerated.Solve(state,actual);
+            Check(actual[0].Equals(expected[0]) && accelerated.StaticPrimitiveCount==0,"Late movement of the last static object leaves a valid empty BVH.");
         }
     }
 }

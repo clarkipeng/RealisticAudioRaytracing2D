@@ -76,7 +76,7 @@ public sealed class TakeEditor : Editor
         EditorGUILayout.HelpBox("Renders recorded 2D/3D inputs without rerunning gameplay. Direct sound and opaque occlusion only; this is not the legacy reflection model.",MessageType.None);
         renderShader=(ComputeShader)EditorGUILayout.ObjectField("Direct shader (empty = CPU)",renderShader,typeof(ComputeShader),false);
         renderSettings.listenerOutput=(TakeRender.ListenerOutput)EditorGUILayout.EnumPopup("Listener output",renderSettings.listenerOutput);
-        renderSettings.useBvh=EditorGUILayout.Toggle("BVH traversal",renderSettings.useBvh);
+        renderSettings.useBvh=EditorGUILayout.Toggle("Static geometry BVH",renderSettings.useBvh);
         renderSettings.transitionSamples=EditorGUILayout.IntField("Transition (samples)",renderSettings.transitionSamples);
         renderSettings.delayFilter=(TakeRender.DelayFilter)EditorGUILayout.EnumPopup("Delay filter",renderSettings.delayFilter);
         if (renderSettings.delayFilter==TakeRender.DelayFilter.WindowedSinc) renderSettings.sincRadius=EditorGUILayout.IntField("Sinc radius / DSP latency",renderSettings.sincRadius);

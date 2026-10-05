@@ -45,7 +45,7 @@ bool PrimitiveHit(uint i,uint stateOffset,float3 o,float3 d,bool planar)
 struct BvhNode { float4 boundsMin,boundsMax; uint4 links; };
 StructuredBuffer<BvhNode> BvhNodes;
 StructuredBuffer<uint> BvhIndices;
-uint BvhNodeCount;
+uint BvhNodeCount,StaticPrimitiveCount;
 bool BoundsHit(BvhNode node,float3 o,float3 d,bool planar)
 {
     float near=0,far=1;
@@ -57,14 +57,14 @@ bool BoundsHit(BvhNode node,float3 o,float3 d,bool planar)
     }
     return true;
 }
-bool BvhBlocked(uint frame,uint stateOffset,float3 o,float3 d,bool planar)
+bool BvhBlocked(uint stateOffset,float3 o,float3 d,bool planar)
 {
     if(BvhNodeCount==0)return false;
     // Balanced median splits of an int-sized primitive array need at most 31 pending nodes.
     uint stack[32],depth=0,index=0;
     while(true)
     {
-        BvhNode node=BvhNodes[frame*BvhNodeCount+index];
+        BvhNode node=BvhNodes[index];
         if(BoundsHit(node,o,d,planar))
         {
             if(node.links.w==0) {stack[depth++]=node.links.y;index=node.links.x;continue;}
@@ -86,7 +86,9 @@ void Solve(uint pair,bool planar)
     float3 d=end-o;
     bool blocked=false;
 #ifdef USE_BVH
-    blocked=BvhBlocked(frame,stateOffset,o,d,planar);
+    blocked=BvhBlocked(stateOffset,o,d,planar);
+    for(uint i=StaticPrimitiveCount;i<PrimitiveCount && !blocked;i++)
+        blocked=PrimitiveHit(BvhIndices[i],stateOffset,o,d,planar);
 #else
     for (uint i=0; i<PrimitiveCount; i++)
     {
