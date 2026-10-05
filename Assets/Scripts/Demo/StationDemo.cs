@@ -61,7 +61,7 @@ public sealed class StationDemo : MonoBehaviour
         manager.RecordingObserved+=ObserveInputRecording;
         manager.RecordingStopped+=EndInputRecording;
         Application.runInBackground=true;
-        SetWalking(false);
+        SetWalking(pendingReplay==null);
         yield return null; // Let the audio components finish Start before opening the session.
         string replay=pendingReplay; pendingReplay=null;
         ready=Try(()=> {
@@ -83,7 +83,6 @@ public sealed class StationDemo : MonoBehaviour
     void Update()
     {
         if(Input.GetKeyDown(KeyCode.Escape)) SetWalking(false);
-        if(Input.GetMouseButtonDown(1) && !manager.IsReplayingTake && !IsInputReplay) SetWalking(true);
         if(!ready || manager.IsReplayingTake || IsInputReplay) return;
         if(ReadPlayerInput)
         {
@@ -201,6 +200,9 @@ public sealed class StationDemo : MonoBehaviour
     }
     void LateUpdate()
     {
+        // UI processes pointer input in Update before we decide whether the scene was clicked.
+        if((Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1)) && !manager.IsReplayingTake && !IsInputReplay &&
+            (EventSystem.current==null || !EventSystem.current.IsPointerOverGameObject())) SetWalking(true);
         if(!ready || playback==null || !manager.IsLiveSimulation) return;
         if(!Try(()=> {
             long now=manager.LiveSample;

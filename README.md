@@ -30,7 +30,7 @@ Current and historical [validation results](docs/cleanup-results.md) cover three
 
 ## Record a scene
 
-Open `Assets/Scenes/TrainStation.unity` and enter Play. Recording, the train and scene audio start automatically. Right-click in Game view to walk; **WASD + mouse** moves/looks, **Space** jumps, and **Esc** releases the cursor and reveals mouse sensitivity.
+Open `Assets/Scenes/TrainStation.unity` and enter Play. Recording, walking controls, the train and scene audio start automatically. **WASD + mouse** moves/looks, **Space** jumps, and **Esc** releases the cursor and reveals mouse sensitivity. Click inside the scene to resume walking; clicking the UI leaves the cursor available for its controls.
 
 - **E** opens/closes the waiting-room door when nearby. Walk onto and off the train normally.
 - **R**, or **Save run**, finishes the recording that began at scene initialization. Walking and the train continue while audio drains; live preview resumes afterward. Re-enter Play for another recording.
