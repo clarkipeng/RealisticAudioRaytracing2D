@@ -219,7 +219,7 @@ Offline numeric replay needs no original Unity scene. The current in-scene pose 
 
 | File | Contract |
 |---|---|
-| `input.json` | `station-input-from-init-v2`: scene identity, runtime module, engine/platform, Git revision/dirty status, timestep, motion settings, counts/completion and checksums. |
+| `input.json` | `station-input-from-init-v2`: scene identity, project content hash (Editor), runtime module, engine/platform, Git revision/dirty status, timestep, motion settings, counts/completion and checksums. |
 | `input.bin` | Little-endian 25-byte changes: int64 tick, float32 movement X/Y and look X/Y, byte jump/interact flags. Held axes persist; look/buttons apply once. |
 | `input-observations.bin` | Little-endian int64 audio sample plus int64 completed tick. Begins at (0,0); sample times increase and tick counts never decrease. |
 | `take.json`, `events.bin` | Scene/source identity tables, source PCM and geometry hashes, audio rate/duration, and source-event records. Payload hashes do not require storing the payloads. |
@@ -231,7 +231,7 @@ Play begins capture at initialization. Save completes it; another run starts by 
 
 `StationReplay` is an Editor operation available in Edit mode, from the Inspector and in batch jobs. It builds an isolated [Unity preview scene](https://docs.unity.com/en-us/engine/6000.3/script-reference/unityeditor/scenemanagement/editorscenemanager/newpreviewscene), uses the same initialization/step methods and regenerates an ordinary acoustic take. It checks authored geometry/source hashes and optionally compares original full observations. Runtime playback does not require this generated take. Walking support is queried explicitly so reconstruction does not depend on Play-only collision callbacks.
 
-The current adapter covers station train/door/walking inputs. Arbitrary scene edits, rigid-body behavior and cross-platform determinism are not promised. Preserve the matching Git revision/assets; identity hashes cannot recover missing source files. The README describes current usage and validation.
+The current adapter covers station train/door/walking inputs. Arbitrary scene edits, rigid-body behavior and cross-platform determinism are not promised. Editor project identity hashes all files under `Assets`, `Packages` and `ProjectSettings` with relative paths; it excludes generated `Library` contents and checkout location. Older manifests without that hash retain their original module/scene checks; Player recordings require the matching runtime build. Preserve the matching Git revision/assets; identity hashes cannot recover missing source files. The README describes current usage and validation.
 
 ## 5. Physics, representations and configuration
 

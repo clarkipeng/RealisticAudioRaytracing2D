@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using UnityEngine;
 
-// Station input sidecar. The normal take remains the reference until a fresh simulation verifies it.
+// Compact station inputs and the original simulation/audio clock mapping.
 public sealed class StationRecording : IDisposable
 {
     public static void ExportInputs(string directory,string output)
@@ -41,7 +41,7 @@ public sealed class StationRecording : IDisposable
     {
         public string schema="station-input-from-init-v2",scene,sceneGuid,sceneRevision,codeModule,unityVersion,platform;
         public string takeHash,inputHash,observationHash;
-        public string gitCommit;
+        public string gitCommit,projectRevision;
         public bool gitModified;
         public float stepSeconds;
         public long ticks;
@@ -68,6 +68,7 @@ public sealed class StationRecording : IDisposable
 #if UNITY_EDITOR
         manifest.sceneGuid=UnityEditor.AssetDatabase.AssetPathToGUID(manifest.scene);
         manifest.sceneRevision=UnityEditor.AssetDatabase.GetAssetDependencyHash(manifest.scene).ToString();
+        manifest.projectRevision=HashProject(Path.GetFullPath(Path.Combine(Application.dataPath,"..")));
         manifest.gitCommit=Git("rev-parse HEAD");
         manifest.gitModified=manifest.gitCommit==null || Git("status --porcelain --untracked-files=normal -- Assets Packages ProjectSettings")!="";
 #endif
@@ -108,6 +109,21 @@ public sealed class StationRecording : IDisposable
     }
     public void Dispose() { if(closed)return; closed=true; input?.Dispose(); observations?.Dispose(); }
 #if UNITY_EDITOR
+    // Compiler module IDs can change when identical sources are rebuilt in another checkout.
+    // Hash project inputs with relative paths; Library and machine-local state are excluded.
+    public static string HashProject(string root)
+    {
+        var files=new System.Collections.Generic.List<string>();
+        foreach(string folder in new[]{"Assets","Packages","ProjectSettings"})
+            foreach(string file in Directory.GetFiles(Path.Combine(root,folder),"*",SearchOption.AllDirectories))
+                files.Add(Path.GetRelativePath(root,file).Replace('\\','/'));
+        files.Sort(StringComparer.Ordinal);
+        using var bytes=new MemoryStream();
+        using(var writer=new BinaryWriter(bytes,System.Text.Encoding.UTF8,true))
+            foreach(string file in files) { writer.Write(file);writer.Write(AcousticTake.HashFile(Path.Combine(root,file))); }
+        using var hash=System.Security.Cryptography.SHA256.Create();
+        return Convert.ToBase64String(hash.ComputeHash(bytes.ToArray()));
+    }
     static string Git(string arguments)
     {
         try
@@ -160,13 +176,15 @@ public sealed class StationRecording : IDisposable
         }
         public void ValidateScene(StationDemo station,bool liveOutput=true)
         {
-            if(Metadata.scene!=station.gameObject.scene.path || Metadata.codeModule!=typeof(StationDemo).Assembly.ManifestModule.ModuleVersionId.ToString() ||
+            bool matchesProject=Metadata.codeModule==typeof(StationDemo).Assembly.ManifestModule.ModuleVersionId.ToString();
+#if UNITY_EDITOR
+            matchesProject=string.IsNullOrEmpty(Metadata.projectRevision)
+                ? matchesProject && Metadata.sceneRevision==UnityEditor.AssetDatabase.GetAssetDependencyHash(Metadata.scene).ToString()
+                : Metadata.projectRevision==HashProject(Path.GetFullPath(Path.Combine(Application.dataPath,"..")));
+#endif
+            if(Metadata.scene!=station.gameObject.scene.path || !matchesProject ||
                 Metadata.unityVersion!=Application.unityVersion || Metadata.platform!=Application.platform+" / "+SystemInfo.processorType)
                 throw new InvalidDataException("Recorded scene/code/engine/platform differs from the current project.");
-#if UNITY_EDITOR
-            if(Metadata.sceneRevision!=UnityEditor.AssetDatabase.GetAssetDependencyHash(Metadata.scene).ToString())
-                throw new InvalidDataException("The saved scene/assets have changed since this recording.");
-#endif
             if(!Metadata.settings.Equals(Settings.From(station)) || Time.fixedDeltaTime!=Metadata.stepSeconds ||
                 (liveOutput && AudioSettings.outputSampleRate!=TakeMetadata.sampleRate))
                 throw new InvalidDataException("Restore the recorded motion settings, fixed step and output sample rate before replaying.");

@@ -146,6 +146,20 @@ public static partial class TakeChecks
     static void StationInputs()
     {
         CompactPayloads();
+        string project=Path.Combine(directory,"project-identity"),copyProject=project+"-copy";
+        foreach(string root in new[]{project,copyProject})
+            foreach(string folder in new[]{"Assets","Packages","ProjectSettings"})
+            { Directory.CreateDirectory(Path.Combine(root,folder));File.WriteAllText(Path.Combine(root,folder,"input"),folder); }
+        string identity=StationRecording.HashProject(project);
+        Check(identity==StationRecording.HashProject(copyProject),"Project identity survives a different checkout directory.");
+        Directory.CreateDirectory(Path.Combine(copyProject,"Library"));File.WriteAllText(Path.Combine(copyProject,"Library","local"),"rebuild");
+        Check(identity==StationRecording.HashProject(copyProject),"Generated Library contents do not affect replay identity.");
+        File.WriteAllText(Path.Combine(copyProject,"Assets","input"),"changed");
+        Check(identity!=StationRecording.HashProject(copyProject),"Changed asset/code bytes invalidate replay identity.");
+        File.WriteAllText(Path.Combine(copyProject,"Assets","input"),"Assets");File.Move(Path.Combine(copyProject,"Assets","input"),Path.Combine(copyProject,"Assets","renamed"));
+        Check(identity!=StationRecording.HashProject(copyProject),"Renamed project inputs invalidate replay identity.");
+        File.Delete(Path.Combine(copyProject,"Assets","renamed"));
+        Check(identity!=StationRecording.HashProject(copyProject),"Missing project inputs invalidate replay identity.");
         string path=Path.Combine(directory,"station-inputs");
         using(var writer=Writer("station-inputs",Scene()))
         {
