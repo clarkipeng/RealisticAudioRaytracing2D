@@ -146,6 +146,15 @@ public static partial class TakeChecks
     static void StationInputs()
     {
         CompactPayloads();
+        var job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\"}");
+        Check(job.comparison==null && job.referenceCheck==null && job.settings.responseStepSamples==512,"A render job cannot implicitly request comparison/reference work.");
+        job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"comparison\":{\"responseStepSamples\":128}}");
+        Check(job.comparison.responseStepSamples==128 && job.referenceCheck==null,"A comparison does not implicitly request a finer reference.");
+        job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"comparison\":null,\"referenceCheck\":null}");
+        Check(job.comparison==null && job.referenceCheck==null,"Explicit null optional jobs remain disabled.");
+        job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"comparison\":{\"responseStepSamples\":128},\"referenceCheck\":{\"responseStepSamples\":64}}");
+        Check(job.referenceCheck.responseStepSamples==64,"Explicit reference settings are retained.");
+        Reject(()=>TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"referenceCheck\":{}}"),"Reference-only jobs cannot silently discard the requested check.");
         string project=Path.Combine(directory,"project-identity"),copyProject=project+"-copy";
         foreach(string root in new[]{project,copyProject})
             foreach(string folder in new[]{"Assets","Packages","ProjectSettings"})

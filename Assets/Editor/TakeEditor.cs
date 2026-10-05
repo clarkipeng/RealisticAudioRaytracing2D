@@ -157,6 +157,16 @@ public static class TakeBatch
         public TakeRender.Settings settings = new TakeRender.Settings();
     }
 
+    public static Job ParseJob(string json)
+    {
+        // Unity's inline serializer instantiates omitted optional objects, including reference jobs.
+        var job=Newtonsoft.Json.JsonConvert.DeserializeObject<Job>(json);
+        if(job==null || string.IsNullOrEmpty(job.take) || string.IsNullOrEmpty(job.output) || job.settings==null)
+            throw new ArgumentException("Job requires take/output paths and render settings.");
+        if(job.referenceCheck!=null && job.comparison==null)throw new ArgumentException("A reference check requires a comparison.");
+        return job;
+    }
+
     // Unity -batchmode -projectPath ... -executeMethod TakeBatch.Render -takeJob /absolute/job.json
     // The first baseline is CPU-only and can also run with -nographics.
     public static void Render()
@@ -167,8 +177,7 @@ public static class TakeBatch
             int index=Array.IndexOf(args,"-takeJob");
             if (index < 0 || index+1 >= args.Length) throw new ArgumentException("Pass -takeJob /absolute/job.json");
             string path=Path.GetFullPath(args[index+1]);
-            var job=JsonUtility.FromJson<Job>(File.ReadAllText(path));
-            if (job == null || string.IsNullOrEmpty(job.take) || string.IsNullOrEmpty(job.output)) throw new ArgumentException("Job requires take and output paths.");
+            var job=ParseJob(File.ReadAllText(path));
             string root=Path.GetDirectoryName(path);
             string output=Path.GetFullPath(Path.Combine(root,job.output));
             using (var take=StationReplay.Open(Path.GetFullPath(Path.Combine(root,job.take)),output))
