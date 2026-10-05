@@ -62,6 +62,7 @@ public static class DirectBenchmark
                     int which=iteration%2==0 ? names.Length-1-order:order;
                     string name=names[which],path=Path.Combine(output,name,iteration<0 ? "warmup":"run-"+iteration);
                     var configuration=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(settings));
+                    configuration.transport=TakeRender.Transport.Direct; // This benchmark compares the CPU/GPU opaque baseline.
                     configuration.responseStepSamples=which%2==0 ? lowStep:highStep;
                     var timer=Stopwatch.StartNew();
                     double opened; TakeRender.Report rendered;

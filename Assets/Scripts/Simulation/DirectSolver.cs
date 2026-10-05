@@ -28,6 +28,9 @@ public sealed class DirectSolver : IDisposable
     readonly TakeRender.DirectPath[] cpuPaths;
     readonly GpuState[] packed;
     readonly DirectBvh bvh;
+    readonly RayTransport transport;
+    internal RayTransport.Path[] RayPaths => transport?.Paths;
+    internal int RayPathsPerFrame => transport?.PathsPerFrame??0;
     ComputeBuffer bvhNodes,bvhIndices;
     ComputeBuffer primitives,states,sources,listeners,responses;
     readonly TakeRender.DirectPath[] completedPaths;
@@ -43,8 +46,8 @@ public sealed class DirectSolver : IDisposable
     public long PairPrimitiveUpperBound {get;private set;}
     public int SolveCount {get;private set;}
     public string Backend => shader==null ? "CPU":"GPU-"+SystemInfo.graphicsDeviceType;
-    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*48)+(bvh?.NumericBytes??0);
-    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*48*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames+(bvh==null?0:(long)Math.Max(1,bvh.Nodes.Length)*48+(long)Math.Max(1,geometry.Length)*4);
+    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*48)+(bvh?.NumericBytes??0)+(transport?.CpuBytes??0);
+    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*48*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames+(bvh==null?0:(long)Math.Max(1,bvh.Nodes.Length)*48+(long)Math.Max(1,geometry.Length)*4)+(transport?.GpuBytes??0);
     public double BvhBuildSeconds => bvh?.BuildSeconds??0;
     public double BvhUpdateSeconds => bvh?.UpdateSeconds??0;
     public int BvhUpdates => bvh?.UpdateCount??0;
@@ -52,7 +55,7 @@ public sealed class DirectSolver : IDisposable
     public double UploadSeconds {get;private set;}
     public double DispatchReadbackSeconds {get;private set;}
 
-    public DirectSolver(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,TakeRender.Settings settings,ComputeShader shader=null,int maximumFrames=1)
+    public DirectSolver(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,TakeRender.Settings settings,ComputeShader shader=null,int maximumFrames=1,int sampleRate=48000)
     {
         TakeRender.Validate(settings); this.scene=scene; this.geometry=geometry; this.settings=settings;
         pairs=checked(scene.sources.Length*scene.listeners.Length);
@@ -61,7 +64,8 @@ public sealed class DirectSolver : IDisposable
         completedPaths=new TakeRender.DirectPath[checked(pairs*maximumFrames)]; completion=CompleteReadback;
         cpuState=new AcousticTake.State[scene.objects.Length]; cpuPaths=new TakeRender.DirectPath[pairs];
         if(settings.useBvh)bvh=new DirectBvh(scene,geometry);
-        if (shader==null) return;
+        if (shader==null)
+        {if(settings.transport==TakeRender.Transport.Raytraced)throw new InvalidOperationException("Raytraced transport requires the shared Direct compute shader.");return;}
         if (!SystemInfo.supportsComputeShaders || pairs==0) throw new InvalidOperationException("Direct GPU solve requires compute support and source/listener pairs.");
         if (Marshal.SizeOf<GpuPrimitive>()!=64 || Marshal.SizeOf<GpuState>()!=48 || Marshal.SizeOf<DirectBvh.Node>()!=48 || Marshal.SizeOf<TakeRender.DirectPath>()!=TakeRender.DirectPathStride)
             throw new InvalidOperationException("Direct solver GPU ABI mismatch.");
@@ -94,6 +98,7 @@ public sealed class DirectSolver : IDisposable
             this.shader.SetFloat("SpeedOfSound",settings.speedOfSound);
             this.shader.SetFloat("ReferenceDistance",settings.referenceDistance);
             this.shader.SetFloat("MinimumDistance",settings.minimumDistance);
+            if(settings.transport==TakeRender.Transport.Raytraced)transport=new RayTransport(scene,geometry,settings,this.shader,primitives,states,sources,listeners,bvhNodes,bvhIndices,sampleRate,maximumFrames);
         }
         catch { Dispose(); throw; }
     }
@@ -107,7 +112,7 @@ public sealed class DirectSolver : IDisposable
             activeFrames=1;
             if (shader==null) { SolveCpu(state,output); CountSolve(); return; }
             Upload(state,1);
-            long start=Stopwatch.GetTimestamp(); shader.Dispatch(kernel,(pairs+63)/64,1,1); responses.GetData(output);
+            long start=Stopwatch.GetTimestamp(); shader.Dispatch(kernel,(pairs+63)/64,1,1); responses.GetData(output); transport?.Dispatch(1,false);
             DispatchReadbackSeconds+=TakeRender.Elapsed(start);
             TakeRender.ValidatePaths(output); CountSolve();
         }
@@ -163,6 +168,7 @@ public sealed class DirectSolver : IDisposable
             {
                 Upload(state,frames);
                 long start=Stopwatch.GetTimestamp(); shader.Dispatch(kernel,(frames*pairs+63)/64,1,1);
+                transport?.Dispatch(frames,true);
                 request=AsyncGPUReadback.Request(responses,frames*pairs*TakeRender.DirectPathStride,0,completion);
                 DispatchReadbackSeconds+=TakeRender.Elapsed(start);
             }
@@ -185,8 +191,8 @@ public sealed class DirectSolver : IDisposable
     {
         if (!pending || disposed) throw new InvalidOperationException("No owned response to complete.");
         if (output.Length<activeFrames*pairs) throw new ArgumentException("Direct response shape mismatch.");
-        if (wait && !completed && shader!=null) request.WaitForCompletion();
-        if (!completed) return false;
+        if(shader!=null && !completed) {if(wait)request.WaitForCompletion();else request.Update();}
+        if (!completed || (transport!=null && !transport.TryComplete(wait))) return false;
         pending=false;
         double elapsed=TakeRender.Elapsed(submitted); CompletionSeconds+=elapsed; MaximumCompletionSeconds=Math.Max(MaximumCompletionSeconds,elapsed);
         if (failed) throw new InvalidOperationException("GPU response readback failed.");
@@ -196,6 +202,7 @@ public sealed class DirectSolver : IDisposable
     {
         if (disposed) return;
         if (pending && shader!=null && !completed) request.WaitForCompletion();
+        transport?.Dispose();
         disposed=true; pending=false;
         primitives?.Dispose(); states?.Dispose(); sources?.Dispose(); listeners?.Dispose(); responses?.Dispose();
         bvhNodes?.Dispose();bvhIndices?.Dispose();bvhNodes=bvhIndices=null;

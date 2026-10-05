@@ -47,7 +47,7 @@ internal static class TakeComparisonAudio
     public static TakeComparison.Report OpenReport(string path)
     {
         var r=JsonUtility.FromJson<TakeComparison.Report>(File.ReadAllText(path));
-        if(r==null || !r.complete || r.experiment!="direct-temporal-resolution-v1") throw new InvalidDataException("Select a completed direct temporal comparison.json.");
+        if(r==null || !r.complete || (r.experiment!="direct-temporal-resolution-v1" && r.experiment!="spectral-temporal-resolution-v1")) throw new InvalidDataException("Select a completed temporal comparison.json.");
         foreach(var run in new[]{r.low,r.high})
         {
             if(run==null || !run.complete || (run.formatVersion!=1 && run.formatVersion!=2) || run.sampleRate<=0 || run.outputSamples<=0 || run.listenerCount<=0 ||

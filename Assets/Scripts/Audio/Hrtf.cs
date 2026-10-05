@@ -68,4 +68,6 @@ public sealed class Hrtf
         return index;
     }
     public float Coefficient(int direction,int ear,int tap) => filters[(direction*2+ear)*Taps+tap];
+    public int DirectionCount => directions.Length;
+    public Vector3 Direction(int index) => directions[index];
 }

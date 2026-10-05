@@ -1,3 +1,11 @@
+#pragma kernel SpectralDirect2D
+#pragma kernel SpectralDirect2DBvh USE_BVH
+#pragma kernel SpectralDirect3D
+#pragma kernel SpectralDirect3DBvh USE_BVH
+#pragma kernel Trace2D
+#pragma kernel Trace2DBvh USE_BVH
+#pragma kernel Trace3D
+#pragma kernel Trace3DBvh USE_BVH
 #pragma kernel Direct2D
 #pragma kernel Direct3D
 #pragma kernel Direct2DBvh USE_BVH
@@ -106,3 +114,5 @@ void Solve(uint pair,bool planar)
 [numthreads(64,1,1)] void Direct3D(uint3 id:SV_DispatchThreadID) { Solve(id.x,false); }
 [numthreads(64,1,1)] void Direct2DBvh(uint3 id:SV_DispatchThreadID) { Solve(id.x,true); }
 [numthreads(64,1,1)] void Direct3DBvh(uint3 id:SV_DispatchThreadID) { Solve(id.x,false); }
+
+#include "Transport.hlsl"

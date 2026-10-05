@@ -155,6 +155,16 @@ public class AudioMaterial : ScriptableObject
             result.absorption = Unpack(legacy.absorptionLow, legacy.absorptionHigh);
             result.scattering = Unpack(legacy.scatteringLow, legacy.scatteringHigh);
         }
+        var transport=GetShaderData();
+        result.transmission=new float[result.frequencies.Length];result.ior=new float[result.frequencies.Length];result.damping=new float[result.frequencies.Length];
+        for(int i=0;i<result.frequencies.Length;i++)
+        {
+            float band=Mathf.Clamp(Mathf.Log(Mathf.Max(125,result.frequencies[i])/125,2),0,7);
+            int a=(int)band,b=Mathf.Min(a+1,7);float t=band-a;
+            float Sample(Vector4 lo,Vector4 hi) => Mathf.Lerp(a<4?lo[a]:hi[a-4],b<4?lo[b]:hi[b-4],t);
+            result.transmission[i]=Sample(transport.transmissionLow,transport.transmissionHigh);
+            result.ior[i]=Sample(transport.iorLow,transport.iorHigh);result.damping[i]=Sample(transport.dampingLow,transport.dampingHigh);
+        }
         return result;
     }
 

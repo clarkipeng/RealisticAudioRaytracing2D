@@ -31,7 +31,8 @@ The next change is specified under [Recordings browser and portable playback](#p
 | Capability | Current implementation | Planned work |
 |---|---|---|
 | Unity authoring and capture | Native 2D/3D geometry export, rigid motion, activation, stable IDs, source events, immutable take files; editable station, train service with stops and walking aboard, and door with two sources and one binaural listener. | AcousticLab and scripted dataset scenarios. |
-| Replay and computation | Pose replay/scrubbing, CPU/HLSL direct solvers with optional static BVH plus direct tests for moving objects, shared live/offline timeline and mixer, WAV/response export, batch jobs and measured station offline benchmarks. | Take browser, scene-independent playback, shared visual snapshots and continuous bounded playback; then indirect transport and richer response payloads. |
+| Replay and computation | Pose replay/scrubbing, CPU/HLSL direct solvers with optional static BVH plus direct tests for moving objects, shared live/offline timeline and mixer, WAV/response export, batch jobs and measured station offline benchmarks. | Take browser, scene-independent playback, shared visual snapshots and continuous bounded playback; then validated indirect transport and richer saved response payloads. |
+| Directional spectral preview | Shared 2D/3D GPU transport with multi-bounce reflection/scattering, transmission/refraction, air/material losses and edge diffraction heuristics. Configurable FFT/hop WOLA, per-arrival KEMAR orientation and delay-derived Doppler; same live/offline implementation. | Physical normalization/convergence, exact convolution, directional dataset export and validation of complex moving boundaries. The preview is not an approved training reference. |
 | Multiple endpoints | Every source/listener pair; mono or binaural mix per head; one monitored listener. | Larger workload benchmarks and explicit local receiver selection for multiplayer. |
 | Comparison | Coarse/fine schedules, metrics/reference gate, native audio A/B/Difference, waveform/spectrogram plots and synchronized listener/top-down/free-camera views. | Per-pair target checks, learned outputs and validated reflection comparisons. |
 | Runtime | Bounded PCM/capture queues, live/offline GPU response batches, fractional-delay FIR, provenance and diagnostics. | Lower measured latency, convolution, reconstruction scheduling. |
@@ -39,7 +40,7 @@ The next change is specified under [Recordings browser and portable playback](#p
 
 The current project uses Unity **6000.4.1f1**, C# and HLSL. Earlier CPU/Metal checks and the repaired legacy FFT are documented in the README. Windows/DirectX still needs its own checks. The legacy reflection shader has different physics and is not a validated reference.
 
-The first indirect model is geometric **energy** transport. Signed pressure/complex transport is a separate phase-bearing capability, followed by models that reconstruct those quantities. Full rendered-audio spectrogram enhancement is another experiment, not a prerequisite for improving acoustic responses.
+The first physically validated indirect dataset model remains geometric **energy** transport. The implemented spectral preview instead synthesizes pressure using idealized square-root energy coefficients and path phase; it is explicitly excluded from that validation gate. Signed pressure/complex transport is a separate phase-bearing capability, followed by models that reconstruct those quantities. Full rendered-audio spectrogram enhancement is another experiment, not a prerequisite for improving acoustic responses.
 
 Temporal upscaling is now an explicit requirement: low-cost solves may run less frequently than reconstructed response updates. Ray budget, solve cadence, response output cadence, response resolution and audio sample rate are separate controls. Test each reduction independently before combining them.
 
@@ -176,7 +177,7 @@ Source inactivity stops new emission while preserving already-emitted tails. Geo
 
 ### Implemented files and versions
 
-Take input files remain version 1. New direct render and monitored-output manifests use version 2 for directional response records and channel metadata. Existing version-1 response files contain delay/gain only; readers must dispatch on the manifest version rather than infer row widths. Old take inputs remain usable for mono or binaural rendering.
+New take inputs use version 2, adding authenticated transmission/IOR/damping material curves. Version 1 remains readable and reconstructable using its original scene checksum; missing coefficients use zero transmission/damping and IOR one. New direct render and monitored-output manifests use version 2 for directional response records and channel metadata. Existing version-1 response files contain delay/gain only; readers must dispatch on the manifest version rather than infer row widths. Old take inputs remain usable for mono or binaural rendering.
 
 ```text
 take/

@@ -27,7 +27,7 @@ public partial class RayTraceManager
     AudioManager sessionAudio;
     AudioManager.PlaybackCapture playbackCapture;
 
-    [Header("Shared direct renderer")]
+    [Header("Shared acoustic renderer")]
     public bool useTakeRenderer;
     public ComputeShader directShader;
     public TakeRender.Settings directSettings=new TakeRender.Settings();
@@ -199,6 +199,7 @@ public partial class RayTraceManager
             {
                 takePath=Path.GetFullPath(directory);
                 takeWriter=new AcousticTake.Writer(takePath,sampleRate,scene,geometry,pcm,retainPayloads);
+                takeWriter.Metadata.captureProvenance=AcousticTake.Provenance.Capture(useTakeRenderer?directShader:null,useTakeRenderer?directSettings:null);
                 takeWriter.Metadata.observationPolicy="first-observation-per-audio-sample";
             }
             if (useTakeRenderer)
@@ -220,7 +221,7 @@ public partial class RayTraceManager
             if (playbackCapture!=null) playbackCapture.Metadata.inputDspOriginSeconds=takeClockOrigin;
             if (monitorQueue!=null) sessionAudio.StartPcmStream(monitorQueue);
             CaptureTakeState(0);
-            TakeStatus = directory==null ? "Live direct simulation":"Recording: " + takePath;
+            TakeStatus = directory==null ? "Live acoustic simulation":"Recording: " + takePath;
         }
         catch { CloseCapture(false); throw; }
     }

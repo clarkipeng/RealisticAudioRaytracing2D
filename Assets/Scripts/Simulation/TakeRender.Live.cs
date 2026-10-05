@@ -56,7 +56,7 @@ public static partial class TakeRender
             block=new float[checked(settings.responseStepSamples*scene.listeners.Length*settings.ChannelsPerListener)];
             observations=new Observation[settings.maximumPendingObservations];
             for (int i=0;i<observations.Length;i++) observations[i]=new Observation {left=new AcousticTake.State[evaluated.Length],right=new AcousticTake.State[evaluated.Length]};
-            solver=new DirectSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch);
+            solver=new DirectSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate);
         }
         public void Append(AcousticTake.VoiceEvent e) { signals[e.sourceIndex].Append(e); }
         public void Observe(long from,long to,AcousticTake.State[] left,AcousticTake.State[] right,Action<long,float[],int> output=null)
@@ -128,7 +128,8 @@ public static partial class TakeRender
                     Array.Copy(batchPaths,index*paths.Length,paths,0,paths.Length);
                     Array.Copy(batchStates,index*evaluated.Length,evaluated,0,evaluated.Length);
                     int cut=cuts.BinarySearch(Cursor); if (cut<0) cut=~cut-1;
-                    mixer.SetResponse(Cursor,paths,evaluated,cut>=0 && cuts[cut]>previousResponse); previousResponse=Cursor;
+                    long responseStart=Stopwatch.GetTimestamp();
+                    mixer.SetResponse(Cursor,paths,evaluated,cut>=0 && cuts[cut]>previousResponse,solver.RayPaths,index*solver.RayPathsPerFrame); previousResponse=Cursor;AudioSeconds+=Elapsed(responseStart);
                     ResponseCount++; ResponseApplied?.Invoke(Cursor+lead,queue==null ? -1:queue.ReadSample,paths);
                 }
                 int count=(int)Math.Min(frame.end-Cursor,settings.responseStepSamples-Cursor%settings.responseStepSamples);

@@ -78,6 +78,7 @@ public sealed class TakeComparisonWindow : EditorWindow
         if(manager==null) manager=UnityEngine.Object.FindAnyObjectByType<RayTraceManager>();
         if(manager==null) return;
         takePath=manager.takePath; settings=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(manager.directSettings)); shader=manager.directShader;
+        highStep=Math.Max(settings.spectralHop,settings.responseStepSamples/2);
     }
     void Release()
     {
@@ -199,14 +200,18 @@ public sealed class TakeComparisonWindow : EditorWindow
                 takePath=EditorGUILayout.TextField("Recorded take",takePath);
                 if(GUILayout.Button("Choose…",GUILayout.Width(80))) {string path=EditorUtility.OpenFolderPanel("Recorded take",takePath,""); if(path!="") takePath=path;}
             }
+            TakeEditor.DrawTransportSettings(settings);
             shader=(ComputeShader)EditorGUILayout.ObjectField("Shader (empty = CPU)",shader,typeof(ComputeShader),false);
             using(new EditorGUILayout.HorizontalScope())
             {settings.responseStepSamples=EditorGUILayout.IntField("Low step (samples)",settings.responseStepSamples); highStep=EditorGUILayout.IntField("High step (samples)",highStep);}
             settings.listenerOutput=(TakeRender.ListenerOutput)EditorGUILayout.EnumPopup("Listener output",settings.listenerOutput);
             settings.tailSamples=EditorGUILayout.IntField("Tail (samples)",settings.tailSamples);
+            if(settings.transport==TakeRender.Transport.Direct)
+            {
             settings.transitionSamples=EditorGUILayout.IntField("Transition (samples)",settings.transitionSamples);
             settings.delayFilter=(TakeRender.DelayFilter)EditorGUILayout.EnumPopup("Delay filter",settings.delayFilter);
             if(settings.delayFilter==TakeRender.DelayFilter.WindowedSinc) settings.sincRadius=EditorGUILayout.IntField("Sinc radius",settings.sincRadius);
+            }
             checkReference=EditorGUILayout.Toggle("Check finer reference",checkReference);
             if(checkReference)
             {
@@ -214,7 +219,7 @@ public sealed class TakeComparisonWindow : EditorWindow
                 reference.maximumRmsError=EditorGUILayout.DoubleField("Maximum RMS error",reference.maximumRmsError);
                 reference.maximumAbsoluteError=EditorGUILayout.DoubleField("Maximum absolute error",reference.maximumAbsoluteError);
             }
-            EditorGUILayout.LabelField("Both runs share all other settings. Current model: direct sound with opaque occlusion.",EditorStyles.wordWrappedMiniLabel);
+            EditorGUILayout.LabelField(settings.transport==TakeRender.Transport.Direct ? "Both runs share all other settings. Direct sound with opaque occlusion.":"GPU geometric spectral preview with directional binaural arrivals. Steps must divide into whole synthesis hops. Both runs share other settings; this is not a validated training teacher.",EditorStyles.wordWrappedMiniLabel);
             if(GUILayout.Button("Render low + high and open comparison")) Try(RenderComparison);
         }
     }

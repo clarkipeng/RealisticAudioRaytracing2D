@@ -98,7 +98,8 @@ public partial class AudioManager : MonoBehaviour
             this.directory=directory; Directory.CreateDirectory(directory);
             outputChannels=settings.ChannelsPerListener; capacityFrames=capacity;
             samples=new float[checked(capacity*outputChannels)]; blocks=new Block[Math.Max(2,capacity/callbackFrames+2)];
-            Metadata=new Report {sampleRate=rate,capacity=capacity,channelsPerListener=outputChannels,leadSamples=lead,listener=listener,settings=settings,provenance=AcousticTake.Provenance.Capture(shader)};
+            Metadata=new Report {sampleRate=rate,capacity=capacity,channelsPerListener=outputChannels,leadSamples=lead,listener=listener,settings=settings,provenance=AcousticTake.Provenance.Capture(shader,settings)};
+            if(settings.transport==TakeRender.Transport.Raytraced)Metadata.responseLayout="Direct opaque diagnostic probes only; PCM includes indirect/transmitted transport. "+Metadata.responseLayout;
             if(outputChannels==2) {var hrtf=Hrtf.Load(rate); Metadata.hrtfDataset=Hrtf.Dataset; Metadata.hrtfHash=hrtf.Hash; Metadata.hrtfTaps=hrtf.Taps;}
             File.WriteAllText(Path.Combine(directory,"output.json"),JsonUtility.ToJson(Metadata,true));
             try

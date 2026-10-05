@@ -17,6 +17,7 @@ public sealed class TakeEditor : Editor
         var manager=(RayTraceManager)target;
         renderSettings=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(manager.directSettings));
         renderShader=manager.directShader;
+        comparisonStep=Math.Max(renderSettings.spectralHop,renderSettings.responseStepSamples/2);
     }
 
     public override void OnInspectorGUI()
@@ -72,14 +73,18 @@ public sealed class TakeEditor : Editor
             StationRecording.ExportInputs(manager.takePath,output);Debug.Log("Input-only run: "+output,manager);
         });
         if (GUILayout.Button("Open audio comparison window")) TakeComparisonWindow.ShowWindow();
-        EditorGUILayout.LabelField("Offline direct-path baseline",EditorStyles.boldLabel);
-        EditorGUILayout.HelpBox("Renders recorded 2D/3D inputs without rerunning gameplay. Direct sound and opaque occlusion only; this is not the legacy reflection model.",MessageType.None);
-        renderShader=(ComputeShader)EditorGUILayout.ObjectField("Direct shader (empty = CPU)",renderShader,typeof(ComputeShader),false);
+        EditorGUILayout.LabelField("Offline acoustic render",EditorStyles.boldLabel);
+        DrawTransportSettings(renderSettings);
+        EditorGUILayout.HelpBox("Renders saved inputs through the selected shared transport. Compact recordings first reconstruct their scene motion.",MessageType.None);
+        renderShader=(ComputeShader)EditorGUILayout.ObjectField("Shader (direct CPU if empty)",renderShader,typeof(ComputeShader),false);
         renderSettings.listenerOutput=(TakeRender.ListenerOutput)EditorGUILayout.EnumPopup("Listener output",renderSettings.listenerOutput);
         renderSettings.useBvh=EditorGUILayout.Toggle("Static geometry BVH",renderSettings.useBvh);
+        if(renderSettings.transport==TakeRender.Transport.Direct)
+        {
         renderSettings.transitionSamples=EditorGUILayout.IntField("Transition (samples)",renderSettings.transitionSamples);
         renderSettings.delayFilter=(TakeRender.DelayFilter)EditorGUILayout.EnumPopup("Delay filter",renderSettings.delayFilter);
         if (renderSettings.delayFilter==TakeRender.DelayFilter.WindowedSinc) renderSettings.sincRadius=EditorGUILayout.IntField("Sinc radius / DSP latency",renderSettings.sincRadius);
+        }
         renderSettings.maximumDelaySeconds=EditorGUILayout.FloatField("Maximum delay (seconds)",renderSettings.maximumDelaySeconds);
         renderSettings.responseStepSamples=EditorGUILayout.IntField("Response step (samples)",renderSettings.responseStepSamples);
         renderSettings.tailSamples=EditorGUILayout.IntField("Tail (samples)",renderSettings.tailSamples);
@@ -89,7 +94,7 @@ public sealed class TakeEditor : Editor
         using (new EditorGUI.DisabledScope(manager.Mode!=RayTraceManager.SessionMode.Idle))
             if (GUILayout.Button("Render saved take to responses + WAV")) Run(() =>
             {
-                string output=Path.Combine(manager.takePath,"direct-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
+                string output=Path.Combine(manager.takePath,"render-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
                 try
                 {
                     using (var take=StationReplay.Open(manager.takePath,output))
@@ -97,7 +102,7 @@ public sealed class TakeEditor : Editor
                         {
                             if (EditorUtility.DisplayCancelableProgressBar("Rendering recorded take",output,p)) throw new OperationCanceledException();
                         },renderShader);
-                    Debug.Log("Direct baseline saved to "+output,manager);
+                    Debug.Log("Acoustic render saved to "+output,manager);
                 }
                 finally { EditorUtility.ClearProgressBar(); }
             });
@@ -127,6 +132,17 @@ public sealed class TakeEditor : Editor
 
     }
 
+    internal static void DrawTransportSettings(TakeRender.Settings settings)
+    {
+        settings.transport=(TakeRender.Transport)EditorGUILayout.EnumPopup("Transport",settings.transport);
+        if(settings.transport!=TakeRender.Transport.Raytraced)return;
+        settings.raysPerPair=EditorGUILayout.IntField("Rays per pair",settings.raysPerPair);
+        settings.maxBounces=EditorGUILayout.IntField("Maximum bounces",settings.maxBounces);
+        settings.fftSize=EditorGUILayout.IntField("Synthesis FFT",settings.fftSize);
+        settings.spectralHop=EditorGUILayout.IntField("Synthesis hop",settings.spectralHop);
+        settings.diffractionFactor=EditorGUILayout.FloatField("Diffraction factor",settings.diffractionFactor);
+        settings.airAbsorption=EditorGUILayout.Toggle("Air absorption",settings.airAbsorption);
+    }
     void DrawConfiguration(RayTraceManager manager)
     {
         if(!manager.useTakeRenderer) {DrawDefaultInspector();return;}

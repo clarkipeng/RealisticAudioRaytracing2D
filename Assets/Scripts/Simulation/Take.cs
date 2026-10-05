@@ -7,7 +7,7 @@ using UnityEngine;
 // Portable inputs for replay. These types contain no Unity object references.
 public sealed class AcousticTake : IDisposable
 {
-    public const int Version = 1;
+    public const int Version = 2;
     const int StateBytes = 80; // position, quaternion, four motion vectors, flags
     public enum Dimension { Planar2D, Spatial3D }
     public enum VoiceAction { Play, Stop, Gain }
@@ -35,6 +35,7 @@ public sealed class AcousticTake : IDisposable
         public string name;
         public string interpolation = "linear-hz-clamped-v1";
         public float[] frequencies, absorption, scattering;
+        public float[] transmission,ior,damping;
     }
 
     [Serializable] public sealed class Scene
@@ -52,10 +53,12 @@ public sealed class AcousticTake : IDisposable
     {
         public string solverContract="direct-opaque-v1", dspContract="fractional-delay-hrtf-fir-v2";
         public string csharpModule,shaderName,shaderDependencyHash,unityVersion,buildGuid;
-        public static Provenance Capture(ComputeShader shader=null)
+        public static Provenance Capture(ComputeShader shader=null,TakeRender.Settings settings=null)
         {
             var value=new Provenance {csharpModule=typeof(AcousticTake).Assembly.ManifestModule.ModuleVersionId.ToString(),
                 unityVersion=Application.unityVersion,buildGuid=Application.buildGUID,shaderName=shader==null ? null:shader.name};
+if(settings!=null && settings.transport==TakeRender.Transport.Raytraced)
+            {value.solverContract="geometric-spectral-preview-v1";value.dspContract="causal-wola-directional-hrtf-v1";}
 #if UNITY_EDITOR
             if (shader!=null)
             {
@@ -164,16 +167,44 @@ public sealed class AcousticTake : IDisposable
     public static Manifest ReadManifest(string directory)
     {
         var manifest = JsonUtility.FromJson<Manifest>(File.ReadAllText(Path.Combine(directory, "take.json")));
-        if (manifest == null || manifest.version != Version || !manifest.complete ||
+        if (manifest == null || (manifest.version != 1 && manifest.version != Version) || !manifest.complete ||
             manifest.sampleRate <= 0 || manifest.frameCount <= 0 || manifest.durationSamples < 0 ||
             manifest.scene == null || manifest.scene.objects == null || manifest.eventCount < 0 ||
             manifest.interpolation != "linear-position-shortest-quaternion-v1" ||
             manifest.motion != "backward-pose-difference-v1")
             throw new InvalidDataException("Unsupported or incomplete acoustic take.");
         ValidateScene(manifest.scene);
-        if (HashText(JsonUtility.ToJson(manifest.scene)) != manifest.sceneHash)
+        if (SceneHash(manifest.scene,manifest.version) != manifest.sceneHash)
             throw new InvalidDataException("Scene metadata checksum mismatch.");
+        if(manifest.version==1)foreach(var material in manifest.scene.materials)
+            material.transmission=material.ior=material.damping=null; // Version 1 did not authenticate these fields.
         return manifest;
+    }
+
+    [Serializable] sealed class VersionOneMaterial
+    {
+        public string name,interpolation;
+        public float[] frequencies,absorption,scattering;
+    }
+    [Serializable] sealed class VersionOneScene
+    {
+        public Dimension dimension;
+        public ObjectDefinition[] objects;
+        public SourceDefinition[] sources;
+        public int[] listeners;
+        public ClipDefinition[] clips;
+        public VersionOneMaterial[] materials;
+        public string geometryHash;
+    }
+    public static string SceneHash(Scene scene,int version)
+    {
+        if(version==Version)return HashText(JsonUtility.ToJson(scene));
+        if(version!=1)throw new InvalidDataException("Unsupported take version.");
+        var materials=new VersionOneMaterial[scene.materials.Length];
+        for(int i=0;i<materials.Length;i++)
+        {var m=scene.materials[i];materials[i]=new VersionOneMaterial {name=m.name,interpolation=m.interpolation,frequencies=m.frequencies,absorption=m.absorption,scattering=m.scattering};}
+        return HashText(JsonUtility.ToJson(new VersionOneScene {dimension=scene.dimension,objects=scene.objects,sources=scene.sources,listeners=scene.listeners,
+            clips=scene.clips,materials=materials,geometryHash=scene.geometryHash}));
     }
 
     public static AcousticTake Open(string directory)
@@ -322,9 +353,10 @@ public sealed class AcousticTake : IDisposable
         long lastSample = -1, lastEventSample = -1;
         bool closed, failed;
 
-        public Writer(string directory, int sampleRate, Scene scene, Primitive[] geometry, float[][] pcm, bool retainPayloads = true)
+        public Writer(string directory, int sampleRate, Scene scene, Primitive[] geometry, float[][] pcm, bool retainPayloads = true,int version=Version)
         {
             if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
+            if(version!=1 && version!=Version)throw new InvalidDataException("Unsupported take version.");
             ValidateScene(scene);
             if (pcm.Length != scene.clips.Length) throw new ArgumentException("Clip count mismatch.");
             if (Directory.Exists(directory)) throw new IOException("Take output directory already exists.");
@@ -342,8 +374,8 @@ public sealed class AcousticTake : IDisposable
                     foreach (float value in pcm[i]) { RequireFinite(value); w.Write(value); }
                 });
             }
-            Metadata = new Manifest { scene = scene, sampleRate = sampleRate, captureProvenance=Provenance.Capture(),
-                sceneHash = HashText(JsonUtility.ToJson(scene)) };
+            Metadata = new Manifest {version=version,scene = scene, sampleRate = sampleRate, captureProvenance=Provenance.Capture(),
+                sceneHash = SceneHash(scene,version) };
             File.WriteAllText(Path.Combine(directory, "take.json"), JsonUtility.ToJson(Metadata, true));
             if (retainPayloads) states = new BinaryWriter(File.Create(Path.Combine(directory, "states.bin")));
             events = new BinaryWriter(File.Create(Path.Combine(directory, "events.bin")));

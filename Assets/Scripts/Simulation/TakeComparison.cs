@@ -50,6 +50,8 @@ public static class TakeComparison
         if (Directory.Exists(output)) throw new IOException("Comparison output directory already exists.");
         Directory.CreateDirectory(output);
         var report=new Report {referenceCheck=referenceCheck,sceneHash=take.Metadata.sceneHash,stateHash=take.Metadata.stateHash,eventHash=take.Metadata.eventHash};
+        if(low.transport==TakeRender.Transport.Raytraced)
+        {report.experiment="spectral-temporal-resolution-v1";report.referenceStatus="same geometric spectral preview at two response steps; no validated training teacher";report.trainingScope="preview comparison only";}
         report.takeDirectory=Path.GetRelativePath(Path.GetFullPath(output),Path.GetFullPath(take.DirectoryPath));
         report.listenerIds=new string[take.Metadata.scene.listeners.Length]; report.listenerNames=new string[report.listenerIds.Length];
         for(int l=0;l<report.listenerIds.Length;l++)
@@ -58,7 +60,7 @@ public static class TakeComparison
         // Warm the backend/JIT before either measured solve. File preparation remains part of each wall time.
         var state=new AcousticTake.State[take.Metadata.scene.objects.Length]; take.Evaluate(0,state);
         var response=new TakeRender.DirectPath[take.Metadata.scene.sources.Length*take.Metadata.scene.listeners.Length];
-        using (var warmup=new DirectSolver(take.Metadata.scene,take.Geometry,high,shader)) warmup.Solve(state,response);
+        using (var warmup=new DirectSolver(take.Metadata.scene,take.Geometry,high,shader,sampleRate:take.Metadata.sampleRate)) warmup.Solve(state,response);
         report.low=TakeRender.RenderDirect(take,low,Path.Combine(output,"low"),p=>progress?.Invoke(p/(referenceCheck==null ? 2:3)),shader);
         report.high=TakeRender.RenderDirect(take,high,Path.Combine(output,"high"),p=>progress?.Invoke((1+p)/(referenceCheck==null ? 2:3)),shader);
         if (report.low.outputSamples!=report.high.outputSamples || report.low.sceneHash!=report.high.sceneHash ||
@@ -77,8 +79,8 @@ public static class TakeComparison
                 var error=report.referenceErrors[l]=CompareWave(Path.Combine(output,"high","listener-"+l+".wav"),Path.Combine(output,"reference","listener-"+l+".wav"));
                 report.referenceAccepted &= error.rmsError<=referenceCheck.maximumRmsError && error.maximumAbsoluteError<=referenceCheck.maximumAbsoluteError;
             }
-            report.eligibleForTemporalTraining=report.referenceAccepted;
-            report.referenceStatus=report.referenceAccepted ? "high output agrees with finer direct-model output within the configured tolerances":"high output fails the configured finer-reference tolerances";
+            report.eligibleForTemporalTraining=report.referenceAccepted && low.transport==TakeRender.Transport.Direct;
+            report.referenceStatus=report.referenceAccepted ? "high output agrees with finer same-model output within the configured tolerances":"high output fails the configured finer-reference tolerances";
         }
         report.complete=true;
         File.WriteAllText(Path.Combine(output,"comparison.complete.json"),JsonUtility.ToJson(report,true));

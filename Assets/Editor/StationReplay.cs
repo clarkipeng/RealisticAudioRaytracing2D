@@ -49,7 +49,7 @@ public static class StationReplay
                     for(int s=0;s<clips.Length;s++)pcm[description.sources[s].clipIndex]=RayTraceManager.LoadSample(clips[s],playback.TakeMetadata.sampleRate);
                 }
                 using var writer=new AcousticTake.Writer(output,playback.TakeMetadata.sampleRate,
-                    JsonUtility.FromJson<AcousticTake.Scene>(JsonUtility.ToJson(description)),geometry,pcm);
+                    JsonUtility.FromJson<AcousticTake.Scene>(JsonUtility.ToJson(description)),geometry,pcm,version:playback.TakeMetadata.version);
                 if(writer.Metadata.sceneHash!=playback.TakeMetadata.sceneHash)throw new InvalidDataException("Authored geometry/source audio differs from the recording.");
                 writer.Metadata.observationPolicy="recorded-input-resimulation";
                 // The isolated scene runs the same initialization and step as live playback.

@@ -1833,14 +1833,14 @@ MonoBehaviour:
   spectrogramGain: 1000
   waveformTexture: {fileID: 0}
   useTakeRenderer: 1
-  directShader: {fileID: 0}
+  directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
   directSettings:
-    responseStepSamples: 512
+    responseStepSamples: 1024
     speedOfSound: 343
     referenceDistance: 1
     minimumDistance: 0.1
-    tailSamples: 0
-    transitionSamples: 64
+    tailSamples: 44100
+    transitionSamples: 0
     delayFilter: 0
     listenerOutput: 1
     sincRadius: 16
@@ -1848,8 +1848,16 @@ MonoBehaviour:
     maximumSignalEvents: 4096
     maximumPendingObservations: 16
     maximumResponsesPerBatch: 64
+    useBvh: 1
+    transport: 1
+    raysPerPair: 512
+    maxBounces: 5
+    diffractionFactor: 0.5
+    airAbsorption: 1
+    fftSize: 1024
+    spectralHop: 256
   monitorListener: 0
-  monitorLeadSamples: 8192
+  monitorLeadSamples: 16384
   monitorCapacitySamples: 96000
   liveDiagnostics:
     backend: 
