@@ -18,6 +18,8 @@ internal sealed class DirectBvh
     readonly AcousticTake.Primitive[] local,world;
     readonly AcousticTake.State[] previous;
     readonly int[] heads,next,stack=new int[32];
+    readonly int[] leaf,parents;
+    readonly bool[] dirty;
     readonly float[] padding;
     readonly Vector3[] centers;
     readonly bool planar;
@@ -26,7 +28,7 @@ internal sealed class DirectBvh
     public double BuildSeconds {get;private set;}
     public double UpdateSeconds {get;private set;}
     public int UpdateCount {get;private set;}
-    public long NumericBytes => (long)world.Length*(44+4+4+12)+(long)Nodes.Length*48+(long)previous.Length*(80+4+4)+stack.Length*4;
+    public long NumericBytes => (long)world.Length*(44+4+4+12+4)+(long)Nodes.Length*(48+4+1)+(long)previous.Length*(80+4+4)+stack.Length*4;
 
     public DirectBvh(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry)
     {
@@ -37,6 +39,7 @@ internal sealed class DirectBvh
         Array.Fill(heads,-1);
         for(int i=0;i<geometry.Length;i++) {int owner=geometry[i].objectIndex;next[i]=heads[owner];heads[owner]=i;Indices[i]=i;}
         Nodes=new Node[CountNodes(geometry.Length)];
+        leaf=new int[geometry.Length];parents=new int[Nodes.Length];dirty=new bool[Nodes.Length];
     }
     static int CountNodes(int count) => count==0 ? 0:count<=4 ? 1:checked(1+CountNodes(count/2)+CountNodes(count-count/2));
     static float AbsMax(Vector3 value) => Mathf.Max(Mathf.Abs(value.x),Mathf.Max(Mathf.Abs(value.y),Mathf.Abs(value.z)));
@@ -56,13 +59,14 @@ internal sealed class DirectBvh
                     c=planar?Vector3.zero:pose.position+pose.rotation*p.c,objectIndex=owner,materialIndex=p.materialIndex};
                 magnitude=Mathf.Max(magnitude,1+AbsMax(pose.position)+4*Mathf.Max(AbsMax(p.a),Mathf.Max(AbsMax(p.b),planar?0:AbsMax(p.c))));
                 if(!initialized)centers[i]=planar ? (world[i].a+world[i].b)*.5f:(world[i].a+world[i].b+world[i].c)/3;
+                else for(int node=leaf[i];node>=0 && !dirty[node];node=parents[node])dirty[node]=true;
             }
             // Conservative broad phase: CPU/GPU quaternion arithmetic may round differently.
             padding[owner]=8*1.1920929e-7f*magnitude;
         }
         if(!initialized)
         {
-            if(Indices.Length>0)Build(0,Indices.Length,new CenterComparer(centers));
+            if(Indices.Length>0)Build(0,Indices.Length,new CenterComparer(centers),-1);
             Refit(); initialized=true; BuildSeconds+=TakeRender.Elapsed(start);
         }
         else
@@ -80,22 +84,29 @@ internal sealed class DirectBvh
         public CenterComparer(Vector3[] values) {this.values=values;}
         public int Compare(int a,int b) {int order=values[a][axis].CompareTo(values[b][axis]);return order==0?a.CompareTo(b):order;}
     }
-    int Build(int first,int count,CenterComparer comparer)
+    int Build(int first,int count,CenterComparer comparer,int parent)
     {
-        int index=built++;
-        if(count<=4) {Nodes[index]=new Node {left=uint.MaxValue,right=uint.MaxValue,first=(uint)first,count=(uint)count};return index;}
+        int index=built++;parents[index]=parent;dirty[index]=true;
+        if(count<=4)
+        {
+            Nodes[index]=new Node {left=uint.MaxValue,right=uint.MaxValue,first=(uint)first,count=(uint)count};
+            for(int i=first;i<first+count;i++)leaf[Indices[i]]=index;
+            return index;
+        }
         Vector3 min=centers[Indices[first]],max=min;
         for(int i=first+1;i<first+count;i++) {min=Vector3.Min(min,centers[Indices[i]]);max=Vector3.Max(max,centers[Indices[i]]);}
         var size=max-min;comparer.axis=size.x>=size.y ? 0:1;
         if(!planar && size.z>size[comparer.axis])comparer.axis=2;
         Array.Sort(Indices,first,count,comparer);
-        int left=Build(first,count/2,comparer),right=Build(first+count/2,count-count/2,comparer);
+        int left=Build(first,count/2,comparer,index),right=Build(first+count/2,count-count/2,comparer,index);
         Nodes[index]=new Node {left=(uint)left,right=(uint)right};return index;
     }
     void Refit()
     {
         for(int n=Nodes.Length-1;n>=0;n--)
         {
+            if(!dirty[n])continue;
+            dirty[n]=false;
             var node=Nodes[n];
             if(node.count==0)
             {
