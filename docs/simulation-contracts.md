@@ -24,7 +24,7 @@ Contents:
 12. [Multiplayer](#12-multiplayer)
 13. [Implementation sequence and acceptance](#13-implementation-sequence-and-acceptance)
 
-The next change is specified under [Recordings browser and portable playback](#planned-recordings-browser-and-portable-playback): navigation, take loading, saved visuals, audio timing, batch generation, file ownership and acceptance checks. That section is a plan, not an implemented menu.
+The [system audit below](#system-audit-2026-10-05) sets the immediate repair order. Audio correctness and trustworthy recording completion precede the planned recordings browser, new scene features and training. The browser section remains a future specification.
 
 ## 1. Status and decisions
 
@@ -54,6 +54,98 @@ Critical constraints:
 - A speedup must include inference, transfers, synthesis, DSP, graphics contention and deadlines. Extra output frames or FFT bins alone do not demonstrate recovered information.
 
 Still unresolved before their respective milestones: the indirect estimator's receiver/PDF normalization; phase-bearing reference physics; measured latency/memory thresholds on target workloads; and model sizes/quality thresholds selected from baseline evidence. These are explicit deliverables, not silently chosen defaults.
+
+### System audit, 2026-10-05
+
+Audited production revision `1586cbb` in the actual Unity project, not the Conductor checkout. This audit changes documentation only. Numerical probes ran in Unity 6000.4.1f1 on Apple M5/Metal without entering Play or dirtying TrainStation. [Recorded measurements](benchmarks/system-audit-2026-10-05.json) distinguish new probes from earlier station performance measurements. Local repro scripts are `.context/system-audit/Probe.cs`, `.context/system-audit/ExistingChecks.cs` and `.context/renderer-audit/Probe.cs`.
+
+**Verdict:** keep the scene, recording and shared execution boundaries. The spectral preview has confirmed synthesis errors and an unvalidated reflection estimator. It is unsuitable as a high-fidelity training teacher. A GPU implementation of the same formulas would retain those errors. No new packages, compiler migration, service layer or second scene representation is justified by this audit.
+
+The actual current flow is:
+
+```text
+Unity scene / reconstructed inputs
+  → numeric geometry + sample-timed states and source events
+  → shared GPU transport → individual path readback
+  → CPU source FFT history, per-path ear filters, IFFT and WOLA
+  → live: completed PCM ring → Unity audio callback
+    offline: the same PCM → WAV
+```
+
+The older flow used GPU spectral accumulation/IFFT, then CPU overlap-add and an additive CPU PCM ring. Current code already has circular source-spectrum history, overlap storage and a PCM handoff queue. Circular storage and GPU/CPU placement are separate decisions. The old implementation also had a fixed 1024-point IFFT, blocking `GetData`, mono playback and a lock around its audio ring; reverting it wholesale would restore those constraints.
+
+| Boundary | Audit decision |
+|---|---|
+| Native Unity objects → numeric scene | Keep. Local triangles/segments, baked scale, stable object IDs and separate rigid poses are appropriate. Native collider proxies remain editable. Scale/topology/material/roster changes require a new segment; arbitrary deformation is not implemented. |
+| Static BVH + moving primitives | Keep. Objects leave the static tree after motion and use direct tests thereafter. GPU batches classify all their poses before dispatch. Add a dynamic hierarchy only if moving geometry becomes a measured bottleneck. |
+| Source commands and simulation/audio clocks | Keep integer sample events and the tick-to-observation map. Inputs alone do not preserve the original relationship between gameplay ticks and audio samples. |
+| Compact station replay | Keep its narrow scope: scene initialization plus station/walking inputs, verified against matching project/engine/platform. It is not a general deterministic Unity physics recorder. |
+| Shared live/offline solver and DSP | Keep one implementation and the same sample timeline. Live must meet playback deadlines; offline can advance without an audio device. Batching may differ without changing output. |
+| One receiver per head | Keep world arrival direction and paired HRTFs. Two ear channels do not require two separately traced listeners. Multiple heads multiply the source/listener work; live currently computes every registered head even though it monitors one. |
+| PCM callback boundary | Keep the existing single-producer/single-consumer queue. The callback copies completed PCM and records bounded diagnostics. It must not run transport, wait for GPU work, allocate or write files. |
+
+Confirmed correctness findings, in repair order:
+
+1. **Spectral filtering is not correct linear delay/convolution.** `SpectralAudio.Synthesize` and `SetResponse` apply a residual delay as frequency phase inside a windowed transform, then apply the original synthesis window. Zero-delay identity works; arbitrary delays do not. The new test uses a unit impulse, no HRTF, no geometry, 128-point FFT and 32-sample hop. At input sample 31 with a 31-sample propagation delay, the declared output is sample 190 with gain 1. Actual gain is 0.7324865, with an early contribution of 0.008240453 at sample 62. Of 28 integer-delay/impulse-position combinations, 16 fail absolute tolerance `1e-5`; delays divisible by the hop pass. This is a DSP error independent of acoustic realism. Fix block support, padding and overlap against an independent time-domain convolution reference. Storage modulo arithmetic must not become circular convolution. Declared latency must describe the actual support.
+
+2. **Pending overlap can be cut off by listener state.** `SpectralAudio.Render` gates already accumulated output using the latest `enabled/oldEnabled` pair. Once the second disabled response arrives, both are false although earlier windows still contain valid output. The existing repro was rerun: disabling at 512 with transition 64 gives sample 639 = 0.13143453, then sample 640 = 0, where the pending overlap is 0.125. Choose explicit listener stop semantics and implement them once; the current mixture of fading and abruptly discarding pending samples is inconsistent. Source Stop already stops future emission through `Signal`; it must still allow earlier sound to arrive.
+
+3. **Path-array indices are incorrectly treated as physical path identity for Doppler.** `SpectralAudio.SetResponse` differentiates delay between equal slots/bins. An indirect ray can hit a different face or edge at the next response. A new valid path with a 30 ms delay increase over a 128/8192-second response interval is discarded because the computed Doppler ratio is negative; the new probe observes its contribution count change from 1 to 0. Retain Doppler only where correspondence is established. A direct path can still need a reset when its transmission topology changes; other paths need real correspondence or an explicitly unsupported Doppler mode. Never interpret an unrelated arrival as velocity. The current approaching/receding pure-tone check does not establish general moving-path correctness.
+
+4. **Indirect frequency allocation leaves holes or unequal weights.** `TracePaths` uses `bin = ray * FrequencyBins / RaysPerPair` and weight `FrequencyBins / RaysPerPair`. At FFT 1024/rays 512, the 513th bin receives no indirect ray; at FFT 2048/rays 512, 513 of 1025 bins receive none. Even FFT 1024/rays 1024 gives aggregate per-bin weights from 0.50098 to 1.00195. Direct spectral paths still cover every bin, so direct audio can hide this error. Use the agreed configurable integer rays per frequency bin: `totalRays = bins * raysPerBin`, with correct per-bin sampling normalization. This removes the allocation error but does not fix the physical estimator. Keep acoustic frequency resolution separate from internal FFT padding for convolution.
+
+5. **The reflection control does not describe the first reflected arrival.** `Transport.hlsl` connects each sampled surface hit directly to the listener using `cosine * 0.5`, regardless of its scattering coefficient. Scattering only affects the continuation ray. In a one-bounce planar wall fixture, scattering 0 and 1 produce byte-identical arrival records: 109 nonzero reflected paths, spread over 8.31–60.88 ms. The geometric specular image path is 8.246 ms. With diffraction disabled, this is not a specular wall response. Branch probabilities, surface sampling and pressure/energy weights also lack a complete estimator derivation. Treat these as geometric preview heuristics. Establish specular and diffuse reference fixtures and normalization before calling more rays a more physically accurate teacher. Material reflection phase and wave diffraction are still absent; increasing budget cannot recover them.
+
+6. **Compact-recording failure can be hidden behind a successful acoustic save.** `StationDemo.RecordSafely` catches input-recorder construction/tick/observation errors, logs them and sets `recording = null`. `RayTraceManager.EndCapture` can still finish its separate writer and show Saved. With `retainFullReference=false`, there is no full pose payload to recover the failed input recording. This is a code-path finding, not a newly simulated disk failure. Make completion mean that both required recording parts succeeded; on input failure propagate an explicit failed session/save state. Do not silently claim a usable compact take.
+
+7. **Offline reconstruction synthesizes some flags instead of reproducing their semantics.** `StationReplay.Observe` assigns Geometry from the binding and Source from membership. Live capture additionally checks primitive count, `AcousticSurface.enabled` and `RaytracedAudioSource.enabled`. The station adapter does not log arbitrary changes to those components. At minimum preserve supported initial enabled states and reject changes outside the adapter's input contract. A same-project hash does not make omitted runtime state reproducible. This is a code-path finding; the current all-enabled station fixture does not exercise it.
+
+Other constraints that should be explicit rather than hidden behind quality labels:
+
+| Area | What the code currently means | Required adjustment |
+|---|---|---|
+| Tail and history | The station permits arrivals up to 10 seconds but renders only a 1-second tail after source cutoff. `RenderDirect` and `Live.Finish` use the requested tail without proving it contains the response. | Drain the retained response support plus DSP support, or record intentional truncation in the output. History horizon, DSP overlap and playback queue are separate quantities. No recording-duration cap is needed. |
+| Moving geometry | Responses use one frozen scene pose per solve; source history supplies older PCM. Acceleration and angular velocity are recorded but are not transport inputs. | Keep this declared approximation until retarded source/receiver/boundary timing is implemented and tested. More frequent solves do not by themselves turn it into a moving-wave solution. |
+| Head motion | HRTFs interpolate continuously in angle, but refresh with the whole acoustic response and are baked into queued PCM. At 44.1 kHz the station's 16,384-frame lead is 371.5 ms, plus 23.2 ms declared FFT latency and device/physical delay. | Refresh head filtering independently of expensive transport where possible, preserve direction until ear synthesis, and measure head-to-audio latency. Smoother interpolation alone cannot fix stale head orientation. Do not bake far-future ear audio against today's head pose. |
+| Materials | The shared shader evaluates the actual FFT bins. However `AudioMaterial.EnergyKnot` only exposes arbitrary knots for absorption/scattering; transmission/IOR/damping still come through legacy eight-band data. | Extend the existing coefficient contract when those curves are needed, migrating authored assets explicitly. The old eight-band authoring limitation is not a necessary solver limitation. Physical-property sliders are heuristic, not calibrated material measurements. |
+| Low/High comparison | `TakeComparison.Run` permits only a different response step; FFT, ray count, bounces and other settings must match. | Label this temporal comparison. Add ray-budget comparison only with covered/normalized bins and independent convergence checks. Neither current preset means validated high fidelity. |
+| Training export | `responses.bin` and captured response applications contain direct opaque probes even when PCM is spectral. All sources are mixed in final WAVs. | Add only the selected per-pair target when its teacher is valid; current files cannot reconstruct the indirect directional response. IR, complex-transfer/directional-target export and training remain unimplemented. Fixed shader RNG is reproducible, but there is no configurable independent seed for convergence testing. |
+| Replay portability | Compact replay hashes all Assets/Packages/ProjectSettings, not only motion dependencies. A shader-only change can prevent reconstruction of an old input-only run. | For now reconstruct with its matching revision and preserve the generated numeric take as an offline artifact before changing renderer code. Git commit alone does not preserve uncommitted files. Do not weaken identity checks without proving the smaller dependency boundary. |
+| BVH coverage | Nearest-hit queries use the static BVH; nearby-edge searches still scan every edge and containment checks scan candidate volumes/primitives. | Profile those kernels before adding another hierarchy. The direct-only traversal benchmark does not establish indirect traversal cost. |
+
+Performance and instrumentation conclusions:
+
+- Current station settings allocate 6,146 path records per response: 196,672 bytes read back, including empty ray/bounce slots. At 44.1 kHz and response step 1024 that is approximately **8.47 MB/s of path data**, versus **0.353 MB/s of stereo output PCM**. Each 64-response path array is about 12 MiB, on CPU and GPU separately. These are layout calculations, not measured transfer bandwidth. GPU synthesis can avoid routine path readback; diagnostics/dataset exports should request it deliberately.
+- The [existing same-revision station smoke runs](benchmarks/material-head-fixes-2026-10-05.json) put CPU audio work at approximately 5.07–10.94 seconds for a 21.18-second take. It is the dominant reported component in those runs. Main-thread scheduling varied substantially, so this audit makes no new speedup claim. Halving solve cadence does not halve the source FFT/per-hop path accumulation/IFFT work.
+- `DirectBenchmark.Run` explicitly forces Direct transport. `backend = GPU-Metal` reports the transport backend, not an all-GPU renderer. `pairPrimitiveTestUpperBound` counts only one pair/primitive diagnostic pass and is not an upper bound on spectral tracing, bounces, edges or medium queries. `dispatchReadbackSeconds` also has different synchronous/asynchronous timing scopes. Rename or scope these counters before treating them as bottleneck attribution. Record whole-job wall time and stage times; use GPU timing when available rather than presenting dispatch CPU time as shader execution time.
+- Live rendering waits for two observations to interpolate an interval and synthesizes on the Unity control thread. This favors live/offline agreement, but observation gaps, CPU DSP, GPU completion and the playback lead all matter. A finite offline render faster than duration does not establish deadline-safe realtime playback. The selected-listener output queue is sound; main-thread stalls must be measured and addressed upstream.
+- `SceneToTake.Guard` deliberately rereads authored meshes to reject in-place edits. Keep the correctness boundary; profile its cost on larger authoring scenes before inventing a dirty-state system. Batch sizes, bounded event queues and maximum acoustic delay are resource/response settings, not recording-duration caps.
+
+The lean target remains the existing numeric scene and one shared block renderer:
+
+```text
+source blocks + scene response
+  → GPU directional spectral work and ear filtering
+  → correct GPU IFFT / overlap accumulation
+  → completed PCM blocks
+      live: asynchronous readback → existing PCM ring → callback
+      offline: same blocks → file
+```
+
+Use absolute sample/frame keys with modulo storage, one clear owner of each output range and explicit clearing before reuse. An additive accumulation ring owns unfinished contributions; the existing PCM queue owns finalized samples and must not be overwritten by late arrivals. The first GPU port can retain source-spectrum history and a short output overlap ring; it need not introduce a second long future-audio ring or duplicate the entire delay horizon. If forward accumulation is chosen instead, retain direction until the relevant head pose is available. Both approaches must apply travel time once, preserve complete filter support, and respect the declared frozen-geometry time convention. The existing per-path representation is sufficient for a correctness-first port; no arbitrary angular grid is mandated.
+
+**Repair sequence and gates:**
+
+1. Make the numerical oracles authoritative: arbitrary-offset integer/fractional delays, independently convolved FIR/HRIR output, complete source/listener stops, cuts, long arrivals and block/hop invariance. Fix synthesis, pending-output gating and invalid Doppler correspondence. Make compact save failure visible and replay activation semantics explicit.
+2. Correct per-bin allocation and define the reflected estimator. Validate a single mirror, a diffuse surface, absorption/transmission and per-medium delay independently. Keep diffraction labeled heuristic until it has its own reference. Exclude the preview from training eligibility throughout.
+3. Port the corrected synthesis to GPU behind the existing live/offline boundary, compare against the small reference fixtures, then measure the actual station workload. Retain the CPU direct solver as an independent baseline. Scope diagnostics properly; measure deadlines/head latency and memory as well as throughput before reducing lead or increasing ray count.
+4. Add the selected directional/per-pair export and separate ray/temporal experiments, then dataset generation/training. The recordings browser, multiplayer and extra scene features can follow; they do not repair the renderer.
+
+**Test coverage finding:** all **9,686 existing transport assertions passed again**, while **16/28 independent impulse cases failed**. Existing identity tests use zero delay, and transition tests reproduce the current window formula without exercising a second disabled-listener response. They prove implementation agreement in those fixtures, not general convolution correctness. The fresh wall test and reused-slot probe expose additional gaps. Earlier capture/BVH/replay checks remain useful; they were not all rerun by this audit. No Windows/DirectX validation or new gameplay/performance run was performed.
+
+Files to change in those repairs are `SpectralAudio.cs` and `RayTransport.cs`/`Transport.hlsl`, the existing `TakeRender`/`Live` tail and block boundaries, `StationDemo.cs`/`StationReplay.cs`, and the corresponding independent tests. `AudioManager.PcmQueue`, scene ABI and replay format do not need replacement to fix the audio errors. Keep names aligned when touching ownership: `DirectSolver` currently orchestrates both direct and spectral transport, and the generic render entry point is still named `RenderDirect`.
+
+Legacy cleanup is a later deletion, not another renderer fork. `Big Room.unity` and `SmollRoom.unity` still reference `Raytrace2D.compute`; migrate or deliberately retire those scenes before deleting its manager/audio partials and packed material helpers. The station's `RaytraceControlPanel` is still active UI, so it is not wholly dead legacy code. Preserve old implementations in Git instead of adding new copies or expanding legacy features. README claims about the old CPU default, next-step browser priority and missing new files in the map were corrected with this audit.
 
 ## 2. Code and dependencies
 
@@ -913,7 +1005,7 @@ Acceptance covers independent ownership, differing audible occlusion per listene
 
 ## 13. Implementation sequence and acceptance
 
-Current status is listed in section 1. Remaining work proceeds in small stages without empty scaffolding:
+Current status is listed in section 1. The [system audit repair sequence](#system-audit-2026-10-05) takes precedence: fix the renderer and recording failures before the broader milestones below. These milestones describe remaining scope, not permission to defer correctness while adding features. Proceed in small stages without empty scaffolding:
 
 | Stage | Concrete work | Completion gate |
 |---|---|---|

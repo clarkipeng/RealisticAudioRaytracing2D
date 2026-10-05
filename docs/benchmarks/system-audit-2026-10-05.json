@@ -1,0 +1,334 @@
+{
+  "unity": "6000.4.1f1",
+  "gpu": "Apple M5",
+  "impulses": [
+    {
+      "delay": 0,
+      "input": 0,
+      "expected": 128,
+      "first": 128,
+      "gain": 0.9999999,
+      "error": 1.1920929e-07,
+      "earlyPeak": 2.23517418e-08
+    },
+    {
+      "delay": 0,
+      "input": 31,
+      "expected": 159,
+      "first": 159,
+      "gain": 0.9999987,
+      "error": 1.31130219e-06,
+      "earlyPeak": 8.017456e-08
+    },
+    {
+      "delay": 0,
+      "input": 32,
+      "expected": 160,
+      "first": 160,
+      "gain": 0.9999999,
+      "error": 1.1920929e-07,
+      "earlyPeak": 2.23517418e-08
+    },
+    {
+      "delay": 0,
+      "input": 127,
+      "expected": 255,
+      "first": 255,
+      "gain": 0.9999987,
+      "error": 1.31130219e-06,
+      "earlyPeak": 8.017456e-08
+    },
+    {
+      "delay": 1,
+      "input": 0,
+      "expected": 129,
+      "first": 129,
+      "gain": 0.9996987,
+      "error": 0.000301301479,
+      "earlyPeak": 2.28935519e-08
+    },
+    {
+      "delay": 1,
+      "input": 31,
+      "expected": 160,
+      "first": 160,
+      "gain": 0.999698043,
+      "error": 0.00030195713,
+      "earlyPeak": 8.114795e-08
+    },
+    {
+      "delay": 1,
+      "input": 32,
+      "expected": 161,
+      "first": 161,
+      "gain": 0.9996987,
+      "error": 0.000301301479,
+      "earlyPeak": 2.28935519e-08
+    },
+    {
+      "delay": 1,
+      "input": 127,
+      "expected": 256,
+      "first": 256,
+      "gain": 0.999698043,
+      "error": 0.00030195713,
+      "earlyPeak": 8.114795e-08
+    },
+    {
+      "delay": 31,
+      "input": 0,
+      "expected": 159,
+      "first": 159,
+      "gain": 0.7242466,
+      "error": 0.275753379,
+      "earlyPeak": 8.172965e-08
+    },
+    {
+      "delay": 31,
+      "input": 31,
+      "expected": 190,
+      "first": 62,
+      "gain": 0.7324865,
+      "error": 0.2675135,
+      "earlyPeak": 0.008240453
+    },
+    {
+      "delay": 31,
+      "input": 32,
+      "expected": 191,
+      "first": 191,
+      "gain": 0.7242466,
+      "error": 0.275753379,
+      "earlyPeak": 8.172965e-08
+    },
+    {
+      "delay": 31,
+      "input": 127,
+      "expected": 286,
+      "first": 158,
+      "gain": 0.7324865,
+      "error": 0.2675135,
+      "earlyPeak": 0.008240453
+    },
+    {
+      "delay": 32,
+      "input": 0,
+      "expected": 160,
+      "first": 160,
+      "gain": 0.9999999,
+      "error": 1.1920929e-07,
+      "earlyPeak": 2.23517418e-08
+    },
+    {
+      "delay": 32,
+      "input": 31,
+      "expected": 191,
+      "first": 191,
+      "gain": 0.9999987,
+      "error": 1.31130219e-06,
+      "earlyPeak": 8.017456e-08
+    },
+    {
+      "delay": 32,
+      "input": 32,
+      "expected": 192,
+      "first": 192,
+      "gain": 0.9999999,
+      "error": 1.1920929e-07,
+      "earlyPeak": 2.23517418e-08
+    },
+    {
+      "delay": 32,
+      "input": 127,
+      "expected": 287,
+      "first": 287,
+      "gain": 0.9999987,
+      "error": 1.31130219e-06,
+      "earlyPeak": 8.017456e-08
+    },
+    {
+      "delay": 63,
+      "input": 0,
+      "expected": 191,
+      "first": 191,
+      "gain": 0.7242466,
+      "error": 0.275753379,
+      "earlyPeak": 8.172965e-08
+    },
+    {
+      "delay": 63,
+      "input": 31,
+      "expected": 222,
+      "first": 94,
+      "gain": 0.7324865,
+      "error": 0.2675135,
+      "earlyPeak": 0.008240453
+    },
+    {
+      "delay": 63,
+      "input": 32,
+      "expected": 223,
+      "first": 223,
+      "gain": 0.7242466,
+      "error": 0.275753379,
+      "earlyPeak": 8.172965e-08
+    },
+    {
+      "delay": 63,
+      "input": 127,
+      "expected": 318,
+      "first": 190,
+      "gain": 0.7324865,
+      "error": 0.2675135,
+      "earlyPeak": 0.008240453
+    },
+    {
+      "delay": 64,
+      "input": 0,
+      "expected": 192,
+      "first": 192,
+      "gain": 0.9999999,
+      "error": 1.1920929e-07,
+      "earlyPeak": 2.23517418e-08
+    },
+    {
+      "delay": 64,
+      "input": 31,
+      "expected": 223,
+      "first": 223,
+      "gain": 0.9999987,
+      "error": 1.31130219e-06,
+      "earlyPeak": 8.017456e-08
+    },
+    {
+      "delay": 64,
+      "input": 32,
+      "expected": 224,
+      "first": 224,
+      "gain": 0.9999999,
+      "error": 1.1920929e-07,
+      "earlyPeak": 2.23517418e-08
+    },
+    {
+      "delay": 64,
+      "input": 127,
+      "expected": 319,
+      "first": 319,
+      "gain": 0.9999987,
+      "error": 1.31130219e-06,
+      "earlyPeak": 8.017456e-08
+    },
+    {
+      "delay": 129,
+      "input": 0,
+      "expected": 257,
+      "first": 257,
+      "gain": 0.9996987,
+      "error": 0.000301301479,
+      "earlyPeak": 2.28935519e-08
+    },
+    {
+      "delay": 129,
+      "input": 31,
+      "expected": 288,
+      "first": 288,
+      "gain": 0.999698043,
+      "error": 0.00030195713,
+      "earlyPeak": 8.114795e-08
+    },
+    {
+      "delay": 129,
+      "input": 32,
+      "expected": 289,
+      "first": 289,
+      "gain": 0.9996987,
+      "error": 0.000301301479,
+      "earlyPeak": 2.28935519e-08
+    },
+    {
+      "delay": 129,
+      "input": 127,
+      "expected": 384,
+      "first": 384,
+      "gain": 0.999698043,
+      "error": 0.00030195713,
+      "earlyPeak": 8.114795e-08
+    }
+  ],
+  "reflection": {
+    "nonzeroPaths": 109,
+    "changedByScattering": 0,
+    "shortest": 0.00831419,
+    "longest": 0.060876932,
+    "idealSpecular": 0.008246143
+  },
+  "reusedSlotContributionsBefore": 1,
+  "reusedSlotContributionsAfter": 0,
+  "sceneDirtyBefore": false,
+  "sceneDirtyAfter": false,
+  "auditedCommit": "1586cbb",
+  "scope": "Numerical audit on the open Unity Editor without Play or scene changes. Impulses use the production CPU spectral mixer; reflection paths use the production Metal shader. No new station timing benchmark.",
+  "impulseSettings": {
+    "sampleRate": 8192,
+    "fftSize": 128,
+    "hop": 32,
+    "responseStep": 128,
+    "transition": 0,
+    "absoluteTolerance": 1e-05
+  },
+  "impulseSummary": {
+    "checked": 28,
+    "failed": 16
+  },
+  "listenerDisable": {
+    "scope": "Existing .context/renderer-audit/Probe.cs rerun on this revision, 8000 Hz, FFT128/hop32, response128, transition64, disable at512.",
+    "sample639": 0.13143453,
+    "sample640": 0.0,
+    "expectedSample640": 0.125
+  },
+  "rayAllocation": [
+    {
+      "fftSize": 1024,
+      "bins": 513,
+      "totalRays": 512,
+      "missingBins": 1,
+      "minAggregateWeight": 0.0,
+      "maxAggregateWeight": 1.001953125
+    },
+    {
+      "fftSize": 2048,
+      "bins": 1025,
+      "totalRays": 512,
+      "missingBins": 513,
+      "minAggregateWeight": 0.0,
+      "maxAggregateWeight": 2.001953125
+    },
+    {
+      "fftSize": 1024,
+      "bins": 513,
+      "totalRays": 1024,
+      "missingBins": 0,
+      "minAggregateWeight": 0.5009765625,
+      "maxAggregateWeight": 1.001953125
+    }
+  ],
+  "stationBufferArithmetic": {
+    "pairs": 2,
+    "fftSize": 1024,
+    "bins": 513,
+    "raysPerPair": 512,
+    "bounces": 5,
+    "slotsPerPair": 3073,
+    "pathsPerResponse": 6146,
+    "pathReadbackBytesPerResponse": 196672,
+    "pathReadbackBytesPerSecondAt44100AndStep1024": 8469956.25,
+    "pcmOutputBytesPerSecondStereo44100": 352800,
+    "pathBufferBytesAt64ResponsesEachOnCpuAndGpu": 12587008,
+    "queueLeadMillisecondsAt44100": 371.51927437641723,
+    "fftLatencyMillisecondsAt44100": 23.219954648526077
+  },
+  "existingSuite": {
+    "transportChecksPassed": 9686,
+    "sceneDirty": false
+  }
+}
