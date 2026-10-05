@@ -1,5 +1,102 @@
 # Cleanup validation and measured bottlenecks
 
+## 2026-10-05 station offline benchmarks
+
+**Keep offline GPU batching enabled; keep BVH optional.** Batching reduced the short station recording's high-quality GPU render from **1.020 s to 0.361 s (2.83×)** with byte-identical responses and audio. BVH helped CPU rendering during the short, mostly stationary take, but its moving-geometry maintenance cost outweighed traversal savings in the three-lap take. The station still defaults to CPU with `useBvh=false`; offline GPU renders use the existing 64-response batch setting. No scene objects or sound assets changed for these measurements.
+
+### Workload and timing
+
+Measured in the actual project's Unity **6000.4.1f1** Editor on **Apple M5 / Metal**, in Edit mode. Both recordings use the real TrainStation geometry: **53 objects, 564 triangles, two sources, one binaural listener**, 44,100 Hz stereo, linear fractional delay, 64-sample transitions and no appended tail. The take fixes the scene, recorded motion and source events for every run.
+
+| Recording under `Recordings/` | Duration | Output frames | Low responses | High responses |
+|---|---:|---:|---:|---:|
+| `station-20261005-195909-093` | 12.701315 s | 560,128 | 274 | 2,188 |
+| `station-20261005-192306-273` | 95.805556 s | 4,225,025 | 2,064 | 16,505 |
+
+Low uses a **2,048-sample response step** (46.44 ms); High uses **256 samples** (5.805 ms). Both use the same direct/opaque transport and binaural DSP. These labels change response cadence, not reflection fidelity, sample rate or ray count; neither is an approved reflection-training reference.
+
+Each case has one discarded warmup and three measured repetitions, alternating case order. Tables show median **whole-render wall seconds**, including opening/checking the take, preparation, motion evaluation, tracing, GPU staging/readback waits, DSP, writing WAV/responses and final output hashes/reports. File caches are warm. The harness report and duplicate-output deletion happen outside this timer. Component times below come from the median-total repetition; they are not independent medians.
+
+Inputs here are existing full diagnostic takes. **Reconstructing compact inputs into a numeric take is a separate, untimed preparation step**, shared by Low and High. No gameplay/physics rerun, visual rendering or live audio deadline is included. These results measure offline throughput, not live latency. At CPU High, only 20.62% of short-take frames and 2.74% of long-take frames contain nonzero audio under the direct/opaque model. Do not extrapolate their DSP cost to continuously audible scenes or reflections. Larger geometry and DirectX remain unmeasured.
+
+### Whole-render results
+
+Short recording, seconds:
+
+| Implementation | CPU Low | CPU High | GPU Low | GPU High |
+|---|---:|---:|---:|---:|
+| Original brute force, synchronous GPU | 0.201 | 0.452 | 0.313 | 1.020 |
+| BVH, full hierarchy refit | 0.207 | 0.410 | 0.314 | 0.979 |
+| BVH, refit affected branches | 0.193 | 0.384 | 0.283 | 0.933 |
+| Brute force, GPU batches of 64 | 0.204 | 0.449 | 0.205 | **0.361** |
+| BVH, GPU batches of 64 | 0.198 | **0.390** | 0.213 | 0.423 |
+
+The final brute-force GPU High range was **0.358–0.371 s**, versus **0.995–1.175 s** originally. Its solve/staging/readback time fell from 0.636 s to 0.035 s. Batching removes thousands of individual waits; it does not change intersection physics. CPU execution still solves one response at a time. The small Low CPU differences are within observed run variation; one BVH Low repetition took 0.502 s, retained in the raw data.
+
+Three-lap recording, median seconds (minimum–maximum):
+
+| Backend | Brute force | BVH |
+|---|---:|---:|
+| CPU Low | **0.928** (0.921–0.953) | 0.982 (0.953–0.983) |
+| CPU High | **2.462** (2.454–2.672) | 2.598 (2.582–2.663) |
+| GPU Low, batch 64 | 1.126 (0.933–1.130) | 1.019 (0.973–1.038) |
+| GPU High, batch 64 | **2.007** (1.973–2.023) | 3.057 (2.729–3.144) |
+
+BVH High regressed 5.5% on CPU. High solve time, including BVH maintenance, rose from 0.689 to 0.819 s on CPU and from 0.226 to 0.910 s on GPU. GPU BVH also stages a hierarchy per response frame; its reported numeric working buffers grow from 2,860,130 to 5,130,253 bytes. These are buffer estimates, not total process memory. Low GPU totals overlap substantially and include variable file-writing costs, so they do not establish a BVH improvement. There was no synchronous-GPU baseline run for the long take.
+
+### Remaining costs
+
+Final brute-force GPU High, seconds:
+
+| Work | Short take | Three-lap take |
+|---|---:|---:|
+| Open/validate inputs | 0.016 | 0.034 |
+| Prepare renderer | 0.015 | 0.050 |
+| Evaluate recorded motion | 0.116 | 0.861 |
+| Solve, stage and wait for readback | 0.035 | 0.226 |
+| Audio DSP | 0.082 | 0.094 |
+| Write responses/WAV | 0.047 | 0.378 |
+| Final hashes/report/disposal | 0.024 | 0.178 |
+| Total, including other loop/setup work | **0.361** | **2.007** |
+
+Motion evaluation is the largest measured component after batching. Output writing and hashing also matter. Optimize those only against the same recordings and exact-output checks. BVH build/update and upload/dispatch counters are nested diagnostics, not extra times to add to the table. With asynchronous batches, `dispatchReadbackSeconds` measures submission work; it is **not GPU kernel execution time**. `solveSeconds` includes the completion wait. The total does not require estimating GPU execution from CPU submission timestamps.
+
+### Correctness and preserved history
+
+All optimized short-run `responses.bin` and stereo WAVs match the baseline **byte-for-byte within each backend**, at both qualities. Long-run BVH and brute-force outputs also match exactly. Every repetition matches its own case's hashes. CPU versus GPU retains the original small numerical differences: short-take RMS error 7.22–7.87e-8, maximum 2.53e-6; long-take RMS 2.45–2.50e-8, maximum 2.18e-6. Cross-backend output is not claimed byte-identical.
+
+**1,387 core checks plus Metal FFT/direct/BVH/batched/live-offline checks passed.** Coverage includes 2D/3D, moving/rotating/inactive/empty geometry, multiple source/listener pairs, zero-allocation warmed CPU solves and batch sizes 1/3/8/64 preserving responses and audio with cuts, gain/stop events, tails, multiple listeners and both delay filters. The Editor was left in Edit mode with TrainStation clean and the manager Idle.
+
+| Git revision | Preserved implementation |
+|---|---|
+| `877c21c` | Original renderer plus repeatable benchmark harness; before BVH/batching changes. |
+| `7c892fc` | CPU/HLSL BVH and brute-force correctness comparisons. |
+| `2c9ffb6` | Refit only hierarchy branches affected by moved geometry. |
+| `0d6e11b` | Offline GPU response batching with exact-output checks. |
+| `fdb6ec8` | Keep one inspectable output per benchmark case; measured code used for long runs. |
+
+Old source is kept in Git, without duplicate runtime files. [Raw measured samples](benchmarks/station-2026-10-05.csv) preserve all **84 measured renders**, full revisions, input/output hashes, settings that vary and timing components. Full local reports and one output per case live under `.context/traversal-benchmark/{baseline,bvh,sparse,batched-brute,batched-bvh,long-brute,long-bvh}/`; recordings and binary outputs are not committed.
+
+### Reproduction
+
+In the graphics-enabled Editor, stop Play and invoke [DirectBenchmark.Run](../Assets/Editor/DirectBenchmark.cs) from an Editor script/native Unity CLI wrapper. It uses immutable recorded geometry rather than the open scene. For the measured settings:
+
+```csharp
+DirectBenchmark.Run(
+    "Recordings/station-20261005-192306-273",
+    ".context/benchmarks/new-run", // Must not exist.
+    "<current git rev-parse HEAD>",
+    new TakeRender.Settings {
+        listenerOutput = TakeRender.ListenerOutput.Binaural,
+        delayFilter = TakeRender.DelayFilter.Linear,
+        transitionSamples = 64,
+        maximumResponsesPerBatch = 64,
+        useBvh = false
+    }, lowStep: 2048, highStep: 256, repetitions: 3);
+```
+
+The async Editor operation writes progress to `benchmark.json`; wait for `complete=true` and an empty `error`. Switch `useBvh` for the traversal comparison. Set `maximumResponsesPerBatch=1` for the original synchronous GPU scheduling. For a new compact recording, reconstruct once using its matching scene/code revision, then supply the generated numeric take to this harness. Do not launch a second Editor against the already-open project. The harness requires a graphics device; CPU-only `-nographics` jobs remain supported by `TakeBatch.Render` separately.
+
 ## 2026-10-05 compact capture cleanup
 
 - Removed unreferenced `TrainVisualLoader` and `AudioConvolve`, plus the duplicate FFT scene/component. Automated FFT/direct GPU checks remain.
@@ -48,7 +145,7 @@ Controlled all-miss fixture: 16 source/listener pairs, static triangles outside 
 | 4096 | 13.010 | 3.633 | 0.204 |
 | 65536 | 207.502 | 25.780 | 2.939 |
 
-Traversal still scans every primitive per pair. The near-linear scaling makes object/geometry acceleration the next measured scaling target. Batching reduces dispatch/readback overhead but does not change that traversal algorithm. Configurable FFT/STFT, validated indirect responses and converged ray-budget training references remain future work.
+At the time of these earlier measurements, traversal scanned every primitive per pair. The near-linear scaling motivated the optional BVH now measured above; large-scene BVH scaling has not yet been rerun. Batching reduces dispatch/readback overhead but does not change the brute-force traversal algorithm. Configurable FFT/STFT, validated indirect responses and converged ray-budget training references remain future work.
 
 ## Reproduction
 

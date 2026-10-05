@@ -1,8 +1,8 @@
 # Acoustic simulation and reconstruction: design contract
 
-Updated 2026-10-04 against the current Unity 6 working tree. This is the single design specification for scenes, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
+Updated 2026-10-05 against the current Unity 6 working tree. This is the single design specification for scenes, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
 
-[README](../README.md) remains the operating guide for actual APIs and workflows. [Cleanup results](cleanup-results.md) preserves earlier measurements; those are not new benchmark results.
+[README](../README.md) remains the operating guide for actual APIs and workflows. [Cleanup results](cleanup-results.md) contains the current station offline benchmarks and explicitly dated historical measurements.
 
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
@@ -31,10 +31,10 @@ The next change is specified under [Recordings browser and portable playback](#p
 | Capability | Current implementation | Planned work |
 |---|---|---|
 | Unity authoring and capture | Native 2D/3D geometry export, rigid motion, activation, stable IDs, source events, immutable take files; editable station, train service with stops and walking aboard, and door with two sources and one binaural listener. | AcousticLab and scripted dataset scenarios. |
-| Replay and computation | Pose replay/scrubbing, CPU/HLSL direct solvers, shared live/offline timeline and mixer, WAV/response export, batch jobs. | Take browser, scene-independent playback, shared visual snapshots and continuous bounded playback; then indirect transport, BVH and richer response payloads. |
+| Replay and computation | Pose replay/scrubbing, CPU/HLSL direct solvers with optional refittable BVH, shared live/offline timeline and mixer, WAV/response export, batch jobs and measured station offline benchmarks. | Take browser, scene-independent playback, shared visual snapshots and continuous bounded playback; then indirect transport and richer response payloads. |
 | Multiple endpoints | Every source/listener pair; mono or binaural mix per head; one monitored listener. | Larger workload benchmarks and explicit local receiver selection for multiplayer. |
 | Comparison | Coarse/fine schedules, metrics/reference gate, native audio A/B/Difference, waveform/spectrogram plots and synchronized listener/top-down/free-camera views. | Per-pair target checks, learned outputs and validated reflection comparisons. |
-| Runtime | Bounded PCM/capture queues, asynchronous live GPU batches, fractional-delay FIR, provenance and diagnostics. | Lower measured latency, convolution, reconstruction scheduling. |
+| Runtime | Bounded PCM/capture queues, live/offline GPU response batches, fractional-delay FIR, provenance and diagnostics. | Lower measured latency, convolution, reconstruction scheduling. |
 | Learning and networking | Neither implemented. | Dataset loader, models, inference and actual host/join gameplay. |
 
 The current project uses Unity **6000.4.1f1**, C# and HLSL. Earlier CPU/Metal checks and the repaired legacy FFT are documented in the README. Windows/DirectX still needs its own checks. The legacy reflection shader has different physics and is not a validated reference.
@@ -62,11 +62,12 @@ Keep one codebase and reuse existing components:
 Assets/
   Scripts/
     Scene/         AcousticSurface, AudioMaterial, SceneHelper
-    Simulation/    RayTraceManager, Take, TakeRender, DirectSolver, TakeComparison
+    Simulation/    RayTraceManager, Take, TakeRender, DirectSolver, DirectBvh, TakeComparison
     Audio/         AudioManager, RaytracedAudioSource, Hrtf
     Demo/          existing movement, scene controls and legacy fixtures
   Shaders/         Direct.compute and existing legacy shaders/includes
-  Editor/          TakeEditor, TakeDemo, TakeComparisonWindow, TakeComparisonAudio/View
+  Editor/          TakeEditor, TakeDemo, TakeComparisonWindow, TakeComparisonAudio/View,
+                   StationReplay, DirectBenchmark
   Tests/Editor/    TakeChecks and numerical fixtures
   Scenes/         editable Unity scenes
   Prefabs/        shared environment and actors
@@ -298,6 +299,7 @@ The current CPU/HLSL direct ABI is:
 | State | float4 position/rotation at 0/16; uint flags/padding at 32; 48 bytes. |
 | Source/listener bindings | int32 object indices, 4 bytes each. |
 | Response | float4 direction at 0 (xyz world listener-to-arrival-origin, w=0); float32 delay/gain at 16/20; reserved zero at 24/28; 32 bytes. Disk serialization is separately packed to five floats. |
+| Optional BVH node | float4 boundsMin/boundsMax at 0/16; uint left/right/first/count at 32/36/40/44; 48 bytes. World-space bounds; a separate int32 array maps leaves to original primitive IDs. |
 
 The future indirect world-space ABI uses full 16-byte record lanes. It is separate from direct's local-geometry/state layout:
 
@@ -322,7 +324,7 @@ Energy arrivals hold world listener-to-arrival-origin direction + delaySeconds a
 
 ### Geometry, memory and scheduling
 
-Compile local geometry once. For the first BVH implementation, expand world primitives, update moved object ranges and refit one flat hierarchy. Rebuild when measured traversal degradation warrants it, preserving primitive IDs. Keep brute-force intersections as an oracle, including moving/empty/grazing cases. Multi-level instance BVHs are deferred until refit/upload costs justify them.
+**Implemented direct BVH:** compile local geometry once, expand world primitives and build one balanced median-split hierarchy with at most four primitives per leaf. Update cached vertices only for changed rigid poses and refit affected branches. The CPU traverses cached world primitives; HLSL traverses uploaded world bounds and retains the original local-primitive transform/intersection math. Conservative bounds account for CPU/GPU rounding, and a separate index array preserves stable primitive IDs. Batched GPU frames own separate node snapshots. Brute-force traversal remains the default and correctness oracle in 2D/3D. The station benchmarks show that refit/staging costs can exceed savings for two pairs over 564 triangles; no automatic selection threshold is invented. Rebuild heuristics and multi-level instance BVHs remain deferred until measured workloads justify them.
 
 Memory estimates precede submission:
 
@@ -709,7 +711,7 @@ The adapter runs low solve → available history/query → bounded inference →
 
 ## 11. Audio comparison and benchmarking
 
-**Live station controls:** the train service and original `train_horn.mp3`/room chime start automatically on Play. Service cruises at 12 m/s with 3 m/s² acceleration/braking, stopping at the same platform for 10 seconds each lap, including startup. Capture starts automatically before movement and sound, and the Game view exposes one Save run action (R). The world keeps moving during audio drain, and saving resumes live monitoring with restarted clips. Re-enter Play for a new recording. Esc releases the cursor and reveals mouse sensitivity, while right-click resumes walking. E opens/closes the nearby waiting-room door. Entering and leaving the carriage uses ordinary walking across the level platform edge; there are no boarding teleports, prompts, pose cuts or special boarding state. The normal station dwell is unchanged, and player parenting stays stable. The walking controller tracks its supporting collider in local coordinates, applies the floor’s translation/yaw before sweeping walking and gravity, and inherits floor velocity on jumping or stepping off. Benches leave a clear aisle; normal collision remains active aboard. Detailed source controls, replay, rendering and diagnostics remain in the Inspectors/comparison window. The full take format is unchanged; the station adds the initialization input sidecar described in section 4.
+**Live station controls:** the train service and original `train_horn.mp3`/room chime start automatically on Play. Service cruises at 12 m/s with 3 m/s² acceleration/braking, stopping at the same platform for 10 seconds each lap, including startup. Capture starts automatically before movement and sound, and the Game view exposes one Save run action (R). The world keeps moving during audio drain, and saving resumes live monitoring with restarted clips. Re-enter Play for a new recording. Walking starts on Play. Esc releases the cursor and reveals mouse sensitivity; left- or right-click inside the scene resumes walking, while UI clicks leave the cursor available. E opens/closes the nearby waiting-room door. Entering and leaving the carriage uses ordinary walking across the level platform edge; there are no boarding teleports, prompts, pose cuts or special boarding state. The normal station dwell is unchanged, and player parenting stays stable. The walking controller tracks its supporting collider in local coordinates, applies the floor’s translation/yaw before sweeping walking and gravity, and inherits floor velocity on jumping or stepping off. Benches leave a clear aisle; normal collision remains active aboard. Detailed source controls, replay, rendering and diagnostics remain in the Inspectors/comparison window. The full take format is unchanged; the station adds the initialization input sidecar described in section 4.
 
 The current roster is 53 objects, two sources and one binaural listener; older rosters need their matching scene for pose replay, while offline audio remains self-contained. Capture records actual late-frame poses, not a separately simulated trajectory. Movement and gravity use one CharacterController sweep per update, including sub-millimetre steps. Wheels align to the rails; emitters lie outside the opaque train proxy. The passenger carriage uses separate floor/side/roof geometry. Mouse sensitivity is independent of render-frame duration. Autonomous passengers remain future work.
 

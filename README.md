@@ -4,9 +4,9 @@ Unity **6000.4.1f1 (Unity 6.4)**, C# and HLSL. The existing realtime renderer is
 
 **Implemented now:** editable 3D station with two sources and one binaural listener, train service with station stops and walking aboard, sliding door and walkthrough controls, strict take capture, live direct-sound monitoring, pose replay/scrubbing, CPU/HLSL direct solvers for 2D/3D, offline WAV/response export, bounded asynchronous GPU batches, captured output PCM/timing, configurable fractional-delay FIR, binaural headphone rendering, and a native comparison window with synchronized audio, plots and recorded scene views. Live and offline use the same interpolation, source timeline and audio mixer. CPU and GPU implement the same direct/opaque model and are checked against each other.
 
-**Still planned:** general reflection transport, configurable FFT/STFT convolution, acceleration structures, multiplayer, converged training pairs and learned reconstruction, including denser response updates from sparse solves. The old realtime prototype remains available when **Use Take Renderer** is disabled. Its physics differs from the shared direct model; neither is a validated high-fidelity reflection teacher.
+**Still planned:** general reflection transport, configurable FFT/STFT convolution, multiplayer, converged training pairs and learned reconstruction, including denser response updates from sparse solves. The old realtime prototype remains available when **Use Take Renderer** is disabled. Its physics differs from the shared direct model; neither is a validated high-fidelity reflection teacher.
 
-[The consolidated design contract](docs/simulation-contracts.md) covers scene/assets, Unity/HLSL data, live/offline execution, IR/complex/spectrogram reconstruction, temporal upscaling, training, multiplayer and acceptance gates. This README covers running the implemented code; [cleanup results](docs/cleanup-results.md) records historical measurements.
+[The consolidated design contract](docs/simulation-contracts.md) covers scene/assets, Unity/HLSL data, live/offline execution, IR/complex/spectrogram reconstruction, temporal upscaling, training, multiplayer and acceptance gates. This README covers running the implemented code; [cleanup results](docs/cleanup-results.md) records current station benchmarks and historical measurements.
 
 The proposed [recordings browser and portable playback](docs/simulation-contracts.md#planned-recordings-browser-and-portable-playback) specifies the Record/Recordings entry point, loading old takes without their original scene, continuous audio/pose replay, shared visual snapshots and batch example generation. It is a design spec; the controls below remain the implemented workflow.
 
@@ -26,7 +26,7 @@ Enable **StationDemo → Retain Full Reference** before Play only when comparing
 
 **Tools → Acoustics → Run take checks** validates formats and the core simulation/audio contracts. **Test station recording and replay** exercises boarding, jumping, saving, export, reconstruction and actual scene replay. `TakeChecks.StartStationLifecycleCheck(true)` extends that check through three station laps. Tests write their results under `Recordings/`; they retain full references intentionally.
 
-Current and historical [validation results](docs/cleanup-results.md) cover three-lap replay, different measured frame cadences, 397 core checks plus GPU checks, reconstruction in a fresh Editor from a clean Git checkout, and a standalone Mac recording. They establish repeatability on the tested build/platform, not general physics determinism.
+Current and historical [validation results](docs/cleanup-results.md) cover three-lap replay, different measured frame cadences, 1,387 core checks plus GPU checks, reconstruction in a fresh Editor from a clean Git checkout, and a standalone Mac recording. They establish repeatability on the tested build/platform, not general physics determinism.
 
 ## Record a scene
 
@@ -119,7 +119,9 @@ The new audio callback copies PCM through a single-producer/single-consumer queu
 
 Unity Profiler markers `Acoustics.ValidateScene`, `Acoustics.SolveDirect` and `Acoustics.MixPCM` expose those stages for closer inspection.
 
-Live GPU rendering batches response samples across the queued, known motion intervals and uses [Unity asynchronous readback](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Rendering.AsyncGPUReadback.html). One in-flight batch owns its pose/response buffers until completion. **Maximum Responses Per Batch** bounds that storage; **Maximum Pending Observations** bounds queued motion intervals. A full queue stops the session visibly. Finishing/cancelling waits for owned requests before releasing their buffers. Offline GPU runs use measured synchronous readback. Completion wall time includes scheduling and readback, not isolated GPU execution time.
+Live GPU rendering batches response samples across the queued, known motion intervals and uses [Unity asynchronous readback](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Rendering.AsyncGPUReadback.html). One in-flight batch owns its pose/response buffers until completion. **Maximum Responses Per Batch** bounds that storage; **Maximum Pending Observations** bounds queued motion intervals. A full queue stops the session visibly. Finishing/cancelling waits for owned requests before releasing their buffers. Offline GPU renders use the same batch capacity and wait once per batch before sequential audio synthesis; capacity 1 or unavailable async readback uses the synchronous path. Completion wall time includes scheduling and readback, not isolated GPU execution time.
+
+**BVH Traversal** optionally accelerates CPU/HLSL direct intersections in both 2D and 3D. It refits bounds for moved geometry while preserving primitive IDs and exact intersection tests. It stays off by default: the station's two pairs and 564 triangles do not consistently benefit once moving-geometry maintenance is included. [Measured Low/High offline totals, preserved Git revisions and benchmark instructions](docs/cleanup-results.md#2026-10-05-station-offline-benchmarks) show GPU batching's improvement and BVH's tradeoffs.
 
 The default station lead is 8,192 sample frames (185.8 ms at 44.1 kHz), plus device latency. Assign `Direct.compute` to opt into GPU execution for larger workloads; measure its completion time and deadline counters when selecting a lead.
 
@@ -250,7 +252,7 @@ Assets/
   Scripts/
     Scene/        AcousticSurface, AudioMaterial, SceneHelper
     Simulation/   RayTraceManager + Take/Legacy partials, Take, TakeRender + Live partial,
-                  DirectSolver, TakeComparison, ComputeHelper
+                  DirectSolver, DirectBvh, TakeComparison, ComputeHelper
     Audio/        AudioManager + Legacy partial, RaytracedAudioSource, Hrtf
     Demo/         StationDemo, StationRecording, StationLoop, PlayerController,
                   MouseLook, Oscillator, RaytraceControlPanel
@@ -258,15 +260,16 @@ Assets/
   Audio/          source clips and DefaultMixer
   Materials/      acoustic material assets
   Resources/      bundled KEMAR filters and attribution
-  Editor/         StationReplay, TakeEditor, TakeDemo, TakeComparisonWindow + helpers
-  Tests/Editor/   TakeChecks
+  Editor/         StationReplay, TakeEditor, TakeDemo, TakeComparisonWindow + helpers,
+                  DirectBenchmark
+  Tests/Editor/   TakeChecks, DirectBvhChecks
   Scenes/         editable scenes and their baked lighting
   Prefabs/        project prefabs
   External/       imported train assets
   TextMesh Pro/   imported UI assets
 Packages/         Unity dependency manifest
 ProjectSettings/  Unity project configuration
-docs/             consolidated design contract and historical cleanup results
+docs/             consolidated design contract, validation results and benchmark samples
 tools/            reproducible KEMAR importer (Python standard library)
 ```
 
@@ -279,7 +282,7 @@ Folders group existing files; they introduce no new assemblies or dependencies. 
 | [SceneHelper.cs](Assets/Scripts/Scene/SceneHelper.cs) | Reuses authoring snapshots and comparison storage, deduplicates shared meshes/materials, and detects in-place changes without per-observation scene export. |
 | [RayTraceManager.cs](Assets/Scripts/Simulation/RayTraceManager.cs), [RayTraceManager.Take.cs](Assets/Scripts/Simulation/RayTraceManager.Take.cs) | Defines exclusive session states and retains ownership while output drains. Legacy precomputation/playback is excluded during a take session. |
 | [AudioManager.cs](Assets/Scripts/Audio/AudioManager.cs) | Defers legacy allocation and captures actual component PCM, callback timing and response applications through bounded storage. |
-| [DirectSolver.cs](Assets/Scripts/Simulation/DirectSolver.cs), [Direct.compute](Assets/Shaders/Direct.compute) | Batches live response frames with asynchronous completion and explicit resource ownership. Reports completion latency and traversal workload bounds. |
+| [DirectSolver.cs](Assets/Scripts/Simulation/DirectSolver.cs), [Direct.compute](Assets/Shaders/Direct.compute), [DirectBvh.cs](Assets/Scripts/Simulation/DirectBvh.cs) | Batches live/offline response frames with explicit resource ownership; optional CPU/HLSL BVH with moved-geometry refits. Reports completion latency, refit costs and traversal workload bounds. |
 | [TakeRender.cs](Assets/Scripts/Simulation/TakeRender.cs), [TakeRender.Live.cs](Assets/Scripts/Simulation/TakeRender.Live.cs) | Bounds event/cut/observation history and shares configurable linear/windowed-sinc delay filtering between live and offline rendering. |
 | [Take.cs](Assets/Scripts/Simulation/Take.cs), [TakeComparison.cs](Assets/Scripts/Simulation/TakeComparison.cs) | Records implementation/settings provenance and optionally gates temporal training pairs against a third, finer direct-model run. |
 
