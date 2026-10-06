@@ -39,16 +39,17 @@ internal sealed class RayTransport : IDisposable
     public readonly Path[] Paths;
     public int PathsPerFrame {get;}
     public int SlotsPerPair {get;}
+    internal ComputeBuffer Buffer => pathBuffer;
     public long CpuBytes => Paths.Length*32L;
     public long GpuBytes {get;}
     public RayTransport(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,TakeRender.Settings settings,ComputeShader shader,
-        ComputeBuffer primitives,ComputeBuffer states,ComputeBuffer sources,ComputeBuffer listeners,ComputeBuffer bvhNodes,ComputeBuffer bvhIndices,int rate,int maximumFrames)
+        ComputeBuffer primitives,ComputeBuffer states,ComputeBuffer sources,ComputeBuffer listeners,ComputeBuffer bvhNodes,ComputeBuffer bvhIndices,int rate,int maximumFrames,bool readback=true)
     {
         if(Marshal.SizeOf<Path>()!=32 || Marshal.SizeOf<Material>()!=32 || Marshal.SizeOf<Edge>()!=48 || Marshal.SizeOf<Volume>()!=48)throw new InvalidOperationException("Spectral GPU ABI mismatch.");
         this.shader=shader;rayCount=settings.RaysPerPair;frequencyBins=settings.fftSize/2+1;pairs=checked(scene.sources.Length*scene.listeners.Length);
         int bins=settings.fftSize/2+1;
         SlotsPerPair=settings.SpectralSlotsPerPair;PathsPerFrame=checked(pairs*SlotsPerPair);
-        Paths=new Path[checked(PathsPerFrame*maximumFrames)];completion=OnComplete;
+        Paths=new Path[readback?checked(PathsPerFrame*maximumFrames):0];completion=OnComplete;
         bool planar=scene.dimension==AcousticTake.Dimension.Planar2D;
         try
         {
@@ -66,7 +67,7 @@ internal sealed class RayTransport : IDisposable
             var edges=Edges(geometry,planar);edgeBuffer=new ComputeBuffer(Math.Max(1,edges.Length),48);if(edges.Length>0)edgeBuffer.SetData(edges);
             var volumes=Volumes(scene,geometry,materials,bins,planar);
             volumeBuffer=new ComputeBuffer(Math.Max(1,volumes.Length),48);if(volumes.Length>0)volumeBuffer.SetData(volumes);
-            pathBuffer=new ComputeBuffer(Paths.Length,32);
+            pathBuffer=new ComputeBuffer(checked(PathsPerFrame*maximumFrames),32);
             foreach(int kernel in new[]{directKernel,traceKernel})
             {
                 shader.SetBuffer(kernel,"Primitives",primitives);shader.SetBuffer(kernel,"States",states);
@@ -79,7 +80,7 @@ internal sealed class RayTransport : IDisposable
             shader.SetInt("SlotsPerPair",SlotsPerPair);shader.SetInt("EdgeCount",edges.Length);shader.SetInt("VolumeCount",volumes.Length);
             shader.SetFloat("FrequencyStep",(float)rate/settings.fftSize);shader.SetFloat("DiffractionFactor",settings.diffractionFactor);
             shader.SetFloat("MaximumPathDelay",settings.maximumDelaySeconds);shader.SetInt("UseAirAbsorption",settings.airAbsorption?1:0);
-            GpuBytes=(long)materials.Length*32+(long)Math.Max(1,edges.Length)*48+Math.Max(1,volumes.Length)*48L+Paths.Length*32L;
+            GpuBytes=(long)materials.Length*32+(long)Math.Max(1,edges.Length)*48+Math.Max(1,volumes.Length)*48L+(long)PathsPerFrame*maximumFrames*32;
         }
         catch {Dispose();throw;}
     }
@@ -177,6 +178,7 @@ internal sealed class RayTransport : IDisposable
         if(pending)throw new InvalidOperationException("Ray responses are still in flight.");
         shader.Dispatch(directKernel,(frames*pairs*frequencyBins+63)/64,1,1);
         shader.Dispatch(traceKernel,(frames*pairs*rayCount+63)/64,1,1);
+        if(Paths.Length==0)return;
         if(asynchronous){pending=true;completed=false;failed=false;request=AsyncGPUReadback.Request(pathBuffer,checked(frames*PathsPerFrame*32),0,completion);}
         else pathBuffer.GetData(Paths,0,0,frames*PathsPerFrame);
     }

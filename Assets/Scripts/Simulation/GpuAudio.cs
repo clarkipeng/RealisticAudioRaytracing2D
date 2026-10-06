@@ -1,0 +1,212 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+// Owns GPU DSP and its asynchronous PCM readback. Scene/timeline contracts are
+// shared with the CPU reference, but no path or intermediate spectrum is read back.
+internal sealed class GpuAudio : IDisposable
+{
+    readonly ComputeShader shader;
+    readonly TakeRender.Settings settings;
+    readonly TakeRender.Signal[] signals;
+    readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock;
+    readonly int reset,compare,commit,groups,filter,input,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
+    readonly int[] kernels;
+    readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
+    readonly ComputeBuffer meta,args,headsPose,source,work,transform,output;
+    readonly float[] upload,download;
+    readonly Vector4[] poses;
+    readonly Quaternion[] lastHeads;
+    readonly bool[] lastEnabled;
+    readonly Action<AsyncGPUReadbackRequest> completion;
+    AsyncGPUReadbackRequest request;
+    bool initialized,pending,completed,failed,disposed;
+    long cursor,uploaded;
+    int requested,queued,poseCursor;
+    public long NumericBytes {get;private set;}
+    public int ResponseSupportSamples {get;private set;}
+    public bool IsPending=>pending;
+    public long UploadedBytes {get;private set;}
+    public long ReadbackBytes {get;private set;}
+    public static bool Selected(TakeRender.Settings settings,ComputeShader transport) =>
+        transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu;
+    public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1)
+    {
+        this.settings=settings;this.signals=signals;listeners=scene.listeners.Length;channels=settings.ChannelsPerListener;pairs=signals.Length*listeners;
+        capacity=checked(pairs*settings.SpectralSlotsPerPair);maximumBlock=checked(settings.responseStepSamples*maximumResponses);
+        var hrtf=channels==2?Hrtf.Load(rate):null;int taps=hrtf?.Taps??1;
+        fft=1;while(fft<settings.fftSize+taps+settings.spectralHop-2)fft=checked(fft*2);bins=fft/2+1;
+        history=checked((int)settings.HistorySamples(rate)+fft+maximumBlock);
+        upload=new float[maximumBlock];download=new float[checked(maximumBlock*listeners*channels+4)];
+        poses=new Vector4[listeners*2];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];completion=Complete;
+        var asset=Resources.Load<ComputeShader>("Acoustics/GpuAudio");
+        if(asset==null)throw new InvalidOperationException("Missing GPU audio compute shader.");
+        shader=UnityEngine.Object.Instantiate(asset);
+        try
+        {
+            reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");filter=Kernel("AudioFilter");input=Kernel("AudioInput");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
+            materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
+            kernels=new[]{reset,compare,commit,groups,filter,input,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
+            int hash=checked(settings.SpectralSlotsPerPair*2+1);
+            meta=Buffer("AudioMeta",16,4);meta.SetData(new uint[16]);
+            Buffer("AudioLast",capacity,32).SetData(new RayTransport.Path[capacity]);
+            Buffer("AudioPaths",checked(capacity*2),32);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
+            args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
+            Buffer("AudioTable",checked(pairs*hash),8);Buffer("AudioHeads",capacity,4);Buffer("AudioNext",capacity,4);Buffer("AudioBlends",capacity,32);
+            headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);
+            source=Buffer("AudioSource",checked(signals.Length*history),4);
+            Buffer("AudioFilters",checked(2*capacity*channels*bins),8);
+            work=Buffer("AudioWork",checked(capacity*fft),8);
+            transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(capacity,listeners*channels)*fft),8):work;
+            Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
+            output=Buffer("AudioOutput",download.Length,4);
+            PrepareEars(hrtf);
+            Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioSlots",settings.SpectralSlotsPerPair);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
+            Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
+            Set("AudioTransition",settings.transitionSamples);Set("AudioSpectral",settings.synthesis==TakeRender.Synthesis.Spectral?1:0);
+            Set("AudioRadius",settings.sincRadius);Set("AudioSinc",settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?1:0);
+            Set("AudioLatency",settings.fftSize/2+(settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0));shader.SetFloat("AudioMaximumDelay",settings.maximumDelaySeconds);
+            NumericBytes+=(long)(upload.Length+download.Length)*4+poses.Length*16L+lastHeads.Length*16L+lastEnabled.Length;
+        }
+        catch {Dispose();throw;}
+    }
+    int Kernel(string name) {int k=shader.FindKernel(name);if(!shader.IsSupported(k))throw new NotSupportedException("GPU audio kernel unavailable: "+name);return k;}
+    ComputeBuffer Buffer(string name,int count,int stride,ComputeBufferType type=ComputeBufferType.Default)
+    {
+        var buffer=new ComputeBuffer(count,stride,type);owned.Add(buffer);NumericBytes+=(long)count*stride;
+        foreach(int k in kernels)shader.SetBuffer(k,name,buffer);return buffer;
+    }
+    void Set(string name,int value)=>shader.SetInt(name,value);
+    void Clock(string name,long sample)=>shader.SetInts(name,unchecked((int)sample),unchecked((int)(sample>>32)));
+    void PrepareEars(Hrtf hrtf)
+    {
+        int directions=hrtf?.DirectionCount??1;var spectra=new Vector2[checked(directions*channels*bins)];var data=new Vector2[fft];
+        for(int direction=0;direction<directions;direction++)for(int ear=0;ear<channels;ear++)
+        {
+            Array.Clear(data,0,fft);for(int t=0;t<(hrtf?.Taps??1);t++)data[t].x=hrtf==null?1:hrtf.Coefficient(direction,ear,t);
+            ImpulseResponseAudio.Fft(data,false);Array.Copy(data,0,spectra,(direction*channels+ear)*bins,bins);
+        }
+        Buffer("AudioEars",spectra.Length,8).SetData(spectra);
+        var rings=new SortedDictionary<float,List<Vector2>>();
+        for(int i=0;i<directions;i++)
+        {
+            Vector3 d=hrtf==null?Vector3.forward:hrtf.Direction(i);float elevation=Mathf.Asin(Mathf.Clamp(d.y,-1,1));
+            if(!rings.TryGetValue(elevation,out var ring)){ring=new List<Vector2>();rings.Add(elevation,ring);}ring.Add(new Vector2(Mathf.Atan2(d.x,d.z),i));
+        }
+        var rows=new Vector4[rings.Count];var angles=new Vector2[directions];int row=0,offset=0;
+        foreach(var item in rings){item.Value.Sort((a,b)=>a.x.CompareTo(b.x));rows[row++]=new Vector4(item.Key,offset,item.Value.Count,0);foreach(var angle in item.Value)angles[offset++]=angle;}
+        Buffer("AudioRings",rows.Length,16).SetData(rows);Buffer("AudioAngles",angles.Length,8).SetData(angles);Set("AudioRingCount",rows.Length);
+    }
+    public void SetResponse(long sample,bool cut,ComputeBuffer arrivals,int offset,AcousticTake.Scene scene,AcousticTake.State[] states)
+    {
+        if(disposed || pending || sample!=cursor)throw new InvalidOperationException("GPU response must match the owned audio cursor.");
+        bool changed=false;
+        foreach(var state in states)cut|=(state.flags&AcousticTake.StateFlags.Cut)!=0;
+        for(int l=0;l<listeners;l++)
+        {
+            var state=states[scene.listeners[l]];bool enabled=TakeRender.Enabled(state,AcousticTake.StateFlags.Listener);
+            changed|=!lastHeads[l].Equals(state.rotation) || lastEnabled[l]!=enabled;lastHeads[l]=state.rotation;lastEnabled[l]=enabled;
+            poses[l]=new Vector4(state.rotation.x,state.rotation.y,state.rotation.z,state.rotation.w);poses[listeners+l]=new Vector4(enabled?1:0,0,0,0);
+        }
+        headsPose.SetData(poses,0,poseCursor*poses.Length,poses.Length);UploadedBytes+=poses.Length*16;
+        Set("AudioPoseOffset",poseCursor*poses.Length);poseCursor++;
+        foreach(int k in kernels)shader.SetBuffer(k,"AudioArrivals",arrivals);
+        Set("AudioOffset",offset);Set("AudioChanged",changed?1:0);Set("AudioInitialized",initialized?1:0);Set("AudioCut",cut?1:0);Clock("AudioResponseSample",sample);
+        shader.Dispatch(reset,1,1,1);shader.Dispatch(compare,(capacity+63)/64,1,1);shader.Dispatch(commit,1,1,1);shader.Dispatch(groups,pairs,1,1);
+        Set("AudioWhich",0);
+        for(int pair=0;pair<pairs;pair++)
+        {
+            Set("AudioPair",pair);
+            if(fft<=2048)Dispatch(filter,pair,0);
+            else
+            {
+                BindTransform(transform);Set("AudioTransformSize",settings.fftSize);Dispatch(materialGlobal,pair,0);
+                FftGlobal(transform,settings.fftSize,true,pair,0);BindTransform(transform);Dispatch(padGlobal,pair,0);
+                FftGlobal(work,fft,false,pair,0);Dispatch(filterGlobal,pair,0);
+            }
+        }
+        initialized=true;
+    }
+    void Dispatch(int kernel,int pair,int which)=>shader.DispatchIndirect(kernel,args,(uint)((which*pairs+pair)*3*4));
+    void BindTransform(ComputeBuffer buffer)
+    {
+        foreach(int k in new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly})shader.SetBuffer(k,"AudioTransform",buffer);
+    }
+    void FftGlobal(ComputeBuffer buffer,int size,bool inverse,int pair,int which,int count=0)
+    {
+        BindTransform(buffer);Set("AudioTransformSize",size);Set("AudioTransformInverse",inverse?1:0);Set("AudioTransformCount",count);
+        if(count==0)Dispatch(reverse,pair,which);else shader.Dispatch(reverse,count,1,1);
+        for(int stage=2;;stage=checked(stage*2))
+        {Set("AudioStage",stage);if(count==0)Dispatch(butterfly,pair,which);else shader.Dispatch(butterfly,count,1,1);if(stage==size)break;}
+    }
+    void UploadUntil(long end)
+    {
+        while(uploaded<end)
+        {
+            int ring=(int)(uploaded%history),count=(int)Math.Min(Math.Min(end-uploaded,history-ring),upload.Length);
+            for(int s=0;s<signals.Length;s++)
+            {for(int n=0;n<count;n++)upload[n]=signals[s].Read(uploaded+n);source.SetData(upload,0,s*history+ring,count);UploadedBytes+=count*4L;}
+            uploaded+=count;
+        }
+    }
+    public void QueueRender(long sample,int count)
+    {
+        if(disposed || pending || sample!=cursor || count<1 || count>maximumBlock-queued)throw new InvalidOperationException("Invalid GPU audio submission.");
+        if(!initialized)throw new InvalidOperationException("GPU audio needs a response before rendering.");
+        UploadUntil(checked(sample+count));
+        for(int at=0;at<count;)
+        {
+            long now=sample+at,block=now-now%settings.spectralHop;Clock("AudioBlockSample",block);
+            if(now%settings.spectralHop==0)
+            {
+                Set("AudioRingAt",(int)(block%history));Set("AudioBlockNegative",block<=int.MaxValue?1:0);
+                Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(uploaded-block)));
+                for(int which=0;which<2;which++)
+                {
+                    Set("AudioWhich",which);
+                    for(int pair=0;pair<pairs;pair++)
+                    {
+                        Set("AudioPair",pair);Dispatch(fft<=2048?input:inputGlobal,pair,which);
+                        if(fft>2048)FftGlobal(work,fft,false,pair,which);
+                    }
+                    if(fft<=2048)shader.Dispatch(inverse,listeners*channels,1,1);
+                    else {BindTransform(transform);shader.Dispatch(sumGlobal,listeners*channels,1,1);FftGlobal(transform,fft,true,0,which,listeners*channels);shader.Dispatch(saveGlobal,listeners*channels,1,1);}
+                }
+            }
+            int first=(int)(now%settings.spectralHop),length=Math.Min(count-at,settings.spectralHop-first);
+            Set("AudioWriteOffset",queued+at);Set("AudioWriteAt",first);Set("AudioWriteCount",length);shader.Dispatch(write,(length*listeners*channels+63)/64,1,1);at+=length;
+        }
+        cursor+=count;queued+=count;
+    }
+    public void BeginReadback()
+    {
+        if(disposed || pending || queued==0)throw new InvalidOperationException("No queued GPU audio to read back.");
+        requested=queued;queued=0;poseCursor=0;
+        completed=false;failed=false;int bytes=checked((requested*listeners*channels+4)*4);ReadbackBytes+=bytes;
+        if(SystemInfo.supportsAsyncGPUReadback)request=AsyncGPUReadback.Request(output,bytes,0,completion);
+        else {output.GetData(download,0,0,bytes/4);completed=true;}
+        pending=true;
+    }
+    void Complete(AsyncGPUReadbackRequest value)
+    {
+        failed=value.hasError;if(!failed){var data=value.GetData<float>();for(int i=0;i<data.Length;i++)download[i]=data[i];}completed=true;
+    }
+    public bool TryComplete(float[] pcm,bool wait=false)
+    {
+        if(!pending)throw new InvalidOperationException("No GPU audio submission is owned.");
+        if(!completed){if(wait)request.WaitForCompletion();else request.Update();}if(!completed)return false;
+        pending=false;if(failed)throw new InvalidOperationException("GPU audio readback failed.");
+        if(download[0]!=0)throw new InvalidOperationException("GPU audio validation failed ("+download[0]+"): 1 invalid path, 2 missing source history, 3 non-finite audio, 4 invalid path grouping.");
+        ResponseSupportSamples=(int)download[1];int length=requested*listeners*channels;
+        for(int i=0;i<length;i++){float value=download[4+i];if(!float.IsFinite(value))throw new InvalidOperationException("Non-finite GPU audio.");pcm[i]=value;}
+        return true;
+    }
+    public void Render(long sample,int count,float[] pcm) {QueueRender(sample,count);BeginReadback();TryComplete(pcm,true);}
+    public void Dispose()
+    {
+        if(disposed)return;if(pending && !completed)request.WaitForCompletion();pending=false;disposed=true;
+        foreach(var buffer in owned)buffer.Dispose();owned.Clear();
+        if(shader!=null){if(Application.isPlaying)UnityEngine.Object.Destroy(shader);else UnityEngine.Object.DestroyImmediate(shader);}
+    }
+}

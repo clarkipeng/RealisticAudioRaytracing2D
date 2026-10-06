@@ -10,7 +10,7 @@ public static partial class TakeChecks
     // Read the private GPU response contract without widening the production API for tests.
     static Array Arrivals(DirectSolver solver) => (Array)typeof(DirectSolver).GetProperty("RayPaths",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(solver);
     static T ArrivalField<T>(Array paths,int index,string field) => (T)paths.GetValue(index).GetType().GetField(field).GetValue(paths.GetValue(index));
-    static TakeRender.Settings SpectralSettings() => new TakeRender.Settings {transport=TakeRender.Transport.Raytraced,synthesis=TakeRender.Synthesis.Spectral,
+    static TakeRender.Settings SpectralSettings() => new TakeRender.Settings {transport=TakeRender.Transport.Raytraced,synthesis=TakeRender.Synthesis.Spectral,audioBackend=TakeRender.AudioBackend.CpuReference,
         responseStepSamples=128,fftSize=128,spectralHop=32,raysPerBin=4,maxBounces=3,maximumDelaySeconds=.1f,
         maximumResponsesPerBatch=4,speedOfSound=8000,minimumDistance=1,airAbsorption=false,diffractionFactor=0,tailSamples=256};
 
@@ -456,7 +456,7 @@ public static partial class TakeChecks
             Check(wantedReal*wantedReal+wantedImag*wantedImag>100*(originalReal*originalReal+originalImag*originalImag),"Doppler tone dominates its unshifted bin");
         }
     }
-    static void SpectralStreaming(ComputeShader shader,AcousticTake.Dimension dimension)
+    static void SpectralStreaming(ComputeShader shader,AcousticTake.Dimension dimension,TakeRender.AudioBackend backend=TakeRender.AudioBackend.CpuReference,TakeRender.Synthesis method=TakeRender.Synthesis.Spectral)
     {
         var scene=Scene(3);scene.dimension=dimension;
         scene.sources=new[]{new AcousticTake.SourceDefinition {objectIndex=0,clipIndex=0},new AcousticTake.SourceDefinition {objectIndex=1,clipIndex=0}};scene.listeners=new[]{2,3};
@@ -465,7 +465,7 @@ public static partial class TakeChecks
         var events=new[]{new AcousticTake.VoiceEvent {sample=0,gain=.5f,action=AcousticTake.VoiceAction.Play,loop=true},
             new AcousticTake.VoiceEvent {sample=97,sourceIndex=1,gain=.3f,action=AcousticTake.VoiceAction.Play,loop=true},
             new AcousticTake.VoiceEvent {sample=611,sourceIndex=0,action=AcousticTake.VoiceAction.Stop}};
-        long[] observations={0,61,137,321,577,699,811,1024};string path=Path.Combine(directory,"live-"+dimension);
+        long[] observations={0,61,137,321,577,699,811,1024};string path=Path.Combine(directory,"live-"+dimension+"-"+backend+"-"+method);
         using(var writer=new AcousticTake.Writer(path,8000,scene,Array.Empty<AcousticTake.Primitive>(),new[]{pcm}))
         {
             foreach(long t in observations)
@@ -475,7 +475,7 @@ public static partial class TakeChecks
             }
             foreach(var e in events)writer.Append(e);writer.Complete();
         }
-        using var take=AcousticTake.Open(path);var settings=SpectralSettings();settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=64;
+        using var take=AcousticTake.Open(path);var settings=SpectralSettings();settings.audioBackend=backend;settings.synthesis=method;settings.airAbsorption=true;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=64;
         var report=TakeRender.RenderDirect(take,settings,path+"-render",shader:shader);
         var samples=new[]{new List<float>(),new List<float>()};Action<long,float[],int> collect=(at,block,count)=>{for(int n=0;n<count;n++)for(int l=0;l<2;l++)for(int ear=0;ear<2;ear++)samples[l].Add(block[n*4+l*2+ear]);};
         var left=new AcousticTake.State[4];var right=new AcousticTake.State[4];take.ReadStoredFrame(0,left);

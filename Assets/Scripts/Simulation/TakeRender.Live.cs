@@ -20,15 +20,16 @@ public static partial class TakeRender
         readonly long historySamples;
         readonly DirectSolver solver;
         readonly Mixer mixer;
+        readonly GpuAudio gpuAudio;
         readonly Signal[] signals;
         readonly AcousticTake.State[] evaluated,batchStates;
         readonly DirectPath[] paths,batchPaths;
-        readonly float[] block;
+        readonly float[] block,gpuBlock;
         readonly AudioManager.PcmQueue queue;
         readonly Observation[] observations;
         int head,pending,batchCount;
         long batchFirst,batchEnd,previousResponse=-1;
-        bool batchReady;
+        bool batchActive,batchReady,audioQueued,audioReady;
         readonly List<long> cuts=new List<long>();
         public long Cursor {get;private set;}
         public double SolveSeconds,AudioSeconds,ResponsePreparationSeconds,MaximumSolveSeconds;
@@ -38,7 +39,7 @@ public static partial class TakeRender
         public double CompletionSeconds => solver.CompletionSeconds;
         public double MaximumCompletionSeconds => solver.MaximumCompletionSeconds;
         public long PairPrimitiveUpperBound => solver.PairPrimitiveUpperBound;
-        public long ResponseSupportSamples => mixer.ResponseSupportSamples;
+        public long ResponseSupportSamples => gpuAudio?.ResponseSupportSamples??mixer.ResponseSupportSamples;
         public bool TailCoversResponseSupport => settings.tailSamples>=ResponseSupportSamples;
         public Action<long,long,DirectPath[]> ResponseApplied;
         public string Backend => solver.Backend;
@@ -51,14 +52,23 @@ public static partial class TakeRender
             if(queue!=null && queue.Channels!=settings.ChannelsPerListener) throw new ArgumentException("Queue/output channel mismatch.");
             signals=new Signal[scene.sources.Length];
             for (int i=0;i<signals.Length;i++) signals[i]=new Signal(pcm[scene.sources[i].clipIndex],settings.maximumSignalEvents);
-            mixer=new Mixer(scene,rate,settings,signals);
             evaluated=new AcousticTake.State[scene.objects.Length]; paths=new DirectPath[scene.sources.Length*scene.listeners.Length];
             batchStates=new AcousticTake.State[checked(evaluated.Length*settings.maximumResponsesPerBatch)];
             batchPaths=new DirectPath[checked(paths.Length*settings.maximumResponsesPerBatch)];
             block=new float[checked(settings.responseStepSamples*scene.listeners.Length*settings.ChannelsPerListener)];
             observations=new Observation[settings.maximumPendingObservations];
             for (int i=0;i<observations.Length;i++) observations[i]=new Observation {left=new AcousticTake.State[evaluated.Length],right=new AcousticTake.State[evaluated.Length]};
-            solver=new DirectSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate);
+            try
+            {
+                if(GpuAudio.Selected(settings,shader))
+                {
+                    gpuBlock=new float[checked(block.Length*settings.maximumResponsesPerBatch)];
+                    gpuAudio=new GpuAudio(scene,rate,settings,signals,settings.maximumResponsesPerBatch);
+                }
+                else mixer=new Mixer(scene,rate,settings,signals);
+                solver=new DirectSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate,gpuAudio==null);
+            }
+            catch {gpuAudio?.Dispose();throw;}
         }
         public void Append(AcousticTake.VoiceEvent e) { signals[e.sourceIndex].Append(e); }
         public void Observe(long from,long to,AcousticTake.State[] left,AcousticTake.State[] right,Action<long,float[],int> output=null)
@@ -99,52 +109,96 @@ public static partial class TakeRender
                 if (last>0) cuts.RemoveRange(0,last);
             }
         }
+        void PrepareBatch()
+        {
+            long knownEnd=observations[(head+pending-1)%observations.Length].end;
+            batchFirst=Cursor%settings.responseStepSamples==0?Cursor:Cursor+settings.responseStepSamples-Cursor%settings.responseStepSamples;
+            batchEnd=Math.Min(knownEnd,checked((Cursor/settings.responseStepSamples+settings.maximumResponsesPerBatch)*settings.responseStepSamples));
+            batchCount=batchEnd<=batchFirst?0:(int)(1+(batchEnd-1-batchFirst)/settings.responseStepSamples);
+            int interval=0;
+            for(int f=0;f<batchCount;f++)
+            {
+                long sample=batchFirst+(long)f*settings.responseStepSamples;
+                while(interval+1<pending && sample>=observations[(head+interval)%observations.Length].end)interval++;
+                var observed=observations[(head+interval)%observations.Length];
+                AcousticTake.Interpolate(Math.Min(sample,observed.to),observed.from,observed.to,sampleRate,observed.left,observed.right,evaluated);
+                if(sample>observed.to)FreezeMotion(evaluated);
+                Array.Copy(evaluated,0,batchStates,f*evaluated.Length,evaluated.Length);
+            }
+            if(batchCount>0)
+            {
+                long start=Stopwatch.GetTimestamp();solver.BeginSolve(batchStates,batchCount);
+                double elapsed=Elapsed(start);SolveSeconds+=elapsed;MaximumSolveSeconds=Math.Max(MaximumSolveSeconds,elapsed);
+            }
+            batchActive=true;batchReady=batchCount==0;audioQueued=audioReady=false;
+        }
+        void ApplyResponse(long sample)
+        {
+            int index=(int)((sample-batchFirst)/settings.responseStepSamples);
+            if(gpuAudio==null)Array.Copy(batchPaths,index*paths.Length,paths,0,paths.Length);
+            Array.Copy(batchStates,index*evaluated.Length,evaluated,0,evaluated.Length);
+            int cut=cuts.BinarySearch(sample);if(cut<0)cut=~cut-1;
+            long start=Stopwatch.GetTimestamp();
+            if(gpuAudio!=null)gpuAudio.SetResponse(sample,cut>=0 && cuts[cut]>previousResponse,solver.RayBuffer,index*solver.RayPathsPerFrame,scene,evaluated);
+            else mixer.SetResponse(sample,paths,evaluated,cut>=0 && cuts[cut]>previousResponse,solver.RayPaths,index*solver.RayPathsPerFrame);
+            previousResponse=sample;
+            double elapsed=Elapsed(start);AudioSeconds+=elapsed;ResponsePreparationSeconds+=elapsed;
+            ResponseCount++;
+            if(gpuAudio==null)ResponseApplied?.Invoke(sample+lead,queue==null?-1:queue.ReadSample,paths);
+        }
+        bool CompleteBatch(bool wait)
+        {
+            if(batchReady)return true;
+            if(!solver.TryComplete(batchPaths,wait))return false;
+            batchReady=true;
+            if(gpuAudio!=null && ResponseApplied!=null)
+                for(int f=0;f<batchCount;f++)
+                {
+                    Array.Copy(batchPaths,f*paths.Length,paths,0,paths.Length);
+                    ResponseApplied(batchFirst+(long)f*settings.responseStepSamples+lead,queue==null?-1:queue.ReadSample,paths);
+                }
+            return true;
+        }
+        long audioFirst;
         bool RenderTo(Observation frame,bool wait)
         {
-            while (Cursor<frame.end)
+            while(Cursor<frame.end)
             {
-                if (Cursor%settings.responseStepSamples==0)
+                if(!batchActive)PrepareBatch();
+                if(gpuAudio==null && !CompleteBatch(wait))return false;
+                if(gpuAudio!=null && !audioReady)
                 {
-                    if (batchCount==0)
+                    if(!audioQueued)
                     {
-                        batchFirst=Cursor;
-                        // Batch all known queued intervals so readback latency cannot limit
-                        // throughput to one observation per GPU completion.
-                        long knownEnd=observations[(head+pending-1)%observations.Length].end;
-                        batchCount=(int)Math.Min(settings.maximumResponsesPerBatch,1+(knownEnd-1-Cursor)/settings.responseStepSamples);
-                        batchEnd=Math.Min(knownEnd,checked(Cursor+(long)batchCount*settings.responseStepSamples));
-                        int interval=0;
-                        for (int f=0;f<batchCount;f++)
+                        audioFirst=Cursor;
+                        // Transport and DSP stay ordered on the GPU; diagnostic
+                        // readback is not a prerequisite for submitting audio.
+                        // Submit every known interval together. A readback per observation
+                        // would limit throughput to the GPU completion cadence.
+                        for(long sample=Cursor;sample<batchEnd;)
                         {
-                            long sample=Cursor+(long)f*settings.responseStepSamples;
-                            while (interval+1<pending && sample>=observations[(head+interval)%observations.Length].end) interval++;
-                            var observed=observations[(head+interval)%observations.Length];
-                            AcousticTake.Interpolate(Math.Min(sample,observed.to),observed.from,observed.to,sampleRate,observed.left,observed.right,evaluated);
-                            if(sample>observed.to)FreezeMotion(evaluated);
-                            Array.Copy(evaluated,0,batchStates,f*evaluated.Length,evaluated.Length);
+                            if(sample%settings.responseStepSamples==0)ApplyResponse(sample);
+                            int length=(int)Math.Min(batchEnd-sample,settings.responseStepSamples-sample%settings.responseStepSamples);
+                            long start=Stopwatch.GetTimestamp();gpuAudio.QueueRender(sample,length);AudioSeconds+=Elapsed(start);sample+=length;
                         }
-                        long start=Stopwatch.GetTimestamp(); solver.BeginSolve(batchStates,batchCount);
-                        double elapsed=Elapsed(start); SolveSeconds+=elapsed; MaximumSolveSeconds=Math.Max(MaximumSolveSeconds,elapsed);
+                        gpuAudio.BeginReadback();audioQueued=true;
                     }
-                    if (!batchReady) { if (!solver.TryComplete(batchPaths,wait)) return false; batchReady=true; }
-                    int index=(int)((Cursor-batchFirst)/settings.responseStepSamples);
-                    Array.Copy(batchPaths,index*paths.Length,paths,0,paths.Length);
-                    Array.Copy(batchStates,index*evaluated.Length,evaluated,0,evaluated.Length);
-                    int cut=cuts.BinarySearch(Cursor); if (cut<0) cut=~cut-1;
-                    long responseStart=Stopwatch.GetTimestamp();
-                    mixer.SetResponse(Cursor,paths,evaluated,cut>=0 && cuts[cut]>previousResponse,solver.RayPaths,index*solver.RayPathsPerFrame); previousResponse=Cursor;
-                    double responseTime=Elapsed(responseStart);AudioSeconds+=responseTime;ResponsePreparationSeconds+=responseTime;
-                    ResponseCount++; ResponseApplied?.Invoke(Cursor+lead,queue==null ? -1:queue.ReadSample,paths);
+                    long completion=Stopwatch.GetTimestamp();audioReady=gpuAudio.TryComplete(gpuBlock,wait);AudioSeconds+=Elapsed(completion);
+                    if(!audioReady)return false;
                 }
-                int count=(int)Math.Min(frame.end-Cursor,settings.responseStepSamples-Cursor%settings.responseStepSamples);
-                long audioStart=Stopwatch.GetTimestamp(); mixer.Render(Cursor,count,block); AudioSeconds+=Elapsed(audioStart);
+                if(gpuAudio!=null && !CompleteBatch(wait))return false;
+                if(gpuAudio==null && Cursor%settings.responseStepSamples==0)ApplyResponse(Cursor);
+                int count=(int)Math.Min(Math.Min(frame.end,batchEnd)-Cursor,settings.responseStepSamples-Cursor%settings.responseStepSamples);
+                long audioStart=Stopwatch.GetTimestamp();
+                if(gpuAudio!=null)Array.Copy(gpuBlock,checked((int)(Cursor-audioFirst)*scene.listeners.Length*settings.ChannelsPerListener),block,0,count*scene.listeners.Length*settings.ChannelsPerListener);
+                else mixer.Render(Cursor,count,block);
+                AudioSeconds+=Elapsed(audioStart);
                 queue?.Publish(Cursor+lead,block,count,scene.listeners.Length*settings.ChannelsPerListener,listener*settings.ChannelsPerListener);
-                frame.output?.Invoke(Cursor,block,count);
-                Cursor+=count;
-                if (batchCount>0 && Cursor>=batchEnd) { batchCount=0; batchReady=false; }
+                frame.output?.Invoke(Cursor,block,count);Cursor+=count;
+                if(Cursor==batchEnd)batchActive=false;
             }
             return true;
         }
-        public void Dispose() { solver.Dispose(); }
+        public void Dispose() { gpuAudio?.Dispose();solver.Dispose(); }
     }
 }

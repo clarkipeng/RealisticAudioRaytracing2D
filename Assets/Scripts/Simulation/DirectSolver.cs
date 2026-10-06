@@ -30,6 +30,7 @@ public sealed class DirectSolver : IDisposable
     readonly DirectBvh bvh;
     readonly RayTransport transport;
     internal RayTransport.Path[] RayPaths => transport?.Paths;
+    internal ComputeBuffer RayBuffer => transport?.Buffer;
     internal int RayPathsPerFrame => transport?.PathsPerFrame??0;
     ComputeBuffer bvhNodes,bvhIndices;
     ComputeBuffer primitives,states,sources,listeners,responses;
@@ -55,7 +56,7 @@ public sealed class DirectSolver : IDisposable
     public double UploadSeconds {get;private set;}
     public double DispatchReadbackSeconds {get;private set;}
 
-    public DirectSolver(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,TakeRender.Settings settings,ComputeShader shader=null,int maximumFrames=1,int sampleRate=48000)
+    public DirectSolver(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,TakeRender.Settings settings,ComputeShader shader=null,int maximumFrames=1,int sampleRate=48000,bool readbackPaths=true)
     {
         TakeRender.Validate(settings); this.scene=scene; this.geometry=geometry; this.settings=settings;
         pairs=checked(scene.sources.Length*scene.listeners.Length);
@@ -98,7 +99,7 @@ public sealed class DirectSolver : IDisposable
             this.shader.SetFloat("SpeedOfSound",settings.speedOfSound);
             this.shader.SetFloat("ReferenceDistance",settings.referenceDistance);
             this.shader.SetFloat("MinimumDistance",settings.minimumDistance);
-            if(settings.transport==TakeRender.Transport.Raytraced)transport=new RayTransport(scene,geometry,settings,this.shader,primitives,states,sources,listeners,bvhNodes,bvhIndices,sampleRate,maximumFrames);
+            if(settings.transport==TakeRender.Transport.Raytraced)transport=new RayTransport(scene,geometry,settings,this.shader,primitives,states,sources,listeners,bvhNodes,bvhIndices,sampleRate,maximumFrames,readbackPaths);
         }
         catch { Dispose(); throw; }
     }

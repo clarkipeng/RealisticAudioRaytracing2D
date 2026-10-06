@@ -12,6 +12,7 @@ public static partial class TakeRender
     public enum DelayFilter { Linear, WindowedSinc }
     public enum Transport { Direct, Raytraced }
     public enum Synthesis { ImpulseResponse, Spectral }
+    public enum AudioBackend { Gpu, CpuReference }
     [Serializable] public sealed class Settings : ISerializationCallbackReceiver
     {
         public int responseStepSamples = 512;
@@ -30,6 +31,7 @@ public static partial class TakeRender
         public bool useBvh;
         public Transport transport;
         public Synthesis synthesis;
+        public AudioBackend audioBackend;
         [Min(1)] public int raysPerBin=1,maxBounces=5;
         public int seed;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
@@ -62,10 +64,11 @@ public static partial class TakeRender
         public string platform = Application.platform.ToString(), processor = SystemInfo.processorType, graphicsDevice = SystemInfo.graphicsDeviceName;
         public string[] audioHashes;
         public AcousticTake.Provenance provenance;
-        public string settingsHash;
+        public string settingsHash,audioShaderDependencyHash;
         public int dspLatencySamples;
         public long responseSupportSamples;
         public bool tailCoversResponseSupport;
+        public long audioUploadBytes,audioReadbackBytes;
         public string backendScope="Transport backend; audio synthesis currently runs on CPU";
         public string traversalCounterScope="Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries";
         public long pairPrimitiveTestUpperBound;
@@ -172,6 +175,7 @@ public static partial class TakeRender
         var watch=Stopwatch.StartNew();
         if (Directory.Exists(outputDirectory)) throw new IOException("Render output directory already exists.");
         var metadata=take.Metadata; var scene=metadata.scene;
+        bool useGpuAudio=GpuAudio.Selected(settings,shader);
         if (scene.sources.Length == 0 || scene.listeners.Length == 0) throw new InvalidOperationException("Rendering requires a recorded source and listener.");
         long length=checked(metadata.durationSamples+1+settings.tailSamples);
         if (length > (uint.MaxValue-36)/(4L*settings.ChannelsPerListener)) throw new InvalidOperationException("Output exceeds the WAV size limit; render a shorter take.");
@@ -183,8 +187,13 @@ public static partial class TakeRender
         if(settings.transport==Transport.Raytraced)
         {
             report.method="geometric-spectral-preview-v4";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-overlap-save-v1";
+            if(useGpuAudio)
+            {
+                report.provenance.dspContract="gpu-path-filter-overlap-save-v1";
+                report.audioShaderDependencyHash=AcousticTake.Provenance.Capture(Resources.Load<ComputeShader>("Acoustics/GpuAudio")).shaderDependencyHash;
+            }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
-            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. IR uses partitioned linear convolution; Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and sampled diffuse/diffraction geometry remain frozen at solve time.";
+            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and sampled diffuse/diffraction geometry remain frozen at solve time.";
         }
         if(settings.listenerOutput==ListenerOutput.Binaural)
         {var hrtf=Hrtf.Load(metadata.sampleRate); report.hrtfDataset=Hrtf.Dataset; report.hrtfHash=hrtf.Hash; report.hrtfTaps=hrtf.Taps;}
@@ -196,16 +205,18 @@ public static partial class TakeRender
         var pcm=new float[scene.clips.Length][];
         for (int c=0; c<pcm.Length; c++) { pcm[c]=take.ReadClip(c); report.preparedPcmBytes+=(long)pcm[c].Length*4; }
         for (int s=0; s<signals.Length; s++) signals[s]=Signal.FromTake(take,s,pcm[scene.sources[s].clipIndex]);
-        var mixer=new Mixer(scene,metadata.sampleRate,settings,signals);
-        long initialMixerBytes=mixer.NumericBytes;
+        using var gpuAudio=useGpuAudio?new GpuAudio(scene,metadata.sampleRate,settings,signals):null;
+        var mixer=useGpuAudio?null:new Mixer(scene,metadata.sampleRate,settings,signals);
+        long initialMixerBytes=gpuAudio?.NumericBytes??mixer.NumericBytes;
+        report.backendScope=useGpuAudio?"GPU transport and audio synthesis; CPU source timeline and PCM output":"Transport backend; CPU reference audio synthesis";
         var block=new float[checked(settings.responseStepSamples*scene.listeners.Length*settings.ChannelsPerListener)];
         int batchCapacity=shader==null || !SystemInfo.supportsAsyncGPUReadback ? 1:(int)Math.Min(settings.maximumResponsesPerBatch,(length-1)/settings.responseStepSamples+1);
         var batchStates=batchCapacity==1 ? state:new AcousticTake.State[checked(state.Length*batchCapacity)];
         var batchPaths=batchCapacity==1 ? response:new DirectPath[checked(response.Length*batchCapacity)];
         report.responseBatchCapacity=batchCapacity;
-        using (var solver=new DirectSolver(scene,take.Geometry,settings,shader,batchCapacity,metadata.sampleRate))
+        using (var solver=new DirectSolver(scene,take.Geometry,settings,shader,batchCapacity,metadata.sampleRate,!useGpuAudio))
         {
-            report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+(long)state.Length*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+mixer.NumericBytes+
+            report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+(long)state.Length*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+initialMixerBytes+
                 (batchCapacity==1?0:(long)batchStates.Length*80+(long)batchPaths.Length*DirectPathStride);
             report.backend=solver.Backend;
             report.preparationSeconds=watch.Elapsed.TotalSeconds;
@@ -244,7 +255,9 @@ public static partial class TakeRender
                             long sample=first+(long)f*settings.responseStepSamples;
                             if(batchCapacity>1) {Array.Copy(batchStates,f*state.Length,state,0,state.Length);Array.Copy(batchPaths,f*response.Length,response,0,response.Length);}
                             start=Stopwatch.GetTimestamp();
-                            mixer.SetResponse(sample,response,state,(settings.transport==Transport.Raytraced || settings.transitionSamples>0) && take.HasCut(sample-settings.responseStepSamples,sample),solver.RayPaths,f*solver.RayPathsPerFrame);
+                            bool cut=(settings.transport==Transport.Raytraced || settings.transitionSamples>0) && take.HasCut(sample-settings.responseStepSamples,sample);
+                            if(useGpuAudio)gpuAudio.SetResponse(sample,cut,solver.RayBuffer,f*solver.RayPathsPerFrame,scene,state);
+                            else mixer.SetResponse(sample,response,state,cut,solver.RayPaths,f*solver.RayPathsPerFrame);
                             double responseTime=Elapsed(start);report.audioSeconds+=responseTime;report.responsePreparationSeconds+=responseTime;
                             start=Stopwatch.GetTimestamp();
                             writer.Write(sample);
@@ -252,7 +265,7 @@ public static partial class TakeRender
                             report.responseCount++;
                             int count=(int)Math.Min(settings.responseStepSamples,length-sample);
                             report.writeSeconds+=Elapsed(start);
-                            start=Stopwatch.GetTimestamp(); mixer.Render(sample,count,block);
+                            start=Stopwatch.GetTimestamp(); if(useGpuAudio)gpuAudio.Render(sample,count,block);else mixer.Render(sample,count,block);
                             report.audioSeconds+=Elapsed(start);
                             start=Stopwatch.GetTimestamp();
                             for (int n=0; n<count; n++) for (int l=0; l<outputs.Count; l++) for(int ear=0;ear<settings.ChannelsPerListener;ear++)
@@ -268,8 +281,9 @@ public static partial class TakeRender
             report.uploadSeconds=solver.UploadSeconds; report.dispatchReadbackSeconds=solver.DispatchReadbackSeconds;
             report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;report.bvhStaticPrimitives=solver.StaticPrimitiveCount;
         }
-        report.workingNumericBytes+=mixer.NumericBytes-initialMixerBytes;
-        report.responseSupportSamples=mixer.ResponseSupportSamples;
+        report.workingNumericBytes+=(gpuAudio?.NumericBytes??mixer.NumericBytes)-initialMixerBytes;
+        report.responseSupportSamples=gpuAudio?.ResponseSupportSamples??mixer.ResponseSupportSamples;
+        report.audioUploadBytes=gpuAudio?.UploadedBytes??0;report.audioReadbackBytes=gpuAudio?.ReadbackBytes??0;
         report.tailCoversResponseSupport=settings.tailSamples>=report.responseSupportSamples;
         report.wallSeconds=watch.Elapsed.TotalSeconds;
         report.responseHash=AcousticTake.HashFile(Path.Combine(outputDirectory,"responses.bin"));
@@ -519,6 +533,7 @@ public static partial class TakeRender
             (settings.delayFilter!=DelayFilter.Linear && settings.delayFilter!=DelayFilter.WindowedSinc) || settings.sincRadius<2 || settings.sincRadius>int.MaxValue/2 ||
             !PositiveFinite(settings.speedOfSound) || !PositiveFinite(settings.referenceDistance) || !PositiveFinite(settings.minimumDistance))
             throw new ArgumentException("Invalid render settings.");
+        if(settings.audioBackend!=AudioBackend.Gpu && settings.audioBackend!=AudioBackend.CpuReference)throw new ArgumentException("Unknown audio backend.");
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.transport==Transport.Raytraced)
