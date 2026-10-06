@@ -1,0 +1,13 @@
+{
+  "name": "Acoustics.Tests",
+  "references": [
+    "Acoustics",
+    "Acoustics.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

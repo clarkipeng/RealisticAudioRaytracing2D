@@ -4,7 +4,7 @@ using UnityEngine;
 
 public static partial class TakeDemo
 {
-    static void ConfigureStationBoarding(StationDemo demo)
+    static void ConfigureStationBoarding(StationDemo demo,SceneSession session)
     {
         if(demo.boardingPlatform!=null) return;
         if(PrefabUtility.IsPartOfPrefabInstance(demo.train)) PrefabUtility.UnpackPrefabInstance(demo.train.gameObject,PrefabUnpackMode.OutermostRoot,InteractionMode.AutomatedAction);
@@ -39,7 +39,7 @@ public static partial class TakeDemo
             foreach(float dz in new[]{-.9f,.9f}) StationBox(demo.carriage,"Bench leg",new Vector3(.94f,1.37f,z+dz),new Vector3(.5f,.34f,.12f),steel,false);
         }
 
-        var platform=new GameObject("Boarding platform").transform; platform.SetParent(demo.manager.takeRoot,false); demo.boardingPlatform=platform;
+        var platform=new GameObject("Boarding platform").transform; platform.SetParent(session.manager.takeRoot,false); demo.boardingPlatform=platform;
         // Author the stop beside the starting carriage pose, including a level crossing from the platform into the carriage.
         var stop=demo.route.PoseAt(demo.startDistance-demo.carriageSpacing);
         platform.SetPositionAndRotation(stop.position,stop.rotation);
@@ -53,8 +53,8 @@ public static partial class TakeDemo
         }
         foreach(float z in new[]{-3.8f,3.8f}) StationBox(platform,"Platform end rail",new Vector3(-2.725f,1.7f,z),new Vector3(2.35f,1.04f,.12f),steel);
         demo.trainSpeed=12; demo.trainAcceleration=3; demo.stationDwell=10;
-        demo.player.GetComponentInChildren<MouseLook>().sensitivity=180;
-        demo.manager.takePath=""; // The freight-car roster belongs to its old take; record this assembly afresh.
-        EditorUtility.SetDirty(demo.player.GetComponentInChildren<MouseLook>());
+        session.player.GetComponentInChildren<MouseLook>().sensitivity=180;
+        session.manager.takePath=""; // The freight-car roster belongs to its old take; record this assembly afresh.
+        EditorUtility.SetDirty(session.player.GetComponentInChildren<MouseLook>());
     }
 }

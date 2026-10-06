@@ -105,20 +105,19 @@ public static partial class TakeDemo
         manager.audioManager=host.AddComponent<AudioManager>(); manager.audioManager.showWaveform=false; manager.audioManager.rayTraceManager=manager;
         var horn=StationSource(train,"Train horn",new Vector3(0,4,1.8f),AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/train_horn.mp3"),manager,true);
         var signal=StationSource(world,"Room signal",new Vector3(5.6f,2.1f,13.98f),StationSignal(),manager,true);
-        var player=new GameObject("Walking listener").transform; player.SetParent(world); player.position=new Vector3(4,0,-20);
-        var controller=player.gameObject.AddComponent<CharacterController>(); controller.height=1.8f; controller.center=new Vector3(0,.9f,0); controller.radius=.28f; controller.stepOffset=.32f; controller.minMoveDistance=0;
-        player.gameObject.AddComponent<PlayerController>().requireLockedCursor=true;
-        var camera=new GameObject("Listener camera").AddComponent<Camera>(); camera.transform.SetParent(player,false); camera.transform.localPosition=new Vector3(0,1.65f,0);
-        camera.tag="MainCamera"; camera.fieldOfView=70; camera.nearClipPlane=.05f; camera.farClipPlane=180; camera.backgroundColor=new Color(.6f,.72f,.8f);
-        camera.gameObject.AddComponent<AudioListener>(); var look=camera.gameObject.AddComponent<MouseLook>(); look.playerBody=player; look.lockOnStart=false;
+        var player=SharedPlayer(world,new Vector3(4,0,-20));
+        var camera=player.GetComponentInChildren<Camera>();
         manager.source=horn.transform; manager.inputClip=horn.clip; manager.listener=camera.transform;
         manager.takeListeners.Add(camera.transform);
         manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding{transform=player});
         manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding{transform=train});
-        var demo=host.AddComponent<StationDemo>(); demo.manager=manager; demo.train=train; demo.door=door.transform; demo.player=player; demo.horn=horn; demo.roomSignal=signal;
-        ConfigureStationLoop(demo); manager.RegisterTakeObjects();
-        // StationDemo checks replay mode before writing motion and keeps UI/escape available.
-        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.audioManager=manager.audioManager; panel.stationDemo=demo; panel.buttonSize=new Vector2(260,30); panel.spacing=3; panel.anchoredPosition=new Vector2(24,-24);
+        var session=host.AddComponent<SceneSession>(); session.manager=manager; session.player=player; session.startSounds=new[]{horn,signal};
+        var demo=host.AddComponent<StationDemo>(); demo.id="train"; demo.train=train;
+        var sliding=door.AddComponent<SlidingDoor>(); sliding.id="waiting-room-door";
+        session.actors=new SceneActor[]{demo,sliding};
+        ConfigureStationLoop(demo,session); manager.RegisterTakeObjects();
+        // SceneSession checks replay mode before writing motion and keeps UI/escape available.
+        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.audioManager=manager.audioManager; panel.session=session; panel.buttonSize=new Vector2(260,30); panel.spacing=3; panel.anchoredPosition=new Vector2(24,-24);
         var sun=new GameObject("Sun").AddComponent<Light>(); sun.type=LightType.Directional; sun.transform.rotation=Quaternion.Euler(42,-32,0); sun.intensity=1.2f; sun.color=new Color(1,.94f,.83f); sun.shadows=LightShadows.Soft;
         var sky=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Sky.mat");
         if(sky==null) {sky=new Material(Shader.Find("Skybox/Procedural")); AssetDatabase.CreateAsset(sky,StationAssets+"/Sky.mat");}
@@ -178,8 +177,9 @@ public static partial class TakeDemo
     }
     static RaytracedAudioSource StationSource(Transform parent,string name,Vector3 position,AudioClip clip,RayTraceManager manager,bool loop)
     {
-        var obj=new GameObject(name); obj.transform.SetParent(parent,false); obj.transform.localPosition=position;
-        var source=obj.AddComponent<RaytracedAudioSource>(); source.rayTraceManager=manager; source.clip=clip; source.loop=loop; source.prepareOnStart=false; return source;
+        var prefab=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/TestSpeaker.prefab");
+        var obj=(GameObject)PrefabUtility.InstantiatePrefab(prefab,parent); obj.name=name; obj.transform.localPosition=position;
+        var source=obj.GetComponent<RaytracedAudioSource>(); source.rayTraceManager=manager; source.clip=clip; source.loop=loop; return source;
     }
     static AudioClip StationSignal()
     {

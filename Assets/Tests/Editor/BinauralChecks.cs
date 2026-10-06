@@ -1,11 +1,12 @@
+using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-public static partial class TakeChecks
+public partial class TakeChecks
 {
-    static float[] EarImpulse(Vector3 arrival,Quaternion rotation,int rate,TakeRender.DelayFilter filter=TakeRender.DelayFilter.Linear)
+    float[] EarImpulse(Vector3 arrival,Quaternion rotation,int rate,TakeRender.DelayFilter filter=TakeRender.DelayFilter.Linear)
     {
         var state=States(); state[1].rotation=rotation;
         var signal=new TakeRender.Signal(new[]{1f}); signal.SetActive(0,true);
@@ -15,9 +16,9 @@ public static partial class TakeChecks
         mixer.SetResponse(0,new[]{new TakeRender.DirectPath {direction=arrival,pressureGain=1}},state);
         var output=new float[1024]; mixer.Render(0,512,output); return output;
     }
-    static void BinauralChecks()
+    [Test, Category("Core")]
+    public void BinauralChecks()
     {
-        HrtfInterpolation();
         var hrtf=Hrtf.Load(44100); var right=EarImpulse(Vector3.right,Quaternion.identity,44100);
         var left=EarImpulse(Vector3.left,Quaternion.identity,44100);
         var turned=EarImpulse(Vector3.right,Quaternion.Euler(0,180,0),44100);
@@ -45,6 +46,11 @@ public static partial class TakeChecks
         var sinc=EarImpulse(Vector3.right,Quaternion.identity,44100,TakeRender.DelayFilter.WindowedSinc);
         float error=0; for(int n=0;n<hrtf.Taps;n++) error=Mathf.Max(error,Mathf.Abs(sinc[(n+16)*2]-right[n*2]));
         Near(error,0,"HRIR composes with declared fractional-delay FIR latency",1e-6f);
+    }
+
+    [Test, Category("Core")]
+    public void StereoQueuePreservesListenerChannels()
+    {
         var queue=new AudioManager.PcmQueue(8,44100,null,2); var block=new float[8];
         queue.Publish(0,new[]{99f,98f,1f,2f,99f,98f,3f,4f,99f,98f,5f,6f,99f,98f,7f,8f},4,4,2); queue.Consume(block,2);
         Check(block[0]==1 && block[1]==2 && block[7]==8,"Monitoring selects both channels of the requested listener.");
@@ -53,6 +59,12 @@ public static partial class TakeChecks
         queue.Complete(); long before=GC.GetAllocatedBytesForCurrentThread();
         for(int i=0;i<100;i++) queue.Consume(block,2);
         Check(GC.GetAllocatedBytesForCurrentThread()==before,"Stereo callback remains allocation-free.");
+    }
+
+    [Test, Category("Integration")]
+    public void StereoCapturePreservesEarSamples()
+    {
+        var block=new float[8];
         var settings=new TakeRender.Settings {listenerOutput=TakeRender.ListenerOutput.Binaural};
         string output=Path.Combine(directory,"stereo-monitor");
         using(var capture=new AudioManager.PlaybackCapture(output,44100,8,4,0,0,settings))
@@ -66,11 +78,17 @@ public static partial class TakeChecks
             var metrics=TakeComparison.CompareWave(Path.Combine(output,"output.wav"),Path.Combine(output,"output.wav"));
             Check(metrics.channels==2 && metrics.samples==4 && metrics.exactMatch,"Stereo comparison counts sample frames, not interleaved values.");
         }
+    }
+
+    [Test, Category("Core")]
+    public void StereoQueueRejectsMonoDevice()
+    {
         var monoDevice=new AudioManager.PcmQueue(8,44100,null,2); monoDevice.Publish(0,new float[8],4,2); monoDevice.Consume(new float[4],1);
         Check(monoDevice.ChannelMismatchSamples==4,"Unsupported device channel layout is counted.");
     }
 
-    static void HrtfInterpolation()
+    [Test, Category("Core")]
+    public void HrtfInterpolation()
     {
         var hrtf=Hrtf.Load(44100);float measuredError=0;
         for(int i=0;i<hrtf.DirectionCount;i++)
@@ -96,8 +114,11 @@ public static partial class TakeChecks
         }
     }
 
-    static void BinauralStreaming(ComputeShader shader=null)
+    [TestCase(false, Category="Core")]
+    [TestCase(true, Category="GPU")]
+    public void BinauralStreaming(bool gpu)
     {
+        var shader=gpu?RequireGpu():null;
         const int rate=48000,duration=4800;
         var scene=Scene(3); scene.sources=new[]{new AcousticTake.SourceDefinition {objectIndex=0,clipIndex=0},new AcousticTake.SourceDefinition {objectIndex=1,clipIndex=0}}; scene.listeners=new[]{2,3};
         var states=States(3); states[1].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Source;

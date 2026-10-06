@@ -3,6 +3,8 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Acoustics.Tests")]
+
 [CustomEditor(typeof(RayTraceManager))]
 public sealed class TakeEditor : Editor
 {
@@ -23,7 +25,7 @@ public sealed class TakeEditor : Editor
     public override void OnInspectorGUI()
     {
         var manager=(RayTraceManager)target;
-        var station=manager.GetComponent<StationDemo>();
+        var station=manager.GetComponent<SceneSession>();
         using (new EditorGUI.DisabledScope(manager.Mode!=RayTraceManager.SessionMode.Idle && !manager.IsReplayingTake)) DrawConfiguration(manager);
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Recorded takes",EditorStyles.boldLabel);
@@ -70,7 +72,7 @@ public sealed class TakeEditor : Editor
             string parent=EditorUtility.OpenFolderPanel("Export inputs under","Recordings","");
             if(string.IsNullOrEmpty(parent))return;
             string output=Path.Combine(parent,"inputs-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
-            StationRecording.ExportInputs(manager.takePath,output);Debug.Log("Input-only run: "+output,manager);
+            SceneRecording.ExportInputs(manager.takePath,output);Debug.Log("Input-only run: "+output,manager);
         });
         if (GUILayout.Button("Open audio comparison window")) TakeComparisonWindow.ShowWindow();
         EditorGUILayout.LabelField("Offline acoustic render",EditorStyles.boldLabel);
@@ -97,7 +99,7 @@ public sealed class TakeEditor : Editor
                 string output=Path.Combine(manager.takePath,"render-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
                 try
                 {
-                    using (var take=StationReplay.Open(manager.takePath,output))
+                    using (var take=SceneReplay.Open(manager.takePath,output))
                         TakeRender.RenderDirect(take,renderSettings,output,p =>
                         {
                             if (EditorUtility.DisplayCancelableProgressBar("Rendering recorded take",output,p)) throw new OperationCanceledException();
@@ -121,7 +123,7 @@ public sealed class TakeEditor : Editor
                 string output=Path.Combine(manager.takePath,"comparison-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
                 try
                 {
-                    using (var take=StationReplay.Open(manager.takePath,output))
+                    using (var take=SceneReplay.Open(manager.takePath,output))
                         TakeComparison.Run(take,renderSettings,high,output,renderShader,p=>
                         { if (EditorUtility.DisplayCancelableProgressBar("Comparing temporal budgets",output,p)) throw new OperationCanceledException(); },checkReference ? referenceCheck:null);
                     Debug.Log("Comparison saved to "+output,manager);
@@ -200,7 +202,7 @@ public static class TakeBatch
             var job=ParseJob(File.ReadAllText(path));
             string root=Path.GetDirectoryName(path);
             string output=Path.GetFullPath(Path.Combine(root,job.output));
-            using (var take=StationReplay.Open(Path.GetFullPath(Path.Combine(root,job.take)),output))
+            using (var take=SceneReplay.Open(Path.GetFullPath(Path.Combine(root,job.take)),output))
             {
                 ComputeShader shader=null;
                 if (!string.IsNullOrEmpty(job.shader))

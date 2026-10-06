@@ -1,10 +1,12 @@
+using NUnit.Framework;
 using System;
 using System.IO;
 using UnityEngine;
 
-public static partial class TakeChecks
+public partial class TakeChecks
 {
-    static void ComparisonInspection()
+    [Test, Category("Core")]
+    public void DisplayFftMatchesDirectDft()
     {
         var real=new double[64]; var imaginary=new double[64]; var original=new double[64];
         for(int n=0;n<64;n++) real[n]=original[n]=Math.Sin(n*.37)+Math.Cos(n*.81)*.3;
@@ -16,6 +18,11 @@ public static partial class TakeChecks
             fftError=Math.Max(fftError,Math.Max(Math.Abs(real[k]-r),Math.Abs(imaginary[k]-i)));
         }
         Check(fftError<1e-10,"Display FFT agrees with independent direct DFT, including phase.");
+    }
+
+    [Test, Category("Core")]
+    public void DisplaySpectrogramCalibration()
+    {
         var tone=new float[512*2]; for(int n=0;n<512;n++) {tone[n*2]=(float)(.25*Math.Sin(2*Math.PI*8*n/64)); tone[n*2+1]=0;}
         var spectrum=TakeComparisonAudio.Spectrogram(tone,2,0,64,16);
         var silent=TakeComparisonAudio.Spectrogram(tone,2,1,64,16);
@@ -24,13 +31,29 @@ public static partial class TakeChecks
         var dense=TakeComparisonAudio.Spectrogram(new float[100000],1,0,64,16);
         Check(dense.Width<=512 && dense.Hop%16==0,"Spectrogram display decimation has an explicit hop and bounded columns.");
         Reject(()=>TakeComparisonAudio.Spectrogram(tone,2,0,65,16),"Reject unsupported FFT without silently changing resolution.");
+    }
+
+    [Test, Category("Core")]
+    public void WaveformEnvelopeRetainsExtrema()
+    {
         var env=TakeComparisonAudio.Envelope(new[]{0f,1f,-2f,.3f,0f,.1f},1,0,2);
         Check(env[0].x==-2 && env[0].y==1,"Waveform envelope retains extrema rather than missing a narrow peak.");
+    }
+
+    [Test, Category("Core")]
+    public void DifferenceAuditionPreservesChannels()
+    {
         var low=new float[800]; var high=new float[800];
         for(int n=0;n<400;n++) {low[n*2]=1; low[n*2+1]=2; high[n*2]=.5f; high[n*2+1]=1;}
         var audition=TakeComparisonAudio.Audition(low,high,2,100,2,.5f,1000);
         Check(audition.Length==600 && audition[20]==.25f && audition[21]==.5f,"Difference audition preserves ear order, cursor and shared gain.");
         Check(audition[0]==0 && audition[audition.Length-1]==0 && low[0]==1,"Audition fade does not mutate source samples.");
+    }
+
+    [Test, Category("Core")]
+    public void WavePreviewValidatesFile()
+    {
+        var low=new float[800];for(int n=0;n<400;n++){low[n*2]=1;low[n*2+1]=2;}
         string wav=Path.Combine(directory,"inspection.wav");
         using(var writer=new BinaryWriter(File.Create(wav)))
         {
@@ -44,7 +67,12 @@ public static partial class TakeChecks
         {var part=wave.Read(123,7); Check(part.Length==14 && part[0]==1 && part[1]==2,"WAV reader seeks in sample frames."); Reject(()=>wave.Read(398,3),"Reject out-of-range preview.");}
         Reject(()=>new TakeComparisonAudio.Wave(wav,"wrong-hash",run),"Reject changed audio before audition.");
         run.sampleRate=2000; Reject(()=>new TakeComparisonAudio.Wave(wav,AcousticTake.HashFile(wav),run),"Reject WAV/report rate mismatch.");
-        using(var take=AcousticTake.Open(Path.Combine(directory,"binaural-cpu")))
+    }
+
+    [Test, Category("EndToEnd")]
+    public void OfflineComparisonRoundTrip()
+    {
+        using(var take=AcousticTake.Open(WriteMovingTake()))
         {
             var settings=new TakeRender.Settings {listenerOutput=TakeRender.ListenerOutput.Binaural,responseStepSamples=128,transitionSamples=32,tailSamples=64};
             var fine=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(settings)); fine.responseStepSamples=64;
@@ -58,9 +86,10 @@ public static partial class TakeChecks
             result.complete=false; File.WriteAllText(path,JsonUtility.ToJson(result)); Reject(()=>TakeComparisonAudio.OpenReport(path),"Reject incomplete comparison.");
         }
     }
-    static void ComparisonViews()
+    [Test, Category("Core")]
+    public void ComparisonViews()
     {
-        var fixtureScene=UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,UnityEditor.SceneManagement.NewSceneMode.Additive);
+        var fixtureScene=UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,UnityEditor.SceneManagement.NewSceneMode.Single);
         var root=new GameObject("Comparison view fixture");
         var source=GameObject.CreatePrimitive(PrimitiveType.Cube); source.transform.SetParent(root.transform); source.transform.position=new Vector3(1,0,4);
         var listener=new GameObject("Fixture listener"); listener.transform.SetParent(root.transform); listener.transform.position=new Vector3(0,0,-3);

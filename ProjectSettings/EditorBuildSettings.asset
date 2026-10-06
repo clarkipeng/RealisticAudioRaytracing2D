@@ -8,4 +8,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/TrainStation.unity
     guid: 58e9b7a165d33774984295f84fe5c6c8
+  - enabled: 1
+    path: Assets/Scenes/Church.unity
+    guid: d5e8f8afca78c40b4b8b3fdd23f00519
   m_configObjects: {}

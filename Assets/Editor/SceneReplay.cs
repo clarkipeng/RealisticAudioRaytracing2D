@@ -6,13 +6,13 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-// Reconstruct station inputs in an isolated physics scene, without live audio or Play mode.
-public static class StationReplay
+// Reconstruct scene inputs in an isolated physics scene, without live audio or Play mode.
+public static class SceneReplay
 {
-    [MenuItem("Tools/Acoustics/Reconstruct recorded station inputs")]
+    [MenuItem("Tools/Acoustics/Reconstruct recorded scene inputs")]
     static void ReconstructMenu()
     {
-        string path=EditorUtility.OpenFolderPanel("Choose a station recording","Recordings","");
+        string path=EditorUtility.OpenFolderPanel("Choose a scene recording","Recordings","");
         if(string.IsNullOrEmpty(path))return;
         try {Debug.Log(Reconstruct(path,Path.Combine(path,"reconstructed-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"))));}
         catch(Exception e){Debug.LogException(e);}
@@ -26,12 +26,12 @@ public static class StationReplay
     }
     public static string Reconstruct(string path,string output,Action<float> progress=null)
     {
-        using var playback=new StationRecording.Playback(path);
+        using var playback=new SceneRecording.Playback(path);
         var meta=playback.Metadata;
         var authoredScene=UnityEditor.SceneManagement.EditorSceneManager.OpenPreviewScene(meta.scene);
         try
         {
-            var authored=authoredScene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<StationDemo>(true)).Single();
+            var authored=authoredScene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<SceneSession>(true)).Single();
             using var take=File.Exists(Path.Combine(path,"states.bin"))?AcousticTake.Open(path):null;
             playback.ValidateScene(authored,false);
             var description=playback.TakeMetadata.scene;
@@ -103,13 +103,13 @@ public static class StationReplay
     internal sealed class Rig : IDisposable
     {
         public readonly Scene scene;
-        public readonly StationDemo demo;
+        public readonly SceneSession demo;
         public readonly PlayerController walker;
         public readonly Transform head;
         public readonly List<RayTraceManager.TakeObjectBinding> bindings = new List<RayTraceManager.TakeObjectBinding>();
         public readonly Dictionary<Transform, Transform> copies = new Dictionary<Transform, Transform>();
         public readonly Dictionary<Transform,bool> sourceEnabled=new Dictionary<Transform,bool>();
-        public Rig(StationDemo source)
+        public Rig(SceneSession source)
         {
             scene = UnityEditor.SceneManagement.EditorSceneManager.NewPreviewScene();
             try
@@ -117,18 +117,30 @@ public static class StationReplay
                 foreach (var root in source.gameObject.scene.GetRootGameObjects()) Copy(root.transform, null);
                 foreach (var b in source.manager.takeObjects)
                     bindings.Add(new RayTraceManager.TakeObjectBinding { id = b.id, geometry = b.geometry, transform = copies[b.transform] });
-                var route = copies[source.route.transform].gameObject.AddComponent<StationLoop>();
-                route.straightLength = source.route.straightLength; route.radius = source.route.radius;
-                demo = copies[source.transform].gameObject.AddComponent<StationDemo>(); demo.enabled = false;
-                demo.train = copies[source.train]; demo.carriage = copies[source.carriage]; demo.door = copies[source.door];
-                demo.player = copies[source.player]; demo.route = route;
+                demo = copies[source.transform].gameObject.AddComponent<SceneSession>(); demo.enabled = false;
+                demo.player = copies[source.player];
+                demo.actors=Array.ConvertAll(source.actors,actor=>
+                {
+                    var copy=(SceneActor)copies[actor.transform].gameObject.AddComponent(actor.GetType());
+                    EditorUtility.CopySerialized(actor,copy);
+                    if(actor is StationDemo train && copy is StationDemo target)
+                    {
+                        var route=copies[train.route.transform].GetComponent<StationLoop>();
+                        if(route==null) route=copies[train.route.transform].gameObject.AddComponent<StationLoop>();
+                        EditorUtility.CopySerialized(train.route,route);
+                        target.train=copies[train.train]; target.carriage=copies[train.carriage]; target.route=route;
+                        target.boardingPlatform=train.boardingPlatform==null?null:copies[train.boardingPlatform];
+                    }
+                    else if(!(actor is SlidingDoor)) throw new NotSupportedException("No isolated replay adapter for "+actor.GetType().Name);
+                    return copy;
+                });
                 head = copies[source.manager.takeListeners[0]];
                 var look=head.gameObject.AddComponent<MouseLook>(); look.enabled=false; look.playerBody=demo.player; look.lockOnStart=false;
                 var controller = demo.player.gameObject.AddComponent<CharacterController>();
                 EditorUtility.CopySerialized(source.player.GetComponent<CharacterController>(), controller);
                 controller.enabled = true;
                 walker = demo.player.gameObject.AddComponent<PlayerController>(); walker.enabled = false;
-                StationRecording.Settings.From(source).Apply(demo);
+                EditorUtility.CopySerialized(source.player.GetComponent<PlayerController>(),walker);
                 demo.InitializeSimulation();
             }
             catch { Dispose(); throw; }
@@ -151,7 +163,7 @@ public static class StationReplay
             if(emitter!=null) sourceEnabled[t]=emitter.enabled;
             foreach (var c in source.GetComponents<Collider>())
                 if (!(c is CharacterController)) EditorUtility.CopySerialized(c, t.gameObject.AddComponent(c.GetType()));
-            if (source.GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Fixture now contains another rigid body; compact station replay supports its train and walking controller only.");
+            if (source.GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Fixture now contains another rigid body; compact input replay supports explicitly stepped actors and the walking controller only.");
             for (int i = 0; i < source.childCount; i++) Copy(source.GetChild(i), t);
             t.gameObject.SetActive(source.gameObject.activeSelf);
         }

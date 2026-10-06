@@ -1,38 +1,70 @@
+using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 // Uses the actual Unity types, scene extraction and file reader. Also callable in batch mode.
-public static partial class TakeChecks
+[TestFixture]
+public partial class TakeChecks
 {
-    static int checks;
-    static string directory;
+    string directory;
 
-    [MenuItem("Tools/Acoustics/Run take checks")]
-    public static void Run()
+    [SetUp]
+    public void SetUp()
     {
-        checks=0; directory=Path.Combine(Path.GetTempPath(),"acoustic-checks-"+Guid.NewGuid().ToString("N"));
+        directory=Path.Combine(Path.GetTempPath(),"acoustics-test-"+Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
-        try
-        {
-            RoundTripAndCuts(); InvalidFiles(); Motion(); Materials(); Geometry(); DirectPaths(); AudioEventsAndTail(); ManagerCapture(); ReplayRestoresScene(); CaptureMutation(); GuardSnapshots(); ColliderProxyGuard(); StreamingMatchesOffline(); StreamingMatchesOffline(null,TakeRender.DelayFilter.WindowedSinc); QueueDeadlines(); LongSampleClock(); BoundedHistory(); DelayFilters(); PlayedOutput(); ConcurrentOutputCapture(); ReferenceQuality(); BinauralChecks(); BinauralStreaming(); ComparisonInspection(); ComparisonViews(); StationLoopMotion();
-            StationInputs(); BvhChecks();
-            Debug.Log("ACOUSTIC_CHECKS_DIR: "+directory);
-            Debug.Log("ACOUSTIC_CHECKS_PASS: "+checks+" checks");
-            if (Application.isBatchMode) EditorApplication.Exit(0);
-        }
-        catch (Exception e)
-        {
-            Debug.LogException(e);
-            if (Application.isBatchMode) EditorApplication.Exit(1);
-            else throw;
-        }
-        finally { if (Array.IndexOf(Environment.GetCommandLineArgs(),"-keepTakeChecks")<0) Directory.Delete(directory,true); }
+        // Test Runner owns and restores the user's scene setup. Each case gets
+        // a fresh empty scene, including when the runner's scene is untitled.
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
     }
 
-    static AcousticTake.Scene Scene(int listeners=1)
+    [TearDown]
+    public void TearDown()
+    {
+        try
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
+        }
+        finally {if(Directory.Exists(directory))Directory.Delete(directory,true);}
+    }
+
+    static ComputeShader RequireGpu()
+    {
+        if(!SystemInfo.supportsComputeShaders || !SystemInfo.supportsAsyncGPUReadback)
+            Assert.Ignore("Requires compute shaders and asynchronous GPU readback; CPU fallback would not test this contract.");
+        var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
+        Assert.That(shader,Is.Not.Null,"Direct.compute must import successfully.");
+        return shader;
+    }
+
+    string WriteMovingTake()
+    {
+        string path=Path.Combine(directory,"moving-input");
+        var scene=Scene(3);scene.sources=new[]{new AcousticTake.SourceDefinition {objectIndex=0,clipIndex=0},
+            new AcousticTake.SourceDefinition {objectIndex=1,clipIndex=0}};scene.listeners=new[]{2,3};
+        var state=States(3);state[1].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Source;
+        var pcm=new float[113];for(int n=0;n<pcm.Length;n++)pcm[n]=Mathf.Sin(n*.31f)*.1f;
+        using(var writer=new AcousticTake.Writer(path,8000,scene,Array.Empty<AcousticTake.Primitive>(),new[]{pcm}))
+        {
+            for(int sample=0;sample<=1024;sample+=128)
+            {
+                state[2].position=new Vector3(1+sample*.004f,0,0);
+                state[3].position=new Vector3(-1,1+sample*.002f,0);
+                writer.Append(sample,state);
+            }
+            for(int source=0;source<2;source++)writer.Append(new AcousticTake.VoiceEvent
+                {sourceIndex=source,action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
+            writer.Complete();
+        }
+        return path;
+    }
+
+
+    AcousticTake.Scene Scene(int listeners=1)
     {
         var objects=new AcousticTake.ObjectDefinition[listeners+1];
         var indices=new int[listeners];
@@ -42,26 +74,27 @@ public static partial class TakeChecks
             sources=new[] { new AcousticTake.SourceDefinition {objectIndex=0,clipIndex=0} },listeners=indices,
             clips=new[] {new AcousticTake.ClipDefinition {name="test"}},materials=new AcousticTake.MaterialDefinition[0] };
     }
-    static AcousticTake.State[] States(int listeners=1)
+    AcousticTake.State[] States(int listeners=1)
     {
         var states=new AcousticTake.State[listeners+1];
         for (int i=0; i<states.Length; i++) states[i]=new AcousticTake.State { position=new Vector3(i,0,0),rotation=Quaternion.identity,
             flags=AcousticTake.StateFlags.Active | (i == 0 ? AcousticTake.StateFlags.Source : AcousticTake.StateFlags.Listener) };
         return states;
     }
-    static AcousticTake.Writer Writer(string name, AcousticTake.Scene scene, float[] pcm=null)
+    AcousticTake.Writer Writer(string name, AcousticTake.Scene scene, float[] pcm=null)
     {
         return new AcousticTake.Writer(Path.Combine(directory,name),1000,scene,new AcousticTake.Primitive[0],new[] {pcm ?? new[] {1f,2f,3f}});
     }
-    static void Check(bool condition,string message) { checks++; if (!condition) throw new Exception(message); }
-    static void Near(float actual,float expected,string message,float tolerance=1e-5f) { Check(Mathf.Abs(actual-expected)<=tolerance,message+": "+actual+" != "+expected); }
-    static void Reject(Action action,string message)
+    void Check(bool condition,string message) { Assert.That(condition, Is.True, message); }
+    void Near(float actual,float expected,string message,float tolerance=1e-5f) { Check(Mathf.Abs(actual-expected)<=tolerance,message+": "+actual+" != "+expected); }
+    void Reject(Action action,string message)
     {
         bool rejected=false; try { action(); } catch (InvalidDataException) { rejected=true; } catch (ArgumentException) { rejected=true; } catch (InvalidOperationException) { rejected=true; }
         Check(rejected,message);
     }
 
-    static void RoundTripAndCuts()
+    [Test, Category("Core")]
+    public void RoundTripAndCuts()
     {
         var states=States();
         states[0].position=new Vector3(1.2345678f,-3.456789f,.00000123f);
@@ -89,7 +122,8 @@ public static partial class TakeChecks
         }
     }
 
-    static void InvalidFiles()
+    [Test, Category("Core")]
+    public void InvalidFiles()
     {
         using (var writer=Writer("incomplete",Scene())) writer.Append(0,States());
         Reject(()=>AcousticTake.Open(Path.Combine(directory,"incomplete")),"Reject incomplete capture.");
@@ -111,7 +145,8 @@ public static partial class TakeChecks
         }
     }
 
-    static void Motion()
+    [Test, Category("Core")]
+    public void Motion()
     {
         var a=States()[0]; var b=a; b.position.x=2; b.rotation=Quaternion.AngleAxis(90,Vector3.up); b.MeasureMotion(a,.5);
         Near(b.velocity.x,4,"Velocity uses timestamp interval"); Near(b.angularVelocity.y,Mathf.PI,"Angular velocity in rad/s");
@@ -122,7 +157,8 @@ public static partial class TakeChecks
         Near(cut.velocity.magnitude,0,"Teleport clears previous motion estimate.");
     }
 
-    static void Materials()
+    [Test, Category("Core")]
+    public void Materials()
     {
         var material=ScriptableObject.CreateInstance<AudioMaterial>();
         try
@@ -141,7 +177,8 @@ public static partial class TakeChecks
         finally { UnityEngine.Object.DestroyImmediate(material); }
     }
 
-    static void Geometry()
+    [Test, Category("Core")]
+    public void Geometry()
     {
         var material=ScriptableObject.CreateInstance<AudioMaterial>();
         var objects=new List<GameObject>();
@@ -183,7 +220,8 @@ public static partial class TakeChecks
         finally { foreach (var obj in objects) UnityEngine.Object.DestroyImmediate(obj); UnityEngine.Object.DestroyImmediate(material); }
     }
 
-    static void DirectPaths()
+    [Test, Category("Core")]
+    public void DirectPaths()
     {
         var scene=Scene(); var state=States();
         var settings=new TakeRender.Settings {speedOfSound=1000}; var response=new TakeRender.DirectPath[1];
@@ -199,7 +237,8 @@ public static partial class TakeChecks
         TakeRender.SolveDirect(scene,wall,state,settings,response); Near(response[0].pressureGain,1,"Disabled geometry does not block.");
     }
 
-    static void AudioEventsAndTail()
+    [Test, Category("Core")]
+    public void AudioEventsAndTail()
     {
         var scene=Scene(2); var state=States(2);
         using (var writer=Writer("audio",scene))
@@ -219,7 +258,7 @@ public static partial class TakeChecks
             Near(a[9],0,"Disabled source mutes new emission"); Near(b[9],.5f,"Already emitted sound survives source disable");
         }
     }
-    static float[] ReadWave(string path)
+    float[] ReadWave(string path)
     {
         using (var reader=new BinaryReader(File.OpenRead(path)))
         {
@@ -230,7 +269,8 @@ public static partial class TakeChecks
         }
     }
 
-    static void ReplayRestoresScene()
+    [Test, Category("Core")]
+    public void ReplayRestoresScene()
     {
         var host=new GameObject("Take host"); var a=new GameObject("Emitter"); var b=new GameObject("Receiver");
         var manager=host.AddComponent<RayTraceManager>();
@@ -252,7 +292,8 @@ public static partial class TakeChecks
         finally { UnityEngine.Object.DestroyImmediate(host); UnityEngine.Object.DestroyImmediate(a); UnityEngine.Object.DestroyImmediate(b); }
     }
 
-    static void ManagerCapture()
+    [Test, Category("Core")]
+    public void ManagerCapture()
     {
         var host=new GameObject("Capture host"); var a=new GameObject("Source A"); var b=new GameObject("Source B"); var listener=new GameObject("Listener");
         var clip=AudioClip.Create("Shared PCM",32,1,1000,false); clip.SetData(new float[32],0);
@@ -305,7 +346,8 @@ public static partial class TakeChecks
         }
     }
 
-    static void CaptureMutation()
+    [Test, Category("Core")]
+    public void CaptureMutation()
     {
         var host=new GameObject("Mutation capture"); var box=GameObject.CreatePrimitive(PrimitiveType.Cube);
         var manager=host.AddComponent<RayTraceManager>(); var material=ScriptableObject.CreateInstance<AudioMaterial>();
@@ -328,8 +370,13 @@ public static partial class TakeChecks
         finally { UnityEngine.Object.DestroyImmediate(host); UnityEngine.Object.DestroyImmediate(box); UnityEngine.Object.DestroyImmediate(mesh); UnityEngine.Object.DestroyImmediate(material); }
     }
 
-    static void StreamingMatchesOffline(ComputeShader shader=null,TakeRender.DelayFilter filter=TakeRender.DelayFilter.Linear)
+    [TestCase(false, TakeRender.DelayFilter.Linear, Category="Integration")]
+    [TestCase(false, TakeRender.DelayFilter.WindowedSinc, Category="Integration")]
+    [TestCase(true, TakeRender.DelayFilter.Linear, Category="GPU")]
+    [TestCase(true, TakeRender.DelayFilter.WindowedSinc, Category="GPU")]
+    public void StreamingMatchesOffline(bool gpu,TakeRender.DelayFilter filter)
     {
+        var shader=gpu?RequireGpu():null;
         string suffix=(shader==null ? "cpu":"gpu")+"-"+filter;
         var scene=Scene(3); scene.sources=new[] {new AcousticTake.SourceDefinition {objectIndex=0,clipIndex=0},new AcousticTake.SourceDefinition {objectIndex=1,clipIndex=0}};
         scene.listeners=new[] {2,3};
@@ -378,15 +425,11 @@ public static partial class TakeChecks
                 float error=0; for (int n=0; n<expected.Length; n++) error=Mathf.Max(error,Mathf.Abs(expected[n]-rendered[l][n]));
                 Near(error,0,"Incremental live producer matches offline samples",shader==null ? 1e-7f:1e-4f);
             }
-            var high=new TakeRender.Settings {responseStepSamples=13,transitionSamples=11,tailSamples=30,speedOfSound=1000,delayFilter=filter,maximumDelaySeconds=.1f,maximumResponsesPerBatch=4};
-            var comparison=TakeComparison.Run(take,settings,high,Path.Combine(directory,"comparison-"+suffix));
-            Check(comparison.complete && comparison.low.outputSamples==comparison.high.outputSamples,"Comparison timelines align.");
-            Check(comparison.high.responseCount>comparison.low.responseCount,"Fine budget performs more solves.");
-            Check(comparison.listeners[0].rmsError>0,"Moving scene exposes temporal approximation error.");
         }
     }
 
-    static void GuardSnapshots()
+    [Test, Category("Core")]
+    public void GuardSnapshots()
     {
         var root=new GameObject("Snapshot guard"); var box=GameObject.CreatePrimitive(PrimitiveType.Cube);
         box.transform.SetParent(root.transform); var surface=box.AddComponent<AcousticSurface>();
@@ -425,7 +468,8 @@ public static partial class TakeChecks
         finally { UnityEngine.Object.DestroyImmediate(root); UnityEngine.Object.DestroyImmediate(mesh); UnityEngine.Object.DestroyImmediate(material); }
     }
 
-    static void ColliderProxyGuard()
+    [Test, Category("Core")]
+    public void ColliderProxyGuard()
     {
         var root=new GameObject("Collider-only proxy");
         var manager=root.AddComponent<RayTraceManager>(); manager.takeRoot=root.transform;
@@ -437,7 +481,6 @@ public static partial class TakeChecks
             manager.RegisterTakeObjects();
             var guard=new SceneToTake.Guard(manager,new Transform[0],new AudioClip[0],new Transform[0]);
             for(int i=0;i<10;i++) {root.transform.position+=Vector3.right; guard.Validate();}
-            Check(true,"Collider-only proxies remain valid while moving without a MeshFilter.");
             UnityEngine.Object.DestroyImmediate(surface);
             Reject(guard.Validate,"Removing a captured acoustic component is detected.");
             root.AddComponent<AcousticSurface>().geometrySource=AcousticSurface.GeometrySource.Collider;
@@ -446,7 +489,8 @@ public static partial class TakeChecks
         finally {UnityEngine.Object.DestroyImmediate(root); UnityEngine.Object.DestroyImmediate(material);}
     }
 
-    static void BoundedHistory()
+    [Test, Category("Core")]
+    public void BoundedHistory()
     {
         var pcm=new float[127]; for (int i=0;i<pcm.Length;i++) pcm[i]=Mathf.Sin(i*.13f);
         var reference=new TakeRender.Signal(pcm); var bounded=new TakeRender.Signal(pcm,64);
@@ -466,10 +510,10 @@ public static partial class TakeChecks
         Reject(()=>tiny.Append(new AcousticTake.VoiceEvent {sample=1,action=AcousticTake.VoiceAction.Stop}),"History overflow fails explicitly.");
     }
 
-    static void DelayFilters()
+    [Test, Category("Core")]
+    public void DelayFilters()
     {
         TakeRender.Validate(JsonUtility.FromJson<TakeRender.Settings>("{}"));
-        Check(true,"Existing JSON jobs retain defaults for newly introduced settings.");
         var migrated=JsonUtility.FromJson<TakeRender.Settings>("{\"fftSize\":1024,\"raysPerPair\":1024}");
         Check(migrated.raysPerPair==0 && migrated.raysPerBin==2 && migrated.RaysPerPair==1026,"Legacy total-ray budgets migrate to complete frequency bins.");
         migrated.raysPerBin=3;Check(migrated.RaysPerPair==1539,"Migrated settings remain editable through the new field.");
@@ -491,7 +535,8 @@ public static partial class TakeChecks
         Check(sincError<.01 && sincError<linearError*.1,"Configurable sinc FIR improves high-frequency fractional-delay accuracy against an analytic sine.");
     }
 
-    static void PlayedOutput()
+    [Test, Category("Core")]
+    public void PlayedOutput()
     {
         string path=Path.Combine(directory,"played-output");
         var capture=new AudioManager.PlaybackCapture(path,1000,64,4,0,0,new TakeRender.Settings());
@@ -522,13 +567,14 @@ public static partial class TakeChecks
         }
     }
 
-    static void ConcurrentOutputCapture()
+    [Test, Category("Core")]
+    public void ConcurrentOutputCapture()
     {
         string path=Path.Combine(directory,"concurrent-output");
         using (var capture=new AudioManager.PlaybackCapture(path,1000,1024,4,0,0,new TakeRender.Settings()))
         {
             capture.CompleteProducer(1024);
-            var worker=new System.Threading.Thread(()=>
+            var worker=System.Threading.Tasks.Task.Run(()=>
             {
                 var data=new float[4];
                 for (int block=0;block<256;block++)
@@ -537,9 +583,10 @@ public static partial class TakeChecks
                     capture.Publish(block*4,data,1,System.Diagnostics.Stopwatch.GetTimestamp()); System.Threading.Thread.Yield();
                 }
             });
-            worker.Start();
-            while (worker.IsAlive) { capture.Drain(); System.Threading.Thread.Yield(); }
-            worker.Join(); capture.Drain();
+            var deadline=System.Diagnostics.Stopwatch.StartNew();
+            while(!worker.IsCompleted && deadline.Elapsed.TotalSeconds<10) {capture.Drain();System.Threading.Thread.Yield();}
+            Assert.That(worker.IsCompleted,Is.True,"Concurrent PCM producer timed out.");
+            worker.GetAwaiter().GetResult();capture.Drain();
             var pcm=ReadWave(Path.Combine(path,"output.wav"));
             Check(capture.Metadata.complete && pcm.Length==1024,"Concurrent finalization drains the last published callback before marking output complete.");
             bool equal=true; for (int i=0;i<pcm.Length;i++) equal &= pcm[i]==i/4+1;
@@ -547,7 +594,8 @@ public static partial class TakeChecks
         }
     }
 
-    static void ReferenceQuality()
+    [Test, Category("Core")]
+    public void StaticReferenceConverges()
     {
         var scene=Scene(); var state=States(); var pcm=new float[100]; for (int i=0;i<pcm.Length;i++) pcm[i]=Mathf.Sin(i*.7f);
         using (var writer=Writer("reference-static",scene,pcm))
@@ -562,31 +610,72 @@ public static partial class TakeChecks
             Check(result.low.provenance.csharpModule==typeof(AcousticTake).Assembly.ManifestModule.ModuleVersionId.ToString() && result.low.settingsHash!=result.high.settingsHash,"Reports identify compiled code and exact settings.");
             Check(take.Metadata.captureProvenance!=null,"New takes retain capture code provenance.");
         }
-        using (var take=AcousticTake.Open(Path.Combine(directory,"streaming-cpu-Linear")))
+    }
+
+    [Test, Category("Integration")]
+    public void UnconvergedReferenceIsIneligibleForTraining()
+    {
+        using (var take=AcousticTake.Open(WriteMovingTake()))
         {
             var result=TakeComparison.Run(take,new TakeRender.Settings {responseStepSamples=100},new TakeRender.Settings {responseStepSamples=31},Path.Combine(directory,"rejected-reference"),null,null,new TakeComparison.ReferenceCheck());
             Check(result.complete && !result.referenceAccepted && !result.eligibleForTemporalTraining,"A completed but unconverged temporal comparison is not eligible for training.");
         }
     }
 
-    static void QueueDeadlines()
+    [Test, Category("Core")]
+    public void QueueWrapPreservesSampleOrder()
     {
-        var queue=new AudioManager.PcmQueue(8); var data=new float[4];
-        queue.Publish(0,new[] {1f,2f,3f,4f},4); queue.Consume(data,1);
-        Check(data[0]==1 && data[3]==4,"PCM queue preserves sequence.");
-        queue.Publish(4,new[] {5f,6f,7f,8f,9f,10f},6); queue.Consume(data,1); queue.Consume(data,1);
-        Check(data[0]==9 && data[1]==10 && data[2]==0 && queue.UnderrunSamples==2,"Queue wraps and emits counted silence on missed deadlines.");
-        queue.Publish(10,new[] {11f,12f,13f,14f},4); queue.Consume(data,2);
-        Check(data[0]==13 && data[1]==13 && data[2]==14 && queue.LateSamples==2,"Late PCM is dropped at its timestamp, not played late.");
-        Check(!queue.Publish(14,new float[9],9),"Queue refuses to overwrite unread audio.");
-        queue.Complete(); long misses=queue.UnderrunSamples; queue.Consume(data,1);
-        Check(queue.UnderrunSamples==misses,"Completed streams do not report idle underruns.");
-        long before=GC.GetAllocatedBytesForCurrentThread();
-        for (int i=0; i<100; i++) queue.Consume(data,1);
-        Check(GC.GetAllocatedBytesForCurrentThread()==before,"Audio consumption allocates no managed memory.");
+        var queue=new AudioManager.PcmQueue(8);var data=new float[4];
+        queue.Publish(0,new[]{1f,2f,3f,4f,5f,6f},6);queue.Consume(data,1);
+        queue.Publish(6,new[]{7f,8f,9f,10f},4);queue.Consume(data,1);
+        Assert.That(data,Is.EqualTo(new[]{5f,6f,7f,8f}));
+        var final=new float[2];queue.Consume(final,1);Assert.That(final,Is.EqualTo(new[]{9f,10f}));
+        Assert.That(queue.UnderrunSamples,Is.Zero);
     }
 
-    static void LongSampleClock()
+    [Test, Category("Core")]
+    public void QueueUnderrunEmitsCountedSilence()
+    {
+        var queue=new AudioManager.PcmQueue(8);var data=new float[4];
+        queue.Publish(0,new[]{1f,2f},2);queue.Consume(data,1);
+        Assert.That(data,Is.EqualTo(new[]{1f,2f,0f,0f}));Assert.That(queue.UnderrunSamples,Is.EqualTo(2));
+    }
+
+    [Test, Category("Core")]
+    public void QueueLateSamplesKeepTheirOriginalTime()
+    {
+        var queue=new AudioManager.PcmQueue(8);queue.Consume(new float[2],1);
+        queue.Publish(0,new[]{1f,2f,3f,4f},4);var data=new float[4];queue.Consume(data,2);
+        Assert.That(data,Is.EqualTo(new[]{3f,3f,4f,4f}));Assert.That(queue.LateSamples,Is.EqualTo(2));
+    }
+
+    [Test, Category("Core")]
+    public void QueueOverflowPreservesUnreadAudio()
+    {
+        var queue=new AudioManager.PcmQueue(4);queue.Publish(0,new[]{1f,2f,3f,4f},4);
+        Assert.That(queue.Publish(4,new[]{5f},1),Is.False);Assert.That(queue.OverflowSamples,Is.EqualTo(1));
+        var data=new float[4];queue.Consume(data,1);Assert.That(data,Is.EqualTo(new[]{1f,2f,3f,4f}));
+    }
+
+    [Test, Category("Core")]
+    public void CompletedQueueDoesNotCountIdleUnderruns()
+    {
+        var queue=new AudioManager.PcmQueue(4);queue.Complete();queue.Consume(new float[8],1);
+        Assert.That(queue.UnderrunSamples,Is.Zero);
+    }
+
+    [Test, Category("Core")]
+    public void QueueCallbackAllocatesNoManagedMemory()
+    {
+        var queue=new AudioManager.PcmQueue(8);var data=new float[4];queue.Consume(data,1);
+        long before=GC.GetAllocatedBytesForCurrentThread();
+        for(int n=0;n<100;n++)queue.Consume(data,1);
+        long bytes=GC.GetAllocatedBytesForCurrentThread()-before;
+        Assert.That(bytes,Is.Zero);
+    }
+
+    [Test, Category("Core")]
+    public void LongSampleClock()
     {
         long first=1L<<30;
         var signal=new TakeRender.Signal(new[] {1f,-1f}); signal.SetActive(0,true);
@@ -595,6 +684,12 @@ public static partial class TakeChecks
         mixer.SetResponse(first,new[] {new TakeRender.DirectPath {delaySeconds=1f/1024,pressureGain=1}},States());
         var output=new float[4]; mixer.Render(first+2,4,output);
         Check(output[0]==-1 && output[1]==1 && output[2]==-1 && output[3]==1,"Long takes preserve single-sample phase beyond float cursor precision.");
+    }
+
+    [Test, Category("Core")]
+    public void MixerRejectsNonFiniteOutput()
+    {
+        var output=new float[4];
         var loud=new TakeRender.Signal(new[] {float.MaxValue}); loud.SetActive(0,true);
         loud.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=2,loop=true});
         var overflow=new TakeRender.Mixer(Scene(),1024,new TakeRender.Settings(),new[] {loud});
@@ -602,10 +697,10 @@ public static partial class TakeChecks
         Reject(()=>overflow.Render(0,1,output),"Reject overflowed audio instead of completing a non-finite dataset.");
     }
 
-    static void GpuDirectChecks()
+    [Test, Category("GPU")]
+    public void GpuDirectChecks()
     {
-        var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-        Check(shader!=null,"Direct shader is imported.");
+        var shader=RequireGpu();
         var scene=Scene(2); var state=States(2); state[0].flags|=AcousticTake.StateFlags.Geometry;
         var geometry=new[] {new AcousticTake.Primitive {a=new Vector3(.5f,-1,-1),b=new Vector3(.5f,1,-1),c=new Vector3(.5f,0,1),objectIndex=0}};
         var cpu=new TakeRender.DirectPath[2]; var gpu=new TakeRender.DirectPath[2]; var settings=new TakeRender.Settings();
@@ -624,9 +719,10 @@ public static partial class TakeChecks
         }
     }
 
-    static void GpuBatches()
+    [Test, Category("GPU")]
+    public void GpuBatches()
     {
-        var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
+        var shader=RequireGpu();
         var scene=Scene(); var states=new AcousticTake.State[10]; var result=new TakeRender.DirectPath[5];
         for (int f=0;f<5;f++) { var state=States(); state[1].position.x=f+1; Array.Copy(state,0,states,f*2,2); }
         using (var solver=new DirectSolver(scene,new AcousticTake.Primitive[0],new TakeRender.Settings(),shader,5))
@@ -636,55 +732,6 @@ public static partial class TakeChecks
             for (int f=0;f<5;f++) Near(result[f].pressureGain,1f/(f+1),"Batch responses use their own pose frame",1e-6f);
             solver.BeginSolve(states,5); // Disposal must wait before releasing request-owned buffers.
         }
-        Debug.Log("ACOUSTIC_GPU_BATCH_PASS");
     }
 
-    [MenuItem("Tools/Acoustics/Check legacy GPU FFT")]
-    public static void RunGpu()
-    {
-        directory=Path.Combine(Path.GetTempPath(),"acoustic-gpu-checks-"+Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory);
-        try
-        {
-            if (!SystemInfo.supportsComputeShaders) throw new InvalidOperationException("GPU FFT check requires compute support.");
-            var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Raytrace2D.compute");
-            const int count=1024;
-            var input=new Vector2[count]; input[0]=Vector2.right;
-            using (var buffer=new ComputeBuffer(count,8))
-            {
-                buffer.SetData(input); int forward=shader.FindKernel("FFT"), inverse=shader.FindKernel("IFFT");
-                shader.SetBuffer(forward,"Data",buffer); shader.Dispatch(forward,1,1,1);
-                var actual=new Vector2[count]; buffer.GetData(actual);
-                for (int i=0; i<count; i++) { Near(actual[i].x,1,"Impulse spectrum real",1e-4f); Near(actual[i].y,0,"Impulse spectrum imaginary",1e-4f); }
-                for (int i=0; i<count; i++) input[i]=new Vector2(Mathf.Sin(2*Mathf.PI*5*i/count),0);
-                buffer.SetData(input); shader.Dispatch(forward,1,1,1); buffer.GetData(actual);
-                Near(actual[5].y,-count*.5f,"Known sine FFT bin",.01f);
-                Near(actual[count-5].y,count*.5f,"Conjugate FFT bin",.01f);
-                shader.SetBuffer(inverse,"Data",buffer); shader.Dispatch(inverse,1,1,1); buffer.GetData(actual);
-                for (int i=0; i<count; i++) { Near(actual[i].x,input[i].x,"FFT round trip",1e-4f); Near(actual[i].y,0,"Round-trip imaginary",1e-4f); }
-            }
-            var host=new GameObject("Prepare before manager Start");
-            var clip=AudioClip.Create("Early preparation",count,1,48000,false);
-            try
-            {
-                var manager=host.AddComponent<RayTraceManager>();
-                manager.raytraceShader=shader; manager.inputClip=clip; manager.source=manager.listener=host.transform;
-                manager.chunkSamples=128; manager.PrepareCurrentClip();
-                Check(manager.chunkSamples==count,"Preparing before manager Start must use the actual kernel size.");
-            }
-            finally { UnityEngine.Object.DestroyImmediate(host); UnityEngine.Object.DestroyImmediate(clip); }
-            GpuDirectChecks(); GpuBatches(); BinauralStreaming(AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute"));
-            var direct=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-            BvhChecks(direct);
-            OfflineBatchChecks(direct);
-            StreamingMatchesOffline(direct); StreamingMatchesOffline(direct,TakeRender.DelayFilter.WindowedSinc);
-            Debug.Log("ACOUSTIC_GPU_FFT_PASS: "+SystemInfo.graphicsDeviceType);
-            Debug.Log("ACOUSTIC_GPU_DIRECT_PASS: 2D/3D transformed geometry and multiple pairs");
-            if (Application.isBatchMode) EditorApplication.Exit(0);
-        }
-        catch (Exception e)
-        {
-            Debug.LogException(e);
-            if (Application.isBatchMode) EditorApplication.Exit(1); else throw;
-        }
-    }
 }

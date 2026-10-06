@@ -4,29 +4,33 @@ Unity **6000.4.1f1 (Unity 6.4)**, C# and HLSL. The shared renderer runs directio
 
 **Implemented now:** editable 3D station with two sources and one binaural listener, train service with station stops and walking aboard, sliding door and walkthrough controls, strict take capture, live directional spectral monitoring, pose replay/scrubbing, CPU/HLSL direct solvers for 2D/3D, offline WAV/response export, bounded asynchronous GPU batches, captured output PCM/timing, configurable fractional-delay FIR, binaural headphone rendering, and a native comparison window with synchronized audio, plots and recorded scene views. Live and offline share interpolation, the source timeline and scheduling. Raytraced DSP has a GPU implementation and a selectable CPU reference. The direct/opaque baseline still has matching CPU/GPU implementations. The GPU spectral preview adds reflections, scattering, transmission/refraction, material/air attenuation and wavelength-scaled edge diffraction, with per-arrival head orientation.
 
-**Still planned:** validated/converged indirect transport, multiplayer, training pairs and learned reconstruction. The old 2D renderer remains available when **Use Take Renderer** is disabled. Its geometric heuristics have been adapted into the shared spectral preview; this is not a validated high-fidelity training teacher.
+**Still planned:** Church/LakeForest, microphone input, multiplayer, validated/converged indirect transport, training pairs and learned reconstruction. The old 2D renderer remains available when **Use Take Renderer** is disabled. Its geometric heuristics have been adapted into the shared spectral preview; this is not a validated high-fidelity training teacher.
 
 **Audit repairs:** [current implementation and remaining limits](docs/simulation-contracts.md#renderer-repairs-2026-10-05). CPU IR synthesis uses partitioned linear convolution; GPU IR evaluates equivalent delayed short filters; the optional spectral synthesis uses continuous path clocks for Doppler and short spectral/ear filters. Both retain sample-by-sample response fades, complete per-frequency ray budgets and first-order image-source reflections. Compact recording failures invalidate the save. Independent convolution/reflection/replay checks cover the repaired errors; diffuse transport and diffraction still need physical validation before training.
 
 [The consolidated design contract](docs/simulation-contracts.md) covers scene/assets, Unity/HLSL data, live/offline execution, IR/complex/spectrogram reconstruction, temporal upscaling, training, multiplayer and acceptance gates. This README covers running the implemented code; [cleanup results](docs/cleanup-results.md) records current station benchmarks and historical measurements.
 
-The proposed [recordings browser and portable playback](docs/simulation-contracts.md#planned-recordings-browser-and-portable-playback) specifies the Record/Recordings entry point, loading old takes without their original scene, continuous audio/pose replay, shared visual snapshots and batch example generation. It is a design spec; the controls below remain the implemented workflow.
+The [next-work specification](docs/simulation-contracts.md#runtime-cleanup-and-shared-scene-session) covers runtime cleanup, shared scene sessions, Church/LakeForest, microphone recording and multiplayer voice. Clips, microphones and decoded remote voices will share one source-audio path. Shared `SceneSession`, compact scene replay, player/speaker prefabs and the Church blockout are implemented. Microphone streams, LakeForest, multiplayer and training remain planned. [Replay scope](docs/simulation-contracts.md#recordings-entry-point-and-replay-scope-planned) keeps compact runs dependent on their matching scene/build and defers snapshots/checkpoints/caches.
+
+Open **Assets/Scenes/Church.unity** and press Play. Walk with WASD/mouse, jump with Space, use **E** near the side-room door, **R** to save and **Esc** to release the cursor. Click the Game view to resume walking. The scene shares its player and recording/replay path with TrainStation. **Tools → Acoustics → Build church** rebuilds the editable blockout and replaces scene edits, so use the existing scene for normal work. The diagnostic chime, material preset and three-second render tail are provisional; this is not a validated church-reverberation dataset.
+
+The [multiplayer capture/training plan](docs/simulation-contracts.md#turning-multiplayer-captures-into-training-examples-planned) saves each client's actual presented poses plus separate decoded, pre-acoustic voice streams and their availability/loss timing. Low/High will use identical received speech; recording a mixed output alone cannot supply those training inputs. Network audio capture is not implemented yet.
 
 ## Compact recording and replay
 
-TrainStation records automatically from scene initialization, before movement or sound. **R / Save run** finishes the recording; stopping Play also finalizes the inputs. Re-enter Play to begin another run. There is no duration cap, seek, checkpoint or playback cache.
+TrainStation and Church record automatically from scene initialization, before movement or sound. **R / Save run** finishes the recording; stopping Play also finalizes the inputs. Re-enter Play to begin another run. There is no duration cap, seek, checkpoint or playback cache.
 
-Station recordings now contain `input.json`, `input.bin`, `input-observations.bin`, `events.bin`, `take.json` and small `live.json` diagnostics. Inputs store held movement changes and one-shot look/jump/interaction values at fixed ticks. The observation map preserves the original relationship between simulation ticks and audio samples. Geometry and source PCM are hashed during preparation but are not written to the recording. Full poses and monitored WAVs are also omitted.
+Compact scene recordings contain `input.json`, `input.bin`, `input-observations.bin`, `events.bin`, `take.json` and small `live.json` diagnostics. Inputs store held movement changes and one-shot look/jump/interaction values at fixed ticks. The observation map preserves the original relationship between simulation ticks and audio samples. Geometry and source PCM are hashed during preparation but are not written to the recording. Full poses and monitored WAVs are also omitted.
 
-The saved scene supplies static geometry, initial state and source assets. Editor recordings hash the contents and relative paths under `Assets`, `Packages` and `ProjectSettings`, so matching source can be rebuilt in another checkout. They also identify the Git commit and uncommitted changes. Engine/platform, fixed step, motion settings and audio rate remain checked; Player recordings and older recordings use their original runtime module identity. Preserve the matching repository revision; automatic Git checkout is not implemented. This adapter supports the station's train, door and walking controller, not arbitrary runtime edits or rigid-body simulations. Authored source/surface enabled states are preserved. Unsupported runtime activation changes fail the recording explicitly. A save is successful only after both acoustic metadata and the required input recorder finalize.
+The saved scene supplies static geometry, initial state and source assets. Editor recordings hash the contents and relative paths under `Assets`, `Packages` and `ProjectSettings`, so matching source can be rebuilt in another checkout. They also identify the Git commit and uncommitted changes. Engine/platform, fixed step, motion settings and audio rate remain checked; Player recordings and older recordings use their original runtime module identity. Preserve the matching repository revision; automatic Git checkout is not implemented. This adapter supports the shared walking controller, sliding doors and station train, not arbitrary runtime edits or rigid-body simulations. Authored source/surface enabled states are preserved. Unsupported runtime activation changes fail the recording explicitly. A save is successful only after both acoustic metadata and the required input recorder finalize.
 
 Select **Acoustic simulation → Choose saved take → Replay saved inputs from beginning** after saving. Playback reloads the matching scene and runs recorded inputs and sound events from zero. Live playback requires a matching output sample rate; offline reconstruction uses the recorded rate without an audio device. **Export input-only run** copies the five replay files to a separate folder, including from older full recordings.
 
-Enable **StationDemo → Retain Full Reference** before Play only when comparing against original poses or monitored audio. This adds geometry, source PCM, full observations and captured output to that run. Existing recordings are left intact. Use Save and wait for audio to drain before stopping Play when validating monitored output.
+Enable **SceneSession → Retain Full Reference** before Play only when comparing against original poses or monitored audio. This adds geometry, source PCM, full observations and captured output to that run. Existing recordings are left intact. Use Save and wait for audio to drain before stopping Play when validating monitored output.
 
-**Tools → Acoustics → Reconstruct recorded station inputs** works in Edit mode. It creates an ordinary acoustic take in an isolated preview physics scene and reports exact state/event agreement when a full reference is available. It does not modify the open scene or enter Play mode. The Inspector's offline render/comparison actions and `TakeBatch.Render` also accept compact recordings directly; they reconstruct into a sibling `<output>-inputs` directory, then render the requested output. These generated files are offline outputs, not mandatory recording or playback data.
+**Tools → Acoustics → Reconstruct recorded scene inputs** works in Edit mode. It creates an ordinary acoustic take in an isolated preview physics scene and reports exact state/event agreement when a full reference is available. It does not modify the open scene or enter Play mode. The Inspector's offline render/comparison actions and `TakeBatch.Render` also accept compact recordings directly; they reconstruct into a sibling `<output>-inputs` directory, then render the requested output. These generated files are offline outputs, not mandatory recording or playback data.
 
-**Tools → Acoustics → Run take checks** validates formats and the core simulation/audio contracts. **Test station recording and replay** exercises boarding, jumping, saving, export, reconstruction and actual scene replay. `TakeChecks.StartStationLifecycleCheck(true)` extends that check through three station laps. Tests write their results under `Recordings/`; they retain full references intentionally.
+Open **Window → General → Test Runner → EditMode → Acoustics.Tests**. Checks are independently selectable; the station end-to-end tests enter Play mode themselves. See [Checks](#checks) for categories, automation and the explicit realtime deadline test.
 
 Current and historical [validation results](docs/cleanup-results.md) cover three-lap replay, different measured frame cadences, 1,417 core checks plus GPU checks, reconstruction in a fresh Editor from a clean Git checkout, and a standalone Mac recording. They establish repeatability on the tested build/platform, not general physics determinism.
 
@@ -279,13 +283,13 @@ Assets/
                   DirectSolver, DirectBvh, RayTransport, GpuAudio, Doppler, SpectralAudio, ImpulseResponseAudio,
                   TakeComparison, ComputeHelper
     Audio/        AudioManager + Legacy partial, RaytracedAudioSource, Hrtf
-    Demo/         StationDemo, StationRecording, StationLoop, PlayerController,
+    Demo/         SceneSession, SceneRecording, StationDemo, StationLoop, SlidingDoor, PlayerController,
                   MouseLook, Oscillator, RaytraceControlPanel
   Shaders/        Direct.compute, Transport.hlsl, Raytrace2D.compute, Common.hlsl, WorldText.shader
   Audio/          source clips and DefaultMixer
   Materials/      acoustic material assets
   Resources/      Acoustics/GpuAudio.compute; bundled KEMAR filters and attribution
-  Editor/         StationReplay, TakeEditor, TakeDemo, TakeComparisonWindow + helpers,
+  Editor/         SceneReplay, TakeEditor, TakeDemo, TakeComparisonWindow + helpers,
                   DirectBenchmark
   Tests/Editor/   TakeChecks + numerical/transport checks, GpuAudioChecks, DirectBvhChecks
   Scenes/         editable scenes and their baked lighting
@@ -298,7 +302,7 @@ docs/             consolidated design contract, validation results and benchmark
 tools/            reproducible KEMAR importer (Python standard library)
 ```
 
-Folders group existing files; they introduce no new assemblies or dependencies. Asset `.meta` GUIDs are preserved so scenes and prefabs keep their references. The unused train loader/convolution shader and duplicate FFT scene/component have been removed; automated GPU tests retain the FFT coverage. Relative shader includes stay together in `Shaders`.
+Folders group responsibilities; the runtime, editor and test assembly definitions only separate compilation. This scene/session change adds no package dependencies. Asset `.meta` GUIDs are preserved so scenes and prefabs keep their references. The unused train loader/convolution shader and duplicate FFT scene/component have been removed; automated GPU tests retain the FFT coverage. Relative shader includes stay together in `Shaders`.
 
 ## Cleanup implemented
 
@@ -317,15 +321,41 @@ The next transport work is physical validation, reducing spectral CPU cost and c
 
 ## Checks
 
-Run **Tools → Acoustics → Run take checks** for file round trips, invalid captures, motion/cuts, native geometry, variable material knots, direct-path fixtures, sample-timed events, multiple sources, capture mutations, live/offline sample equality, callback allocation and queue deadline behavior, authoring snapshot allocation/mutations, long-lived source history, analytic FIR accuracy, exact captured component PCM and reference acceptance/rejection. **Check GPU audio against CPU reference** exercises IR/Spectral, multiple heads/sources, movement, source stops, listener fades, cuts, linear/sinc delays, larger FFTs and live/offline batch agreement. **Check legacy GPU FFT** also checks the new 2D/3D direct kernels against CPU fixtures on the active GPU, plus batched async completion/disposal and GPU live/offline equality for both delay filters.
+Open **Window → General → Test Runner → EditMode → Acoustics.Tests**. Tests use fresh scenes and temporary directories; Unity restores the original scene setup. Unexpected Unity errors fail. GPU cases skip unsupported hardware and never substitute CPU results.
 
-**Check directional spectral transport** (`TakeChecks.RunTransport`) adds v1/v2 material compatibility, direct transmission, reflection/diffraction in 2D/3D, static/moving BVH agreement, head rotation, independent linear/sinc delayed-convolution and long-HRIR oracles, shared-edge specular gain/time, replacement-path retention, complete receiver fades, FFT/block gain and latency, analytic source/listener motion and moving-mirror Doppler with crossfades disabled, sinc pitch-up alias rejection, and multi-source/listener live/offline and batch-size agreement including cuts.
+| Category | Coverage |
+| --- | --- |
+| `Core` | Formats, materials, geometry, independent DSP oracles and queue contracts |
+| `GPU` | Shader execution, CPU/GPU agreement, transport and readback ownership |
+| `Integration` | Streaming/offline agreement, response batching and audio files |
+| `EndToEnd` | Offline comparison; station recording/reconstruction/replay; realtime delivery |
+| `Realtime` | Explicit device-deadline test under station graphics load |
 
-Both checks also support `-executeMethod TakeChecks.Run` or `TakeChecks.RunGpu` in batch mode; omit `-nographics` for the GPU check. The legacy FFT remains fixed at 1024; its out-of-bounds butterfly indexing was repaired. This does not validate the rest of the old reflection/DSP model.
+Categories can overlap; each selected test runs once. FIR cases use pairwise FFT/hop/channel/delay/filter/method combinations against a time-domain oracle, with separate long-HRIR, transition and larger-transform regressions. Numerical agreement does not establish physical accuracy of scattering/diffraction approximations.
 
-The project has migrated to Unity **6000.4.1f1**. The earlier cleanup measurements used an isolated project on the same Unity version with Metal; see the linked report for those measurements. DirectX validation remains outstanding.
+`RecordingReconstructsAndReplays` walks aboard, jumps and turns the head, then checks exact reconstructed state/event hashes and final replay transforms. `StationDeliversAudioBeforeItsDeadline` is **Explicit**: select it on an idle target machine with stereo output. After two seconds of warmup it measures 20 seconds of device-clock movement, failing on any new underrun, late, overflow, channel mismatch or over-budget callback. Run All excludes it; exclusion is not a pass. The configured playback lead is unchanged. Test watchdogs do not limit recording duration.
 
-Measured results and reproduction details are in [cleanup-results.md](docs/cleanup-results.md).
+For the open Editor:
+
+```sh
+unity command run_tests --mode editor --filter TakeChecks --async_tests true
+unity command test_status
+```
+
+For station tests, select the exact test in Test Runner. Pipeline CLI status can remain `running` across Play-mode reloads; Unity's result/XML is authoritative. Station recordings are deleted after testing, including on failure.
+
+For CI with the project **closed**:
+
+```sh
+"$UNITY_EDITOR" -batchmode -projectPath "$PROJECT_PATH" \
+  -runTests -testPlatform EditMode -assemblyNames Acoustics.Tests \
+  -testCategory '!EndToEnd' -testResults "$RESULTS_DIR/tests.xml" \
+  -logFile "$RESULTS_DIR/unity.log"
+```
+
+Keep graphics enabled for GPU checks. Require expected cases to execute; reject failures, unexpected skips and missing/incomplete XML. Device-clock tests need active audio and graphics; offline renders cannot replace them. An external process watchdog is still needed for native/driver hangs.
+
+No new test package: Unity Test Framework handles selection, coroutines and reports. Three assembly definitions isolate runtime, editor and tests; friend declarations expose internal DSP to tests without expanding the public API. `DirectBenchmark` remains the offline Low/High timing harness. [Measured results](docs/cleanup-results.md) exclude cold import/build costs; DirectX and standalone Player test runs remain separate validation work.
 
 ## Standalone entry point
 

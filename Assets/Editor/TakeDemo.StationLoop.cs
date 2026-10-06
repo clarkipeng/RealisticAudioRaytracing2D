@@ -13,12 +13,13 @@ public static partial class TakeDemo
         if(EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play mode before editing the station.");
         var demo=UnityEngine.Object.FindAnyObjectByType<StationDemo>();
         if(demo==null) throw new InvalidOperationException("Open TrainStation first.");
-        ConfigureStationLoop(demo); demo.manager.RegisterTakeObjects();
+        var session=demo.GetComponent<SceneSession>();
+        ConfigureStationLoop(demo,session); session.manager.RegisterTakeObjects();
         EditorSceneManager.MarkSceneDirty(demo.gameObject.scene); EditorSceneManager.SaveScene(demo.gameObject.scene); AssetDatabase.SaveAssets();
     }
-    static void ConfigureStationLoop(StationDemo demo)
+    static void ConfigureStationLoop(StationDemo demo,SceneSession session)
     {
-        var world=demo.manager.takeRoot;
+        var world=session.manager.takeRoot;
         if(demo.route==null)
         {
             var go=new GameObject("Train loop"); go.transform.SetParent(world,false); go.transform.position=new Vector3(-.5f,.02f,0);
@@ -45,14 +46,14 @@ public static partial class TakeDemo
                 child.SetParent(carriage,true);
             }
             demo.carriage=carriage;
-            demo.manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {transform=carriage});
+            session.manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {transform=carriage});
         }
-        ConfigureStationBoarding(demo);
+        ConfigureStationBoarding(demo,session);
         PrefabUtility.SaveAsPrefabAssetAndConnect(demo.train.gameObject,"Assets/Prefabs/Station/Train.prefab",InteractionMode.AutomatedAction);
-        foreach(var source in demo.train.GetComponentsInChildren<RaytracedAudioSource>()) {source.rayTraceManager=demo.manager; PrefabUtility.RecordPrefabInstancePropertyModifications(source);}
+        foreach(var source in demo.train.GetComponentsInChildren<RaytracedAudioSource>()) {source.rayTraceManager=session.manager; PrefabUtility.RecordPrefabInstancePropertyModifications(source);}
         RebuildStationTrack(demo.route);
         var panel=demo.GetComponent<RaytraceControlPanel>(); if(panel!=null) {panel.buttonSize=new Vector2(260,30); panel.spacing=3;}
-        EditorUtility.SetDirty(demo); EditorUtility.SetDirty(demo.manager);
+        EditorUtility.SetDirty(demo); EditorUtility.SetDirty(session.manager);
     }
 
     public static void RebuildStationTrack(StationLoop route)

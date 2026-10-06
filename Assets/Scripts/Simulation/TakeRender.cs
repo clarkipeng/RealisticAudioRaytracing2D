@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.IO;
 using UnityEngine;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Acoustics.Tests")]
+
 // Small CPU direct-path baseline. Shared numeric input; no scene or physics queries.
 // Reflection/energy estimators must pass their own correctness gate before export.
 public static partial class TakeRender

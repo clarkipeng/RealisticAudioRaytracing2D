@@ -1,12 +1,14 @@
+using NUnit.Framework;
 using System;
 using System.IO;
-using UnityEditor;
 using UnityEngine;
 
-public static partial class TakeChecks
+public partial class TakeChecks
 {
-    static void OfflineBatchChecks(ComputeShader shader)
+    [Test, Category("GPU")]
+    public void OfflineBatchChecks()
     {
+        var shader=RequireGpu();
         string input=Path.Combine(directory,"offline-batch-input");var scene=Scene(2);var state=States(2);
         scene.materials=new[]{new AcousticTake.MaterialDefinition {name="opaque",frequencies=new float[0],absorption=new float[0],scattering=new float[0]}};
         state[0].flags|=AcousticTake.StateFlags.Geometry;
@@ -43,9 +45,11 @@ public static partial class TakeChecks
             }
         }
     }
-    static void BvhChecks(ComputeShader shader=null)
+    [TestCase(false, Category="Core")]
+    [TestCase(true, Category="GPU")]
+    public void BvhChecks(bool gpu)
     {
-        StaticBvhChecks(shader);
+        var shader=gpu?RequireGpu():null;
         var random=new System.Random(62831);
         float Coordinate() => (float)(random.NextDouble()*12-6);
         Vector3 Point() => new Vector3(Coordinate(),Coordinate(),Coordinate());
@@ -95,8 +99,11 @@ public static partial class TakeChecks
             }
         }
     }
-    static void StaticBvhChecks(ComputeShader shader)
+    [TestCase(false, Category="Core")]
+    [TestCase(true, Category="GPU")]
+    public void StaticBvhChecks(bool gpu)
     {
+        var shader=gpu?RequireGpu():null;
         foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
         {
             var scene=new AcousticTake.Scene {dimension=dimension,objects=new AcousticTake.ObjectDefinition[4],

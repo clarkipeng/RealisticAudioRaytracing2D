@@ -2,8 +2,8 @@ using System;
 using System.IO;
 using UnityEngine;
 
-// Compact station inputs and the original simulation/audio clock mapping.
-public sealed class StationRecording : IDisposable
+// Compact scene inputs and the original simulation/audio clock mapping.
+public sealed class SceneRecording : IDisposable
 {
     public static void ExportInputs(string directory,string output)
     {
@@ -26,20 +26,35 @@ public sealed class StationRecording : IDisposable
     {
         public float cruise,acceleration,dwell,spacing,doorSpeed,walkSpeed,gravity,jumpHeight,startDistance;
         public Vector3 doorOffset;
-        public static Settings From(StationDemo d) => new Settings { cruise=d.trainSpeed,acceleration=d.trainAcceleration,
-            dwell=d.stationDwell,spacing=d.carriageSpacing,doorSpeed=d.doorSpeed,doorOffset=d.doorOpenOffset,
-            walkSpeed=d.player.GetComponent<PlayerController>().speed,gravity=d.player.GetComponent<PlayerController>().gravity,jumpHeight=d.player.GetComponent<PlayerController>().jumpHeight,startDistance=d.startDistance };
-        public void Apply(StationDemo d)
+        // Legacy station-v2 headers remain readable; replay still requires the original project revision.
+        public static Settings From(SceneSession session)
         {
-            d.trainSpeed=cruise; d.trainAcceleration=acceleration; d.stationDwell=dwell; d.carriageSpacing=spacing;
-            d.doorSpeed=doorSpeed; d.doorOpenOffset=doorOffset;
-            d.startDistance=startDistance;
-            var w=d.player.GetComponent<PlayerController>(); w.speed=walkSpeed; w.gravity=gravity; w.jumpHeight=jumpHeight;
+            var train=session.GetComponent<StationDemo>();
+            var door=Array.Find(session.actors,a=>a is SlidingDoor) as SlidingDoor;
+            var w=session.player.GetComponent<PlayerController>();
+            return new Settings {cruise=train.trainSpeed,acceleration=train.trainAcceleration,dwell=train.stationDwell,
+                spacing=train.carriageSpacing,startDistance=train.startDistance,doorSpeed=door.speed,doorOffset=door.openOffset,
+                walkSpeed=w.speed,gravity=w.gravity,jumpHeight=w.jumpHeight};
         }
+    }
+    [Serializable] public struct PlayerSettings
+    {
+        public float speed,gravity,jumpHeight;
+        public static PlayerSettings From(SceneSession session)
+        {
+            var w=session.player.GetComponent<PlayerController>();
+            return new PlayerSettings {speed=w.speed,gravity=w.gravity,jumpHeight=w.jumpHeight};
+        }
+    }
+    [Serializable] public struct ActorSettings
+    {
+        public string id,kind,settings;
+        public int version;
+        public static ActorSettings From(SceneActor actor) => new ActorSettings {id=actor.id,kind=actor.GetType().Name,version=1,settings=actor.SettingsJson};
     }
     [Serializable] public sealed class Manifest
     {
-        public string schema="station-input-from-init-v2",scene,sceneGuid,sceneRevision,codeModule,unityVersion,platform;
+        public string schema="scene-input-from-init-v1",scene,sceneGuid,sceneRevision,codeModule,unityVersion,platform;
         public string takeHash,inputHash,observationHash;
         public string gitCommit,projectRevision;
         public bool gitModified;
@@ -47,32 +62,35 @@ public sealed class StationRecording : IDisposable
         public long ticks;
         public int inputCount,observationCount;
         public bool complete;
-        public Settings settings;
+        public Settings settings; // Read-only station-v2 compatibility.
+        public PlayerSettings player;
+        public ActorSettings[] actors=Array.Empty<ActorSettings>();
     }
-    readonly StationDemo station;
+    readonly SceneSession session;
+    readonly SceneActor[] actors;
     readonly string directory;
     readonly BinaryWriter input,observations;
     readonly Manifest manifest;
     readonly (Transform transform,bool active,AcousticSurface surface,bool surfaceEnabled,RaytracedAudioSource source,bool sourceEnabled)[] activation;
     Vector2 heldMovement;
     bool closed;
-    public StationRecording(StationDemo station,string directory)
+    public SceneRecording(SceneSession session,string directory)
     {
-        this.station=station; this.directory=directory;
-        activation=new (Transform,bool,AcousticSurface,bool,RaytracedAudioSource,bool)[station.manager.takeObjects.Count];
+        this.session=session; actors=(SceneActor[])session.actors.Clone(); this.directory=directory;
+        activation=new (Transform,bool,AcousticSurface,bool,RaytracedAudioSource,bool)[session.manager.takeObjects.Count];
         for(int i=0;i<activation.Length;i++)
         {
-            var transform=station.manager.takeObjects[i].transform;
+            var transform=session.manager.takeObjects[i].transform;
             var surface=transform.GetComponent<AcousticSurface>();var source=transform.GetComponent<RaytracedAudioSource>();
             activation[i]=(transform,transform.gameObject.activeInHierarchy,surface,surface!=null && surface.enabled,source,source!=null && source.enabled);
         }
-        if(station.Tick!=0) throw new InvalidOperationException("Input capture must start at scene initialization; re-enter Play for a new run.");
-        foreach(var root in station.gameObject.scene.GetRootGameObjects())
+        if(session.Tick!=0) throw new InvalidOperationException("Input capture must start at scene initialization; re-enter Play for a new run.");
+        foreach(var root in session.gameObject.scene.GetRootGameObjects())
             if(root.GetComponentsInChildren<Rigidbody>(true).Length>0)
-                throw new NotSupportedException("The station input adapter supports its train and walking controller; arbitrary rigid bodies still require full capture.");
-        manifest=new Manifest { scene=station.gameObject.scene.path,codeModule=typeof(StationDemo).Assembly.ManifestModule.ModuleVersionId.ToString(),
+                throw new NotSupportedException("Compact scene input supports explicitly stepped actors and the walking controller; arbitrary rigid bodies require full capture.");
+        manifest=new Manifest { scene=session.gameObject.scene.path,codeModule=typeof(SceneSession).Assembly.ManifestModule.ModuleVersionId.ToString(),
             unityVersion=Application.unityVersion,platform=Application.platform+" / "+SystemInfo.processorType,
-            stepSeconds=Time.fixedDeltaTime,settings=Settings.From(station) };
+            stepSeconds=Time.fixedDeltaTime,player=PlayerSettings.From(session),actors=Array.ConvertAll(actors,ActorSettings.From) };
 #if UNITY_EDITOR
         manifest.sceneGuid=UnityEditor.AssetDatabase.AssetPathToGUID(manifest.scene);
         manifest.sceneRevision=UnityEditor.AssetDatabase.GetAssetDependencyHash(manifest.scene).ToString();
@@ -90,10 +108,15 @@ public sealed class StationRecording : IDisposable
     }
     public void BeforeTick(long tick,Input value,float seconds)
     {
-        if(closed) throw new ObjectDisposedException(nameof(StationRecording));
-        if(seconds!=manifest.stepSeconds || !manifest.settings.Equals(Settings.From(station)))
-            throw new InvalidOperationException("Station motion settings changed during input recording; use the full take for this run.");
-        if(tick!=manifest.ticks) throw new InvalidOperationException("Station input ticks must be contiguous from zero.");
+        if(closed) throw new ObjectDisposedException(nameof(SceneRecording));
+        if(seconds!=manifest.stepSeconds || !manifest.player.Equals(PlayerSettings.From(session)))
+            throw new InvalidOperationException("Player motion settings changed during input recording; start a new run.");
+        if(session.actors.Length!=actors.Length) throw new InvalidOperationException("Scene actor roster changed during input recording.");
+        for(int i=0;i<actors.Length;i++)
+            if(actors[i]==null || actors[i]!=session.actors[i] || actors[i].id!=manifest.actors[i].id ||
+                !actors[i].isActiveAndEnabled || !actors[i].SettingsUnchanged)
+                throw new InvalidOperationException("Scene actor order, activity or settings changed during input recording.");
+        if(tick!=manifest.ticks) throw new InvalidOperationException("Scene input ticks must be contiguous from zero.");
         if(manifest.inputCount==0 || !value.movement.Equals(heldMovement) || value.look!=Vector2.zero || value.jump || value.interact)
         {
             input.Write(manifest.ticks); input.Write(value.movement.x); input.Write(value.movement.y);
@@ -107,7 +130,7 @@ public sealed class StationRecording : IDisposable
         foreach(var value in activation)
             if(value.transform==null || value.transform.gameObject.activeInHierarchy!=value.active ||
                 (value.surface!=null && value.surface.enabled!=value.surfaceEnabled) || (value.source!=null && value.source.enabled!=value.sourceEnabled))
-                throw new InvalidOperationException("Compact station inputs do not record activation changes; start a new scene run with the desired initial activity.");
+                throw new InvalidOperationException("Compact scene inputs do not record activation changes; start a new scene run with the desired initial activity.");
         observations.Write(sample); observations.Write(tick); manifest.observationCount++;
     }
     public void Complete(bool valid)
@@ -166,7 +189,7 @@ public sealed class StationRecording : IDisposable
         public Playback(string directory)
         {
             Metadata=JsonUtility.FromJson<Manifest>(File.ReadAllText(Path.Combine(directory,"input.json")));
-            if(Metadata==null || Metadata.schema!="station-input-from-init-v2" || !Metadata.complete ||
+            if(Metadata==null || (Metadata.schema!="station-input-from-init-v2" && Metadata.schema!="scene-input-from-init-v1") || !Metadata.complete ||
                 !float.IsFinite(Metadata.stepSeconds) || Metadata.stepSeconds<=0 || Metadata.ticks<0 || Metadata.inputCount<0 || Metadata.observationCount<=0)
                 throw new InvalidDataException("Select a completed recording made from scene initialization.");
             foreach(var pair in new[]{("take.json",Metadata.takeHash),("input.bin",Metadata.inputHash),("input-observations.bin",Metadata.observationHash)})
@@ -186,18 +209,23 @@ public sealed class StationRecording : IDisposable
             }
             catch { Dispose(); throw; }
         }
-        public void ValidateScene(StationDemo station,bool liveOutput=true)
+        public void ValidateScene(SceneSession session,bool liveOutput=true)
         {
-            bool matchesProject=Metadata.codeModule==typeof(StationDemo).Assembly.ManifestModule.ModuleVersionId.ToString();
+            bool matchesProject=Metadata.codeModule==typeof(SceneSession).Assembly.ManifestModule.ModuleVersionId.ToString();
 #if UNITY_EDITOR
             matchesProject=string.IsNullOrEmpty(Metadata.projectRevision)
                 ? matchesProject && Metadata.sceneRevision==UnityEditor.AssetDatabase.GetAssetDependencyHash(Metadata.scene).ToString()
                 : Metadata.projectRevision==HashProject(Path.GetFullPath(Path.Combine(Application.dataPath,"..")));
 #endif
-            if(Metadata.scene!=station.gameObject.scene.path || !matchesProject ||
+            if(Metadata.scene!=session.gameObject.scene.path || !matchesProject ||
                 Metadata.unityVersion!=Application.unityVersion || Metadata.platform!=Application.platform+" / "+SystemInfo.processorType)
                 throw new InvalidDataException("Recorded scene/code/engine/platform differs from the current project.");
-            if(!Metadata.settings.Equals(Settings.From(station)) || Time.fixedDeltaTime!=Metadata.stepSeconds ||
+            bool settingsMatch=Metadata.schema=="station-input-from-init-v2"
+                ? session.GetComponent<StationDemo>()!=null && Metadata.settings.Equals(Settings.From(session))
+                : Metadata.player.Equals(PlayerSettings.From(session)) && Metadata.actors!=null && Metadata.actors.Length==session.actors.Length;
+            if(settingsMatch && Metadata.schema=="scene-input-from-init-v1")
+                for(int i=0;i<Metadata.actors.Length;i++) settingsMatch&=Metadata.actors[i].Equals(ActorSettings.From(session.actors[i]));
+            if(!settingsMatch || Time.fixedDeltaTime!=Metadata.stepSeconds ||
                 (liveOutput && AudioSettings.outputSampleRate!=TakeMetadata.sampleRate))
                 throw new InvalidDataException("Restore the recorded motion settings, fixed step and output sample rate before replaying.");
         }

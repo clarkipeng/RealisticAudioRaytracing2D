@@ -1,125 +1,18 @@
+using UnityEngine.TestTools;
+using UnityEditor.SceneManagement;
+using System.Threading;
+using System.Collections;
+using NUnit.Framework;
 using System;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-public static partial class TakeChecks
+public partial class TakeChecks
 {
-    const string StationTestKey="Acoustics.StationLifecycleCheck";
-    [MenuItem("Tools/Acoustics/Test station recording and replay")]
-    public static void StartStationLifecycleCheck() => StartStationLifecycleCheck(false);
-    public static void StartStationLifecycleCheck(bool endurance,bool compareFrameRates=false)
-    {
-        if(Application.isPlaying)throw new InvalidOperationException("Run this check from Edit mode in the saved station scene.");
-        var station=UnityEngine.Object.FindAnyObjectByType<StationDemo>();
-        if(station==null || station.gameObject.scene.isDirty || string.IsNullOrEmpty(station.gameObject.scene.path))
-            throw new InvalidOperationException("Open and save the station scene before running this check.");
-        File.Delete("Recordings/station-lifecycle-result.txt");
-        SessionState.SetBool(StationTestKey+".Endurance",endurance);
-        SessionState.SetBool(StationTestKey+".Rates",endurance || compareFrameRates);
-        EditorApplication.ExecuteMenuItem("Window/General/Game");
-        SessionState.SetBool(StationTestKey,true);EditorApplication.isPlaying=true;
-    }
-    [InitializeOnLoadMethod]
-    static void InstallStationLifecycleCheck()
-    {
-        EditorApplication.playModeStateChanged+=state=> {
-            if(state!=PlayModeStateChange.EnteredPlayMode || !SessionState.GetBool(StationTestKey,false))return;
-            SessionState.EraseBool(StationTestKey);
-            UnityEngine.Object.FindAnyObjectByType<StationDemo>().retainFullReference=true;
-            bool endurance=SessionState.GetBool(StationTestKey+".Endurance",false);SessionState.EraseBool(StationTestKey+".Endurance");
-            bool rates=SessionState.GetBool(StationTestKey+".Rates",false);SessionState.EraseBool(StationTestKey+".Rates");
-            StationLifecycleCheck(endurance,rates);
-        };
-    }
-    static async Task StationTicks(StationDemo station,int count)
-    {long end=station.Tick+count;while(station.Tick<end)await Task.Delay(5);}
-    static async void StationLifecycleCheck(bool endurance,bool compareFrameRates)
-    {
-        int previousRate=Application.targetFrameRate,previousSync=QualitySettings.vSyncCount;
-        string result="Recordings/station-lifecycle-result.txt";
-        try
-        {
-            StationDemo d;
-            do {await Task.Delay(5);d=UnityEngine.Object.FindAnyObjectByType<StationDemo>();}while(d==null || !d.manager.IsRecordingTake);
-            string path=d.manager.takePath;d.ReadPlayerInput=false;
-            d.SubmitInput(Vector2.up,Vector2.zero);await StationTicks(d,57);
-            d.SubmitInput(Vector2.right,Vector2.zero);await StationTicks(d,95);
-            d.SubmitInput(Vector2.zero,Vector2.zero);await StationTicks(d,5);
-            if(d.Walker.Ground==null || !d.Walker.Ground.IsChildOf(d.carriage))throw new Exception("Player did not walk aboard.");
-            while(d.CurrentTrainSpeed<2)await Task.Delay(5);
-            d.SubmitInput(Vector2.zero,new Vector2(20,-15),true);await StationTicks(d,60);
-            d.SubmitInput(Vector2.up,new Vector2(-20,15));await StationTicks(d,12);
-            d.SubmitInput(Vector2.zero,Vector2.zero);await StationTicks(d,35);
-            if(endurance)for(int lap=0;lap<3;lap++)
-            {
-                while(!d.AtStation)await Task.Delay(5);
-                if(lap<2)while(d.AtStation)await Task.Delay(5);
-            }
-            d.SaveRecording();while(d.Busy)await Task.Delay(5);
-            d.manager.StopLiveSimulation();while(d.manager.Mode!=RayTraceManager.SessionMode.Idle)await Task.Delay(5);
-            string compact=Path.Combine(path,"input-only");StationRecording.ExportInputs(path,compact);
-            long bytes=Directory.GetFiles(compact).Sum(f=>new FileInfo(f).Length);
-            string rebuilt=StationReplay.Reconstruct(compact,Path.Combine(compact,"rebuilt"));
-            using(var a=AcousticTake.Open(path))using(var b=AcousticTake.Open(rebuilt))
-            {
-                if(a.Metadata.stateHash!=b.Metadata.stateHash || a.Metadata.eventHash!=b.Metadata.eventHash)throw new Exception("Input reconstruction drifted.");
-                var settings=new TakeRender.Settings {responseStepSamples=256,listenerOutput=TakeRender.ListenerOutput.Binaural};
-                TakeRender.RenderDirect(a,settings,Path.Combine(path,"check-audio"));TakeRender.RenderDirect(b,settings,Path.Combine(rebuilt,"check-audio"));
-            }
-            var audio=TakeComparison.CompareWave(Path.Combine(path,"check-audio/listener-0.wav"),Path.Combine(rebuilt,"check-audio/listener-0.wav"));
-            if(!audio.exactMatch || audio.referenceRms<=0)throw new Exception("Reconstructed audio differs.");
-            File.WriteAllText(Path.Combine(path,"check-audio.json"),JsonUtility.ToJson(audio,true));
-            foreach(int frameRate in compareFrameRates?new[]{5,30}:new[]{60})d=await CheckSceneReplay(d,compact,path,frameRate);
-            var diagnostics=d.manager.liveDiagnostics;
-            File.WriteAllText(Path.Combine(path,"replay-live.json"),JsonUtility.ToJson(diagnostics,true));
-            File.WriteAllText(result,"PASS: states/events, stereo reconstruction and input-only scene replay. Export bytes: "+bytes+
-                ". Replay underrun/late/overflow samples: "+diagnostics.underrunSamples+" / "+diagnostics.lateSamples+" / "+diagnostics.overflowSamples+"\n"+path);
-        }
-        catch(Exception e) {Directory.CreateDirectory("Recordings");File.WriteAllText(result,"FAIL: "+e);Debug.LogException(e);}
-        finally {Application.targetFrameRate=previousRate;QualitySettings.vSyncCount=previousSync;EditorApplication.isPlaying=false;}
-    }
-
-    static async Task<StationDemo> CheckSceneReplay(StationDemo d,string compact,string path,int frameRate)
-    {
-        // Editor background updates can ignore targetFrameRate; enforce the test's maximum cadence.
-        var timer=System.Diagnostics.Stopwatch.StartNew();long next=0;
-        EditorApplication.CallbackFunction throttle=()=> {
-            long wait=next-timer.ElapsedMilliseconds;
-            if(wait>0)System.Threading.Thread.Sleep((int)wait);
-            next=timer.ElapsedMilliseconds+1000/frameRate;
-        };
-        EditorApplication.update+=throttle;
-        try
-        {
-            var prior=d;
-            Application.targetFrameRate=frameRate;QualitySettings.vSyncCount=0;
-            d.ReplayInputs(compact);
-            do {await Task.Delay(5);d=UnityEngine.Object.FindAnyObjectByType<StationDemo>();}while(d==null || d==prior || !d.IsInputReplay);
-            int startFrame=Time.frameCount;double startTime=Time.realtimeSinceStartupAsDouble;
-            var telemetry=new System.Text.StringBuilder("sample,tick,read,written,underrun\n");
-            while(!d.InputReplayFinished || d.manager.Mode!=RayTraceManager.SessionMode.Idle)
-            {
-                var queue=d.manager.audioManager.OutputQueue;
-                if(queue!=null)telemetry.AppendLine(d.manager.LiveSample+","+d.Tick+","+queue.ReadSample+","+queue.WrittenSample+","+queue.UnderrunSamples);
-                await Task.Delay(5);
-            }
-            File.WriteAllText(Path.Combine(path,"replay-timing-"+frameRate+".csv"),telemetry.ToString());
-            using(var take=AcousticTake.Open(path))
-            {
-                var states=new AcousticTake.State[take.Metadata.scene.objects.Length];take.ReadStoredFrame(take.Metadata.frameCount-1,states);
-                for(int i=0;i<states.Length;i++)if(!states[i].position.Equals(d.manager.takeObjects[i].transform.position))throw new Exception("Scene replay drifted.");
-            }
-        File.WriteAllText(Path.Combine(path,"replay-live-"+frameRate+".json"),JsonUtility.ToJson(d.manager.liveDiagnostics,true));
-        File.WriteAllText(Path.Combine(path,"replay-fps-"+frameRate+".txt"),((Time.frameCount-startFrame)/(Time.realtimeSinceStartupAsDouble-startTime)).ToString("F2"));
-        return d;
-        }
-        finally {EditorApplication.update-=throttle;}
-    }
-
-    static void CompactPayloads()
+    [Test, Category("Core")]
+    public void CompactPayloads()
     {
         string compact=Path.Combine(directory,"compact-payloads");
         string reference=Path.Combine(directory,"reference-payloads");
@@ -143,26 +36,28 @@ public static partial class TakeChecks
         }
     }
 
-    static void StationActivation()
+    [Test, Category("Core")]
+    public void StationActivation()
     {
         var authoredScene=UnityEditor.SceneManagement.EditorSceneManager.OpenPreviewScene("Assets/Scenes/TrainStation.unity");
         try
         {
-            var station=authoredScene.GetRootGameObjects().SelectMany(root=>root.GetComponentsInChildren<StationDemo>(true)).Single();
+            var station=authoredScene.GetRootGameObjects().SelectMany(root=>root.GetComponentsInChildren<SceneSession>(true)).Single();
+            station.InitializeSimulation();
             var manager=station.manager;var source=manager.takeSources[0];source.enabled=false;
             var surface=manager.takeObjects.Select(b=>b.transform.GetComponent<AcousticSurface>()).First(value=>value!=null);surface.enabled=false;
             var scene=SceneToTake.Compile(manager.takeObjects,manager.takeDimension,manager.takeCurveTolerance,manager.takeDefaultMaterial,
                 manager.takeSources.Select(s=>s.transform).ToArray(),manager.takeSources.Select(s=>s.clip).ToArray(),manager.takeListeners.ToArray(),out _);
-            using(var rig=new StationReplay.Rig(station))
+            using(var rig=new SceneReplay.Rig(station))
             {
-                var observe=typeof(StationReplay).GetMethod("Observe",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
+                var observe=typeof(SceneReplay).GetMethod("Observe",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
                 var states=(AcousticTake.State[])observe.Invoke(null,new object[]{rig,scene});
                 int sourceIndex=manager.takeObjects.FindIndex(b=>b.transform==source.transform),surfaceIndex=manager.takeObjects.FindIndex(b=>b.transform==surface.transform);
                 Check((states[sourceIndex].flags&AcousticTake.StateFlags.Source)==0,"Reconstruction preserves disabled initial source");
                 Check((states[surfaceIndex].flags&AcousticTake.StateFlags.Geometry)==0,"Reconstruction preserves disabled initial surface");
             }
             string path=Path.Combine(directory,"activation-guard");Directory.CreateDirectory(path);
-            using(var recorder=new StationRecording(station,path))
+            using(var recorder=new SceneRecording(station,path))
             {
                 recorder.Observe(0,0);source.enabled=true;
                 Reject(()=>recorder.Observe(1,0),"Compact input capture rejects unrecorded activation changes");
@@ -171,10 +66,31 @@ public static partial class TakeChecks
         finally {UnityEditor.SceneManagement.EditorSceneManager.ClosePreviewScene(authoredScene);}
     }
 
-    static void StationInputs()
+    [TestCase("duplicate-id"), TestCase("order"), TestCase("settings"), Category("Core")]
+    public void SceneActorsKeepRecordedIdentity(string change)
     {
-        CompactPayloads();
-        StationActivation();
+        var player=new GameObject("Player").transform; player.gameObject.AddComponent<CharacterController>();
+        player.gameObject.AddComponent<PlayerController>();
+        var head=new GameObject("Head").AddComponent<MouseLook>(); head.transform.SetParent(player); head.playerBody=player;
+        var session=new GameObject("Session").AddComponent<SceneSession>(); session.player=player;
+        session.manager=session.gameObject.AddComponent<RayTraceManager>();
+        var a=new GameObject("Door A").AddComponent<SlidingDoor>(); a.id="a";
+        var b=new GameObject("Door B").AddComponent<SlidingDoor>(); b.id="b";
+        session.actors=new SceneActor[]{a,b};
+        if(change=="duplicate-id") {b.id=a.id;Assert.Throws<InvalidOperationException>(session.InitializeSimulation);return;}
+        session.InitializeSimulation();
+        string path=Path.Combine(directory,"actor-identity");Directory.CreateDirectory(path);
+        using(var recorder=new SceneRecording(session,path))
+        {
+            recorder.BeforeTick(0,default,Time.fixedDeltaTime);
+            if(change=="order") session.actors=new SceneActor[]{b,a}; else a.speed+=1;
+            Assert.Throws<InvalidOperationException>(()=>recorder.BeforeTick(1,default,Time.fixedDeltaTime));
+        }
+    }
+
+    [Test, Category("Core")]
+    public void BatchJobsRequireExplicitComparison()
+    {
         var job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\"}");
         Check(job.comparison==null && job.referenceCheck==null && job.settings.responseStepSamples==512,"A render job cannot implicitly request comparison/reference work.");
         job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"comparison\":{\"responseStepSamples\":128}}");
@@ -184,20 +100,30 @@ public static partial class TakeChecks
         job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"comparison\":{\"responseStepSamples\":128},\"referenceCheck\":{\"responseStepSamples\":64}}");
         Check(job.referenceCheck.responseStepSamples==64,"Explicit reference settings are retained.");
         Reject(()=>TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"referenceCheck\":{}}"),"Reference-only jobs cannot silently discard the requested check.");
+    }
+
+    [Test, Category("Core")]
+    public void ProjectIdentityTracksAuthoredInputs()
+    {
         string project=Path.Combine(directory,"project-identity"),copyProject=project+"-copy";
         foreach(string root in new[]{project,copyProject})
             foreach(string folder in new[]{"Assets","Packages","ProjectSettings"})
             { Directory.CreateDirectory(Path.Combine(root,folder));File.WriteAllText(Path.Combine(root,folder,"input"),folder); }
-        string identity=StationRecording.HashProject(project);
-        Check(identity==StationRecording.HashProject(copyProject),"Project identity survives a different checkout directory.");
+        string identity=SceneRecording.HashProject(project);
+        Check(identity==SceneRecording.HashProject(copyProject),"Project identity survives a different checkout directory.");
         Directory.CreateDirectory(Path.Combine(copyProject,"Library"));File.WriteAllText(Path.Combine(copyProject,"Library","local"),"rebuild");
-        Check(identity==StationRecording.HashProject(copyProject),"Generated Library contents do not affect replay identity.");
+        Check(identity==SceneRecording.HashProject(copyProject),"Generated Library contents do not affect replay identity.");
         File.WriteAllText(Path.Combine(copyProject,"Assets","input"),"changed");
-        Check(identity!=StationRecording.HashProject(copyProject),"Changed asset/code bytes invalidate replay identity.");
+        Check(identity!=SceneRecording.HashProject(copyProject),"Changed asset/code bytes invalidate replay identity.");
         File.WriteAllText(Path.Combine(copyProject,"Assets","input"),"Assets");File.Move(Path.Combine(copyProject,"Assets","input"),Path.Combine(copyProject,"Assets","renamed"));
-        Check(identity!=StationRecording.HashProject(copyProject),"Renamed project inputs invalidate replay identity.");
+        Check(identity!=SceneRecording.HashProject(copyProject),"Renamed project inputs invalidate replay identity.");
         File.Delete(Path.Combine(copyProject,"Assets","renamed"));
-        Check(identity!=StationRecording.HashProject(copyProject),"Missing project inputs invalidate replay identity.");
+        Check(identity!=SceneRecording.HashProject(copyProject),"Missing project inputs invalidate replay identity.");
+    }
+
+    [TestCase("station-input-from-init-v2"), TestCase("scene-input-from-init-v1"), Category("Core")]
+    public void InputLogRoundTripAndValidation(string schema)
+    {
         string path=Path.Combine(directory,"station-inputs");
         using(var writer=Writer("station-inputs",Scene()))
         {
@@ -206,7 +132,7 @@ public static partial class TakeChecks
             writer.Append(new AcousticTake.VoiceEvent {sample=30,action=AcousticTake.VoiceAction.Gain,gain=.4f});
             writer.Complete();
         }
-        var metadata=new StationRecording.Manifest {complete=true,stepSeconds=.02f,ticks=4,inputCount=3,observationCount=3};
+        var metadata=new SceneRecording.Manifest {schema=schema,complete=true,stepSeconds=.02f,ticks=4,inputCount=3,observationCount=3};
         void Inputs(float x=0,byte flags=1)
         {
             using(var writer=new BinaryWriter(File.Create(Path.Combine(path,"input.bin"))))
@@ -228,13 +154,13 @@ public static partial class TakeChecks
             metadata.observationHash=AcousticTake.HashFile(Path.Combine(path,"input-observations.bin"));
             File.WriteAllText(Path.Combine(path,"input.json"),JsonUtility.ToJson(metadata));
         }
-        void Load() {using(var input=new StationRecording.Playback(path)){} }
+        void Load() {using(var input=new SceneRecording.Playback(path)){} }
         void ReadObservations()
-        {using(var input=new StationRecording.Playback(path))while(input.NextObservation(long.MaxValue,out _,out _)){} }
+        {using(var input=new SceneRecording.Playback(path))while(input.NextObservation(long.MaxValue,out _,out _)){} }
         Inputs();Observations();Header();
         // These are deliberately absent: playback must use scene initialization and inputs.
         foreach(string file in new[]{"states.bin","geometry.bin","clip-0.f32"})File.Delete(Path.Combine(path,file));
-        using(var input=new StationRecording.Playback(path))
+        using(var input=new SceneRecording.Playback(path))
         {
             Check(input.Events.Length==2 && input.Events[1].sample==30,"Input-only replay retains source sample timing.");
             Check(input.NextObservation(0,out long sample,out long tick) && sample==0 && tick==0,"Replay starts at tick/sample zero.");
@@ -248,15 +174,15 @@ public static partial class TakeChecks
             Check(input.NextObservation(80,out sample,out tick) && tick==4 && !input.NextObservation(long.MaxValue,out _,out _),"Final observation terminates replay.");
         }
         Check(!File.ReadAllText(Path.Combine(path,"input.json")).Contains("\"initial\""),"Input format contains no world snapshot.");
-        string exported=Path.Combine(directory,"exported-inputs");StationRecording.ExportInputs(path,exported);
+        string exported=Path.Combine(directory,"exported-inputs");SceneRecording.ExportInputs(path,exported);
         Check(Directory.GetFiles(exported).Length==5,"Compact export only includes metadata, input/timing and source events.");
-        using(var copy=new StationRecording.Playback(exported))Check(copy.Read(0).jump,"Export remains playable without reference files.");
-        bool rejected=false;try {StationRecording.ExportInputs(path,exported);}catch(IOException){rejected=true;}
+        using(var copy=new SceneRecording.Playback(exported))Check(copy.Read(0).jump,"Export remains playable without reference files.");
+        bool rejected=false;try {SceneRecording.ExportInputs(path,exported);}catch(IOException){rejected=true;}
         Check(rejected,"Never overwrite an existing export.");
         var bytes=File.ReadAllBytes(Path.Combine(path,"input.bin"));bytes[0]^=1;File.WriteAllBytes(Path.Combine(path,"input.bin"),bytes);
         Reject(Load,"Reject altered input payload.");
-        Inputs(float.NaN);Header();Reject(()=>{using(var input=new StationRecording.Playback(path))input.Read(0);},"Reject non-finite input even with a matching checksum.");
-        Inputs(0,4);Header();Reject(()=>{using(var input=new StationRecording.Playback(path))input.Read(0);},"Reject unknown button bits.");
+        Inputs(float.NaN);Header();Reject(()=>{using(var input=new SceneRecording.Playback(path))input.Read(0);},"Reject non-finite input even with a matching checksum.");
+        Inputs(0,4);Header();Reject(()=>{using(var input=new SceneRecording.Playback(path))input.Read(0);},"Reject unknown button bits.");
         Inputs();Observations(start:1);Header();Reject(ReadObservations,"Reject an omitted initialization observation.");
         Observations(middle:-1);Header();Reject(ReadObservations,"Reject backward observation ticks.");
         Observations(end:79);Header();Reject(ReadObservations,"Reject a clock map missing the audio endpoint.");
@@ -265,4 +191,215 @@ public static partial class TakeChecks
         metadata.complete=true;metadata.observationCount=0;Header();Reject(Load,"Reject empty clock maps.");
         metadata.observationCount=3;metadata.inputCount=2;Header();Reject(Load,"Reject incorrect input counts.");
     }
+}
+
+// Real scene lifecycle and device-clock coverage. Numeric contracts live in TakeChecks.
+public abstract class SceneEndToEndTests
+{
+    protected SceneSession session;
+    protected abstract string ScenePath {get;}
+    string recording;
+    bool previousBackground;
+
+    [UnitySetUp]
+    public IEnumerator OpenSession()
+    {
+        if(!SystemInfo.supportsComputeShaders || !SystemInfo.supportsAsyncGPUReadback)
+            Assert.Ignore("Station tests require a GPU with asynchronous readback.");
+        if(AudioSettings.GetConfiguration().speakerMode!=AudioSpeakerMode.Stereo)
+            Assert.Ignore("Station tests require a stereo audio device.");
+        // Configure the loaded copy before Start can run. Test Runner restores
+        // the original scene; these fixture settings are never saved to disk.
+        EditorSceneManager.OpenScene(ScenePath,OpenSceneMode.Single);
+        session=UnityEngine.Object.FindAnyObjectByType<SceneSession>();
+        Assert.That(session,Is.Not.Null);
+        session.enabled=false;
+        session.player.GetComponent<PlayerController>().enabled=false;
+        session.player.GetComponentInChildren<MouseLook>().enabled=false;
+        EditorApplication.ExecuteMenuItem("Window/General/Game");
+        yield return new EnterPlayMode();
+        previousBackground=Application.runInBackground;
+        Application.runInBackground=true;
+        session=UnityEngine.Object.FindAnyObjectByType<SceneSession>();
+        Assert.That(session,Is.Not.Null);
+        var walker=session.player.GetComponent<PlayerController>();walker.externalClock=true;walker.enabled=true;
+        var look=session.player.GetComponentInChildren<MouseLook>();look.externalClock=true;look.enabled=true;
+        session.ReadPlayerInput=false;
+    }
+
+    protected IEnumerator StartSession(bool reference=false)
+    {
+        session.retainFullReference=reference;session.enabled=true;
+        yield return Until(()=>session.manager.IsRecordingTake,"session capture startup");
+        recording=session.manager.takePath;
+        session.SetWalking(false);
+    }
+
+    [UnityTearDown]
+    public IEnumerator CloseSession()
+    {
+        // Exiting Play disposes the session even when an assertion/timeout interrupted it.
+        if(Application.isPlaying)
+        {
+            if(session==null)session=UnityEngine.Object.FindAnyObjectByType<SceneSession>();
+            if(session!=null && session.manager.IsRecordingTake)
+            {
+                // Keep the path even if a test failed during startup.
+                recording=session.manager.takePath;
+                try {session.manager.EndTakeRecording();}
+                catch(Exception e) {Debug.LogException(e);}
+            }
+            Application.runInBackground=previousBackground;
+            yield return new ExitPlayMode();
+        }
+        if(!string.IsNullOrEmpty(recording) && Directory.Exists(recording))Directory.Delete(recording,true);
+    }
+
+    protected static IEnumerator Until(Func<bool> ready,string operation,double seconds=30)
+    {
+        double end=Time.realtimeSinceStartupAsDouble+seconds;
+        while(!ready())
+        {
+            Assert.That(Time.realtimeSinceStartupAsDouble,Is.LessThan(end),"Timed out waiting for "+operation);
+            yield return null;
+        }
+    }
+
+    protected IEnumerator VerifyReplay()
+    {
+        session.manager.EndTakeRecording();
+        yield return Until(()=>session.manager.Mode==RayTraceManager.SessionMode.Idle,"capture drain");
+
+        string compact=Path.Combine(recording,"input-only");
+        SceneRecording.ExportInputs(recording,compact);
+        string rebuilt=SceneReplay.Reconstruct(compact,Path.Combine(compact,"rebuilt"));
+        using(var original=AcousticTake.Open(recording))
+        using(var replay=AcousticTake.Open(rebuilt))
+        {
+            Assert.That(replay.Metadata.stateHash,Is.EqualTo(original.Metadata.stateHash),"Recorded observations must reconstruct exactly.");
+            Assert.That(replay.Metadata.eventHash,Is.EqualTo(original.Metadata.eventHash),"Source events must retain sample timing.");
+        }
+
+        var previous=session;
+        session.ReplayInputs(compact);
+        yield return Until(()=>
+        {
+            var next=UnityEngine.Object.FindAnyObjectByType<SceneSession>();
+            if(next==null || next==previous || !next.IsInputReplay)return false;
+            session=next;session.SetWalking(false);return true;
+        },"fresh-scene input replay");
+        using(var take=AcousticTake.Open(recording))
+        {
+            yield return Until(()=>session.InputReplayFinished && session.manager.Mode==RayTraceManager.SessionMode.Idle,
+                "input replay completion",(double)take.Metadata.durationSamples/take.Metadata.sampleRate+30);
+            var expected=new AcousticTake.State[take.Metadata.scene.objects.Length];
+            take.ReadStoredFrame(take.Metadata.frameCount-1,expected);
+            for(int i=0;i<expected.Length;i++)
+            {
+                var actual=session.manager.takeObjects[i].transform;
+                Assert.That(actual.position,Is.EqualTo(expected[i].position),"Final replay position: "+take.Metadata.scene.objects[i].id);
+                Assert.That(Quaternion.Angle(actual.rotation,expected[i].rotation),Is.LessThan(.05f),"Final replay orientation: "+take.Metadata.scene.objects[i].id);
+            }
+        }
+    }
+
+}
+
+public sealed class StationEndToEndTests : SceneEndToEndTests
+{
+    protected override string ScenePath => "Assets/Scenes/TrainStation.unity";
+    [UnityTest, Category("EndToEnd"), Category("GPU")]
+    public IEnumerator RecordingReconstructsAndReplays()
+    {
+        yield return StartSession(true);
+        // Feed exact simulation ticks: a frame-based wait can overshoot several
+        // physics ticks under GPU load and walk past the carriage entrance.
+        var input=session.gameObject.AddComponent<SceneTestInput>();
+        input.session=session;long start=session.Tick;
+        input.submit=tick=>session.SubmitInput(tick-start<57?Vector2.up:tick-start<152?Vector2.right:Vector2.zero,Vector2.zero);
+        yield return Until(()=>session.Tick>=start+157,"walking aboard");
+        Assert.That(session.Walker.Ground!=null && session.Walker.Ground.IsChildOf(session.GetComponent<StationDemo>().carriage),Is.True,
+            "The scripted player must actually walk aboard before testing moving-platform replay.");
+        yield return Until(()=>session.GetComponent<StationDemo>().CurrentTrainSpeed>2,"train departure",session.GetComponent<StationDemo>().stationDwell+15);
+        start=session.Tick;
+        input.submit=tick=>session.SubmitInput(tick-start>=60 && tick-start<72?Vector2.up:Vector2.zero,
+            tick==start?new Vector2(20,-15):tick==start+60?new Vector2(-20,15):Vector2.zero,tick==start);
+        yield return Until(()=>session.Tick>=start+107,"onboard motion");
+        UnityEngine.Object.Destroy(input);
+        yield return VerifyReplay();
+    }
+
+    [UnityTest, Category("EndToEnd"), Category("GPU"), Category("Realtime")]
+    [Explicit("Measures real device deadlines under session graphics load. Run explicitly on an otherwise idle target machine.")]
+    public IEnumerator StationDeliversAudioBeforeItsDeadline()
+    {
+        yield return StartSession();
+        var manager=session.manager;
+        Assert.That(manager.directSettings.audioBackend,Is.EqualTo(TakeRender.AudioBackend.Gpu));
+        Assert.That(manager.directSettings.transport,Is.EqualTo(TakeRender.Transport.Raytraced));
+        Assert.That(manager.liveDiagnostics.backend,Does.StartWith("GPU-"));
+        var queue=manager.audioManager.OutputQueue;
+        Assert.That(queue,Is.Not.Null);
+        yield return Until(()=>queue.ReadSample>=manager.sampleRate*2L,"two seconds of device warmup");
+        long start=queue.ReadSample,callbacks=Interlocked.Read(ref queue.CallbackCount);
+        long underruns=Interlocked.Read(ref queue.UnderrunSamples),late=queue.LateSamples,overflow=queue.OverflowSamples;
+        long mismatch=Interlocked.Read(ref queue.ChannelMismatchSamples),overBudget=Interlocked.Read(ref queue.OverBudgetCallbacks);
+        long end=start+manager.sampleRate*20L;
+        double timeout=Time.realtimeSinceStartupAsDouble+40;
+        while(queue.ReadSample<end)
+        {
+            Assert.That(Time.realtimeSinceStartupAsDouble,Is.LessThan(timeout),"Audio device stopped advancing.");
+            session.SubmitInput(session.Tick%200<100?Vector2.up:Vector2.zero,new Vector2(.2f,0));
+            yield return null;
+        }
+        long missed=Interlocked.Read(ref queue.UnderrunSamples)-underruns;
+        long tardy=queue.LateSamples-late,overflowed=queue.OverflowSamples-overflow;
+        long mismatched=Interlocked.Read(ref queue.ChannelMismatchSamples)-mismatch;
+        long slow=Interlocked.Read(ref queue.OverBudgetCallbacks)-overBudget;
+        TestContext.WriteLine("Device frames="+(queue.ReadSample-start)+", underrun="+missed+", late="+tardy+
+            ", overflow="+overflowed+", channel mismatch="+mismatched+", over-budget callbacks="+slow+
+            ", lead="+manager.monitorLeadSamples+", hardware="+SystemInfo.graphicsDeviceName);
+        TestContext.WriteLine("Producer diagnostics: "+JsonUtility.ToJson(manager.liveDiagnostics));
+        Assert.That(Interlocked.Read(ref queue.CallbackCount),Is.GreaterThan(callbacks),"The real audio callback must run.");
+        Assert.That(manager.liveDiagnostics.responseCount,Is.GreaterThan(0),"The producer must trace responses.");
+        Assert.That(session.GetComponent<StationDemo>().CurrentTrainSpeed,Is.GreaterThan(0),"The test must include a moving train.");
+        Assert.That(new[]{missed,tardy,overflowed,mismatched,slow},Is.All.Zero,
+            "Audio delivery missed its contract. Underrun and late counters overlap; do not add them.");
+    }
+}
+
+public sealed class ChurchEndToEndTests : SceneEndToEndTests
+{
+    protected override string ScenePath => "Assets/Scenes/Church.unity";
+    [UnityTest, Category("EndToEnd"), Category("GPU")]
+    public IEnumerator ChurchWalksThroughDoorAndReplays()
+    {
+        yield return StartSession(true);
+        Assert.That(session.GetComponent<StationDemo>(),Is.Null,"The shared session must work without a train.");
+        var door=(SlidingDoor)session.actors.Single();
+        var input=session.gameObject.AddComponent<SceneTestInput>(); input.session=session;
+        long start=session.Tick;
+        // 171 ticks down the clear central aisle, then approach the east doorway.
+        input.submit=tick=>session.SubmitInput(tick-start<171?Vector2.up:tick-start<207?Vector2.right:Vector2.zero,Vector2.zero);
+        yield return Until(()=>session.Tick>=start+211,"door approach");
+        Assert.That(session.player.position.z,Is.InRange(7.8f,8.2f));
+        Assert.That(session.Walker.Ground,Is.Not.Null,"The player must stay on the floor.");
+        start=session.Tick;
+        input.submit=tick=>session.SubmitInput(tick-start>=85 && tick-start<129?Vector2.right:Vector2.zero,
+            tick==start+150?new Vector2(25,10):Vector2.zero,interact:tick==start);
+        yield return Until(()=>session.Tick>=start+155,"door opening and side-room entry");
+        Assert.That(door.IsOpen,Is.True);
+        Assert.That(session.player.position.x,Is.GreaterThan(8),"The player must pass the collider opening into the room.");
+        Assert.That(session.player.position.y,Is.InRange(-.1f,.1f),"The player must not fall through the floor.");
+        UnityEngine.Object.Destroy(input);
+        yield return VerifyReplay();
+    }
+}
+
+[DefaultExecutionOrder(-30)]
+public sealed class SceneTestInput : MonoBehaviour
+{
+    public SceneSession session;
+    public Action<long> submit;
+    void FixedUpdate()=>submit?.Invoke(session.Tick);
 }

@@ -155,7 +155,7 @@ public sealed class TakeComparisonWindow : EditorWindow
         preview.Dispose();
         try
         {
-            using(var take=StationReplay.Open(takePath,output)) TakeComparison.Run(take,lowSettings,highSettings,output,shader,p=>
+            using(var take=SceneReplay.Open(takePath,output)) TakeComparison.Run(take,lowSettings,highSettings,output,shader,p=>
             {if(EditorUtility.DisplayCancelableProgressBar("Rendering acoustic comparison",output,p)) throw new OperationCanceledException("Comparison cancelled; incomplete output retained.");},checkReference ? reference:null);
             LoadComparison(Path.Combine(output,"comparison.json"));
         }

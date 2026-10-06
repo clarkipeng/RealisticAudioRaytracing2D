@@ -1,12 +1,19 @@
+using NUnit.Framework;
 using System;
-using System.Reflection;
 using UnityEngine;
 
-public static partial class TakeChecks
+public partial class TakeChecks
 {
-    static void MotionDoppler(ComputeShader shader)
+    [Test, Category("Core")]
+    public void LegacySettingsRetainIrSynthesis()
     {
         Check(JsonUtility.FromJson<TakeRender.Settings>("{\"transport\":1}").synthesis==TakeRender.Synthesis.ImpulseResponse,"Existing settings retain IR synthesis.");
+    }
+
+    [Test, Category("GPU")]
+    public void SourceAndListenerDoppler()
+    {
+        var shader=RequireGpu();
         const int rate=8192;const float speed=343;
         var motions=new[]{new Vector2(34.3f,0),new Vector2(-34.3f,0),new Vector2(0,34.3f),new Vector2(0,-34.3f),new Vector2(34.3f,34.3f)};
         foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})foreach(var motion in motions)
@@ -23,9 +30,9 @@ public static partial class TakeChecks
             Near(gpu[0].delaySeconds,(float)delay,"Retarded source travel time GPU",1e-6f);
             Near(1-cpu[0].direction.w,(float)ratio,"Source and listener radial factors CPU",1e-6f);
             Near(1-gpu[0].direction.w,(float)ratio,"Source and listener radial factors GPU",1e-6f);
-            var arrivals=Arrivals(solver);
-            Near(ArrivalField<float>(arrivals,1,"delaySeconds"),(float)delay,"Spectral retarded travel time",1e-6f);
-            Near(1-ArrivalField<Vector4>(arrivals,1,"direction").w,(float)ratio,"Spectral motion factor",1e-6f);
+            var arrivals=solver.RayPaths;
+            Near(arrivals[1].delaySeconds,(float)delay,"Spectral retarded travel time",1e-6f);
+            Near(1-arrivals[1].direction.w,(float)ratio,"Spectral motion factor",1e-6f);
             if(dimension==AcousticTake.Dimension.Spatial3D)
             {
                 foreach(bool direct in new[]{false,true})
@@ -41,6 +48,13 @@ public static partial class TakeChecks
                 }
             }
         }
+    }
+
+    [Test, Category("GPU")]
+    public void MovingMirrorDoppler()
+    {
+        var shader=RequireGpu();
+        const int rate=8192;const float speed=343;
         foreach(float wallSpeed in new[]{-34.3f,34.3f})
         {
             var scene=Scene(2);scene.listeners=new[]{1};scene.objects[2].primitiveCount=1;
@@ -49,12 +63,19 @@ public static partial class TakeChecks
             state[2].velocity=new Vector3(wallSpeed,0,0);state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry|AcousticTake.StateFlags.VelocityValid;
             var geometry=new[]{new AcousticTake.Primitive{objectIndex=2,a=new Vector3(0,-100,-100),b=new Vector3(0,100,-100),c=new Vector3(0,0,100)}};
             var settings=SpectralSettings();settings.speedOfSound=speed;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
-            using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);var rays=Arrivals(solver);
+            using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
             double ratio=(speed-wallSpeed)/(speed+wallSpeed),delay=200/(speed+wallSpeed);int mirror=settings.FrequencyBins;
-            Near(ArrivalField<float>(rays,mirror,"delaySeconds"),(float)delay,"Moving mirror retarded round trip",1e-6f);
-            Near(1-ArrivalField<Vector4>(rays,mirror,"direction").w,(float)ratio,"Moving mirror double Doppler",1e-6f);
+            Near(rays[mirror].delaySeconds,(float)delay,"Moving mirror retarded round trip",1e-6f);
+            Near(1-rays[mirror].direction.w,(float)ratio,"Moving mirror double Doppler",1e-6f);
             CheckMotionTone(scene,state,geometry,settings,shader,new Vector2(wallSpeed,0),ratio,true);
         }
+    }
+
+    [Test, Category("GPU")]
+    public void MaterialSpeedDoppler()
+    {
+        var shader=RequireGpu();
+        const int rate=8192;const float speed=343;
         // A source wholly inside a material uses that material's speed in both
         // the retarded delay and Doppler denominator, not the configured air speed.
         foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
@@ -67,10 +88,17 @@ public static partial class TakeChecks
             state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
             var settings=SpectralSettings();settings.speedOfSound=speed;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
             using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);
-            var paths=Arrivals(solver);
-            Near(ArrivalField<float>(paths,1,"delaySeconds"),100/(171.5f-17.15f),"Material-speed retarded source",1e-6f);
-            Near(1-ArrivalField<Vector4>(paths,1,"direction").w,171.5f/(171.5f-17.15f),"Material-speed Doppler",1e-6f);
+            var paths=solver.RayPaths;
+            Near(paths[1].delaySeconds,100/(171.5f-17.15f),"Material-speed retarded source",1e-6f);
+            Near(1-paths[1].direction.w,171.5f/(171.5f-17.15f),"Material-speed Doppler",1e-6f);
         }
+    }
+
+    [Test, Category("GPU")]
+    public void TwoMediumRetardedRoot()
+    {
+        var shader=RequireGpu();
+        const int rate=8192;const float speed=343;
         // This two-medium root has fixed-point slope -0.9, so 32 iterations
         // cannot resolve it. The analytic retarded source remains inside the solid.
         {
@@ -82,18 +110,22 @@ public static partial class TakeChecks
             state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
             var settings=SpectralSettings();settings.speedOfSound=1000;settings.maximumDelaySeconds=4;settings.raysPerBin=1;
             using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);
-            var paths=Arrivals(solver);
-            Near(ArrivalField<float>(paths,1,"delaySeconds"),2.5f/1.9f,"Bracketed retarded root through two media",2e-6f);
-            Near(1-ArrivalField<Vector4>(paths,1,"direction").w,1/1.9f,"Two-medium emitted-frequency factor",1e-6f);
+            var paths=solver.RayPaths;
+            Near(paths[1].delaySeconds,2.5f/1.9f,"Bracketed retarded root through two media",2e-6f);
+            Near(1-paths[1].direction.w,1/1.9f,"Two-medium emitted-frequency factor",1e-6f);
         }
+    }
+
+    [Test, Category("Core")]
+    public void DopplerRejectsAliasing()
+    {
         // Pitch-up must attenuate content that would fold above output Nyquist in sinc mode.
-        var type=typeof(TakeRender).Assembly.GetType("Doppler");var read=type.GetMethod("Read",BindingFlags.Static|BindingFlags.Public);
         var tone=new float[128];for(int n=0;n<tone.Length;n++)tone[n]=Mathf.Sin(2*Mathf.PI*.375f*n);
         var signal=new TakeRender.Signal(tone);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
-        double energy=0;for(int n=0;n<256;n++){float v=(float)read.Invoke(null,new object[]{signal,500.25+1.5*n,1.5,TakeRender.DelayFilter.WindowedSinc,32});energy+=v*v;}
+        double energy=0;for(int n=0;n<256;n++){float v=Doppler.Read(signal,500.25+1.5*n,1.5,TakeRender.DelayFilter.WindowedSinc,32);energy+=v*v;}
         Check(Math.Sqrt(energy/256)<.01,"Doppler sinc low-pass rejects a tone shifted above Nyquist.");
     }
-    static void CheckMotionTone(AcousticTake.Scene scene,AcousticTake.State[] initial,AcousticTake.Primitive[] geometry,
+    void CheckMotionTone(AcousticTake.Scene scene,AcousticTake.State[] initial,AcousticTake.Primitive[] geometry,
         TakeRender.Settings settings,ComputeShader shader,Vector2 motion,double ratio,bool mirrorOnly)
     {
         const int rate=8192,total=16384;const double frequency=512;
@@ -102,18 +134,18 @@ public static partial class TakeChecks
         var signal=new TakeRender.Signal(pcm);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
         var mixer=new TakeRender.Mixer(scene,rate,settings,new[]{signal});var state=(AcousticTake.State[])initial.Clone();
         using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);
-        var set=typeof(TakeRender.Mixer).GetMethod("SetResponse",BindingFlags.Instance|BindingFlags.NonPublic);
+
         var direct=new TakeRender.DirectPath[1];var block=new float[128];var output=new float[total];
         for(int sample=0;sample<total;sample+=128)
         {
             double seconds=(double)sample/rate;
             for(int i=0;i<state.Length;i++)state[i].position=initial[i].position+initial[i].velocity*(float)seconds;
-            solver.Solve(state,direct);var arrivals=Arrivals(solver);
+            solver.Solve(state,direct);var arrivals=solver.RayPaths;
             if(mirrorOnly)
                 for(int slot=0;slot<arrivals.Length;slot++)if(slot<settings.FrequencyBins || (slot-settings.FrequencyBins)%(settings.maxBounces+1)!=0)
-                    arrivals.SetValue(Activator.CreateInstance(arrivals.GetType().GetElementType()),slot);
+                    arrivals[slot]=default;
             if(settings.transport==TakeRender.Transport.Direct)mixer.SetResponse(sample,direct,state);
-            else set.Invoke(mixer,new object[]{(long)sample,direct,state,false,arrivals,0});
+            else mixer.SetResponse((long)sample,direct,state,false,arrivals,0);
             mixer.Render(sample,128,block);Array.Copy(block,0,output,sample,128);
         }
         int crossings=0;double re=0,im=0,energy=0;

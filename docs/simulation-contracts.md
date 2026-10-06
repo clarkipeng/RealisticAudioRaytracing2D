@@ -1,6 +1,6 @@
 # Acoustic simulation and reconstruction: design contract
 
-Updated 2026-10-06 against the current Unity 6 working tree. This is the single design specification for scenes, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
+Updated 2026-10-06 against the current Unity 6 working tree. This is the single design specification for runtime cleanup, scenes, microphone/clip sources, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
 
 [README](../README.md) remains the operating guide for actual APIs and workflows. [Cleanup results](cleanup-results.md) contains the current station offline benchmarks and explicitly dated historical measurements.
 
@@ -24,19 +24,22 @@ Contents:
 12. [Multiplayer](#12-multiplayer)
 13. [Implementation sequence and acceptance](#13-implementation-sequence-and-acceptance)
 
-The [system audit below](#system-audit-2026-10-05) sets the immediate repair order. Audio correctness and trustworthy recording completion precede the planned recordings browser, new scene features and training. The browser section remains a future specification.
+**Implemented next-scene foundation:** shared session, generic compact replay and Church blockout. **Remaining:** legacy/material migration → Church acoustic validation → local microphone → LakeForest → multiplayer on the same scenes. [Section 13](#13-implementation-sequence-and-acceptance) defines delivery gates. The remaining additions are specified, not implemented. The existing simulation/training contracts remain applicable; scene demos do not establish teacher accuracy.
+
+Review the [runtime changes](#runtime-cleanup-and-shared-scene-session), [scene designs](#scene-composition), [recording formats](#scene-independent-input-implemented-and-stream-recording-proposed), [microphone pipeline](#microphone-and-streamed-source-audio-proposed), and [multiplayer contracts](#12-multiplayer).
 
 ## 1. Status and decisions
 
 | Capability | Current implementation | Planned work |
 |---|---|---|
-| Unity authoring and capture | Native 2D/3D geometry export, rigid motion, activation, stable IDs, source events, immutable take files; editable station, train service with stops and walking aboard, and door with two sources and one binaural listener. | AcousticLab and scripted dataset scenarios. |
-| Replay and computation | Pose replay/scrubbing, CPU/HLSL direct solvers with optional static BVH plus direct tests for moving objects, shared live/offline timeline and mixer, WAV/response export, batch jobs and measured station offline benchmarks. | Take browser, scene-independent playback, shared visual snapshots and continuous bounded playback; then validated indirect transport and richer saved response payloads. |
+| Unity authoring and capture | Native 2D/3D geometry export, rigid motion, activation, stable IDs, source events, immutable take files; editable station, train service with stops and walking aboard, and door with two sources and one binaural listener; Church blockout with the same session/player/door and compact recorder. | Church acoustic validation and LakeForest; migrate the old rooms as small 2D/3D fixtures. |
+| Replay and computation | Shared compact scene-input reconstruction, pose replay/scrubbing, CPU/HLSL direct solvers with optional static BVH plus direct tests for moving objects, shared live/offline timeline and mixer, WAV/response export, batch jobs and measured station offline benchmarks. | Streamed source files; small recordings picker. Portable decorative snapshots and continuous audition remain deferred. |
 | Directional spectral preview | Shared 2D/3D GPU transport with multi-bounce reflection/scattering, transmission/refraction, air/material losses and edge diffraction heuristics. Configurable frequency grid, selectable scene-IR or continuous path-clock spectral synthesis, interpolated per-arrival KEMAR orientation, samplewise response crossfades and first-order image-source reflections; same live/offline implementation. Closed 2D/3D objects use per-medium speed/damping, including nested solids and interior sources. | Physical normalization/convergence, higher-order mirror connections, directional dataset export and validation of complex moving boundaries. The preview is not an approved training reference. |
 | Multiple endpoints | Every source/listener pair; mono or binaural mix per head; one monitored listener. | Larger workload benchmarks and explicit local receiver selection for multiplayer. |
 | Comparison | Coarse/fine schedules, metrics/reference gate, native audio A/B/Difference, waveform/spectrogram plots and synchronized listener/top-down/free-camera views. | Per-pair target checks, learned outputs and validated reflection comparisons. |
 | Runtime | Bounded PCM/capture queues, GPU transport and DSP with asynchronous PCM batches, selectable CPU reference, fractional-delay FIR, provenance and diagnostics. | Lower measured latency/memory and reconstruction scheduling. |
-| Learning and networking | Neither implemented. | Dataset loader, models, inference and actual host/join gameplay. |
+| Microphone and networking | Sources currently require prepared clips; no mic capture, voice codec or network gameplay. | Timestamped stream input, saved source audio, actual host/join and local acoustic rendering of remote voices. |
+| Learning | Not implemented. | Validated teachers, dataset loader, models and inference. |
 
 The current project uses Unity **6000.4.1f1**, C# and HLSL. Earlier CPU/Metal checks and the repaired legacy FFT are documented in the README. Windows/DirectX still needs its own checks. The legacy reflection shader has different physics and is not a validated reference.
 
@@ -128,95 +131,19 @@ The padding/overlap distinction follows [linear FFT convolution](https://www.dsp
 
 ### System audit, 2026-10-05
 
-Audited production revision `1586cbb` in the actual Unity project, not the Conductor checkout. This historical audit describes the pre-repair revision; see [repairs below](#renderer-repairs-2026-10-05) for current behavior. Numerical probes ran in Unity 6000.4.1f1 on Apple M5/Metal without entering Play or dirtying TrainStation. [Recorded measurements](benchmarks/system-audit-2026-10-05.json) distinguish new probes from earlier station performance measurements. Local repro scripts are `.context/system-audit/Probe.cs`, `.context/system-audit/ExistingChecks.cs` and `.context/renderer-audit/Probe.cs`.
+The pre-repair audit of `1586cbb` is historical. Its impulse/convolution failures and CPU synthesis bottleneck were addressed by the repairs and GPU port above. Keep the raw [audit](benchmarks/system-audit-2026-10-05.json), [repair results](benchmarks/renderer-repair-2026-10-05.json) and [measured history](cleanup-results.md); do not treat old failing counts as current failures.
 
-**Verdict:** keep the scene, recording and shared execution boundaries. The spectral preview has confirmed synthesis errors and an unvalidated reflection estimator. It is unsuitable as a high-fidelity training teacher. A GPU implementation of the same formulas would retain those errors. No new packages, compiler migration, service layer or second scene representation is justified by this audit.
+Current limits relevant to new scenes:
 
-The flow at that revision was:
+- Higher-order specular connections, diffuse-pressure normalization and diffraction are not validated room references. More rays alone do not approve training labels.
+- The station uses five bounces, a one-second output tail and 16,384 samples of playback lead. These are scene settings, not universal fidelity/latency requirements. Tail coverage is reported, not extended automatically.
+- Head filtering is tied to response updates and already queued PCM. Measure head-to-audio latency as well as throughput.
+- Only absorption/scattering have arbitrary authored knots; other material coefficients still use eight-band conversion. Complete that migration rather than expanding legacy packing.
+- Static BVH traversal works; moving objects leave it for direct tests. Nearby-edge and containment searches still have linear scans. Profile larger scenes before choosing BLAS/TLAS or another hierarchy.
+- Compact replay is station-specific and depends on matching project/build identity. Hashes cannot recover missing assets or uncommitted code.
+- Low/High currently changes response cadence only. Per-pair directional export, independent ray-budget comparisons and learned reconstruction remain planned.
 
-```text
-Unity scene / reconstructed inputs
-  → numeric geometry + sample-timed states and source events
-  → shared GPU transport → individual path readback
-  → CPU source FFT history, per-path ear filters, IFFT and WOLA
-  → live: completed PCM ring → Unity audio callback
-    offline: the same PCM → WAV
-```
-
-The older flow used GPU spectral accumulation/IFFT, then CPU overlap-add and an additive CPU PCM ring. Current code already has circular source-spectrum history, overlap storage and a PCM handoff queue. Circular storage and GPU/CPU placement are separate decisions. The old implementation also had a fixed 1024-point IFFT, blocking `GetData`, mono playback and a lock around its audio ring; reverting it wholesale would restore those constraints.
-
-| Boundary | Audit decision |
-|---|---|
-| Native Unity objects → numeric scene | Keep. Local triangles/segments, baked scale, stable object IDs and separate rigid poses are appropriate. Native collider proxies remain editable. Scale/topology/material/roster changes require a new segment; arbitrary deformation is not implemented. |
-| Static BVH + moving primitives | Keep. Objects leave the static tree after motion and use direct tests thereafter. GPU batches classify all their poses before dispatch. Add a dynamic hierarchy only if moving geometry becomes a measured bottleneck. |
-| Source commands and simulation/audio clocks | Keep integer sample events and the tick-to-observation map. Inputs alone do not preserve the original relationship between gameplay ticks and audio samples. |
-| Compact station replay | Keep its narrow scope: scene initialization plus station/walking inputs, verified against matching project/engine/platform. It is not a general deterministic Unity physics recorder. |
-| Shared live/offline solver and DSP | Keep one implementation and the same sample timeline. Live must meet playback deadlines; offline can advance without an audio device. Batching may differ without changing output. |
-| One receiver per head | Keep world arrival direction and paired HRTFs. Two ear channels do not require two separately traced listeners. Multiple heads multiply the source/listener work; live currently computes every registered head even though it monitors one. |
-| PCM callback boundary | Keep the existing single-producer/single-consumer queue. The callback copies completed PCM and records bounded diagnostics. It must not run transport, wait for GPU work, allocate or write files. |
-
-Confirmed correctness findings, in repair order:
-
-1. **Spectral filtering is not correct linear delay/convolution.** `SpectralAudio.Synthesize` and `SetResponse` apply a residual delay as frequency phase inside a windowed transform, then apply the original synthesis window. Zero-delay identity works; arbitrary delays do not. The new test uses a unit impulse, no HRTF, no geometry, 128-point FFT and 32-sample hop. At input sample 31 with a 31-sample propagation delay, the declared output is sample 190 with gain 1. Actual gain is 0.7324865, with an early contribution of 0.008240453 at sample 62. Of 28 integer-delay/impulse-position combinations, 16 fail absolute tolerance `1e-5`; delays divisible by the hop pass. This is a DSP error independent of acoustic realism. Fix block support, padding and overlap against an independent time-domain convolution reference. Storage modulo arithmetic must not become circular convolution. Declared latency must describe the actual support.
-
-2. **Pending overlap can be cut off by listener state.** `SpectralAudio.Render` gates already accumulated output using the latest `enabled/oldEnabled` pair. Once the second disabled response arrives, both are false although earlier windows still contain valid output. The existing repro was rerun: disabling at 512 with transition 64 gives sample 639 = 0.13143453, then sample 640 = 0, where the pending overlap is 0.125. Choose explicit listener stop semantics and implement them once; the current mixture of fading and abruptly discarding pending samples is inconsistent. Source Stop already stops future emission through `Signal`; it must still allow earlier sound to arrive.
-
-3. **Path-array indices are incorrectly treated as physical path identity for Doppler.** `SpectralAudio.SetResponse` differentiates delay between equal slots/bins. An indirect ray can hit a different face or edge at the next response. A new valid path with a 30 ms delay increase over a 128/8192-second response interval is discarded because the computed Doppler ratio is negative; the new probe observes its contribution count change from 1 to 0. Retain Doppler only where correspondence is established. A direct path can still need a reset when its transmission topology changes; other paths need real correspondence or an explicitly unsupported Doppler mode. Never interpret an unrelated arrival as velocity. The current approaching/receding pure-tone check does not establish general moving-path correctness.
-
-4. **Indirect frequency allocation leaves holes or unequal weights.** `TracePaths` uses `bin = ray * FrequencyBins / RaysPerPair` and weight `FrequencyBins / RaysPerPair`. At FFT 1024/rays 512, the 513th bin receives no indirect ray; at FFT 2048/rays 512, 513 of 1025 bins receive none. Even FFT 1024/rays 1024 gives aggregate per-bin weights from 0.50098 to 1.00195. Direct spectral paths still cover every bin, so direct audio can hide this error. Use the agreed configurable integer rays per frequency bin: `totalRays = bins * raysPerBin`, with correct per-bin sampling normalization. This removes the allocation error but does not fix the physical estimator. Keep acoustic frequency resolution separate from internal FFT padding for convolution.
-
-5. **The reflection control does not describe the first reflected arrival.** `Transport.hlsl` connects each sampled surface hit directly to the listener using `cosine * 0.5`, regardless of its scattering coefficient. Scattering only affects the continuation ray. In a one-bounce planar wall fixture, scattering 0 and 1 produce byte-identical arrival records: 109 nonzero reflected paths, spread over 8.31–60.88 ms. The geometric specular image path is 8.246 ms. With diffraction disabled, this is not a specular wall response. Branch probabilities, surface sampling and pressure/energy weights also lack a complete estimator derivation. Treat these as geometric preview heuristics. Establish specular and diffuse reference fixtures and normalization before calling more rays a more physically accurate teacher. Material reflection phase and wave diffraction are still absent; increasing budget cannot recover them.
-
-6. **Compact-recording failure can be hidden behind a successful acoustic save.** `StationDemo.RecordSafely` catches input-recorder construction/tick/observation errors, logs them and sets `recording = null`. `RayTraceManager.EndCapture` can still finish its separate writer and show Saved. With `retainFullReference=false`, there is no full pose payload to recover the failed input recording. This is a code-path finding, not a newly simulated disk failure. Make completion mean that both required recording parts succeeded; on input failure propagate an explicit failed session/save state. Do not silently claim a usable compact take.
-
-7. **Offline reconstruction synthesizes some flags instead of reproducing their semantics.** `StationReplay.Observe` assigns Geometry from the binding and Source from membership. Live capture additionally checks primitive count, `AcousticSurface.enabled` and `RaytracedAudioSource.enabled`. The station adapter does not log arbitrary changes to those components. At minimum preserve supported initial enabled states and reject changes outside the adapter's input contract. A same-project hash does not make omitted runtime state reproducible. This is a code-path finding; the current all-enabled station fixture does not exercise it.
-
-Other constraints that should be explicit rather than hidden behind quality labels:
-
-| Area | What the code currently means | Required adjustment |
-|---|---|---|
-| Tail and history | The station permits arrivals up to 10 seconds but renders only a 1-second tail after source cutoff. `RenderDirect` and `Live.Finish` use the requested tail without proving it contains the response. | Drain the retained response support plus DSP support, or record intentional truncation in the output. History horizon, DSP overlap and playback queue are separate quantities. No recording-duration cap is needed. |
-| Moving geometry | Responses use one frozen scene pose per solve; source history supplies older PCM. Acceleration and angular velocity are recorded but are not transport inputs. | Keep this declared approximation until retarded source/receiver/boundary timing is implemented and tested. More frequent solves do not by themselves turn it into a moving-wave solution. |
-| Head motion | HRTFs interpolate continuously in angle, but refresh with the whole acoustic response and are baked into queued PCM. At 44.1 kHz the station's 16,384-frame lead is 371.5 ms, plus 23.2 ms declared FFT latency and device/physical delay. | Refresh head filtering independently of expensive transport where possible, preserve direction until ear synthesis, and measure head-to-audio latency. Smoother interpolation alone cannot fix stale head orientation. Do not bake far-future ear audio against today's head pose. |
-| Materials | The shared shader evaluates the actual FFT bins. However `AudioMaterial.EnergyKnot` only exposes arbitrary knots for absorption/scattering; transmission/IOR/damping still come through legacy eight-band data. | Extend the existing coefficient contract when those curves are needed, migrating authored assets explicitly. The old eight-band authoring limitation is not a necessary solver limitation. Physical-property sliders are heuristic, not calibrated material measurements. |
-| Low/High comparison | `TakeComparison.Run` permits only a different response step; FFT, ray count, bounces and other settings must match. | Label this temporal comparison. Add ray-budget comparison only with covered/normalized bins and independent convergence checks. Neither current preset means validated high fidelity. |
-| Training export | `responses.bin` and captured response applications contain direct opaque probes even when PCM is spectral. All sources are mixed in final WAVs. | Add only the selected per-pair target when its teacher is valid; current files cannot reconstruct the indirect directional response. IR, complex-transfer/directional-target export and training remain unimplemented. Fixed shader RNG is reproducible, but there is no configurable independent seed for convergence testing. |
-| Replay portability | Compact replay hashes all Assets/Packages/ProjectSettings, not only motion dependencies. A shader-only change can prevent reconstruction of an old input-only run. | For now reconstruct with its matching revision and preserve the generated numeric take as an offline artifact before changing renderer code. Git commit alone does not preserve uncommitted files. Do not weaken identity checks without proving the smaller dependency boundary. |
-| BVH coverage | Nearest-hit queries use the static BVH; nearby-edge searches still scan every edge and containment checks scan candidate volumes/primitives. | Profile those kernels before adding another hierarchy. The direct-only traversal benchmark does not establish indirect traversal cost. |
-
-Performance and instrumentation conclusions:
-
-- Current station settings allocate 6,146 path records per response: 196,672 bytes read back, including empty ray/bounce slots. At 44.1 kHz and response step 1024 that is approximately **8.47 MB/s of path data**, versus **0.353 MB/s of stereo output PCM**. Each 64-response path array is about 12 MiB, on CPU and GPU separately. These are layout calculations, not measured transfer bandwidth. GPU synthesis can avoid routine path readback; diagnostics/dataset exports should request it deliberately.
-- The [existing same-revision station smoke runs](benchmarks/material-head-fixes-2026-10-05.json) put CPU audio work at approximately 5.07–10.94 seconds for a 21.18-second take. It is the dominant reported component in those runs. Main-thread scheduling varied substantially, so this audit makes no new speedup claim. Halving solve cadence does not halve the source FFT/per-hop path accumulation/IFFT work.
-- `DirectBenchmark.Run` explicitly forces Direct transport. `backend = GPU-Metal` reports the transport backend, not an all-GPU renderer. `pairPrimitiveTestUpperBound` counts only one pair/primitive diagnostic pass and is not an upper bound on spectral tracing, bounces, edges or medium queries. `dispatchReadbackSeconds` also has different synchronous/asynchronous timing scopes. Rename or scope these counters before treating them as bottleneck attribution. Record whole-job wall time and stage times; use GPU timing when available rather than presenting dispatch CPU time as shader execution time.
-- Live rendering waits for two observations to interpolate an interval and synthesizes on the Unity control thread. This favors live/offline agreement, but observation gaps, CPU DSP, GPU completion and the playback lead all matter. A finite offline render faster than duration does not establish deadline-safe realtime playback. The selected-listener output queue is sound; main-thread stalls must be measured and addressed upstream.
-- `SceneToTake.Guard` deliberately rereads authored meshes to reject in-place edits. Keep the correctness boundary; profile its cost on larger authoring scenes before inventing a dirty-state system. Batch sizes, bounded event queues and maximum acoustic delay are resource/response settings, not recording-duration caps.
-
-The lean target remains the existing numeric scene and one shared block renderer:
-
-```text
-source blocks + scene response
-  → GPU directional spectral work and ear filtering
-  → correct GPU IFFT / overlap accumulation
-  → completed PCM blocks
-      live: asynchronous readback → existing PCM ring → callback
-      offline: same blocks → file
-```
-
-Use absolute sample/frame keys with modulo storage, one clear owner of each output range and explicit clearing before reuse. An additive accumulation ring owns unfinished contributions; the existing PCM queue owns finalized samples and must not be overwritten by late arrivals. The first GPU port can retain source-spectrum history and a short output overlap ring; it need not introduce a second long future-audio ring or duplicate the entire delay horizon. If forward accumulation is chosen instead, retain direction until the relevant head pose is available. Both approaches must apply travel time once, preserve complete filter support, and respect the declared frozen-geometry time convention. The existing per-path representation is sufficient for a correctness-first port; no arbitrary angular grid is mandated.
-
-**Repair sequence and gates:**
-
-1. Make the numerical oracles authoritative: arbitrary-offset integer/fractional delays, independently convolved FIR/HRIR output, complete source/listener stops, cuts, long arrivals and block/hop invariance. Fix synthesis, pending-output gating and invalid Doppler correspondence. Make compact save failure visible and replay activation semantics explicit.
-2. Correct per-bin allocation and define the reflected estimator. Validate a single mirror, a diffuse surface, absorption/transmission and per-medium delay independently. Keep diffraction labeled heuristic until it has its own reference. Exclude the preview from training eligibility throughout.
-3. Port the corrected synthesis to GPU behind the existing live/offline boundary, compare against the small reference fixtures, then measure the actual station workload. Retain the CPU direct solver as an independent baseline. Scope diagnostics properly; measure deadlines/head latency and memory as well as throughput before reducing lead or increasing ray count.
-4. Add the selected directional/per-pair export and separate ray/temporal experiments, then dataset generation/training. The recordings browser, multiplayer and extra scene features can follow; they do not repair the renderer.
-
-**Test coverage finding:** all **9,686 existing transport assertions passed again**, while **16/28 independent impulse cases failed**. Existing identity tests use zero delay, and transition tests reproduce the current window formula without exercising a second disabled-listener response. They prove implementation agreement in those fixtures, not general convolution correctness. The fresh wall test and reused-slot probe expose additional gaps. Earlier capture/BVH/replay checks remain useful; they were not all rerun by this audit. No Windows/DirectX validation or new gameplay/performance run was performed.
-
-Files to change in those repairs are `SpectralAudio.cs` and `RayTransport.cs`/`Transport.hlsl`, the existing `TakeRender`/`Live` tail and block boundaries, `StationDemo.cs`/`StationReplay.cs`, and the corresponding independent tests. `AudioManager.PcmQueue`, scene ABI and replay format do not need replacement to fix the audio errors. Keep names aligned when touching ownership: `DirectSolver` currently orchestrates both direct and spectral transport, and the generic render entry point is still named `RenderDirect`.
-
-Legacy cleanup is a later deletion, not another renderer fork. `Big Room.unity` and `SmollRoom.unity` still reference `Raytrace2D.compute`; migrate or deliberately retire those scenes before deleting its manager/audio partials and packed material helpers. The station's `RaytraceControlPanel` is still active UI, so it is not wholly dead legacy code. Preserve old implementations in Git instead of adding new copies or expanding legacy features. README claims about the old CPU default, next-step browser priority and missing new files in the map were corrected with this audit.
+The selectable test suite now covers 107 default cases plus an explicit device-deadline case; measured results and limits are in [cleanup results](cleanup-results.md#test-suite-cleanup--2026-10-06). These tests are numerical/software evidence, not physical calibration.
 
 ## 2. Code and dependencies
 
@@ -231,7 +158,7 @@ Assets/
     Demo/          existing movement, scene controls and legacy fixtures
   Shaders/         Direct.compute and existing legacy shaders/includes
   Editor/          TakeEditor, TakeDemo, TakeComparisonWindow, TakeComparisonAudio/View,
-                   StationReplay, DirectBenchmark
+                   SceneReplay, DirectBenchmark
   Tests/Editor/    TakeChecks and numerical fixtures
   Scenes/         editable Unity scenes
   Prefabs/        shared environment and actors
@@ -248,15 +175,51 @@ docs/
   cleanup-results.md
 ```
 
-No new package hierarchy, assemblies, generic plugin framework, scene database or orchestration service. Preserve Unity `.meta` GUIDs. Retire legacy code/assets only after checking references and replacement coverage.
+Use the existing runtime/editor/test assemblies. No additional package hierarchy, generic plugin framework, scene database or orchestration service. Preserve Unity `.meta` GUIDs. Retire legacy code/assets only after checking references and replacement coverage.
 
-Proposed additions have concrete owners: `Simulation/Bvh.cs`, `Simulation/IndirectSolver.cs`, `Shaders/Indirect.compute`, shared geometry helpers when reused, `Audio/AcousticDsp.cs`, and one reconstruction adapter at the existing response boundary. Do not create empty files in advance.
+Keep `DirectBvh`, `DirectSolver`, `RayTransport`, the two CPU synthesis implementations and `GpuAudio`. Extend those boundaries when required; do not add duplicate Bvh/IndirectSolver/AcousticDsp layers or empty files. Rename misleading entry points such as `RenderDirect` when their callers are migrated together.
 
 Dependencies flow Unity authoring → numeric scene/state → solver → response → audio rendering. Capture and normal simulation work without ML. Offline uses the same C#/HLSL solver and DSP. A small Python job loop is sufficient if existing Editor/batch jobs become tedious. NumPy/PyTorch serve training; SciPy is optional for independent DSP checks. Test ONNX → Unity `com.unity.ai.inference` before substantial training. Networking adds Netcode for GameObjects/Unity Transport only at its milestone. Pin compatible versions then.
 
 Current binaural rendering adds no runtime package: measured KEMAR coefficients are bundled as a Unity resource. The standard-library Python importer verifies the source archive hash and reproduces the asset. Retain [Gardner/Martin attribution and conversion details](../Assets/Resources/Acoustics/ATTRIBUTION.md) when distributing data or derived outputs.
 
 Start hardware measurements on the available Metal machine; verify the same layouts and fixtures on DirectX before claiming support. HLSL sharing is useful but does not prove equal performance. A different compiler/backend needs a measured reason, not a parallel architecture. [Unity compute documentation](https://docs.unity3d.com/6000.0/Documentation/Manual/class-ComputeShader.html).
+
+### Runtime cleanup and shared scene session
+
+This is a focused extraction while building the second scene, not a renderer rewrite.
+
+| Existing code | Change | Deletion/reuse condition |
+|---|---|---|
+| `RayTraceManager.Legacy.cs`, `AudioManager.Legacy.cs` | Migrate `Big Room` and `SmollRoom` to the current 3D/2D renderer; retain their useful fixtures. | Then remove both legacy partials (~1,100 lines), old shader-only helpers, unused debug buffers/UI and legacy branches. Verify all scenes/prefabs first; Git retains old code. |
+| `SceneHelper.cs`, `AudioMaterial.cs` | Keep numeric scene export; remove old 2D projection/packed material adapters after scene/material migration. | Preserve GUIDs and compare exported geometry/coefficients; never delete shared code by filename alone. |
+| `StationDemo.cs` | Input, session startup/save/replay and cursor handling now live in `SceneSession`; train service/motion remains in the existing station component. | No `ChurchDemo` or `ForestDemo` copies of the recorder. `SlidingDoor` is shared by station and church. |
+| `SceneRecording.cs`, `SceneReplay.cs` (renamed) | Evolve to scene input recording and reconstruction, retaining the station-v2 reader. | Same initialization/step code live and offline; remove train-specific settings from the shared contract. |
+| `RaytracedAudioSource.cs`, `TakeRender.Signal`, `TakeRender.Live` | Add a stream source alongside clips, with bounded source history and explicit availability. | CPU/GPU and mic/network use this same sample-read boundary. |
+| `RaytraceControlPanel`, `TakeEditor`, comparison window | Replace station-specific session calls with shared ones; preserve existing views/diagnostics. | One small control surface; no per-environment menus. |
+
+`SceneSession.cs` and `SlidingDoor.cs` implement the shared scene clock and door; add `MicrophoneInput.cs` only at the microphone milestone. Shared source-buffer types can live with `Signal`; recording/replay are moves of existing files with their `.meta` files. Network adapters are added only at the multiplayer milestone. Keep the independent CPU oracle and genuine IR/Spectral algorithms.
+
+The shared session owns the player/head, manager, fixed-step index, input mode and explicit ordered list of supported scene actors. Actor initialization and stepping form one small contract in the session file; no reflection registry or generic service framework. Use persisted actor IDs for order and interaction targets. Authoring changes require a new capture; arbitrary scripts/rigid bodies are not silently replayable.
+
+```text
+initialize authored scene:
+    validate fixed bindings and actor settings
+    initialize actors, player and head once; synchronize colliders
+    open recording at tick/sample zero before accepting movement or sounds
+step(tick, acceptedInput):
+    record consumed input/accepted interaction at this tick
+    advance train/doors/other supported actors in stable order
+    synchronize changed collider transforms
+    advance head and walking controller; complete the physics step once
+    publish completed tick for the existing audio observation mapping
+```
+
+Unity performs the live physics step; isolated reconstruction explicitly simulates its physics scene once. Neither path double-steps controllers. Native physics repeatability remains a tested build/platform property. Reconstruction copies only supported components and remaps their references; it must not start a second live session or microphone. Unsupported actors fail before recording, with full numeric capture available only as an explicit alternative.
+
+Extend `AudioMaterial`'s existing knot structure to include absorption, scattering, transmission, acoustic index and interior damping at arbitrary ordered Hz knots. Continue the declared linear-Hz/clamped interpolation; `c_material = c_air / index`, with damping in nepers/metre. Require finite values, positive index, nonnegative damping, coefficients in [0,1], and absorption + transmission <= 1 under the selected energy contract; scattering partitions reflected energy. Asset migration preserves the old evaluated values and records its version. Do not silently clamp invalid measurements or claim the physical-property sliders are measured material data.
+
+Package cleanup follows actual dependency use: remove unused demo/import packages only after checking assets, serialization and an Editor/Player compile. Keep tooling packages in use. Source line count alone is not a reason to merge independent algorithms or remove validation.
 
 ## 3. Unity scenes and assets
 
@@ -267,7 +230,7 @@ Use ordinary Unity GameObjects, native primitives, transforms, colliders, meshes
 | Role | Contract |
 |---|---|
 | Geometry | `AcousticSurface` selects mesh/collider/proxy and acoustic material, optionally per submesh. |
-| Source | `RaytracedAudioSource` owns clip settings and issues sample-timed events to its manager. |
+| Source | `RaytracedAudioSource` binds a prepared clip or proposed stream input and issues sample-timed source events; source identity is independent of storage. |
 | Receiver | Registered head transform; configurable omnidirectional mono or binaural left/right output. One head is one receiver, distinct from Unity's native AudioListener. |
 | Session | Manager owns identity tables, capture/replay state and numeric resources; stays active outside the captured hierarchy. |
 | Motion | Exactly one controller, animator or physics owner per moving object; acoustics observes its result. |
@@ -282,31 +245,32 @@ IDs are unique per placed instance, persisted before capture, sorted into stable
 
 ### Scene composition
 
-Build two useful environments first:
+Use three environments with multiplayer as an optional mode on each. All remain editable Unity scenes, with metre-scale geometry and one shared player/session setup. Initial sizes below are authoring starting points, not solver limits.
 
-- **TrainStation (implemented):** one platform with boarding steps, shelter/columns and an enclosed waiting room with a sliding door. Walking between the open platform and room gives repeatable visibility changes. An editable perimeter oval drives the locomotive and walkable carriage along the same route used to bake the rail mesh. Train service and the original train recording/room chime run automatically. The walking listener records a binaural head; additional sources/listeners remain supported but are not instantiated without a scene purpose. The Game view shows only the recording control while walking; mouse sensitivity appears when the cursor is released. Authoring/diagnostics remain in the Inspectors. Platform 2, obsolete markings/signs, the static reference receiver and unused synthesized engine were removed from both scene and builder. The operating controls and measured preview limitations are in the README.
-- **AcousticLab:** two connected spaces, adjustable opening, source, shutter and marked receiver positions. Save the existing walkthrough generator's result as an editable scene. Adapt `SmollRoom.unity` as the XY/orthographic counterpart with appropriate movement.
+| Scene | Editable layout and interactions | Acoustic purpose and acceptance |
+|---|---|---|
+| `TrainStation` (implemented) | Preserve the single platform, automatic perimeter train/stops, ordinary walk-on carriage and waiting-room door. | Moving source/receiver, Doppler, moving-platform replay and indoor/outdoor transitions. Keep the existing train sound. |
+| `Church` (editable blockout) | Start with an approximately 30 × 12 × 15 m nave, side aisles/columns, pew rows and one adjoining room with an opening door. Place a test speaker at the front and walking paths down the nave/behind columns/through the doorway. | Separated early arrivals, decaying reverberation, material variation, occlusion and head rotation. Play an impulse/sweep/dry speech; later speak through the mic. Validate simple subfixtures before interpreting the full hall. |
+| `LakeForest` | Start with an approximately 120 m outdoor mesh clearing, shoreline, water plane, rocks, a tree cluster and a cliff across the water. Walk a loop from open shore into trees and behind rock cover; use two independently positioned test sources. | Long arrival times and distinct cliff echoes, ground/water differences, occlusion, scattering and larger static workloads. Measure each effect by changing one scene element. |
 
-Preserve FFT/legacy regression scenes. Make the train visible in Edit mode; runtime spawning is reserved for actual network actors. Show acoustic proxies through optional gizmos/lines. Place horn/speaker origins outside opaque housings. The initial player capsule supplies collision, not acoustic body occlusion around its listener.
+The church must not fake success with a Unity reverb zone or reverberant source recording. The acoustic solver creates the response. Vary bounce budget, rays, delay horizon and render tail independently; retain complete measured decay or label truncation. Report early-arrival timing, band decay curves and EDT/T20/T30 only where their fitting ranges and noise floor support them. Do not call a one-second tail a measured multi-second RT60. Higher-order mirror/diffuse limitations may require transport work before this becomes a teacher; low-frequency room modes are outside geometric validation.
+
+The outdoor scene uses mesh terrain/acoustic proxies because the current exporter does not support Unity Terrain. Water starts as a planar reflective approximation with declared coefficients; no underwater solver, wave motion, wind refraction or vegetation-volume model is implied. Tree trunks/large branches/rocks participate through simple meshes/colliders; decorative leaves initially do not. Forest reverberation is frequency-dependent and must be checked separately from hall reverberation ([measured bamboo-forest example](https://doi.org/10.1121/1.1354988)). Add canopy/ground detail only when its acoustic role and cost are measured.
 
 ```text
-TrainStation
-  Simulation          RayTraceManager + AudioManager, always active
-  World               captured root
-    Station           shared static prefab, track and actor anchors
-    Train             visual, rigid proxy children, horn
-    Door              fixed frame and moving leaf
-    Announcement      emitter
-    Player            controller, camera/receiver, optional emitter
-  Scenario            routes, cue settings and reset state
-  Presentation        lighting and existing Unity UI/text
+Church / LakeForest / TrainStation
+  Simulation       RayTraceManager + AudioManager + shared SceneSession
+  World            fixed geometry, movable actors, persistent acoustic IDs
+  Player           reused controller + camera/head + optional mouth source
+  Sources          test speaker(s), clip or streamed PCM
+  Presentation     scene lighting and existing minimal UI
 ```
 
-`Prefabs/Station/Platform.prefab` owns static architecture, not players or managers; `Train.prefab` owns the locomotive/carriage visuals, proxies and attached horn/engine emitters. A scene-level `StationLoop` supplies distance-based poses; `LoopTrack.asset` is its baked Kenney-derived visual mesh. Rebuild the mesh after authoring route dimensions, before capture. The carriage root is explicitly registered because its world pose differs from a rigid train child through bends. Reuse these in solo and multiplayer. Keep the unique door, room emitter and player as native scene objects until another scene needs shared prefabs. Network player/train variants add ownership/replication later. Each proxy child has one supported collider.
+Create a shared player prefab and test-speaker prefab when the church uses them. Keep unique architecture in its scene; prefab only repeated pews/columns/trees and genuinely shared actors. No scene copies for Low/High or multiplayer. The current `Platform.prefab`, `Train.prefab` and `StationLoop` remain station assets. Visual calibration stays below unit-scale motion roots; acoustic proxies have explicit shapes/materials and no coincident duplicate surfaces. Keep the player's collision capsule out of acoustic geometry initially so it does not enclose its own head/mouth.
 
-Use a clean unit-scale train motion root, nested visual calibration, proxy children and horn. The existing locomotive prefab has scene-specific offsets/scale; rebuild the shared assembly from its FBX while preserving old references until migrated. Calibrate train/track proportions together in metres, with no accumulated scale corrections or shear. The emitter receives its manager through scene/session wiring.
+All scenes expose walking/look/jump, the existing Save run, and listener/top-down comparison views. Recreate these views from the replay timeline; storing two videos with every take is unnecessary. Video export can be an explicit later output. Use ordinary nearby door interaction. Mic controls add one explicit enable/mute control with a recording indicator; device/gain/self-monitor settings appear when the cursor is released. No boarding button, horn/restart buttons, repetitive interaction notifications or separate game menu is required. Detailed renderer/material/benchmark settings stay in the Inspector/comparison window. A scripted route feeds the same accepted-input path as manual movement.
 
-Controls remain minimal: automatic recording/train/audio on Play, ordinary movement and nearby door interaction, then Save run. Replay starts from scene initialization through the Inspector; detailed numerical settings stay there too. Test manual movement and authored routes: distance changes, wall crossings, passing obstructions, independent source events and multiple listeners.
+Retain small 2D/3D room fixtures by migrating the existing rooms; a separate large AcousticLab environment is not required. They supply analytic single-wall/door/empty-space tests without loading scenery. Static scenes use the existing BVH first. Profile primitive, edge and volume queries before adding per-mesh BLAS plus instance TLAS; visual tree instancing alone does not accelerate acoustic tracing.
 
 ### Selected assets, lighting and materials
 
@@ -316,17 +280,21 @@ Optional visual imports, not downloaded by this specification: Poly Haven [Kloof
 
 Use shared Standard materials for concrete/painted metal/safety paint, Skybox/Panoramic for the sky and existing unlit/text support for markers. Normal maps use normal import; roughness/masks use linear data and the Standard workflow's proper channel packing, including `smoothness = 1 - roughness`. Visual textures do not define acoustic coefficients.
 
-`StationLighting.prefab` contains a directional sun, light probes, reflection probe and a few local lights. Share a LightingSettings asset and sky material between station scenes; RenderSettings and baked data remain scene-specific. Bake fixed architecture after layout settles; moving trains/doors/players use probes and realtime direct shadows. Check open/closed doors because a static bake cannot represent every state. Keep the lab neutrally lit. No graphics pipeline migration or post-processing package is required.
+A reusable lighting prefab, if needed, contains a directional sun, light probes, reflection probe and a few local lights. Share a LightingSettings asset and sky material between station scenes; RenderSettings and baked data remain scene-specific. Bake fixed architecture after layout settles; moving trains/doors/players use probes and realtime direct shadows. Check open/closed doors because a static bake cannot represent every state. Keep numerical room fixtures neutrally lit. Church uses window/door daylight and a small number of local lights; LakeForest reuses sun/sky/probes. Check performance with these visuals enabled. No graphics pipeline migration or post-processing package is required.
 
 Visual materials and `AudioMaterial` assets stay separate. Preserve existing materials; add numerical fixtures `IdealRigid` (absorption/scattering 0/0) and `IdealAbsorber` (1/0) for the later energy solver. Both remain opaque in today's direct solver. Measured real materials need sourced curves; guessed values are not measurements.
 
 Generate documented impulse, sweep and seeded-noise fixtures. Preserve the horn for preview while resolving its provenance before distributed datasets; existing wind/meme clips lack adjacent source records and stay out of controlled datasets. Identify already-reverberant recordings. Prepare dry PCM before capture; avoid simultaneous native AudioSource playback duplicating the custom renderer. No purchased audio library, speech service or asset catalog is required.
 
+Asset scope for the new scenes: build church walls/arches/pews from native primitives and simple authored meshes first. Use shared stone/plaster/wood Standard materials; select only needed maps from the [Poly Haven texture library](https://polyhaven.com/textures) after layout acceptance. For outdoor visuals, the optional [Kenney Nature Kit](https://kenney.nl/assets/nature-kit) supplies CC0 trees/rocks; import only used models with its license. Use the existing Built-in material shaders and a simple Standard water surface initially. A custom animated water shader is decorative later work, not an acoustic dependency. No new asset download is implied by this document.
+
+Store scenes in `Assets/Scenes`, shared player/speaker/door prefabs in `Assets/Prefabs`, environment-only prefabs under their environment folder, visual and acoustic material assets separately under `Assets/Materials`, and external models/licenses in `Assets/External`. Reuse existing locations rather than adding a package tree. Asset hashes/provenance bind training recipes. Placeholder acoustics must be labeled as such until sourced coefficients replace them.
+
 ## 4. Capture and saved inputs
 
 ### Numeric scene and time
 
-Unity objects resolve into existing `AcousticTake.Scene` tables: objects, local primitives, material curves, source bindings, receiver bindings and prepared clips. Per-observation `State[]` follows the object table. No GameObject, Transform, AudioClip or GPU padding crosses the file boundary.
+Unity objects resolve into existing `AcousticTake.Scene` tables: objects, local primitives, material curves, source bindings, receiver bindings and prepared clips. Per-observation `State[]` follows the object table. The proposed stream table extends source storage without changing object/primitive GPU layouts. No GameObject, Transform, AudioClip or GPU padding crosses the file boundary.
 
 Units are metres, seconds, Hz and radians; quaternions are xyzw. One fixed sample rate and clock origin belong to each take. Live capture uses integer sample timestamps mapped from `AudioSettings.dspTime`; silent capture keeps its configured rate. Device-rate changes or clock discontinuities end a segment. All future adapters must preserve sample-time identities.
 
@@ -340,7 +308,7 @@ Source inactivity stops new emission while preserving already-emitted tails. Geo
 
 ### Implemented files and versions
 
-New take inputs use version 2, adding authenticated transmission/IOR/damping material curves. Version 1 remains readable and reconstructable using its original scene checksum; missing coefficients use zero transmission/damping and IOR one. New direct render and monitored-output manifests use version 2 for directional response records and channel metadata. Existing version-1 response files contain delay/gain only; readers must dispatch on the manifest version rather than infer row widths. Old take inputs remain usable for mono or binaural rendering.
+New take inputs use version 2, adding authenticated transmission/IOR/damping material curves. Version 1 remains readable and reconstructable using its original scene checksum; missing coefficients use zero transmission/damping and IOR one. Current direct render and monitored-output manifests use version 3, adding propagation delay rate to the version-2 directional records and channel metadata. Existing version-1 response files contain delay/gain only; readers must dispatch on the manifest version rather than infer row widths. Old take inputs remain usable for mono or binaural rendering.
 
 ```text
 take/
@@ -364,27 +332,28 @@ Binary types are little-endian, with explicit serialization and no padding:
 | State frame | int64 sample followed by 80 bytes/object: position3, quaternion4, velocity3, angularVelocity3, acceleration3, angularAcceleration3 as float32; uint32 flags. |
 | State flags | Active=1, Geometry=2, Source=4, Listener=8, Cut=16, VelocityValid=32, AccelerationValid=64. |
 | Event | int64 sample/clipOffset, int32 sourceIndex/action, float32 gain, byte loop: 29 bytes. |
+| Direct frame v3 | int64 sample then six float32 values per pair: delay, pressure gain, direction XYZ and delay rate; `8 + 24*P` bytes. |
 | Direct frame v2 | int64 sample then float32 delaySeconds/pressureGain/directionX/Y/Z per pair: `8 + 20*P` bytes. Direction points from the listener toward the arrival's origin in world coordinates. |
 | Direct frame v1 | Legacy delaySeconds/pressureGain only: `8 + 8*P` bytes. |
 | Clip | Mono float32 at take rate, content-hashed. |
 
 The current downmix is channel averaging and resampling is linear. Replace or independently validate that preparation before high-fidelity audio claims; paired runs must always share exact prepared PCM and processing identity.
 
-Run/output manifests bind `channelsPerListener`, `hrtfDataset`, `hrtfHash`, `hrtfTaps` and the DSP contract. WAV frames order left then right for binaural output; internal blocks order [sample,listener,ear]. Sample counts, queue capacities and lead always measure frames. Output-capture v2 application rows contain int64 scheduledSample/consumedSample/applicationTicks, int32 pairCount, then the same five float32 values per pair. Callback rows remain unchanged. Capture preserves both ear channels; overflow, channel mismatch or interrupted shutdown leaves it incomplete.
+Run/output manifests bind `channelsPerListener`, `hrtfDataset`, `hrtfHash`, `hrtfTaps` and the DSP contract. WAV frames order left then right for binaural output; internal blocks order [sample,listener,ear]. Sample counts, queue capacities and lead always measure frames. Output-capture application rows contain int64 scheduledSample/consumedSample/applicationTicks, int32 pairCount, then six float32 values per pair in v3 (five in v2). Callback rows remain unchanged. Capture preserves both ear channels; overflow, channel mismatch or interrupted shutdown leaves it incomplete.
 
 Capture validates geometry/materials, bindings, scale and hierarchy without rebuilding geometry every observation. Mesh scanning still costs O(mesh data) and must be profiled. Complete manifests publish only after payloads close and hash successfully. Reject incomplete files, unsupported formats, mismatches and non-finite data.
 
 Keep two replay meanings separate: a new render evaluates the saved take with new settings; original-run review plays captured component PCM and uses actual response-application/queue logs. Component PCM includes underruns but excludes downstream device processing. Exact original playback does not imply bit-identical simulation across GPUs.
 
-Offline numeric replay needs no original Unity scene. The current in-scene pose replay needs matching persisted take object IDs/assets and suspends all motion writers, including configured extra scripts; stopping restores them. The planned browser instead constructs isolated objects from the take or a saved visual snapshot, as specified in section 11. Seeking cached output PCM only reads the requested audio range; seeking a new simulation must reconstruct sufficient dry/response history and tails, or be explicitly marked a cold start.
+Offline numeric replay needs no original Unity scene. The current in-scene pose replay needs matching persisted take object IDs/assets and suspends all motion writers, including configured extra scripts; stopping restores them. For compact inputs the authored scene/build remains required; numeric full takes retain their acoustic geometry, while current decorative comparison views still require matching scene assets. A portable visual-snapshot system is deferred. Seeking cached output PCM only reads the requested audio range; seeking a new simulation must reconstruct sufficient dry/response history and tails, or be explicitly marked a cold start.
 
-### Compact station recording
+### Compact scene recording
 
-`StationRecording` is the default station recorder. It stores consumed input changes, sample-stamped source events and the audio-sample/completed-tick mapping from scene initialization. It references the authored scene and runtime revision instead of retaining runtime snapshots. Train, door, look and walking share `StationDemo.InitializeSimulation` / `Step` in live playback and reconstruction.
+`SceneRecording` is the default station/church recorder. It stores consumed input changes, sample-stamped source events and the audio-sample/completed-tick mapping from scene initialization. It references the authored scene and runtime revision instead of retaining runtime snapshots. Train, door, look and walking share `SceneSession.InitializeSimulation` / `Step` in live playback and reconstruction.
 
 | File | Contract |
 |---|---|
-| `input.json` | `station-input-from-init-v2`: scene identity, project content hash (Editor), runtime module, engine/platform, Git revision/dirty status, timestep, motion settings, counts/completion and checksums. |
+| `input.json` | `scene-input-from-init-v1` (also reads `station-input-from-init-v2`): scene identity, project content hash (Editor), runtime module, engine/platform, Git revision/dirty status, timestep, player and ordered actor IDs/types/version/settings, counts/completion and checksums. |
 | `input.bin` | Little-endian 25-byte changes: int64 tick, float32 movement X/Y and look X/Y, byte jump/interact flags. Held axes persist; look/buttons apply once. |
 | `input-observations.bin` | Little-endian int64 audio sample plus int64 completed tick. Begins at (0,0); sample times increase and tick counts never decrease. |
 | `take.json`, `events.bin` | Scene/source identity tables, source PCM and geometry hashes, audio rate/duration, and source-event records. Payload hashes do not require storing the payloads. |
@@ -394,9 +363,33 @@ Full poses, geometry, prepared PCM and monitored audio are omitted by default. *
 
 Play begins capture at initialization. Save completes it; another run starts by re-entering Play. Stopping Play also finalizes input data. Scene-reload playback runs sequentially from zero; there are no seeks, checkpoints, cached playback or artificial duration limits. Reopening requires matching scene/code/engine/platform and simulation settings. Live output checks device sample rate; offline reconstruction uses the saved rate independently.
 
-`StationReplay` is an Editor operation available in Edit mode, from the Inspector and in batch jobs. It builds an isolated [Unity preview scene](https://docs.unity.com/en-us/engine/6000.3/script-reference/unityeditor/scenemanagement/editorscenemanager/newpreviewscene), uses the same initialization/step methods and regenerates an ordinary acoustic take. It checks authored geometry/source hashes and optionally compares original full observations. Runtime playback does not require this generated take. Walking support is queried explicitly so reconstruction does not depend on Play-only collision callbacks.
+`SceneReplay` is an Editor operation available in Edit mode, from the Inspector and in batch jobs. It builds an isolated [Unity preview scene](https://docs.unity.com/en-us/engine/6000.3/script-reference/unityeditor/scenemanagement/editorscenemanager/newpreviewscene), uses the same initialization/step methods and regenerates an ordinary acoustic take. It checks authored geometry/source hashes and optionally compares original full observations. Runtime playback does not require this generated take. Walking support is queried explicitly so reconstruction does not depend on Play-only collision callbacks.
 
-The current adapter covers station train/door/walking inputs. Arbitrary scene edits, rigid-body behavior and cross-platform determinism are not promised. Editor project identity hashes all files under `Assets`, `Packages` and `ProjectSettings` with relative paths; it excludes generated `Library` contents and checkout location. Older manifests without that hash retain their original module/scene checks; Player recordings require the matching runtime build. Preserve the matching Git revision/assets; identity hashes cannot recover missing source files. The README describes current usage and validation.
+The current adapter covers shared walking/sliding-door inputs in Station and Church, plus the station train. Arbitrary scene edits, rigid-body behavior and cross-platform determinism are not promised. Editor project identity hashes all files under `Assets`, `Packages` and `ProjectSettings` with relative paths; it excludes generated `Library` contents and checkout location. Older manifests without that hash retain their original module/scene checks; Player recordings require the matching runtime build. Preserve the matching Git revision/assets; identity hashes cannot recover missing source files. The README describes current usage and validation.
+
+### Scene-independent input (implemented) and stream recording (proposed)
+
+Keep compact recording from initialization as the default for the new supported scenes. Record the scene/build identity, fixed actor settings, accepted input changes, interactions, source events and sample-to-completed-tick map. Train/door motion is reconstructed by the same actor code; static geometry stays in the authored scene. The new `scene-input-from-init-v1` header identifies its actor/input contract and preserves the old station-v2 reader. Keep the existing 25-byte local walking/look/button records and 16-byte observation mapping. The header binds the player and ordered actor IDs, component contract versions and immutable initialization settings; new action payloads require a versioned contract rather than untyped event blobs. Do not weaken project identity to make old recordings open against changed code.
+
+**Microphone audio is new input data and must be saved.** Neither Git, input buttons nor an RNG seed can reconstruct speech. Compact mic takes therefore add the source PCM and timing metadata, while continuing to omit regenerable poses/geometry/asset clips and optional monitored output. Live mic preview without saved source data is allowed, but that run cannot be offered as replayable/renderable mic data.
+
+Propose acoustic take **v3** for source kinds; current v1/v2 files retain their existing interpretation. `SourceDefinition` gains `kind: Clip | Stream`; Clip uses the existing clip index, Stream uses a stream index. Resolve bindings before capture; a disabled mic can occupy its source slot from initialization. Stream tables are separate from immutable clip assets and finalized independently of the geometry/scene identity, avoiding an end-of-recording change to the scene hash. The completed take manifest authenticates all stream descriptors and the shared source-block log path/hash; no unauthenticated sidecar determines rendering.
+
+| Stream record | Meaning |
+|---|---|
+| Stream descriptor in take manifest | Stable source binding, relative payload path/hash, int64 first scene sample and sample count, canonical mono float32 at the take's fixed rate; original device/codec and processing identity. |
+| `source-<index>.f32` | Little-endian canonical PCM entering source gain/transport, written sequentially; file length is `4 * sampleCount`. No per-block files and no load-entire-recording requirement. |
+| `source-blocks.bin` | Shared append-only timeline: int32 stream index, int64 first scene sample, int32 frame count, int64 available-at scene sample, uint32 status = 28 bytes/record. Spans are ordered/nonoverlapping per stream and cover its payload. |
+| Status values | Captured/decoded data; intentional silence; missing capture; concealed network loss. A bit identifies discontinuity. Unknown values or unaccounted ranges are invalid. |
+| Clock metadata | Device/remote origin, source rate, mapping/resampler version, epoch changes and measured uncertainty. Availability denotes completed canonical input, not inferred acoustic capture time. |
+
+Gaps occupy their declared timeline and contain the exact silence/concealment used live, with status preserved. Intentional mute is valid silence; missing input is not. Start/Stop/Gain remain separate source events and apply once; Stream Play/Stop gates emission without restarting or looping the sample cursor (`clipOffset=0`, `loop=false`). Muted device input is not retained. Restarting capture records a discontinuity and new clock mapping without changing past samples. Source data outside declared active/recorded intervals is known silence only where that policy is explicit.
+
+Use checked 64-bit absolute sample/file positions; chunk lengths remain bounded integers. Memory depends on response/DSP history and pending I/O, not take duration. At 48 kHz, mono float32 costs 11.52 MB/minute before lossless compression. Optional ZIP archival preserves exact bytes; lossy voice packets are transport data, not the sole canonical training/replay payload. Do not add a codec dependency just to archive local recordings.
+
+Finalization stops emission, copies accepted remaining capture data, closes/hashes stream files and then publishes take completion. Disk overflow/failure marks the saved input incomplete; it cannot silently produce a valid replay. Offline treats saved stream blocks as a bounded file-backed source and never opens the microphone or network. Reconstruct compact movement once into an ordinary numeric take, then reuse that immutable result and exact source samples for all quality variants.
+
+Single-player replay from zero remains sequential: no checkpoints, seek cache, geometry snapshot or duration cap is required. Multiplayer additionally needs the accepted multi-actor timeline and authoritative corrections; exact client acoustic replay records the interpolated state it consumed, as section 12 specifies.
 
 ## 5. Physics, representations and configuration
 
@@ -421,7 +414,7 @@ Energy absorption/scattering coefficients do not determine complex pressure refl
 | History, prediction limit and deadlines | Available model context and maximum accepted age/horizon. |
 | Memory/batch limits | Execution capacity; never silently redefine physics or normalization. |
 
-Author material curves at arbitrary ordered frequency knots, with interpolation/out-of-range conventions. The current energy curves interpolate linearly in Hz and clamp outside their knots. Transport bands have ordered nonoverlapping edges within [0, Fs/2] and a declared coefficient evaluation rule. Validate coefficients and grid bounds; interpolate once into the requested material-by-band table. More sampled bands do not create new measured material detail. Keep legacy eight-band packing in its adapter.
+Author material curves at arbitrary ordered frequency knots, with interpolation/out-of-range conventions. The current energy curves interpolate linearly in Hz and clamp outside their knots. Transport bands have ordered nonoverlapping edges within [0, Fs/2] and a declared coefficient evaluation rule. Validate coefficients and grid bounds; interpolate once into the requested material-by-band table. More sampled bands do not create new measured material detail. During migration, keep eight-band packing only in the legacy adapter; remove it after its scenes/materials are migrated.
 
 Sampling keys use named seed stream, snapshot identity, pair, band, global ray index and bounce. Do not derive them from frame count, worker ordering or dispatch size. Record actual counts. Start with independent sampling per pair/band; shared paths require correct PDFs. Low/reference seeds are independent. Tiling normalizes against the complete estimator budget, not each tile.
 
@@ -525,7 +518,7 @@ A request hash includes evaluated state bytes, not only timestamp. Reconfigurati
 
 | Mode | Inputs | Execution |
 |---|---|---|
-| Live | Captured Unity observations and effective source events. | Bounded work against output deadlines; select one monitored receiver. |
+| Live | Captured Unity observations, effective source events and available clip/stream PCM. | Bounded work against output deadlines; select one monitored receiver. |
 | Offline replay | Evaluate immutable take at requested sample positions. | Same solver/DSP; wait and stream results. Wall time never advances scene time. |
 | Scripted generation | Explicit simulation ticks and virtual sample clock. | Record one take first, then reuse it for all render budgets. |
 
@@ -559,6 +552,51 @@ The measured dataset contains 710 mirrored directions, 128 taps/ear at 44.1 kHz,
 This is a generic far-field mannequin model for headphones, not personalized HRTFs, near-field head scattering, headphone equalization or complete wave acoustics. The raytraced preview preserves each arrival direction through per-ear synthesis; validated directional reverberation and directional dataset export remain future work. Scalar band energy cannot recover directional reverberation without extra arrival data or an explicit diffuse assumption. Keep mono reference checks. Binaural tests verify ear timing/level, head rotation, stereo routing/capture and live/offline sample agreement on CPU and Metal.
 
 Use the active Editor for authoring-time jobs, or batch mode when that project is closed. A second Editor must not share the open project. Existing CPU batch jobs can use -nographics; HLSL jobs need a graphics device. A built worker is an option when simultaneous authoring/jobs justify it, not required infrastructure. Interrupted runs restart initially; resumability later must restore DSP history and verify all identities.
+
+### Microphone and streamed source audio (proposed)
+
+The new source path supports a local microphone, decoded remote voice and saved streamed PCM. These are producers of the same source samples; they do not introduce a third renderer or a new shader family. Existing clips remain the simplest source. A microphone emitter follows the player's mouth transform; each client has one local listening head, whose two ears remain the existing binaural output.
+
+```text
+local mic → capture cursor → mono/rate/clock conversion ─┐
+network voice → jitter/decoder → mono/rate/clock conversion ├→ timestamped source history
+saved stream → bounded file reads ──────────────────────┘
+asset clip → existing event-driven source reads ───────────→ CPU reference or GPU DSP
+                                                        → listener PCM queue
+canonical stream input + timing/status → recording writer
+```
+
+**Source boundary.** Extend `TakeRender.Signal` with Clip/Stream storage and retain its existing sample reads for DSP. A stream has a bounded circular sample history plus absolute int64 positions and a committed availability frontier. Add only append/range-readiness operations; no audio-provider plugin hierarchy is needed.
+
+```text
+append(source, firstSample, pcm, availableAtSample, status):
+    validate finite data, ordering and retained capacity
+    copy into owned source storage; publish only after the copy completes
+    enqueue the same canonical bytes + timing/status for recording
+prepareOutput(first, count):
+    derive conservative source ranges from declared delay/resampling/filter support
+    if any required stream range is still pending: defer this bounded job
+    upload newly committed samples once; run existing CPU or GPU synthesis
+    retire history only after every reader's required range has advanced
+```
+
+A missing future block is not silence and must never be uploaded as zeros that become permanent source history. Before capture begins/after a known stop, explicitly defined ranges are silence. At a real live deadline, apply the declared gap policy once, record its status and count it; late data cannot replace samples already used. Offline reads the recorded decision, or reports missing inputs, rather than obtaining better data for High than Low. Range-readiness checks use conservative DSP bounds without GPU path readback; test those bounds for every supported Doppler/filter configuration. Retention covers maximum acoustic delay plus actual DSP/resampling support; capture-buffer capacity and output playback lead are separate quantities. GPU submission/readback and file writing stay outside the device callback.
+
+**Unity capture.** `MicrophoneInput` owns one selected device and an ordinary looping capture clip. Drain only newly committed samples using its cursor into reusable buffers; never reread/resample the full capture clip every frame. Unity provides the looped clip and current recording position ([Start](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/Microphone.Start.html), [GetPosition](https://docs.unity3d.com/6000.4/Documentation/ScriptReference/Microphone.GetPosition.html)). Its loop length bounds memory, not session duration. Enable through the platform microphone permission flow; handle refusal, absent/disconnected devices and shutdown explicitly. Merely opening a scene or replay never enables the microphone.
+
+Convert the actual captured channel layout to mono and resample to the fixed session rate with a stateful, anti-aliased resampler. Preserve phase/history across chunks; validate 44.1/48 kHz and varying chunk sizes against an independent oracle. Do not use the current whole-clip linear resampler as a high-fidelity stream converter. The renderer consumes and the recorder stores the exact same post-conversion samples, before source gain and virtual propagation. Device/OS processing, optional gain control/noise suppression and conversion versions are provenance; processing must not differ between paired runs.
+
+**Clocks and gaps.** Unwrap the device cursor into a monotonic frame count. Map capture-frame positions to scene emission samples using an explicit origin/rate mapping; track clock drift without discontinuously jumping the source timeline. `GetPosition` is not a calibrated hardware ADC timestamp: record estimated offset/uncertainty and measure capture-to-output latency with a loopback fixture. A long poll gap can hide whole buffer wraps; detect ambiguous/overwritten data and mark loss rather than treating the cursor as proof of continuity. If exact lost-frame positions cannot be established, close the capture epoch and record the uncertain interval; do not invent sample-accurate recovery. Device/rate/clock resets end a capture epoch (or the take when its fixed-rate contract changes). Resampling drift correction has a saved version; saved canonical PCM is authoritative on replay.
+
+Capture timestamps, canonical-sample availability, render publication and device-consumption timestamps are distinct. In live synthesis, block waiting/resampler lookahead adds measured latency; it never shifts the recorded emission time or duplicates physical propagation delay. The current ~372 ms playback lead is a known obstacle to comfortable voice monitoring. Report capture, resampling, network/jitter, renderer scheduling, DSP and device buffering separately from simulated path travel time. Reduce lead only after device-deadline tests pass with scene graphics; no new latency guarantee follows from adding a mic selector.
+
+**Controls and output.** Mic starts disabled. Enabling it is an explicit action with a small active/recording indicator; mute stops retaining/transmitting speech and commits intentional silence while earlier echoes drain. Expose device and level controls in the existing released-cursor panel. Local processed self-monitoring is opt-in for acoustic experiments, with a headphone-first workflow to avoid speaker feedback. Save its audibility mask/timing in render provenance so a live/offline comparison uses the same sources. Remote listeners still hear the source when local monitoring is off: apply a local source/listener audibility mask, not a global source mute. Do not also play the microphone clip through Unity's native spatializer.
+
+The first implementation does not invent acoustic echo cancellation. A later voice backend may supply AEC using the actual speaker-output reference; ordinary room reflections from our solver are not microphone feedback cancellation. For live usability, microphone failure should disable that source and give a concise reason without stopping walking/other audio. Saved gaps remain visible in diagnostics and training eligibility.
+
+**Recording and training.** Section 4 defines saved stream bytes and availability/status. 'Dry' here means before virtual acoustics; a real microphone may already contain room reverberation, noise and device processing. Label that origin. Use generated impulses/sweeps or suitable dry recordings for controlled physics checks. Save manual mic takes for playback and reuse; do not automatically enqueue them for training. When selected for an acoustic comparison, Low/High receive identical canonical speech, motion, preprocessing and gap decisions. Windows affected by capture loss remain identifiable and are excluded from clean-source teacher claims. Response reconstruction can still train using synthetic source signals; mic speech is an additional end-to-end workload.
+
+Implementation touches `RaytracedAudioSource`, scene source export/guard validation, manager session setup, `Signal`/Live scheduling and the take reader/writer. Stream sources do not need dummy AudioClips; fixed source identity and input kind replace the current mandatory-clip guard. Add one capture component and keep bounded stream storage alongside existing source types. GPU filters, transport and output callback remain the same except for availability-aware submission and local audibility selection.
 
 ## 8. Reconstruction and temporal upscaling
 
@@ -640,7 +678,7 @@ For moving scenes, snapshot transfer functions cannot simply be multiplied by so
 
 ### Collection and teacher acceptance
 
-A resolved recipe records scene/layout family, dimension, geometry/material variation, endpoint placements, motion curves, source-event schedule, capture/tick schedule, length and independent scene/motion/signal seeds. Resolve ranges before capture using authored traversable bounds. Manual and scripted captures use the same take format.
+A resolved recipe records scene/layout family, dimension, geometry/material variation, endpoint placements, motion curves, source-event schedule, capture/tick schedule, length and independent scene/motion/signal seeds. Resolve ranges before capture using authored traversable bounds. Manual and scripted captures use the same take format. Include environment family (station/church/outdoor), source origin (asset/generated/mic/decoded voice), source PCM/preprocessing hashes and gap/availability metadata. Group speaker and original utterance/session ancestry before windowing; recording does not automatically enroll microphone speech into training.
 
 The recordings browser and batch entry point share the job contract in section 11. Selecting a take for replay never changes its inputs or its dataset membership. Generating pairs is explicit, and successfully rendered comparisons become training examples only after the acceptance and availability checks below.
 
@@ -704,19 +742,20 @@ Each bundle binds take/scene/state/event hashes, stable pair mapping, run/config
 
 Every numeric descriptor declares file, dtype, shape, axes, units, logical C order, byte_offset, byte_length and whole-file SHA-256; explicit byte strides describe interleaving. byte_length is the addressed span beginning at byte_offset. Validate sizes/offset products before mapping. Use <f4, <i8 and |u1 for float32, sample/index int64 and byte masks. Timestamps remain integers; the direct propagation-delay field remains float seconds.
 
-Current version-2 direct scalar address:
-```text
-frame r, pair p, channel c:
-offset = r*(8 + 20*P) + 8 + 20*p + 4*c
-c=0 delaySeconds; c=1 pressureGain; c=2,3,4 world directionX,Y,Z
+Direct scalar addressing dispatches on the render manifest version (independent of take-input version):
 
-[R,P,5] strides = [8+20*P, 20, 4]
+```text
+C = {1: 2, 2: 5, 3: 6}[formatVersion]
+frame r, pair p, channel c:
+offset = r*(8 + 4*C*P) + 8 + 4*C*p + 4*c
+c=0 delaySeconds; c=1 pressureGain; c=2,3,4 direction XYZ; c=5 delayRate
+[R,P,C] strides = [8+4*C*P, 4*C, 4]
 initial offset = 8
-nonempty addressed span = (R-1)*(8+20*P) + 20*P
-full file length = R*(8+20*P)
+nonempty addressed span = (R-1)*(8+4*C*P) + 4*C*P
+full file length = R*(8+4*C*P)
 ```
 
-Use an unaligned structured dtype/explicit strides, not float32 reshape of timestamps. Version-1 direct rows have two channels and an 8-byte pair stride. A mono temporal experiment may select only delay/gain from version 2, but its descriptor must state that selection. Preserve directions and recorded head rotations for binaural experiments. Directions are unit vectors, with the coincident zero convention; they require directional normalization/validity rather than generic scalar interpolation.
+Use an unaligned structured dtype/explicit strides, not float32 reshape of timestamps. A mono temporal experiment may select delay/gain, but its descriptor must state that selection; retain the other stored channels. Delay rate has units seconds/second. Preserve directions and head rotations for binaural experiments; unit vectors use the coincident-zero convention and require directional validity/normalization rather than generic scalar interpolation. Missing channels in old formats must not be misread as stored zeros.
 
 Future response runs use response-samples.i64 [R], responses.f32 [R,P,...quantity axes...] and pair-valid.u8 [R,P], described in run.json. Energy uses [R,P,F,D], pressure [R,P,K], complex [R,P,Q,2]. Separate active endpoints from numeric validity. Declared grid sizes can differ only in a named cross-grid experiment with both descriptors.
 
@@ -879,7 +918,7 @@ The adapter runs low solve → available history/query → bounded inference →
 
 **Live station controls:** the train service and original `train_horn.mp3`/room chime start automatically on Play. Service cruises at 12 m/s with 3 m/s² acceleration/braking, stopping at the same platform for 10 seconds each lap, including startup. Capture starts automatically before movement and sound, and the Game view exposes one Save run action (R). The world keeps moving during audio drain, and saving resumes live monitoring with restarted clips. Re-enter Play for a new recording. Walking starts on Play. Esc releases the cursor and reveals mouse sensitivity; left- or right-click inside the scene resumes walking, while UI clicks leave the cursor available. E opens/closes the nearby waiting-room door. Entering and leaving the carriage uses ordinary walking across the level platform edge; there are no boarding teleports, prompts, pose cuts or special boarding state. The normal station dwell is unchanged, and player parenting stays stable. The walking controller tracks its supporting collider in local coordinates, applies the floor’s translation/yaw before sweeping walking and gravity, and inherits floor velocity on jumping or stepping off. Benches leave a clear aisle; normal collision remains active aboard. Detailed source controls, replay, rendering and diagnostics remain in the Inspectors/comparison window. The full take format is unchanged; the station adds the initialization input sidecar described in section 4.
 
-The current roster is 53 objects, two sources and one binaural listener; older rosters need their matching scene for pose replay, while offline audio remains self-contained. Capture records actual late-frame poses, not a separately simulated trajectory. Movement and gravity use one CharacterController sweep per update, including sub-millimetre steps. Wheels align to the rails; emitters lie outside the opaque train proxy. The passenger carriage uses separate floor/side/roof geometry. Mouse sensitivity is independent of render-frame duration. Autonomous passengers remain future work.
+The current roster is 53 objects, two sources and one binaural listener; older rosters need their matching scene for pose replay, while offline audio remains self-contained. Capture records actual late-frame poses, not a separately simulated trajectory. Movement and gravity use one CharacterController sweep per simulation tick, including sub-millimetre steps. Wheels align to the rails; emitters lie outside the opaque train proxy. The passenger carriage uses separate floor/side/roof geometry. Mouse sensitivity is independent of render-frame duration. Autonomous passengers remain future work.
 
 **Implemented:** Tools → Acoustics → Compare audio opens comparison.json without a running scene. Select a recorded listener by name/index; new reports also retain its stable ID and relative take directory. Low/High waveforms and spectrograms use equal scales and a shared cursor. Low/High/Difference (low-high) audition preserves sample position on switches, with one shared gain initially unity. Preview restarts at the preserved sample and may have a gap; a 5 ms edge fade affects audition only. The original WAVs and numerical metrics are unchanged. Later add model output as another aligned run.
 
@@ -904,201 +943,145 @@ Earlier train observations were about 10 FPS, maximum pose gap ~116 ms and GPU c
 
 Do not sum overlapping durations to claim latency; correlate timestamps. GPU submission/completion wall time is not GPU execution. Mark unavailable counters unavailable. Run profiling without training competing for the same device; measure minimal graphics and actual station presentation separately. Detailed overlays/path capture must be identified in results.
 
-Current worst-case direct work scales O(R*S*L*G); mixing about O(N*S*L*C*Ktap), where C is one or two output channels and Ktap includes the HRIR in binaural mode. Version-2 response bytes are R*(8+20*S*L), output about 4*N*L*C excluding headers. Binaural filter preparation also searches the measured directions and composes the FIR per response; profile that cost when increasing pair count or update rate. These guide sweeps, not arbitrary capacity guarantees. Tiling/pair batching preserves identity and normalization.
+For the direct baseline, worst-case traversal scales O(R*S*L*G) and CPU mixing about O(N*S*L*C*Ktap), where C is one or two output channels and Ktap includes the HRIR. These formulas do not account for spectral rays/bounces/group FFT work. Current version-3 direct diagnostic bytes are R*(8+24*S*L), output about 4*N*L*C excluding headers. Binaural filter preparation also searches the measured directions and composes the FIR per response; profile that cost when increasing pair count or update rate. These guide sweeps, not arbitrary capacity guarantees. Tiling/pair batching preserves identity and normalization.
 
 Record hardware, Unity/backend/build, device sample rate, audio buffer, visual workload, seeds and deadlines before a realtime acceptance claim. Use same take/physical model/output range across comparisons. Include static/open/blocked paths, moving doors/trains, fast motion, empty geometry, large counts and cuts. Score absolute level, arrival time, decay, phase where meaningful, clicks, staleness and deadline misses. No automatic time shifting or separate amplitude normalization.
 
-### Planned recordings browser and portable playback
+### Recordings entry point and replay scope (planned)
 
-**Scope:** load any complete, supported take without opening its original Unity scene; play or scrub its movement and available audio; render quality variants and generate examples from those same inputs. Preserve existing v1 take payloads and v1/v2 render readers. This whole subsection is proposed work. The Inspector workflow and 30-second comparison ranges described above are the current implementation.
+Extend the existing comparison window with Open recording/folder and available recordings; retain Inspector replay/render actions. No separate main-menu framework is required for church, outdoor or mic work. Discovery reads manifests, not whole payloads. Show supported completed runs and concise reasons for corrupt/incomplete ones. Do not build automatic scene snapshots, a database, checkpoint system or playback cache in the first delivery.
 
-#### Navigation and controls
+Opening behavior depends on the actual saved inputs:
 
-Use one entry point, **Tools → Acoustics → Recordings**, by extending `TakeComparisonWindow`. Its home view has **Record scene** and **Recordings**. Keep the existing Compare audio menu as a link to this same window during migration. A take opens into playback, with comparison and generation controls revealed when needed:
-
-```text
-Home:       [Record scene]  [Recordings]
-Recordings: [Open folder…]  name / duration / sources / listeners
-            selected take → [Play / Pause]  ───●──── whole-take timeline
-                            [Recorded / Rendered / Low / High / Difference]
-                            listener view | top-down view
-                            [Generate pairs…]
-```
-
-List the configured recording root and explicitly opened folders; do not scan the entire project or import recordings into Assets. Discovery reads manifests only. A small rebuildable preferences cache remembers recent folders and selection; files remain authoritative. Incomplete/unsupported takes stay visible with an inline reason instead of disappearing. Show only available audio choices, and show listener selection only for multiple receivers. Put render settings, provenance and diagnostics in folded details. Playback can start from a take folder or `take.json`; an existing `comparison.json` resolves its take and selects the corresponding renders.
-
-**Record scene** prepares/reuses the scene's visual snapshot in Edit mode, then enters the selected existing authoring scene using the normal Unity workflow; capture begins at scene initialization before movement or sounds. Selecting a different authoring scene follows Unity's normal unsaved-scene handling. While walking, keep the single Save run control. Esc releases input and exposes Resume/Recordings alongside sensitivity; it does not silently pause the captured world or stop a take. No additional gameplay commands or interaction prompts are needed.
-
-**Stop & save** finishes output capture and selects the new take in the browser without stealing walking focus. It retains today's automatic return to live monitoring. **Recordings** explicitly switches activity: finish/save a take or stop live audio, let Draining finish, suppress the automatic live restart for this transition, then leave Play mode and open the browser. Do not freeze updates before draining. Preserve the pending take path across the Editor mode transition. A failed finalization keeps the browser open with the failure; it must not silently play a partially saved capture or discard it. Users do not operate the manager's internal states themselves.
-
-This browser proposal is deferred behind working initialization recording and sequential input playback. Its first delivery would be the native Editor window, which can preview saved takes in Edit mode. A standalone Record/Recordings panel is a later thin host over the same take/audio session; it is not required to launch the browser. That host has a neutral startup view and unloads the live scene after draining before replay; the replay scene never starts train/gameplay/audio scripts. Add its UI to the existing control-panel code when building the standalone workflow, rather than a separate menu framework.
-
-#### Inputs, identities and audio choice
-
-Loading is independent of `RayTraceManager`, the active scene, object count and current device sample rate. `take.json` and its existing payload hashes identify the immutable acoustic inputs. The take manifest's SHA-256 identifies an exact take file; existing scene/state/event hashes continue to identify solver inputs. Validate the selected payloads and schemas before playback, with cancellable progress on first verification. Browsing a library does not hash every recording or load PCM/meshes. Each session owns its reader, buffers and preview resources; changing selection cancels and disposes the previous session before publishing the replacement.
-
-Audio selection is explicit:
-
-| Choice | Source and behavior |
+| Recording | Playback/render contract |
 |---|---|
-| Recorded | Complete `monitor/output.json` and its verified WAV; only for the listener actually monitored. Preserve captured underruns and recorded latency. This is component output, not a microphone recording or downstream device capture. |
-| Rendered | A compatible completed offline run, with listener/channel/HRTF/settings identities retained. |
-| Low / High / Difference | An explicitly selected completed comparison; both sides must share its declared timeline and experiment. Difference remains Low minus High. |
-| No cached audio | Show **Render audio & play** using the selected saved preset; mark the result Rendered. Until then, allow silent pose scrubbing. Never label regenerated audio Recorded. |
+| Compact scene inputs | Load the matching authored scene/build and replay from initialization; stream mic PCM from its saved payload. Missing revision/assets is an actionable error, not silent substitution. |
+| Full/generated numeric take | Use saved state/geometry/PCM for offline rendering without re-running gameplay. Current listener/top-down visual previews need matching scene assets; a geometry-only fallback can be added in the same viewer when needed. |
+| Completed offline audio | Play the selected listener's compatible Rendered/Low/High/Difference output. Keep its original sample mapping and declared DSP/propagation latency. |
+| Captured monitored output | Available only when explicitly retained; call it Recorded and keep its callback/lead mapping. Regenerated output is never labeled Recorded. |
 
-Prefer Recorded on initial open when available for the selected listener, otherwise the last explicitly selected compatible render. Select a recorded take's monitored listener initially. Switching to another receiver uses that receiver's offline audio or requests a render; recorded mono/stereo output cannot supply a different receiver. Generated response files retain all source/listener pairs. Listen to a receiver's summed output; source-isolated listening would require another declared render, not separating sources from a mixed WAV.
+Opening a take never activates a live microphone or joins a server. Select the recorded listener initially; another listener needs its own render. Missing monitored output does not invalidate valid source inputs. Audio and views share an int64 take-sample clock; measured output follows actual consumed audio, not frame deltaTime. For compact replay, no seeking/checkpoints are promised. Existing numeric comparison range/scrub behavior remains; continuous bounded audition is separate work, not a prerequisite for these scenes.
 
-Incomplete monitored audio does not invalidate an otherwise complete input take. Keep it in diagnostics; normal playback can use a completed offline render. Unsupported/corrupt acoustic inputs fail validation. Old recordings are read in place; opening them never rewrites manifests, IDs or poses.
+Use the existing Save → finalize/drain → replay/render lifecycle. Keep walking controls usable during capture and restore the user's scene/controls after preview. Source mute stops new emission; pending reflections remain. Handle failed saves explicitly and never silently drop required microphone payloads.
 
-New monitored-output reports bind the final take-manifest hash when finalization completes. Existing reports lack this explicit association: retain them as legacy recordings with their original adjacent take and validated timing, and expose the missing binding in details. Moving a monitored WAV alone cannot establish which take/listener it belongs to.
-
-The shared session flow is intentionally small; these are proposed operations, not new public APIs yet:
-
-```text
-open(path):
-    close prior playback session
-    take = validate and open saved acoustic inputs
-    view = matching saved snapshot, otherwise saved acoustic geometry
-    tracks = validate available recorded output and completed renders
-    select listener/track; seek to its first valid sample; remain paused
-play(): prefill bounded audio; use its consumed position to drive take.Evaluate
-seek(sample): cancel old reads; apply poses; refill audio; restore play/pause
-generate(recipe): enqueue the immutable take identity; leave input files unchanged
-```
-
-#### Visual replay without the original scene
-
-**Basic view is always available for a valid take.** Create one unit-scale replay transform per recorded object; reconstruct local triangles in 3D or segments in XY from `geometry.bin`. Those coordinates already contain authoring scale: apply only recorded position and rotation, never multiply by `ObjectDefinition.scale` again. Use simple acoustic-material colors and source/listener markers. Apply activity/cut flags and the existing interpolation. This restores the saved acoustic representation, not omitted decorative assets. Source/listener-only objects still receive transforms. Replay needs no gameplay physics; free-camera collision is a separate inspection concern.
-
-**Saved visual snapshots are optional, shared assets.** Export a whitelisted visual hierarchy before capture, bound to the persisted object IDs, fixed relative transforms/scales, static meshes/text/materials/textures, solid inspection colliders, lights and listener camera settings. Reuse the existing visual-copy logic. Build the copy from permitted components; never instantiate gameplay scripts and then remove them after lifecycle callbacks could run. Registered objects receive recorded world poses parent-first; unregistered children inherit fixed local transforms. Every independently moving or activating visual root must be registered. The snapshot cannot depend on mutable objects in the open scene.
-
-Use Unity's built-in AssetBundle export for the whitelisted prefab and its dependencies, with one immutable bundle per visual revision and target platform. Keep the serialized object-ID → prefab-transform-path mapping and fixed camera/lighting metadata in `snapshot.json`; paths use child indices, not nonunique names. Capture and restore any global preview settings explicitly. Snapshot identity hashes the finalized manifest, which binds bundle/dependency bytes, exporter version, Unity version, render pipeline and build target. An authoring dependency key can locate an existing export, but is not proof that its bytes remain valid. Do not rebuild unchanged snapshots for every take. [Unity bundle build API](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/BuildPipeline.BuildAssetBundles.html).
-
-Build snapshots in Edit mode before entering the live scene, and reuse the prepared snapshot for subsequent takes. A standalone scene carries a previously prepared compatible snapshot; runtime bundle building is not required. Direct Unity Play without a matching prepared snapshot still permits acoustic capture with the basic view. Changes to supported static visuals or bindings create a new revision on the next authoring export. Validate the supported rigid/static contract and snapshot binding at capture boundaries; do not promise exact playback of animated materials, particles, skinned meshes, changing lights or other uncaptured state. A feature needs a recorded channel before being added to the supported contract. A snapshot failure leaves acoustic capture/replay usable and states that the take has only the basic view. Lighting/shader output can vary across devices, so saved assets and poses do not promise pixel-identical video.
-
-AssetBundles are platform-specific. A Mac export is not a Windows replay asset; include a compatible export or use the basic view. Record and check the tested Unity/pipeline compatibility before loading a snapshot. Audio and acoustic geometry remain independent of the visual bundle. This avoids a custom material/shader serializer or an Addressables dependency. [Unity platform limitations](https://docs.unity3d.com/6000.0/Documentation/Manual/assetbundles-platforms.html).
-
-Proposed additions to the existing recording root:
-
-```text
-Recordings/
-  station-<id>/
-    take.json, geometry.bin, states.bin, events.bin, clip-*.f32
-    monitor/                         existing optional captured output
-    visuals.json                     optional binding to a saved snapshot
-    <render-or-comparison>/           existing outputs remain readable here
-  visuals/<snapshot-id>/
-    snapshot.json, scene.bundle       shared across takes of this revision
-  datasets/<name>/                    section 9 manifests and indexes
-```
-
-`visuals.json` declares `schema: acoustic-take-visuals-v1`, `takeManifestHash`, a relative snapshot-manifest path and its SHA-256. The completed sidecar is published after the take manifest is final; it introduces no circular hash or change to v1 take files. `snapshot.json` declares `schema: acoustic-visual-snapshot-v1`, component/export versions, compatibility, bundle path/hash, mappings and fixed presentation data. Old takes without the sidecar use the basic view. Missing/incompatible visuals produce a short explanation beside that view; don't bind by name or silently substitute today's scene. Preserve the existing current-scene viewer only as an explicitly labeled diagnostic option.
-
-#### One clock, continuous playback and seeking
-
-The internal cursor is signed int64 samples at the take's sample rate. Seconds are presentation only. Rendering, seeking and pose evaluation share this cursor. During audio playback, advance from the audio player's consumed playback position, not frame count, decoder read-ahead or accumulated `deltaTime`. Paused scrubbing sets the cursor directly. Visual updates sample that clock at display rate; a slow visual frame must not stretch audio.
-
-Each audio selection has an explicit mapping between file frame and take sample:
-
-- **Offline runs:** file frame `n` corresponds to output scene sample `n`. Keep propagation delay and declared FIR/HRTF latency in the output; do not shift by waveform correlation. Low/high metrics continue to compare original samples unchanged.
-- **Recorded output:** reconstruct the output clock from `callbacks.bin` (`firstSample`, block length and `dspTimeSeconds`) and `inputDspOriginSeconds`. For frame `c` in a callback starting at `b`, `sceneSample = round((callbackDspTime - inputDspOriginSeconds) * Fs) + (c - b)`. Validate callback continuity and clock mapping. Preserve the captured queue lead in the audio so the default recorded view shows what the component emitted while those poses occurred. `leadSamples` also maps scheduled solver output to its capture frame for diagnostics; subtracting it is a separately labeled alignment operation, not the default replay clock.
-
-If an old capture lacks valid clock metadata, offer explicitly labeled unaligned audio and pose inspection independently, or use a completed offline render for synchronized replay. Do not assert measured synchronization from a guessed offset. Audio/display/device latency remains subject to measurement even with correct software timestamps. Before/after the pose interval, hold the first/last pose through valid audio lead/tails. Declare track coverage; unavailable intervals are not measured silence, and Difference is only available on a valid common timeline.
-
-A seek or track/listener switch stops the current output, increments a session generation, cancels obsolete reads, fills the new position and resumes if previously playing. Keep absolute sample position; reject stale buffer completions. Small audition fades may suppress start/stop clicks without altering files or metrics. Apply fades at user discontinuities, not every streaming block. Cached PCM already contains propagation/DSP history, so seeking it does not rerun source events or physics.
-
-Keep one continuous take timeline while loading bounded audio blocks and plot tiles automatically. The current `Preview` creates an entire in-memory clip for a manually chosen range through internal `AudioUtil`; it cannot simply be relabeled as streaming. Verify a streamed `AudioClip` and its seek/cursor behavior in Unity 6000.4.1f1 Edit mode first. Unity's public clip API supports small on-demand PCM blocks, but that does not establish compatibility with the internal Editor audition API. If that route fails, use an isolated preview audio host; gate delivery on continuous playback rather than concatenating clips with audible gaps. Keep this adapter behind the existing preview boundary. [Unity streamed clip API](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AudioClip.Create.html).
-
-File reads, validation and decoding occur outside the audio callback. The callback consumes prepared bounded data without locks, file I/O, logging or allocation. Preview starvation is reported separately from silence already present in a captured WAV; request pause/rebuffer without blocking the callback, and preserve the first unconsumed content sample instead of advancing past unheard data. Any device silence inserted by the preview is a playback fault, not recorded content. Clip/device sample-rate conversion must retain the take clock and original files; don't require an old take's sample rate to equal today's device rate. No throughput or synchronization claim precedes the playback spike and native measurements.
-
-`AcousticTake` already seeks fixed-stride frames and keeps a timestamp index. Reuse that reader: cache adjacent observations during sequential playback and binary-search on seek. Keep the existing O(observation-count) int64 timestamp index initially; pose/PCM payloads must not grow in memory with duration. Bound waveform/spectrogram caches by the visible range and prefetch window, with documented byte caps. Compute display spectra lazily; they remain distinct from ML tensors. Library scanning, hashing and expensive plotting must not run inside the playback callback or every repaint.
-
-#### Storage, batch generation and automation
-
-Retain the current binary float32/int64 files and seekable working directories. The first storage savings come from sharing snapshots and referencing existing takes/renders/windows. Use an optional lossless ZIP export to move/archive a selection, including its referenced snapshots and required audio once. Import extracts to a validated working directory before opening, with relative paths resolved inside the selected archive root. Validate paths, declared sizes and hashes; compression must preserve source bytes and cannot round poses, decimate observations or transcode training PCM. Keep archive/import outside the playback path. A custom delta codec, per-window files, database and content store are unnecessary for the first delivery.
-
-**Generate pairs** accepts one or more selected takes and one resolved generation recipe. Start with the current direct-model coarse/fine cadence experiment and explicit reference tolerances. It calls the same render/comparison methods as `TakeBatch`, writes run reports, applies section 9 per-pair and causal-availability checks, and writes index rows only for accepted examples. Successful WAV rendering alone does not establish training eligibility. Reflection/ray-budget pairs remain unavailable until their solver and reference gates exist.
-
-The recipe binds experiment/schema version, low/high/reference settings, seeds when applicable, renderer/shader/DSP/HRTF identities, output policy and quality/availability rules. A job key hashes the exact input identities and resolved settings. Reuse an existing result only when identity, payload hashes and completion all match; changed code/settings produce a new job. Preserve separate low variants while sharing a verified high result when its complete identity matches. Cancel between bounded batches, retain incomplete outputs with a reason, and resume at completed-job boundaries. Publish dataset manifests last. Split related takes/layouts/trajectories/ears/variants together before making windows, as already required in section 9.
-
-Keep the queue as a saved JSON list plus completion reports, with one job active by default. The UI and batch entry point call the same C# job method; batch execution never constructs cameras, loads visual bundles or auditions audio. Extend the existing `TakeBatch.Job` compatibly to accept the same resolved recipe for a list of takes; keep today's single-job JSON valid. Run the queue in the idle Editor first. Do not launch a second Unity Editor against the project already open by the user; unattended workers need an isolated project copy or a later built runner. GPU jobs require a graphics-capable host; CPU-only jobs can retain the current `-nographics` path.
-
-Manual and automatic collection share `BeginTakeRecording`, observed poses and sample-timed source events. A small scenario driver supplies a resolved movement/event schedule to existing scene controls; it records the actual outcome once. Save recipe, seeds, layout/trajectory family and capture schedule beside the take. Render all budgets from that take rather than rerunning the controller for each budget. Scripted collection is a separate queue step from rendering existing takes; no procedural-world framework is needed. Training loaders read windows on demand using the section 9 descriptors; they do not use preview plots or captured underruns as high-quality targets.
-
-#### Code ownership and delivery gates
-
-| Existing file / proposed addition | Responsibility |
-|---|---|
-| `Assets/Editor/TakeComparisonWindow.cs` | Take discovery/home view, open take/comparison, continuous timeline, existing A/B/plots and generation controls. Keep one window. |
-| `Assets/Editor/TakeComparisonView.cs` | Replace required open-scene clone with basic-geometry or snapshot construction; retain cameras, pose application and inspection controls. |
-| `Assets/Editor/TakeComparisonAudio.cs` | Accept recorded-output and render descriptors, validate clock/coverage, replace range-clip audition with bounded playback; keep preview-only analysis here. |
-| `Assets/Scripts/Simulation/Take.cs` | Reuse versioned reader/interpolation and fixed-stride data; add adjacent-frame caching only with measured benefit. No payload migration for the browser. |
-| `Assets/Scripts/Simulation/TakePlayback.cs` (new when implementing playback) | Small session owning selected take, track descriptors, sample cursor, seek generation and cleanup; no Editor UI or scene-manager dependency. Move reusable audio reading here or into an audio file only when a second host needs it. |
-| `Assets/Editor/TakeVisualSnapshot.cs` (new at the snapshot milestone) | Whitelist export, dependency/compatibility identity, bundle build and optional take sidecar. Temporary build assets are cleaned after export; no copied scene per take. |
-| `Assets/Editor/TakeEditor.cs` | Link Inspector to the shared browser; factor a callable batch job method from the existing CLI entry point. Preserve single-job compatibility. |
-| `Assets/Scripts/Demo/StationDemo.cs`, `Assets/Scripts/Demo/RaytraceControlPanel.cs`, `RayTraceManager.Take.cs` | Recordings transition, completion notification and live-restart policy; preserve one capture/drain owner. Do not duplicate these states in UI code. |
-| `TakeRender.cs`, `TakeComparison.cs`, later `tools/take_dataset.py` | Existing offline rendering, reusable verified runs and per-pair acceptance; section 9 dataset indexing/loading. The browser does not implement another solver or trainer. |
-
-Delivery order and tests:
-
-1. **Playback spike and raw-take browser:** prove native Edit-mode streaming/seek/cursor behavior, then implement discovery, isolated basic views and recorded/cached audio on a continuous timeline. Open old/current 2D/3D takes with no original scene, differing rosters and several sources/listeners. Corrupt/incomplete inputs produce specific failures; missing monitored audio still permits input replay/rendering. Demonstrate playback across several former 30-second boundaries, repeated seeks, channel changes and a different device sample rate, with bounded buffers and no steady-state callback allocations or block-edge gaps.
-2. **Saved visuals:** capture a snapshot, record two takes sharing it, edit/delete the original scene assets, then reopen the recordings. Verify object mapping, scaled geometry, parent/child motion and activation. Move/export/import a take with its snapshot; missing bundles or incompatible platforms still allow basic views and audio. Unsupported animated presentation is identified. Verify no gameplay callbacks, duplicate audio listeners or live-scene mutations, and cleanup on close/reload/cancel.
-3. **Generation from the browser and batch:** same inputs/recipe reach the same job identities and tolerance-checked outputs through both entry points. Test cancellation/retry, reuse of a common high run, rejected teachers, source/listener ordering, causal windows and split isolation. Add scripted capture through the same recorder after the saved-take path passes.
-4. **Standalone host:** move genuinely shared loader/audio/view code out of Editor and add the thin home panel. Test record → save/drain → replay → return to scene, scene teardown and no accidental live restart. The Editor's internal `AudioUtil` cannot be a standalone dependency.
-
-For timing acceptance, use a fixture with independently known pose cuts and audio impulses plus a nonzero queue lead. Check exact integer mapping at stored samples and seek endpoints, block-continuous PCM, recorded-versus-rendered timing semantics and bounded pose interpolation error. Measure cold open/hash time, warm Play/seek time, memory versus duration and audio/display delay on the actual Editor/backend; set shipping thresholds from this spike instead of inventing performance guarantees. Until these gates pass, describe this as planned browser/playback work rather than a working main menu or training pipeline.
+Batch generation stays a small saved JSON job list around `TakeBatch` and existing render/comparison methods. Resolve a compact run once, then reuse its immutable numeric inputs for every budget. Jobs bind scene/source hashes, code, settings, seeds and target acceptance. Publish a complete dataset only after its referenced files and gates pass. The open Editor runs jobs sequentially; do not start another Editor on that same project. Optional later lossless archive export preserves bytes; portable decorative snapshots/standalone browser/seek caches are deferred until required.
 
 ## 12. Multiplayer
 
-The first network scene uses the same Station prefab, network player/train variants and existing solver. Players host/join, move independently, see one another and hear shared clips from their own receiver positions. Test two separate processes then two machines; a configurable player limit is measured, not assumed.
+Multiplayer is a mode for the same Church, LakeForest and TrainStation assets, not a copied environment or a second acoustic engine. The first network acceptance run is two separate processes, then two machines over LAN/direct IP. Test independent walking/head direction and a shared door/speaker before adding voice. Player count is configured and benchmarked; two is the validation starting point, not a hardcoded maximum.
 
-Use Netcode for GameObjects and Unity Transport after verifying/pinning Unity-compatible releases. Local/direct-IP comes first; internet join codes add Multiplayer Services/Relay configuration and a real cross-network test. [Unity Relay integration](https://docs.unity.com/en-us/mps-sdk/tutorials/relay-and-ngo).
+Use **Netcode for GameObjects + Unity Transport** for session/object replication, with compatible versions pinned when implementation begins. Host owns shared actors and accepted interaction/sound events; clients own local input/camera and receive authoritative state. Start with package-supported transform replication and measure control latency. Do not implement competitive rollback, host migration, matchmaking or internet Relay until requested. Physics is simulated by the authoritative owner; peers do not infer identical outcomes from input alone ([Unity network physics](https://docs.unity3d.com/Packages/com.unity.netcode.gameobjects@2.7/manual/advanced-topics/physics.html)).
 
-The host owns spawning, shared train/door movement and accepted sound ordering. Each owner drives its player through package replication; remote copies disable local input/camera/native AudioListener. Exactly one native listener per playing client, none on a non-playing server. Competitive prediction/reconciliation, host migration and matchmaking services are deferred.
+### World, sound and listener ownership
 
-Each client renders its own acoustic receiver from the replicated world. Replicate object state and sound commands, not response tensors, FFT buffers or final acoustic audio. Quality settings remain local. Add explicit live receiver selection at the manager boundary; retain all captured poses for offline work.
+- Assign session-stable IDs to players, scene actors and acoustic sources; verify scene/clip/build identities at join. Map IDs to the existing numeric source/receiver tables.
+- Replicate accepted events once with event ID, source/target, action, gain, clip offset/loop state and server tick/emission time. The host must not apply an event once locally and again through its client path.
+- Join state includes current actor transforms/settings and playing voice phase/start time. Replaying old broadcasts is not a substitute for current state.
+- Each client renders all audible emitters for **its local head only** in ordinary gameplay; it need not synthesize every other player's ears. Multiple receivers remain available for explicit offline experiments.
+- Only the local player's camera/input and one output AudioListener are active. Remote player heads/mouths provide pose/source data, not extra native audio outputs.
+- Local acoustic quality is independent of network tick/packet rates. No response tensors, ray buffers, wet PCM or HRTF outputs are replicated as gameplay state.
 
-Network contracts:
+Use one declared presentation clock for replicated remote actors, voice and scene events, mapped to the client's fixed acoustic sample rate. Record server/client clock corrections and input availability. Align voice emission and remote mouth/occluder presentation on that clock; do not synchronize by packet-arrival time. Track local-head pose/application latency separately. Late commands advance phase or expire according to their timestamp, never rewind consumed audio or restart a continuing clip from zero. Explicitly benchmark the extra delay from transform interpolation as well as audio queues.
 
-- Map session-stable acoustic IDs to network IDs and verify scene/clip asset identity.
-- Commands carry event ID, source/clip, action, gain, loop, clip offset and server emission time. Apply accepted commands once, including on the host.
-- Replicate current voice state/start time for late join; event broadcast alone cannot restore phase.
-- Map server time to each client's DSP clock/sample rate with declared delay/rounding and recorded clock corrections. Device sample indices are not network timestamps.
-- Align remote transform presentation and sound to the same scene time. Late commands advance phase or skip ended clips; never rewind consumed audio or restart from sample zero.
+### Microphone voice transport
 
-Host takes record server-accepted state/events; client takes record the actual interpolated state/events its local acoustics saw. Low/high for a client use that same client take. Do not label host-versus-delayed-client differences as reconstruction error. Related session segments and views share a dataset split.
+NGO does not itself supply the required voice codec/jitter pipeline. Use a maintained Unity-compatible **Opus** implementation for compressed mono speech; verify its package/platform/license support before selecting/pinning it. A voice SDK is acceptable only if decoded PCM can enter our source pipeline and automatic spatialized playback can be disabled. Do not write a codec. Codec packet duration/bitrate/loss handling are saved settings and are independent of our STFT grid ([Opus specification](https://www.rfc-editor.org/rfc/rfc6716)).
 
-Roster changes require closing the current fixed-roster segment before rebinding/spawn destruction, then starting a segment with current voice phase. A small session index records offsets, gaps and warmup. Disconnects finalize what is valid; host departure visibly ends the initial session. Do not claim seamless continuous capture across roster changes yet.
+```text
+local canonical mic → encoder → timestamped packets → remote jitter buffer
+  → decoder / declared loss concealment → fixed-rate canonical stream
+  → existing local raytracing + binaural rendering
+```
 
-Microphone voice needs a separate streamed-PCM/jitter/capture contract; fixed-clip gameplay is the initial scope. Proposed integration homes are MultiplayerSession.cs, NetworkPlayer.cs and NetworkAcousticSource.cs, with ordinary package transform replication for props rather than a networking class per object.
+Packet contract: session/source ID, capture epoch, sequence number, sender frame/sample timestamp, frame count, codec configuration identity and payload. Session handshake supplies rate/channel/clock details; codec changes begin a declared epoch. Use bounded unreliable delivery for voice frames so retransmission cannot hold later speech behind a lost packet; reliable session/control messages remain separate. The transport adapter chooses a tested packet size/framing within its limits, not a large reliable RPC stream. A LAN PCM fixture may isolate timing during tests but is not the shipping bandwidth plan.
 
-Acceptance covers independent ownership, differing audible occlusion per listener, no duplicate host playback, correct late-join loops, leave/disconnect cleanup, latency/jitter/loss, differing device sample rates and replayable segments. Measure network delay separately from acoustic reconstruction latency.
+The jitter buffer orders frames and finalizes each playout range once. Duplicates are ignored; late packets cannot replace committed speech. Record packet gaps and the actual decoder concealment/silence used. Adaptive jitter delay/clock drift must preserve a declared monotonic scene-time mapping, with corrections recorded. Starting a remote voice waits for its prebuffer without blocking the audio callback. Network decode creates no Unity scene objects on its worker thread.
+
+Each receiving client can hear a different acoustic result because its head and occlusion differ. It can also receive different packets; do not hide those differences behind a shared host recording. Local self-monitoring uses the pre-encode source only when enabled, avoiding a second looped-back copy. Muting/disconnect stops new emission and drains retained paths; a disappearing source's data slot remains valid until no pending renderer work references it.
+
+### Recording and replay
+
+A host recording keeps accepted inputs/events for all actors plus authoritative corrections needed to reproduce the host world. A **client acoustic recording** keeps the actual interpolated scene states/events consumed by that renderer and the canonical decoded pre-acoustic PCM, including concealment. Local input alone cannot reconstruct remote interpolation, packet loss or authoritative physics corrections.
+
+Keep this distinction explicit: compact deterministic single-player takes remain compact. Exact network-client acoustic capture opts into the necessary dynamic-state observations and streamed source payloads; static geometry still references its matching scene/build until offline reconstruction creates a portable numeric take. Initially reuse the existing full `State[]` observation layout (including static poses); sparse pose encoding is a later measured storage optimization, not a prerequisite. Geometry/assets and optional monitored output are still not mandatory snapshots for every run. Never advertise an input-only network recording as exact client replay.
+
+Low/High comparisons for a client reuse that client's exact scene/source timeline, with identical network artifacts. Separate experiments can evaluate codec/network quality, but cannot count those errors as acoustic reconstruction error. All host/client views of one session and their voice-speaker ancestry stay in the same dataset split.
+
+Keep the existing fixed-roster acoustic segment invariant initially. Join/leave closes the current segment before rebinding, then starts another with current actor/source state and the dry pre-roll needed for pending propagation/filter history. A small session index records segment offsets, gaps and warmup; do not truncate old echoes silently. If overlap/pre-roll is not yet implemented, declare the transition discontinuity and exclude affected comparison windows. A disconnect finalizes valid data; host departure ends the first implementation's session visibly.
+
+### Turning multiplayer captures into training examples (planned)
+
+Capture at the **source-history boundary**, immediately after receive-side decoding, concealment and rate/clock conversion, before source gain, propagation or HRTF. Commit those same canonical samples once to live source history and the recording queue. A separate recording of the microphone or speaker output is not an exact copy of what the acoustic renderer consumed. Keep one mono stream per source; do not premix speakers or store a stereo file for every source/listener pair. Local mic uses its pre-encode canonical stream; each remote source uses that client's post-decode canonical stream.
+
+```text
+session.json                         session ID, capture consent/provenance, segment index
+  client ID → ordered segment paths, scene-time offsets, warmup/gap status
+client-<id>/segment-<id>/
+  take.json                          scene/build/material/source IDs, local receiver
+  states.bin                         actual presented poses at acoustic observations
+  events.bin                         accepted emission/gain/mute changes
+  source-<index>.f32                  canonical pre-acoustic mono samples
+  source-blocks.bin                  firstSample/count/availableAt/status (section 4)
+  clock mapping                      sender epochs → this segment's sample clock
+```
+
+This is the proposed streamed-take extension, not files the current clip recorder already writes. Keep clock mappings in the segment manifest initially; use sample-indexed records only if updates become numerous. Matching scene assets supply fixed geometry and clips. Finalization binds all payload hashes/counts and marks completion last. A bounded writer queue moves disk IO off the audio callback; an overrun makes the capture incomplete instead of silently dropping speech. Runtime playback can continue even if recording fails.
+
+| Recorded identity/state | Why training needs it |
+|---|---|
+| Session/client/segment IDs; stable source, receiver and pseudonymous speaker IDs | Join the right views, preserve source ownership and avoid split leakage. No dependence on transient network object IDs. |
+| Scene/build/material/clip hashes, solver version and settings | Reconstruct exactly the acoustic problem; distinguish asset changes from quality changes. |
+| Local head pose and presented remote mouth/occluder poses at observed samples | Reproduce this client's spatial input, including interpolation and authoritative corrections. Do not substitute the host's different timeline. |
+| Canonical source samples, absolute emission sample, block availability, loss/concealment/discontinuity status | Preserve what was audible and what was known at each deadline. A muted sample, an unavailable sample and a concealed sample are different facts. |
+| Sender epoch/rate and clock mapping changes; codec/resampler/jitter settings | Explain alignment and degradation without requiring the decoder or network to run identically later. |
+| Local monitoring/source-listener mask; HRTF and ear-layout identity | Reproduce self-voice routing and binaural labels without treating two ears as two players. |
+
+A raw packet log and sender-side clean mic copy are **optional diagnostics** for a separate codec/network experiment. They cannot replace receive-side canonical PCM. Do not store both by default. Likewise, wet monitor WAV is an optional audit output, not the training master. Speech is a real recorded asset: participants explicitly opt into dataset collection, with a visible recording state; training selection is a separate choice. Retain permitted-use provenance and source ancestry so excluded speech can be removed from derived examples.
+
+Offline generation uses the existing reconstruction/render path:
+
+1. Validate/finalize a client segment and resolve its exact scene/build. Compile fixed geometry once and open saved source streams with bounded reads. Input-only solo runs first reconstruct their motion; network client runs read their observed poses directly.
+2. Select the target: directional acoustic response/IR for transport reconstruction, or the existing complex STFT/waveform target for audio reconstruction. Store the exact target axes, units, time origin, FFT/window/hop and directional representation. Both ears can be derived from one reconstructed directional response; an ear-output model declares the HRTF explicitly.
+3. Render Low and converged High against **identical** source samples, scene trajectory, event times, interpolation rules and source/receiver masks. Vary the declared ray/bounce/response-time budgets only. A finer acoustic solve samples the saved trajectory; it does not invent unobserved authoritative motion. Network tick density and pose interpolation error remain separate limitations.
+4. Produce causally ordered training windows containing Low features, available motion/material/direction metadata, persistent-history reset flags and valid/loss masks, with High targets. Model inputs stop at the deployment deadline; an offline teacher may use additional computation, but must not leak future speech, future poses or later packet arrivals into the student's features. The already-finalized received timeline defines the label problem.
+5. Preserve pre-roll long enough for the selected propagation horizon and DSP/filter state, not just one STFT window. At startup/join/leave/clock-reset boundaries either restore valid history or mask the affected windows. Record actual tail truncation; missing tails are not target silence. A noncausal lookahead experiment must declare and benchmark its added latency separately.
+6. Split by related session, speaker and scene/layout ancestry **before** windowing. All clients, ears, quality variants and overlapping windows from a session stay together. Keep held-out layouts/materials, speakers, source overlap, rapid turns, moving occlusion and network-loss conditions. Save seeds and low/high/reference settings with each generated run.
+
+Acoustic reconstruction learns missing acoustic detail with the same decoded speech in both budgets. High must not use clean sender speech while Low uses lost/concealed receiver speech: that would silently turn the task into codec enhancement or missing-speech synthesis. Keep concealment windows labeled; report their results separately, and exclude ambiguous timing/capture failure windows. Test single-source and overlapping talkers; per-pair response labels are reusable across dry clips, while mixed audio targets must include all contributing sources.
+
+Do not label today's maximum budget “ground truth” automatically. Church higher-order reflection/diffuse limits still need physical checks and convergence. Approve the teacher per target, then compare learned reconstruction to unmodified Low, simple temporal interpolation and spending the same total GPU time on more simulation. Report held-out quality, head/voice latency, deadline misses, memory and total render-plus-inference cost. Actual microphone, network transport, streaming persistence and model training remain later implementation stages.
+
+The implementation can use three small adapters: session/clock ownership, network player/actor binding, and network source/voice delivery. Keep Unity package replication for ordinary transforms; avoid a networking class per prop. Reuse the microphone stream/history, recording writer and local DSP.
 
 ## 13. Implementation sequence and acceptance
 
-Current status is listed in section 1. The [system audit repair sequence](#system-audit-2026-10-05) takes precedence: fix the renderer and recording failures before the broader milestones below. These milestones describe remaining scope, not permission to defer correctness while adding features. Proceed in small stages without empty scaffolding:
+The shared SceneSession, generic scene input recording/reconstruction, shared player/speaker prefabs and editable Church blockout are now implemented. Church currently uses the existing diagnostic chime and provisional material/transport settings. Legacy room/material migration, microphone streams, LakeForest, networking and training remain planned. Keep each change reviewable and reuse the independent CPU/GPU oracles.
 
-| Stage | Concrete work | Completion gate |
+| Stage | Smallest concrete change | Completion gate |
 |---|---|---|
-| 1. Recordings and authoring | Section 11 raw-take browser, bounded audio playback, basic/saved visuals and capture handoff; retain station/lab/XY authoring fixtures. | Old/current takes open without the original scene; continuous shared timeline, explicit audio clock, snapshot fallback, bounded cleanup and no gameplay execution. |
-| 2. Timing/direct data | Profile active workload, per-pair reference gates, dataset loader/index and availability/query logging. | Causal windows, corrupt/mismatched rejection, exact pair mapping, measured ages/deadlines, no split leakage. |
-| 3. Numerical foundation | BVH/oracles, energy estimator derivation, convolution and configurable transforms; tiny model import test before ML investment. | Absolute gain/normalization, brute-force agreement, transform/phase/tail checks and claimed-backend ABI parity. |
-| 4. Indirect simulation | Bounded 2D/3D energy tracing, synthesis and low/high reference runs. | Independent seed/budget/receiver convergence, overflow-safe batching, audible transitions and uncertainty. |
-| 5. Reconstruction | Separate denoising and temporal experiments, then combined; small training/export adapter. | Held-out quality/cost benefit, limited horizon, real publication schedules, valid fallback and total runtime budget. |
-| 6. Phase/spectral extension | Validated pressure teacher, IR/complex models; audio-STFT/cross-grid experiments where justified. | Phase/causality/support/synthesis validity, streaming latency and held-out source/scene results. |
-| Multiplayer extension | Shared scene, package integration and clock/roster adapter after capture timing is stable. | Real clients/machines and segment/clock/late-event tests; not blocked on training. |
+| 1. Shared session + cleanup | Extract common input/capture/replay from StationDemo while creating the Church blockout. Migrate the two old room fixtures, then delete unused legacy renderer/UI/helpers. Complete material-knot migration before relying on new material presets. | Station walking/boarding/save/replay still works; a scene with no train records/reconstructs identically; old supported takes remain readable; no missing scene/prefab scripts. |
+| 2. Church | Editable architecture, common player/speaker/door, listener/top-down views and impulse/sweep/dry speech. | Correct simple early-arrival fixtures and full tail reporting; repeated capture/render comparisons; measure ray/bounce convergence before teacher eligibility. |
+| 3. Local microphone | One capture component, canonical streaming source/history, timing/gaps and versioned saved source files. | Permission/device lifecycle, bounded wrap/drift/resampling, clip-stream CPU/GPU parity and exact saved-input replay. Actual device test reports latency and deadlines with church graphics. |
+| 4. LakeForest | Mesh terrain, shoreline/cliff, acoustic tree/rock proxies and the same session/mic tools. | No ground/collider failures; independently explainable distant arrivals; static BVH agreement and measured primitive/edge/volume/DSP costs as geometry scales. |
+| 5. Network world, then voice | Host/join, ownership/state/clock mapping, local receiver, then Opus/jitter feeding the same stream path. | Two processes and two machines; independent control/occlusion, one event application, late join, rate mismatch, loss/reorder/disconnect and replay of actual client inputs. |
+| 6. Dataset/reconstruction | Validate selected teacher/target, export per-pair data, then existing cadence/ray/temporal training plan. | Identical low/high scene and source inputs, loss/status/availability masks, source/session/layout split isolation, reference convergence and held-out quality/cost benefit. |
 
-Preserve the independent correctness oracles. Checks that matter:
+A recordings picker can extend the existing comparison window when needed; portable visual snapshots, new menu frameworks, checkpoints and automatic caches are not dependencies of these stages. No new compiler or render pipeline is required. BLAS/TLAS, filter reuse and scheduling changes follow measured bottlenecks; compare whole-job memory/latency/deadlines, not CPU dispatch time alone.
 
-- Existing/new disk offsets, GPU strides/echo, non-divisible dispatches, empty scenes and arbitrary supported band counts.
-- Native shape offsets/scales, moving/rotating parents, velocity/acceleration validity, fixed membership and source/listener identities.
-- Exact recorded observations/events, immutable same-sample knots, cuts, pre-roll/tails, source activation and two-source/two-listener replay.
-- BVH/refit versus brute force, independent analytic transport, batch-size invariance, absolute pressure/energy and reference convergence.
-- IR/complex/STFT round trips and bounds, block-size invariance, long moving-response playback, phase/arrival continuity.
-- Deadline-window fixture, late/missing inputs, resets, true zeros versus padding, low-variant target deduplication, grouped split isolation.
-- Queue exhaustion, arrival overflow, cancellation, teardown, out-of-order completion and stale predicted versus actual response publication.
-- Python/Unity feature packing, preprocessing and graph parity at supported batch sizes; finite predictions and all fallback paths.
+Atomic tests should cover one contract and use synthetic data; physical microphone/network/hardware timing is a separate category. Reuse the existing test files/fixtures instead of adding another runner.
 
-The next implementation locations are the existing Take/TakeRender/TakeComparison/manager boundaries, extensions to the existing Editor comparison window, the concrete BVH/indirect/DSP additions, and two Python entry points. Add render_jobs.py only if actual sweep volume needs it. Shared source/timeline/geometry code is retained.
+| Test responsibility | Independent check |
+|---|---|
+| Scene initialization/steps | Same accepted inputs produce matching observations for supported actors; one owner steps each actor/physics scene. |
+| Stream storage | Absolute positions survive wrap; pending differs from silence; late overwrite is rejected; retention/overflow and source end preserve needed history. |
+| Stream conversion/clock | Chunk-size-invariant anti-aliased conversion, known tone/impulse timing, sample-rate mismatch, drift, reset and ambiguous capture-wrap loss. |
+| Stream files | Exact PCM/count/hash round trip, explicit gaps/status, interrupted save rejection and old clip-only readers. |
+| DSP boundary | Identical finite clip and chunked stream yield matching IR/Spectral CPU/GPU outputs, including delayed tail and two sources/heads. |
+| Voice delivery | Synthetic packet sequence proves reorder/dedup/deadline/concealment behavior; accepted event IDs apply exactly once. |
+| Materials/transport | Knot migration and energy bounds; analytic wall/door/medium fixtures, BVH/brute-force agreement and declared decay/convergence tests. |
 
-Before collecting expensive labels, finish the estimator/phase derivation appropriate to that target and set tolerances from fixtures. Before model acceptance, fix hardware/workload, latency/memory, prediction-age and quality thresholds from baseline measurements. Bigger networks, longer history, more bands, compiler changes or additional services are not substitutes for those checks.
+Keep a few end-to-end scenarios: the existing station lifecycle; a church walk/door/saved-stream Low/High replay; a two-client scene with independent audible occlusion and voice loss/rejoin; and the explicit real-device deadline test with graphics. A smaller outdoor route is a scene smoke/benchmark fixture, not a duplicate of every unit test. Missing hardware is an explicit skip, not simulated success. There is no zero-bug guarantee; bounded waits and resource cleanup prevent ordinary failures from contaminating later tests.
+
+Benchmark each scene with the same saved input, warmup policy and declared CPU/GPU/quality settings. Save code/scene/material/source hashes, wall time, stage scopes, device deadlines, source-to-output and head-to-audio latency, peak buffers, upload/readback bytes and geometry/source/listener counts. Report repetitions and failures; preserve previous implementations in Git. Microphone and network recordings are deterministic *inputs for replay*, not proof that real devices or distributed physics repeat identically.
+
+Before expensive labels, approve the selected teacher's physics and convergence. Before calling voice usable or reconstruction faster, set workload/hardware-specific latency, memory and quality targets from the prototype measurements, then enforce them. Unchosen Opus package/version, measured material curves and final latency targets are explicit implementation decisions; do not silently fill them with arbitrary constants.

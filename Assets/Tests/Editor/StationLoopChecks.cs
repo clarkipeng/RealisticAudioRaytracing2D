@@ -1,9 +1,11 @@
+using NUnit.Framework;
 using System;
 using UnityEngine;
 
-public static partial class TakeChecks
+public partial class TakeChecks
 {
-    static void StationLoopMotion()
+    [Test, Category("Core")]
+    public void StationLoopMotion()
     {
         var go=new GameObject("Loop fixture");
         try

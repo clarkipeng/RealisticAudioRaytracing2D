@@ -1,0 +1,9 @@
+{
+  "name": "Acoustics.Editor",
+  "references": [
+    "Acoustics"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

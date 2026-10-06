@@ -441,7 +441,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -524,114 +524,11 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 245916460}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!1 &250148661
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 250148662}
-  - component: {fileID: 250148665}
-  - component: {fileID: 250148664}
-  - component: {fileID: 250148663}
-  m_Layer: 0
-  m_Name: Listener camera
-  m_TagString: MainCamera
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &250148662
+--- !u!4 &250148662 stripped
 Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_CorrespondingSourceObject: {fileID: 6510467198444469236, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+  m_PrefabInstance: {fileID: 9036175139000267705}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 250148661}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.65, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1444714213}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &250148663
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 250148661}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a449387954ce3488c34d7afc4b7d4f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MouseLook
-  sensitivity: 180
-  playerBody: {fileID: 1444714213}
-  lockOnStart: 0
---- !u!81 &250148664
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 250148661}
-  m_Enabled: 1
---- !u!20 &250148665
-Camera:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 250148661}
-  m_Enabled: 1
-  serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.6, g: 0.72, b: 0.8, a: 1}
-  m_projectionMatrixMode: 1
-  m_GateFitMode: 2
-  m_FOVAxisMode: 0
-  m_Iso: 200
-  m_ShutterSpeed: 0.005
-  m_Aperture: 16
-  m_FocusDistance: 10
-  m_FocalLength: 50
-  m_BladeCount: 5
-  m_Curvature: {x: 2, y: 11}
-  m_BarrelClipping: 0.25
-  m_Anamorphism: 0
-  m_SensorSize: {x: 36, y: 24}
-  m_LensShift: {x: 0, y: 0}
-  m_NormalizedViewPortRect:
-    serializedVersion: 2
-    x: 0
-    y: 0
-    width: 1
-    height: 1
-  near clip plane: 0.05
-  far clip plane: 180
-  field of view: 70
-  orthographic: 0
-  orthographic size: 5
-  m_Depth: 0
-  m_CullingMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  m_RenderingPath: -1
-  m_TargetTexture: {fileID: 0}
-  m_TargetDisplay: 0
-  m_TargetEye: 3
-  m_HDR: 1
-  m_AllowMSAA: 1
-  m_AllowDynamicResolution: 0
-  m_ForceIntoRT: 0
-  m_OcclusionCulling: 1
-  m_StereoConvergence: 10
-  m_StereoSeparation: 0.022
 --- !u!1 &268818979
 GameObject:
   m_ObjectHideFlags: 0
@@ -734,7 +631,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e6c6a20ddb7bf40c2b713ee646213944, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::StationLoop
   straightLength: 56
   radius: 16.5
@@ -783,7 +680,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -911,7 +808,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -1129,7 +1026,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -1385,7 +1282,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -1675,7 +1572,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::RaytracedAudioSource
   rayTraceManager: {fileID: 1303114736}
   clip: {fileID: 8300000, guid: 7f547180c6c5d4144bf1cf3e9042c002, type: 3}
@@ -1709,6 +1606,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1303114737}
+  - component: {fileID: 1303114738}
   - component: {fileID: 1303114736}
   - component: {fileID: 1303114735}
   - component: {fileID: 1303114734}
@@ -1730,12 +1628,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8d4f7df1ef1c4a348a1c6747e02f0c40, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::RaytraceControlPanel
   rayTraceManager: {fileID: 1303114736}
   audioManager: {fileID: 1303114735}
   trainMotion: {fileID: 0}
-  stationDemo: {fileID: 1303114734}
+  session: {fileID: 1303114738}
   buildOnStart: 1
   anchoredPosition: {x: 24, y: -24}
   buttonSize: {x: 260, y: 30}
@@ -1750,26 +1648,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 46794832026e640f98c91031ee6bf169, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::StationDemo
-  manager: {fileID: 1303114736}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::StationDemo
+  id: train
   train: {fileID: 3628899432826401398}
   carriage: {fileID: 1283788926840481392}
-  door: {fileID: 1898691258}
-  player: {fileID: 1444714213}
   boardingPlatform: {fileID: 2003071593}
   route: {fileID: 268818983}
-  horn: {fileID: 5123702278139013080}
-  roomSignal: {fileID: 1277931755}
-  doorOpenOffset: {x: 2.2, y: 0, z: 0}
   trainSpeed: 12
   startDistance: 22
   trainAcceleration: 3
   carriageSpacing: 7.2
-  doorSpeed: 1.8
   stationDwell: 10
-  retainFullReference: 0
-  doorOpen: 0
 --- !u!114 &1303114735
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1780,7 +1670,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a2b430a59924455e84d12c6a2e3434d, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AudioManager
   shader: {fileID: 0}
   showWaveform: 0
@@ -1807,7 +1697,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2913e124272014f598570cc1c30f24bc, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::RayTraceManager
   raytraceShader: {fileID: 0}
   rayCount: 1000
@@ -1850,10 +1740,12 @@ MonoBehaviour:
     maximumResponsesPerBatch: 64
     useBvh: 1
     transport: 1
+    synthesis: 0
+    audioBackend: 0
     raysPerBin: 1
+    maxBounces: 5
     seed: 0
     raysPerPair: 0
-    maxBounces: 5
     diffractionFactor: 0.5
     airAbsorption: 1
     fftSize: 1024
@@ -1873,6 +1765,8 @@ MonoBehaviour:
     pairPrimitiveTestUpperBound: 0
     validationCount: 0
     coalescedObservations: 0
+    responseSupportSamples: 0
+    tailCoversResponseSupport: 0
     completionSeconds: 0
     maximumCompletionSeconds: 0
     channelMismatchSamples: 0
@@ -1888,6 +1782,7 @@ MonoBehaviour:
     maximumValidationSeconds: 0
     solveSeconds: 0
     audioSeconds: 0
+    responsePreparationSeconds: 0
     maximumSolveSeconds: 0
     maximumCallbackSeconds: 0
   takeDimension: 1
@@ -2082,81 +1977,32 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1444714212
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1444714213}
-  - component: {fileID: 1444714215}
-  - component: {fileID: 1444714214}
-  m_Layer: 0
-  m_Name: Walking listener
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1444714213
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1444714212}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 4, y: 0, z: -20}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 250148662}
-  m_Father: {fileID: 942910199}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1444714214
+--- !u!114 &1303114738
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1444714212}
+  m_GameObject: {fileID: 1303114732}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8029e96769487642a5769687e7b1cdf, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  speed: 6
-  gravity: -9.81
-  jumpHeight: 2
-  requireLockedCursor: 1
---- !u!143 &1444714215
-CharacterController:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
+  m_Script: {fileID: 11500000, guid: 1c871ed719fb48a380f74d94e904c36d, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::SceneSession
+  manager: {fileID: 1303114736}
+  player: {fileID: 1444714213}
+  actors:
+  - {fileID: 1303114734}
+  - {fileID: 1898691265}
+  startSounds:
+  - {fileID: 5123702278139013080}
+  - {fileID: 1277931755}
+  retainFullReference: 0
+--- !u!4 &1444714213 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+  m_PrefabInstance: {fileID: 9036175139000267705}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1444714212}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Height: 1.8
-  m_Radius: 0.28
-  m_SlopeLimit: 45
-  m_StepOffset: 0.32
-  m_SkinWidth: 0.08
-  m_MinMoveDistance: 0
-  m_Center: {x: 0, y: 0.9, z: 0}
 --- !u!1 &1652396380
 GameObject:
   m_ObjectHideFlags: 0
@@ -2256,6 +2102,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1898691258}
+  - component: {fileID: 1898691265}
   - component: {fileID: 1898691262}
   - component: {fileID: 1898691261}
   - component: {fileID: 1898691260}
@@ -2293,7 +2140,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -2376,6 +2223,23 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1898691257}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1898691265
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1898691257}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8bc84f613ce244b883f940e91bc5642f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::SlidingDoor
+  id: waiting-room-door
+  openOffset: {x: 2.2, y: 0, z: 0}
+  speed: 1.8
+  interactionDistance: 2.2
+  initiallyOpen: 0
 --- !u!1 &1913477721
 GameObject:
   m_ObjectHideFlags: 0
@@ -2421,7 +2285,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -2596,7 +2460,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -2814,7 +2678,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -2942,7 +2806,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
   material: {fileID: 0}
@@ -3231,7 +3095,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::RaytracedAudioSource
 --- !u!4 &5839937849591494840 stripped
 Transform:
@@ -3355,6 +3219,63 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2306724649006293075, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
   m_PrefabInstance: {fileID: 4456624260870445064}
   m_PrefabAsset: {fileID: 0}
+--- !u!1001 &9036175139000267705
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 942910199}
+    m_Modifications:
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -20
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 2599932555886027170, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4388455344183151076, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
+      propertyPath: m_Name
+      value: Walking listener
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 1b02723e548964e3891fa99c23c3fa98, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

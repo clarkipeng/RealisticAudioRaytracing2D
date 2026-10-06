@@ -7,7 +7,7 @@ public class RaytraceControlPanel : MonoBehaviour
     public RayTraceManager rayTraceManager;
     public AudioManager audioManager;
     public Oscillator trainMotion;
-    public StationDemo stationDemo;
+    public SceneSession session;
     public bool buildOnStart = true;
 
     [Header("Layout")]
@@ -35,14 +35,14 @@ public class RaytraceControlPanel : MonoBehaviour
         buttonFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         Transform panel = CreatePanel();
-        if(stationDemo!=null)
+        if(session!=null)
         {
-            recordLabel=AddButton(panel,"Save run  [R]",stationDemo.SaveRecording);
+            recordLabel=AddButton(panel,"Save run  [R]",session.SaveRecording);
             sensitivityControls=new GameObject("Look settings",typeof(RectTransform),typeof(VerticalLayoutGroup));
             sensitivityControls.transform.SetParent(panel,false);
             sensitivityControls.GetComponent<RectTransform>().sizeDelta=new Vector2(buttonSize.x,40);
             var layout=sensitivityControls.GetComponent<VerticalLayoutGroup>(); layout.childControlHeight=false; layout.childForceExpandHeight=false;
-            var look=stationDemo.player.GetComponentInChildren<MouseLook>();
+            var look=session.player.GetComponentInChildren<MouseLook>();
             var sensitivityLabel=AddLabel(sensitivityControls.transform,"Mouse sensitivity: "+look.sensitivity.ToString("F0"),13,18);
             var sensitivityObject=DefaultControls.CreateSlider(new DefaultControls.Resources()); sensitivityObject.name="Mouse sensitivity"; sensitivityObject.transform.SetParent(sensitivityControls.transform,false);
             sensitivityObject.GetComponent<RectTransform>().sizeDelta=new Vector2(buttonSize.x,18);
@@ -71,10 +71,10 @@ public class RaytraceControlPanel : MonoBehaviour
     {
         if(recordLabel==null || Time.unscaledTime<nextUiUpdate) return;
         nextUiUpdate=Time.unscaledTime+.2f;
-        bool waiting=stationDemo.Busy || rayTraceManager.Mode==RayTraceManager.SessionMode.Draining;
+        bool waiting=session.Busy || rayTraceManager.Mode==RayTraceManager.SessionMode.Draining;
         bool recording=rayTraceManager.IsRecordingTake;
-        recordLabel.text=waiting?"…":stationDemo.IsInputReplay?(stationDemo.InputReplayFinished?"Replay finished":"Replaying"):recording?"Save run  [R]":"Saved";
-        recordLabel.GetComponentInParent<Button>().interactable=!waiting && recording && !rayTraceManager.IsReplayingTake && !stationDemo.IsInputReplay;
+        recordLabel.text=waiting?"…":session.IsInputReplay?(session.InputReplayFinished?"Replay finished":"Replaying"):recording?"Save run  [R]":"Saved";
+        recordLabel.GetComponentInParent<Button>().interactable=!waiting && recording && !rayTraceManager.IsReplayingTake && !session.IsInputReplay;
         sensitivityControls.SetActive(Cursor.lockState!=CursorLockMode.Locked);
     }
 
@@ -109,7 +109,7 @@ public class RaytraceControlPanel : MonoBehaviour
 
         CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = stationDemo!=null ? new Vector2(1280,720):new Vector2(1920,1080);
+        scaler.referenceResolution = session!=null ? new Vector2(1280,720):new Vector2(1920,1080);
 
         var panelObject = new GameObject("Panel", typeof(RectTransform), typeof(VerticalLayoutGroup));
         panelObject.transform.SetParent(canvasObject.transform, false);
@@ -122,7 +122,7 @@ public class RaytraceControlPanel : MonoBehaviour
 
         VerticalLayoutGroup layout = panelObject.GetComponent<VerticalLayoutGroup>();
         layout.spacing = spacing;
-        if(stationDemo!=null)
+        if(session!=null)
         {
             rect.sizeDelta=new Vector2(buttonSize.x+24,0);
             panelObject.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
