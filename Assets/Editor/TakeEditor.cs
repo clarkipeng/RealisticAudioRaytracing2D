@@ -136,10 +136,11 @@ public sealed class TakeEditor : Editor
     {
         settings.transport=(TakeRender.Transport)EditorGUILayout.EnumPopup("Transport",settings.transport);
         if(settings.transport!=TakeRender.Transport.Raytraced)return;
-        settings.raysPerPair=EditorGUILayout.IntField("Rays per pair",settings.raysPerPair);
+        settings.raysPerBin=EditorGUILayout.IntField("Rays per frequency bin",settings.RaysPerBin);settings.raysPerPair=0;
+        settings.seed=EditorGUILayout.IntField("Sampling seed",settings.seed);
         settings.maxBounces=EditorGUILayout.IntField("Maximum bounces",settings.maxBounces);
-        settings.fftSize=EditorGUILayout.IntField("Synthesis FFT",settings.fftSize);
-        settings.spectralHop=EditorGUILayout.IntField("Synthesis hop",settings.spectralHop);
+        settings.fftSize=EditorGUILayout.IntField("Acoustic frequency grid (FFT size)",settings.fftSize);
+        settings.spectralHop=EditorGUILayout.IntField("Convolution block (samples)",settings.spectralHop);
         settings.diffractionFactor=EditorGUILayout.FloatField("Diffraction factor",settings.diffractionFactor);
         settings.airAbsorption=EditorGUILayout.Toggle("Air absorption",settings.airAbsorption);
     }

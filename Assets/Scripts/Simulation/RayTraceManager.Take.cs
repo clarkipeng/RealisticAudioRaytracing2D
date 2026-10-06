@@ -39,11 +39,12 @@ public partial class RayTraceManager
     {
         public string backend,scope="producer stopped; callback counters sampled at stop";
         public int sampleRate,responseCount,queueCapacity,deviceBufferSamples,maximumPendingObservations,retainedEvents;
-        public long pairPrimitiveTestUpperBound,validationCount,coalescedObservations;
+        public long pairPrimitiveTestUpperBound,validationCount,coalescedObservations,responseSupportSamples;
+        public bool tailCoversResponseSupport;
         public double completionSeconds,maximumCompletionSeconds;
         public long channelMismatchSamples;
         public long observedSamples,leadSamples,underrunSamples,lateSamples,overflowSamples,overBudgetCallbacks,maximumObservationGapSamples;
-        public double preparationSeconds,validationSeconds,maximumValidationSeconds,solveSeconds,audioSeconds,maximumSolveSeconds,maximumCallbackSeconds;
+        public double preparationSeconds,validationSeconds,maximumValidationSeconds,solveSeconds,audioSeconds,responsePreparationSeconds,maximumSolveSeconds,maximumCallbackSeconds;
     }
     public LiveDiagnostics liveDiagnostics=new LiveDiagnostics();
     // Unity hot reload also serializes private fields; session ownership is runtime-only.
@@ -72,6 +73,7 @@ public partial class RayTraceManager
     public string TakeStatus { get; private set; } = "Idle";
     public event Action<string> RecordingStarted;
     public event Action<long> RecordingObserved;
+    public event Action<string> RecordingFinalizing;
     public event Action<string,bool> RecordingStopped;
 
     AcousticTake.Writer takeWriter;
@@ -223,7 +225,7 @@ public partial class RayTraceManager
             CaptureTakeState(0);
             TakeStatus = directory==null ? "Live acoustic simulation":"Recording: " + takePath;
         }
-        catch { CloseCapture(false); throw; }
+        catch(Exception e) { CloseCapture(false); TakeStatus="Recording failed: "+e.Message; throw; }
     }
 
     public void EndTakeRecording() { if (takeWriter!=null) EndCapture(); }
@@ -238,12 +240,22 @@ public partial class RayTraceManager
             if (takeWriter!=null)
             {
                 if (liveDirect!=null) File.WriteAllText(Path.Combine(takePath,"live.json"),JsonUtility.ToJson(liveDiagnostics,true));
-                takeWriter.Complete(); TakeStatus="Saved: "+takePath;
+                takeWriter.Complete(); RecordingFinalizing?.Invoke(takePath); TakeStatus="Saved: "+takePath;
             }
             else TakeStatus="Live simulation stopped.";
             complete=true;
         }
+        catch(Exception e)
+        {
+            TakeStatus="Recording failed: "+e.Message; takeWriter?.Invalidate(); throw;
+        }
         finally { CloseCapture(complete); }
+    }
+    public void AbortTakeRecording(string reason)
+    {
+        if(takeWriter==null)return;
+        try { takeWriter.Invalidate(); }
+        finally { CloseCapture(false); TakeStatus="Recording failed: "+reason; }
     }
     void UpdateLiveDiagnostics(long sample)
     {
@@ -252,8 +264,10 @@ public partial class RayTraceManager
         liveDiagnostics.maximumPendingObservations=liveDirect.MaximumPendingObservations; liveDiagnostics.retainedEvents=liveDirect.RetainedEvents;
         liveDiagnostics.completionSeconds=liveDirect.CompletionSeconds; liveDiagnostics.maximumCompletionSeconds=liveDirect.MaximumCompletionSeconds;
         liveDiagnostics.pairPrimitiveTestUpperBound=liveDirect.PairPrimitiveUpperBound;
+        liveDiagnostics.responseSupportSamples=liveDirect.ResponseSupportSamples;
+        liveDiagnostics.tailCoversResponseSupport=liveDirect.TailCoversResponseSupport;
         liveDiagnostics.responseCount=liveDirect.ResponseCount; liveDiagnostics.solveSeconds=liveDirect.SolveSeconds;
-        liveDiagnostics.audioSeconds=liveDirect.AudioSeconds; liveDiagnostics.maximumSolveSeconds=liveDirect.MaximumSolveSeconds;
+        liveDiagnostics.audioSeconds=liveDirect.AudioSeconds; liveDiagnostics.responsePreparationSeconds=liveDirect.ResponsePreparationSeconds; liveDiagnostics.maximumSolveSeconds=liveDirect.MaximumSolveSeconds;
         liveDiagnostics.channelMismatchSamples=System.Threading.Interlocked.Read(ref monitorQueue.ChannelMismatchSamples);
         liveDiagnostics.underrunSamples=System.Threading.Interlocked.Read(ref monitorQueue.UnderrunSamples);
         liveDiagnostics.overBudgetCallbacks=System.Threading.Interlocked.Read(ref monitorQueue.OverBudgetCallbacks);

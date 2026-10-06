@@ -1850,7 +1850,9 @@ MonoBehaviour:
     maximumResponsesPerBatch: 64
     useBvh: 1
     transport: 1
-    raysPerPair: 512
+    raysPerBin: 1
+    seed: 0
+    raysPerPair: 0
     maxBounces: 5
     diffractionFactor: 0.5
     airAbsorption: 1

@@ -31,13 +31,15 @@ public static partial class TakeRender
         bool batchReady;
         readonly List<long> cuts=new List<long>();
         public long Cursor {get;private set;}
-        public double SolveSeconds,AudioSeconds,MaximumSolveSeconds;
+        public double SolveSeconds,AudioSeconds,ResponsePreparationSeconds,MaximumSolveSeconds;
         public int ResponseCount,MaximumPendingObservations;
         public int PendingObservations => pending;
         public int RetainedEvents { get { int count=cuts.Count; foreach (var signal in signals) count+=signal.RetainedEvents; return count; } }
         public double CompletionSeconds => solver.CompletionSeconds;
         public double MaximumCompletionSeconds => solver.MaximumCompletionSeconds;
         public long PairPrimitiveUpperBound => solver.PairPrimitiveUpperBound;
+        public long ResponseSupportSamples => mixer.ResponseSupportSamples;
+        public bool TailCoversResponseSupport => settings.tailSamples>=ResponseSupportSamples;
         public Action<long,long,DirectPath[]> ResponseApplied;
         public string Backend => solver.Backend;
         public Live(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,float[][] pcm,int rate,Settings settings,
@@ -129,7 +131,8 @@ public static partial class TakeRender
                     Array.Copy(batchStates,index*evaluated.Length,evaluated,0,evaluated.Length);
                     int cut=cuts.BinarySearch(Cursor); if (cut<0) cut=~cut-1;
                     long responseStart=Stopwatch.GetTimestamp();
-                    mixer.SetResponse(Cursor,paths,evaluated,cut>=0 && cuts[cut]>previousResponse,solver.RayPaths,index*solver.RayPathsPerFrame); previousResponse=Cursor;AudioSeconds+=Elapsed(responseStart);
+                    mixer.SetResponse(Cursor,paths,evaluated,cut>=0 && cuts[cut]>previousResponse,solver.RayPaths,index*solver.RayPathsPerFrame); previousResponse=Cursor;
+                    double responseTime=Elapsed(responseStart);AudioSeconds+=responseTime;ResponsePreparationSeconds+=responseTime;
                     ResponseCount++; ResponseApplied?.Invoke(Cursor+lead,queue==null ? -1:queue.ReadSample,paths);
                 }
                 int count=(int)Math.Min(frame.end-Cursor,settings.responseStepSamples-Cursor%settings.responseStepSamples);

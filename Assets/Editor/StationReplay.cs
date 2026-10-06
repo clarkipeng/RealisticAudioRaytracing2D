@@ -108,6 +108,7 @@ public static class StationReplay
         public readonly Transform head;
         public readonly List<RayTraceManager.TakeObjectBinding> bindings = new List<RayTraceManager.TakeObjectBinding>();
         public readonly Dictionary<Transform, Transform> copies = new Dictionary<Transform, Transform>();
+        public readonly Dictionary<Transform,bool> sourceEnabled=new Dictionary<Transform,bool>();
         public Rig(StationDemo source)
         {
             scene = UnityEditor.SceneManagement.EditorSceneManager.NewPreviewScene();
@@ -145,6 +146,9 @@ public static class StationReplay
             var mesh = source.GetComponent<MeshFilter>(); if (mesh != null) t.gameObject.AddComponent<MeshFilter>().sharedMesh = mesh.sharedMesh;
             var surface = source.GetComponent<AcousticSurface>();
             if (surface != null) EditorUtility.CopySerialized(surface, t.gameObject.AddComponent<AcousticSurface>());
+            // Keep initial source activity without running any source lifecycle methods.
+            var emitter=source.GetComponent<RaytracedAudioSource>();
+            if(emitter!=null) sourceEnabled[t]=emitter.enabled;
             foreach (var c in source.GetComponents<Collider>())
                 if (!(c is CharacterController)) EditorUtility.CopySerialized(c, t.gameObject.AddComponent(c.GetType()));
             if (source.GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Fixture now contains another rigid body; compact station replay supports its train and walking controller only.");
@@ -163,8 +167,9 @@ public static class StationReplay
         var result = new AcousticTake.State[rig.bindings.Count];
         for (int i = 0; i < result.Length; i++)
         {
-            var flags = rig.bindings[i].geometry ? AcousticTake.StateFlags.Geometry : 0;
-            if (description.sources.Any(s => s.objectIndex == i)) flags |= AcousticTake.StateFlags.Source;
+            var transform=rig.bindings[i].transform;var surface=transform.GetComponent<AcousticSurface>();
+            var flags = description.objects[i].primitiveCount>0 && (surface==null || surface.enabled) ? AcousticTake.StateFlags.Geometry : 0;
+            if (description.sources.Any(s => s.objectIndex == i) && (!rig.sourceEnabled.TryGetValue(transform,out bool enabled) || enabled)) flags |= AcousticTake.StateFlags.Source;
             if (description.listeners.Contains(i)) flags |= AcousticTake.StateFlags.Listener;
             result[i] = AcousticTake.State.Observe(rig.bindings[i].transform, flags);
         }

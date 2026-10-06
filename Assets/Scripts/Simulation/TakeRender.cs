@@ -11,7 +11,7 @@ public static partial class TakeRender
     public enum ListenerOutput { Mono, Binaural }
     public enum DelayFilter { Linear, WindowedSinc }
     public enum Transport { Direct, Raytraced }
-    [Serializable] public sealed class Settings
+    [Serializable] public sealed class Settings : ISerializationCallbackReceiver
     {
         public int responseStepSamples = 512;
         public float speedOfSound = 343, referenceDistance = 1, minimumDistance = .1f;
@@ -28,11 +28,22 @@ public static partial class TakeRender
         [Tooltip("Use a BVH for fixed geometry. Objects that move use direct intersection tests for the rest of the session.")]
         public bool useBvh;
         public Transport transport;
-        [Min(1)] public int raysPerPair=512,maxBounces=5;
+        [Min(1)] public int raysPerBin=1,maxBounces=5;
+        public int seed;
+        [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
+        public int FrequencyBins => fftSize/2+1;
+        public int RaysPerBin => raysPerPair>0 ? checked((raysPerPair-1)/FrequencyBins+1):raysPerBin;
+        public void OnBeforeSerialize() { }
+        public void OnAfterDeserialize()
+        {
+            if(raysPerPair>0 && FrequencyBins>0){raysPerBin=RaysPerBin;raysPerPair=0;}
+        }
+        public int RaysPerPair => checked(FrequencyBins*RaysPerBin);
+        public int SpectralSlotsPerPair => checked(FrequencyBins+RaysPerPair*checked(maxBounces+1));
         [Min(0)] public float diffractionFactor=.5f;
         public bool airAbsorption=true;
         [Min(2)] public int fftSize=1024,spectralHop=256;
-        public int DspLatencySamples => transport==Transport.Raytraced ? fftSize:delayFilter==DelayFilter.WindowedSinc ? sincRadius:0;
+        public int DspLatencySamples => (transport==Transport.Raytraced ? fftSize:0)+(delayFilter==DelayFilter.WindowedSinc ? sincRadius:0);
         public long HistorySamples(int rate) => checked((long)Math.Ceiling((double)maximumDelaySeconds*rate)+2L*DspLatencySamples+2+(listenerOutput==ListenerOutput.Binaural ? Hrtf.Load(rate).Taps-1:0));
     }
 
@@ -51,12 +62,16 @@ public static partial class TakeRender
         public AcousticTake.Provenance provenance;
         public string settingsHash;
         public int dspLatencySamples;
+        public long responseSupportSamples;
+        public bool tailCoversResponseSupport;
+        public string backendScope="Transport backend; audio synthesis currently runs on CPU";
+        public string traversalCounterScope="Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries";
         public long pairPrimitiveTestUpperBound;
         public Settings settings;
         public int sampleRate, sourceCount, listenerCount, responseCount, objectCount, primitiveCount;
         public int responseBatchCapacity;
         public long outputSamples, preparedPcmBytes, workingNumericBytes;
-        public double preparationSeconds,wallSeconds, solveSeconds, evaluationSeconds, audioSeconds, writeSeconds, maximumSolveSeconds;
+        public double preparationSeconds,wallSeconds, solveSeconds, evaluationSeconds, audioSeconds, responsePreparationSeconds, writeSeconds, maximumSolveSeconds;
         public string backend = "CPU";
         public double uploadSeconds, dispatchReadbackSeconds;
         public double bvhBuildSeconds,bvhUpdateSeconds;
@@ -161,9 +176,9 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="geometric-spectral-preview-v2";report.provenance.solverContract=report.method;report.provenance.dspContract="causal-wola-interpolated-hrtf-v2";
+            report.method="geometric-spectral-preview-v3";report.provenance.solverContract=report.method;report.provenance.dspContract="partitioned-linear-fir-hrtf-v1";
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
-            report.transportDescription="Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. WOLA synthesis has declared FFT latency.";
+            report.transportDescription="Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. Partitioned linear convolution has declared FIR/block latency. Specular first-order paths use image sources; diffuse/diffraction remain preview heuristics.";
         }
         if(settings.listenerOutput==ListenerOutput.Binaural)
         {var hrtf=Hrtf.Load(metadata.sampleRate); report.hrtfDataset=Hrtf.Dataset; report.hrtfHash=hrtf.Hash; report.hrtfTaps=hrtf.Taps;}
@@ -222,7 +237,7 @@ public static partial class TakeRender
                             if(batchCapacity>1) {Array.Copy(batchStates,f*state.Length,state,0,state.Length);Array.Copy(batchPaths,f*response.Length,response,0,response.Length);}
                             start=Stopwatch.GetTimestamp();
                             mixer.SetResponse(sample,response,state,(settings.transport==Transport.Raytraced || settings.transitionSamples>0) && take.HasCut(sample-settings.responseStepSamples,sample),solver.RayPaths,f*solver.RayPathsPerFrame);
-                            report.audioSeconds+=Elapsed(start);
+                            double responseTime=Elapsed(start);report.audioSeconds+=responseTime;report.responsePreparationSeconds+=responseTime;
                             start=Stopwatch.GetTimestamp();
                             writer.Write(sample);
                             foreach (var path in response) WritePath(writer,path);
@@ -245,6 +260,8 @@ public static partial class TakeRender
             report.uploadSeconds=solver.UploadSeconds; report.dispatchReadbackSeconds=solver.DispatchReadbackSeconds;
             report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;report.bvhStaticPrimitives=solver.StaticPrimitiveCount;
         }
+        report.responseSupportSamples=mixer.ResponseSupportSamples;
+        report.tailCoversResponseSupport=settings.tailSamples>=report.responseSupportSamples;
         report.wallSeconds=watch.Elapsed.TotalSeconds;
         report.responseHash=AcousticTake.HashFile(Path.Combine(outputDirectory,"responses.bin"));
         report.audioHashes=new string[scene.listeners.Length];
@@ -345,6 +362,8 @@ public static partial class TakeRender
         long responseSample;
         bool initialized;
         int fade;
+        long directSupport;
+        public long ResponseSupportSamples => spectral!=null?spectral.ResponseSupportSamples:directSupport;
         public long NumericBytes => (long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
             (long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0)+(spectral?.NumericBytes??0);
         public Mixer(AcousticTake.Scene scene,int sampleRate,Settings settings,Signal[] signals)
@@ -379,6 +398,7 @@ public static partial class TakeRender
             {
                 double samples=(double)paths[pair].delaySeconds*sampleRate;
                 delay[pair]=checked((long)Math.Ceiling(samples)+latency);
+                directSupport=Math.Max(directSupport,delay[pair]-firstTap);
                 double fraction=Math.Ceiling(samples)-samples,sum=0;
                 int delayFirst=latency==0 ? 0:1-latency;
                 for(int t=0;t<delayTaps;t++)
@@ -464,9 +484,9 @@ public static partial class TakeRender
         {
             if(settings.fftSize<2 || (settings.fftSize&(settings.fftSize-1))!=0 || settings.spectralHop<1 || settings.spectralHop>settings.fftSize/2 ||
                 settings.fftSize%settings.spectralHop!=0 || settings.responseStepSamples%settings.spectralHop!=0 ||
-                settings.raysPerPair<1 || settings.maxBounces<1 || !float.IsFinite(settings.diffractionFactor) || settings.diffractionFactor<0)
+                settings.RaysPerBin<1 || settings.maxBounces<1 || !float.IsFinite(settings.diffractionFactor) || settings.diffractionFactor<0)
                 throw new ArgumentException("Raytraced transport needs a power-of-two FFT, a dividing hop no larger than half the FFT, response steps divisible by the hop, and positive ray/bounce counts.");
-            checked { _=settings.fftSize/2+1+settings.raysPerPair*settings.maxBounces; }
+            checked { _=settings.SpectralSlotsPerPair; }
         }
     }
     static bool PositiveFinite(float value) { return value>0 && !float.IsInfinity(value); }

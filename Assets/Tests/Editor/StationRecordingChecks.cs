@@ -143,9 +143,38 @@ public static partial class TakeChecks
         }
     }
 
+    static void StationActivation()
+    {
+        var authoredScene=UnityEditor.SceneManagement.EditorSceneManager.OpenPreviewScene("Assets/Scenes/TrainStation.unity");
+        try
+        {
+            var station=authoredScene.GetRootGameObjects().SelectMany(root=>root.GetComponentsInChildren<StationDemo>(true)).Single();
+            var manager=station.manager;var source=manager.takeSources[0];source.enabled=false;
+            var surface=manager.takeObjects.Select(b=>b.transform.GetComponent<AcousticSurface>()).First(value=>value!=null);surface.enabled=false;
+            var scene=SceneToTake.Compile(manager.takeObjects,manager.takeDimension,manager.takeCurveTolerance,manager.takeDefaultMaterial,
+                manager.takeSources.Select(s=>s.transform).ToArray(),manager.takeSources.Select(s=>s.clip).ToArray(),manager.takeListeners.ToArray(),out _);
+            using(var rig=new StationReplay.Rig(station))
+            {
+                var observe=typeof(StationReplay).GetMethod("Observe",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
+                var states=(AcousticTake.State[])observe.Invoke(null,new object[]{rig,scene});
+                int sourceIndex=manager.takeObjects.FindIndex(b=>b.transform==source.transform),surfaceIndex=manager.takeObjects.FindIndex(b=>b.transform==surface.transform);
+                Check((states[sourceIndex].flags&AcousticTake.StateFlags.Source)==0,"Reconstruction preserves disabled initial source");
+                Check((states[surfaceIndex].flags&AcousticTake.StateFlags.Geometry)==0,"Reconstruction preserves disabled initial surface");
+            }
+            string path=Path.Combine(directory,"activation-guard");Directory.CreateDirectory(path);
+            using(var recorder=new StationRecording(station,path))
+            {
+                recorder.Observe(0,0);source.enabled=true;
+                Reject(()=>recorder.Observe(1,0),"Compact input capture rejects unrecorded activation changes");
+            }
+        }
+        finally {UnityEditor.SceneManagement.EditorSceneManager.ClosePreviewScene(authoredScene);}
+    }
+
     static void StationInputs()
     {
         CompactPayloads();
+        StationActivation();
         var job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\"}");
         Check(job.comparison==null && job.referenceCheck==null && job.settings.responseStepSamples==512,"A render job cannot implicitly request comparison/reference work.");
         job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\",\"comparison\":{\"responseStepSamples\":128}}");

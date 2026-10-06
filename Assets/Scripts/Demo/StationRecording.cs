@@ -53,11 +53,19 @@ public sealed class StationRecording : IDisposable
     readonly string directory;
     readonly BinaryWriter input,observations;
     readonly Manifest manifest;
+    readonly (Transform transform,bool active,AcousticSurface surface,bool surfaceEnabled,RaytracedAudioSource source,bool sourceEnabled)[] activation;
     Vector2 heldMovement;
     bool closed;
     public StationRecording(StationDemo station,string directory)
     {
         this.station=station; this.directory=directory;
+        activation=new (Transform,bool,AcousticSurface,bool,RaytracedAudioSource,bool)[station.manager.takeObjects.Count];
+        for(int i=0;i<activation.Length;i++)
+        {
+            var transform=station.manager.takeObjects[i].transform;
+            var surface=transform.GetComponent<AcousticSurface>();var source=transform.GetComponent<RaytracedAudioSource>();
+            activation[i]=(transform,transform.gameObject.activeInHierarchy,surface,surface!=null && surface.enabled,source,source!=null && source.enabled);
+        }
         if(station.Tick!=0) throw new InvalidOperationException("Input capture must start at scene initialization; re-enter Play for a new run.");
         foreach(var root in station.gameObject.scene.GetRootGameObjects())
             if(root.GetComponentsInChildren<Rigidbody>(true).Length>0)
@@ -96,6 +104,10 @@ public sealed class StationRecording : IDisposable
     }
     public void Observe(long sample,long tick)
     {
+        foreach(var value in activation)
+            if(value.transform==null || value.transform.gameObject.activeInHierarchy!=value.active ||
+                (value.surface!=null && value.surface.enabled!=value.surfaceEnabled) || (value.source!=null && value.source.enabled!=value.sourceEnabled))
+                throw new InvalidOperationException("Compact station inputs do not record activation changes; start a new scene run with the desired initial activity.");
         observations.Write(sample); observations.Write(tick); manifest.observationCount++;
     }
     public void Complete(bool valid)

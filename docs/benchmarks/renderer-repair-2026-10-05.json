@@ -1,0 +1,794 @@
+{
+  "date": "2026-10-05 America/Los_Angeles",
+  "baselineCodeRevision": "1586cbb",
+  "auditCheckpoint": "332f8f3",
+  "scope": "Renderer correctness repairs; the pressure/diffuse/diffraction preview remains ineligible as a physical training reference.",
+  "validation": {
+    "coreAssertions": 2168,
+    "gpuAssertions": 5458,
+    "transportAssertions": 12275,
+    "note": "GPU runner retains the core counter; reported GPU count here subtracts it. Counts are numerical assertions, not independent physical scenarios.",
+    "csharpModule": "18d75710-45c8-4a35-8d91-ef49bac83e4b",
+    "success": true,
+    "runtime": "Unity 6000.4.1f1 on Apple M5 / Metal; DirectX not tested",
+    "regressions": [
+      "Independent integer/linear/sinc fractional-delay impulse convolution over FFT 64/128 and half/quarter blocks, with mono and paired HRIRs",
+      "Single-bin FIR convolved with 128-tap HRIR longer than the acoustic grid",
+      "Unrelated replacement indirect slot remains audible after a large delay increase",
+      "Second disabled response preserves the declared samplewise receiver fade",
+      "Analytic 2D/3D image-source mirror gain/time; diffuse/scattering control; shared triangle edge and primitive strata invariance across seeds/budgets",
+      "Legacy total ray settings migrate and remain editable; finalizer/tick failures invalidate capture",
+      "Initial source/surface activation is preserved; unsupported activation changes are rejected",
+      "Existing multi-source/listener live/offline and GPU batch agreement; medium timing and angular interpolation"
+    ]
+  },
+  "offline": {
+    "sourceArtifact": ".context/spectral-renderer/comparison-223907-inputs",
+    "sourceDurationSeconds": 21.176598639455783,
+    "method": "One final Low and High render, same numeric station take. Renderer wall time includes preparation and WAV/probe writes; excludes CLI compilation, original compact reconstruction and final output hashing.",
+    "qualityDifference": "Response step only: Low 2048, High 512. Same FFT 1024/block 256, one ray per bin, five bounces, seed 0, binaural, BVH, batch capacity 64, one-second tail.",
+    "low": {
+      "method": "geometric-spectral-preview-v3",
+      "motion": "frozen-geometry-held-per-response-step",
+      "formatVersion": 2,
+      "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ); direction is world listener-to-arrival-origin",
+      "channelsPerListener": 2,
+      "hrtfTaps": 128,
+      "hrtfDataset": "MIT-KEMAR-compact-v1",
+      "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+      "sceneHash": "3a6319f08ef060556182885ce68e8ded41cf7fe49a5fc42f06910ffee5a24858",
+      "takeStateHash": "888cfeb024d6925e6fb4befbb7742e184cbc5057b0a7b973e966753b8f73aaad",
+      "takeEventHash": "cdcd1712e2c15ab0b51236885cd4ce0edbf0bd9d99f49bba3ef08e9fae8e0518",
+      "responseHash": "d007f1bf5441a500d59538ac5fe299bcdffa50f54091247e40460269b1ee8893",
+      "unityVersion": "6000.4.1f1",
+      "platform": "OSXEditor",
+      "processor": "Apple M5",
+      "graphicsDevice": "Apple M5",
+      "audioHashes": [
+        "2fe231b28736b26fa1a1d3f7f7343b923a1c04dc15cb4fce8f2e6b79277ebcc6"
+      ],
+      "provenance": {
+        "solverContract": "geometric-spectral-preview-v3",
+        "dspContract": "partitioned-linear-fir-hrtf-v1",
+        "csharpModule": "18d75710-45c8-4a35-8d91-ef49bac83e4b",
+        "shaderName": "Direct",
+        "shaderDependencyHash": "1910e940a79e106cbbc1f97a6af6fb13",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      },
+      "settingsHash": "d4d673f9474c62c63c3c6138ecc2867198d2d6d3512977c38ce42782e7b86f6b",
+      "dspLatencySamples": 1024,
+      "responseSupportSamples": 23452,
+      "tailCoversResponseSupport": true,
+      "backendScope": "Transport backend; audio synthesis currently runs on CPU",
+      "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+      "pairPrimitiveTestUpperBound": 539184,
+      "settings": {
+        "responseStepSamples": 2048,
+        "speedOfSound": 343.0,
+        "referenceDistance": 1.0,
+        "minimumDistance": 0.10000000149011612,
+        "tailSamples": 44100,
+        "transitionSamples": 512,
+        "delayFilter": 0,
+        "listenerOutput": 1,
+        "sincRadius": 16,
+        "maximumDelaySeconds": 10.0,
+        "maximumSignalEvents": 4096,
+        "maximumPendingObservations": 16,
+        "maximumResponsesPerBatch": 64,
+        "useBvh": true,
+        "transport": 1,
+        "raysPerBin": 1,
+        "maxBounces": 5,
+        "seed": 0,
+        "raysPerPair": 0,
+        "diffractionFactor": 0.5,
+        "airAbsorption": true,
+        "fftSize": 1024,
+        "spectralHop": 256
+      },
+      "sampleRate": 44100,
+      "sourceCount": 2,
+      "listenerCount": 1,
+      "responseCount": 478,
+      "objectCount": 53,
+      "primitiveCount": 564,
+      "responseBatchCapacity": 64,
+      "outputSamples": 977988,
+      "preparedPcmBytes": 1433780,
+      "workingNumericBytes": 83851781,
+      "preparationSeconds": 0.2754386,
+      "wallSeconds": 15.172911599999999,
+      "solveSeconds": 0.6087826000000001,
+      "evaluationSeconds": 0.061766699999999994,
+      "audioSeconds": 13.813745999999998,
+      "responsePreparationSeconds": 10.790965100000001,
+      "writeSeconds": 0.40671050000000064,
+      "maximumSolveSeconds": 0.1157812,
+      "backend": "GPU-Metal",
+      "uploadSeconds": 0.0062537,
+      "dispatchReadbackSeconds": 0.0015018,
+      "bvhBuildSeconds": 0.001459,
+      "bvhUpdateSeconds": 0.0017268999999999997,
+      "bvhUpdates": 2,
+      "bvhStaticPrimitives": 408,
+      "transportDescription": "Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. Partitioned linear convolution has declared FIR/block latency. Specular first-order paths use image sources; diffuse/diffraction remain preview heuristics.",
+      "complete": true,
+      "wavPeak": 0.0274816807359457,
+      "wavRms": 0.0029495160790934424
+    },
+    "high": {
+      "method": "geometric-spectral-preview-v3",
+      "motion": "frozen-geometry-held-per-response-step",
+      "formatVersion": 2,
+      "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ); direction is world listener-to-arrival-origin",
+      "channelsPerListener": 2,
+      "hrtfTaps": 128,
+      "hrtfDataset": "MIT-KEMAR-compact-v1",
+      "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+      "sceneHash": "3a6319f08ef060556182885ce68e8ded41cf7fe49a5fc42f06910ffee5a24858",
+      "takeStateHash": "888cfeb024d6925e6fb4befbb7742e184cbc5057b0a7b973e966753b8f73aaad",
+      "takeEventHash": "cdcd1712e2c15ab0b51236885cd4ce0edbf0bd9d99f49bba3ef08e9fae8e0518",
+      "responseHash": "f8bb0adcbaeb1b6d5d0735af6d6ae4db1895a8a1da81853932d01b7622d2c031",
+      "unityVersion": "6000.4.1f1",
+      "platform": "OSXEditor",
+      "processor": "Apple M5",
+      "graphicsDevice": "Apple M5",
+      "audioHashes": [
+        "6a377eb78558b510d27b73772542fe29250eded0471f64d17fbbe56f9e7f0ba8"
+      ],
+      "provenance": {
+        "solverContract": "geometric-spectral-preview-v3",
+        "dspContract": "partitioned-linear-fir-hrtf-v1",
+        "csharpModule": "18d75710-45c8-4a35-8d91-ef49bac83e4b",
+        "shaderName": "Direct",
+        "shaderDependencyHash": "1910e940a79e106cbbc1f97a6af6fb13",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      },
+      "settingsHash": "5e3f147e25fe041cf0a3733e0d1c8ff5c78972240056febbbdc507231dae94c3",
+      "dspLatencySamples": 1024,
+      "responseSupportSamples": 23452,
+      "tailCoversResponseSupport": true,
+      "backendScope": "Transport backend; audio synthesis currently runs on CPU",
+      "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+      "pairPrimitiveTestUpperBound": 2155608,
+      "settings": {
+        "responseStepSamples": 512,
+        "speedOfSound": 343.0,
+        "referenceDistance": 1.0,
+        "minimumDistance": 0.10000000149011612,
+        "tailSamples": 44100,
+        "transitionSamples": 512,
+        "delayFilter": 0,
+        "listenerOutput": 1,
+        "sincRadius": 16,
+        "maximumDelaySeconds": 10.0,
+        "maximumSignalEvents": 4096,
+        "maximumPendingObservations": 16,
+        "maximumResponsesPerBatch": 64,
+        "useBvh": true,
+        "transport": 1,
+        "raysPerBin": 1,
+        "maxBounces": 5,
+        "seed": 0,
+        "raysPerPair": 0,
+        "diffractionFactor": 0.5,
+        "airAbsorption": true,
+        "fftSize": 1024,
+        "spectralHop": 256
+      },
+      "sampleRate": 44100,
+      "sourceCount": 2,
+      "listenerCount": 1,
+      "responseCount": 1911,
+      "objectCount": 53,
+      "primitiveCount": 564,
+      "responseBatchCapacity": 64,
+      "outputSamples": 977988,
+      "preparedPcmBytes": 1433780,
+      "workingNumericBytes": 83808773,
+      "preparationSeconds": 0.3467633,
+      "wallSeconds": 54.7260803,
+      "solveSeconds": 2.6330861,
+      "evaluationSeconds": 0.30460109999999996,
+      "audioSeconds": 50.758554699999976,
+      "responsePreparationSeconds": 46.28376729999997,
+      "writeSeconds": 0.642243599999997,
+      "maximumSolveSeconds": 0.2354763,
+      "backend": "GPU-Metal",
+      "uploadSeconds": 0.029276399999999994,
+      "dispatchReadbackSeconds": 0.0141181,
+      "bvhBuildSeconds": 0.0036049,
+      "bvhUpdateSeconds": 0.004531599999999979,
+      "bvhUpdates": 2,
+      "bvhStaticPrimitives": 408,
+      "transportDescription": "Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. Partitioned linear convolution has declared FIR/block latency. Specular first-order paths use image sources; diffuse/diffraction remain preview heuristics.",
+      "complete": true,
+      "wavPeak": 0.0274816807359457,
+      "wavRms": 0.0029204120777116655
+    },
+    "earlierIterationRuns": [
+      {
+        "artifact": ".context/renderer-repair/benchmark-000553",
+        "wallSeconds": 30.8875775,
+        "audioSeconds": 29.16343029999998,
+        "solveSeconds": 0.9823474000000001,
+        "audioHashes": [
+          "f57b0a070680a33c46bb98d53d576674d7196d07fbd6d707a5a7a723b9af8e44"
+        ],
+        "provenance": {
+          "solverContract": "geometric-spectral-preview-v3",
+          "dspContract": "partitioned-linear-fir-hrtf-v1",
+          "csharpModule": "984952c3-a253-4377-abfd-af239f65c0a3",
+          "shaderName": "Direct",
+          "shaderDependencyHash": "b387092980b515e6c2dfeca9daa24fb6",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settings": {
+          "responseStepSamples": 2048,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 64,
+          "useBvh": true,
+          "transport": 1,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 0.5,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        }
+      },
+      {
+        "artifact": ".context/renderer-repair/benchmark-001216",
+        "wallSeconds": 14.307473799999999,
+        "audioSeconds": 12.55348690000001,
+        "solveSeconds": 0.7063326999999999,
+        "audioHashes": [
+          "2fe231b28736b26fa1a1d3f7f7343b923a1c04dc15cb4fce8f2e6b79277ebcc6"
+        ],
+        "provenance": {
+          "solverContract": "geometric-spectral-preview-v3",
+          "dspContract": "partitioned-linear-fir-hrtf-v1",
+          "csharpModule": "c3f12d3b-d0d6-4628-b478-163187339b9a",
+          "shaderName": "Direct",
+          "shaderDependencyHash": "1910e940a79e106cbbc1f97a6af6fb13",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settings": {
+          "responseStepSamples": 2048,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 64,
+          "useBvh": true,
+          "transport": 1,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 0.5,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        }
+      },
+      {
+        "artifact": ".context/renderer-repair/benchmark-001243",
+        "wallSeconds": 35.6263192,
+        "audioSeconds": 32.75815429999997,
+        "solveSeconds": 1.9158580999999997,
+        "audioHashes": [
+          "6a377eb78558b510d27b73772542fe29250eded0471f64d17fbbe56f9e7f0ba8"
+        ],
+        "provenance": {
+          "solverContract": "geometric-spectral-preview-v3",
+          "dspContract": "partitioned-linear-fir-hrtf-v1",
+          "csharpModule": "c3f12d3b-d0d6-4628-b478-163187339b9a",
+          "shaderName": "Direct",
+          "shaderDependencyHash": "1910e940a79e106cbbc1f97a6af6fb13",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settings": {
+          "responseStepSamples": 512,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 64,
+          "useBvh": true,
+          "transport": 1,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 0.5,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        }
+      }
+    ],
+    "limitation": "No robust median or causal speedup claim. Timing varies between passes. High is slower than realtime, and offline throughput does not establish callback deadlines.",
+    "latestOutputsMatchEarlierOptimizedPass": {
+      "low": true,
+      "high": true
+    }
+  },
+  "live": {
+    "take": "station-20261006-001707-863",
+    "diagnostics": {
+      "backend": "GPU-Metal",
+      "scope": "producer stopped; callback counters sampled at stop",
+      "sampleRate": 44100,
+      "responseCount": 1143,
+      "queueCapacity": 96000,
+      "deviceBufferSamples": 1024,
+      "maximumPendingObservations": 9,
+      "retainedEvents": 4,
+      "pairPrimitiveTestUpperBound": 1289304,
+      "validationCount": 45,
+      "coalescedObservations": 1,
+      "responseSupportSamples": 9649,
+      "tailCoversResponseSupport": true,
+      "completionSeconds": 10.414087600000002,
+      "maximumCompletionSeconds": 6.0732714,
+      "channelMismatchSamples": 0,
+      "observedSamples": 1125376,
+      "leadSamples": 16384,
+      "underrunSamples": 1771520,
+      "lateSamples": 1038405,
+      "overflowSamples": 0,
+      "overBudgetCallbacks": 0,
+      "maximumObservationGapSamples": 268288,
+      "preparationSeconds": 0.3568879,
+      "validationSeconds": 0.01347,
+      "maximumValidationSeconds": 0.0017161,
+      "solveSeconds": 0.05960360000000001,
+      "audioSeconds": 32.982516,
+      "maximumSolveSeconds": 0.0355369,
+      "maximumCallbackSeconds": 7.68e-05
+    },
+    "probe": {
+      "compileMilliseconds": 5961,
+      "executeMilliseconds": 34672,
+      "result": "{ path = /Users/clarkpeng/UnityGames/realisticaudioraytracing2d/Recordings/station-20261006-001707-863, speed = 0, tick = 319, position = (4.29, 0.08, -12.69), diagnostics = RayTraceManager+LiveDiagnostics, mode = Idle }"
+    },
+    "reconstruction": {
+      "source": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/Recordings/station-20261006-001707-863",
+      "output": ".context/renderer-repair/reconstructed-001825",
+      "complete": true,
+      "frameCount": 44,
+      "eventCount": 2,
+      "durationSamples": 1125376
+    },
+    "successMeaning": "Saved compact inputs and reconstructed successfully; not a realtime performance pass.",
+    "limitations": "Probe compilation occurred during Play and stalled the main thread for roughly six seconds. Underrun/late counters overlap and include queue lifetime and draining; do not sum them or divide by recorded duration as a miss percentage. CPU audio work also exceeded recorded duration. This is an instrumented failure observation, not a clean production latency benchmark."
+  },
+  "productionFilesSha256": {
+    "Assets/Editor/StationReplay.cs": "191ba276ccafc5e292900a9268beca566ee3d1f59ee70766d555ce082b73be49",
+    "Assets/Editor/TakeEditor.cs": "1cbd560731eb98136bfa21b90a1bbc513241937ecaf94b705f3aae57592a4cae",
+    "Assets/Scenes/TrainStation.unity": "20cfdd94b7f65bde0079694bc75d83a0ec48fa724f9d81b677581baf9a914672",
+    "Assets/Scripts/Demo/StationDemo.cs": "c6f9ea3cd3f6786233e70acdbcc8992108f344dcd67f48894423d0628e6dc12a",
+    "Assets/Scripts/Demo/StationRecording.cs": "d62ed6a819e70859181f981d0a157bc7795ade60dc1a56af4ed887275aeda8aa",
+    "Assets/Scripts/Simulation/RayTraceManager.Take.cs": "11e6f6b779fa936a9664f1ea06cbb9e52737ef2b4cb0fe741d607bb4ecf53cc8",
+    "Assets/Scripts/Simulation/RayTransport.cs": "f456ef308917c91ad4a721d5872377cbd2f86c35369b21ed28f07497106a4191",
+    "Assets/Scripts/Simulation/SpectralAudio.cs": "180a9d1e7c335c16c1ea6410d582549e6e0c19cf76e54b10958e11de6e2d6092",
+    "Assets/Scripts/Simulation/Take.cs": "03f7f578ac6733e304cc79038e7730df73c276fbc0e2df0032ab736b7841614f",
+    "Assets/Scripts/Simulation/TakeRender.Live.cs": "47d0eaf4f6d8bfa2c982966055d9e420cd081933367376b4302e3675d2723eb9",
+    "Assets/Scripts/Simulation/TakeRender.cs": "b4228bfc08cc9cd7b938fe477196a6808a29ac7945d9cc1906604c21716ea33c",
+    "Assets/Shaders/Transport.hlsl": "3c74e2a73fbecc347623ee1192dfa607b1636bb4a6da6a5d21b4da7e3a85c9a0"
+  },
+  "remaining": [
+    "CPU response preparation and head-to-audio latency; GPU synthesis not implemented",
+    "Higher-order mirror connections, diffuse/PDF normalization, phase physics and validated diffraction",
+    "Directional per-pair training targets/export and learned reconstruction",
+    "Windows/DirectX validation"
+  ],
+  "editorFinalState": {
+    "isPlaying": false,
+    "scene": "Assets/Scenes/TrainStation.unity",
+    "dirty": false,
+    "errors": [
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel SpectralDirect2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel SpectralDirect2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel SpectralDirect3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel SpectralDirect3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel Trace2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel Trace2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel Trace3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (AirCoefficient) at kernel Trace3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 26,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel SpectralDirect2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel SpectralDirect2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel SpectralDirect3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel SpectralDirect3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel Trace2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel Trace2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel Trace3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveDistance) at kernel Trace3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 34,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Visible) at kernel Trace2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 77,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Visible) at kernel Trace2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 77,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Visible) at kernel Trace3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 77,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Visible) at kernel Trace3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 77,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel SpectralDirect2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel SpectralDirect2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel SpectralDirect3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel SpectralDirect3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel Trace2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel Trace2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel Trace3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Arrival) at kernel Trace3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 116,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (NearbyEdge) at kernel Trace2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 148,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (NearbyEdge) at kernel Trace2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 148,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (NearbyEdge) at kernel Trace3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 148,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (NearbyEdge) at kernel Trace3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 148,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (MirrorPath) at kernel Trace2D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 170,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (MirrorPath) at kernel Trace2DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 170,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (MirrorPath) at kernel Trace3D",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 170,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (MirrorPath) at kernel Trace3DBvh",
+        "messageDetails": "",
+        "file": "Assets/Shaders/Transport.hlsl",
+        "line": 170,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Segment) at kernel Direct2D",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 29,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Segment) at kernel Direct2DBvh",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 29,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Triangle) at kernel Direct3D",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 37,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (Triangle) at kernel Direct3DBvh",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 37,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveHit) at kernel Direct2D",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 48,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveHit) at kernel Direct2DBvh",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 48,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveHit) at kernel Direct3D",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 48,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (PrimitiveHit) at kernel Direct3DBvh",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 48,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (BvhBlocked) at kernel Direct2DBvh",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 70,
+        "platform": 14,
+        "severity": 1
+      },
+      {
+        "message": "use of potentially uninitialized variable (BvhBlocked) at kernel Direct3DBvh",
+        "messageDetails": "",
+        "file": "Direct.compute",
+        "line": 70,
+        "platform": 14,
+        "severity": 1
+      }
+    ]
+  }
+}

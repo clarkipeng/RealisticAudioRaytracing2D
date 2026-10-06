@@ -277,6 +277,16 @@ public static partial class TakeChecks
                 Check(take.Events[2].action==AcousticTake.VoiceAction.Gain && take.Events[2].gain==.25f && first.gain==.25f,"Gain control preserves the exact value in the source and take.");
                 Check(take.Metadata.sampleRate==1000,"Silent capture preserves its configured sample rate.");
             }
+            // A companion-input finalization failure must revoke acoustic success.
+            string failedPath=Path.Combine(directory,"manager-compact-failure");
+            Action<string> failure=_=>throw new InvalidOperationException("Injected input finalization failure");
+            manager.RecordingFinalizing+=failure;manager.BeginTakeRecording(failedPath,false);
+            Reject(manager.EndTakeRecording,"Companion failure aborts compact save");manager.RecordingFinalizing-=failure;
+            Check(!manager.IsRecordingTake && manager.TakeStatus.StartsWith("Recording failed:"),"Failed compact session releases ownership and reports failure");
+            Reject(()=>AcousticTake.ReadManifest(failedPath),"Acoustic manifest cannot hide a failed required input recorder");
+            string aborted=Path.Combine(directory,"manager-input-aborted");manager.BeginTakeRecording(aborted,false);
+            manager.AbortTakeRecording("Injected tick failure");
+            Reject(()=>AcousticTake.ReadManifest(aborted),"Tick failure cannot be saved as a completed take");
             manager.audioManager=host.AddComponent<AudioManager>();
             manager.useTakeRenderer=true;
             manager.sampleRate=AudioSettings.outputSampleRate==48000 ? 44100:48000;
@@ -460,6 +470,9 @@ public static partial class TakeChecks
     {
         TakeRender.Validate(JsonUtility.FromJson<TakeRender.Settings>("{}"));
         Check(true,"Existing JSON jobs retain defaults for newly introduced settings.");
+        var migrated=JsonUtility.FromJson<TakeRender.Settings>("{\"fftSize\":1024,\"raysPerPair\":1024}");
+        Check(migrated.raysPerPair==0 && migrated.raysPerBin==2 && migrated.RaysPerPair==1026,"Legacy total-ray budgets migrate to complete frequency bins.");
+        migrated.raysPerBin=3;Check(migrated.RaysPerPair==1539,"Migrated settings remain editable through the new field.");
         const int rate=1000,count=256,start=100;
         var pcm=new float[1000]; for (int i=0;i<pcm.Length;i++) pcm[i]=(float)Math.Sin(2*Math.PI*.35*i);
         var signal=new TakeRender.Signal(pcm); signal.SetActive(0,true); signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1,loop=true});

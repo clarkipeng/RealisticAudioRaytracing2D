@@ -59,6 +59,7 @@ public sealed class StationDemo : MonoBehaviour
         InitializeSimulation();
         manager.RecordingStarted+=BeginInputRecording;
         manager.RecordingObserved+=ObserveInputRecording;
+        manager.RecordingFinalizing+=FinalizeInputRecording;
         manager.RecordingStopped+=EndInputRecording;
         Application.runInBackground=true;
         SetWalking(pendingReplay==null);
@@ -106,7 +107,11 @@ public sealed class StationDemo : MonoBehaviour
     public void Step(StationRecording.Input input,float seconds)
     {
         if(walker==null) ConfigureControls();
-        if(recording!=null) RecordSafely(()=>recording.BeforeTick(Tick,input,seconds));
+        if(recording!=null)
+        {
+            try {recording.BeforeTick(Tick,input,seconds);}
+            catch(Exception e) {manager.AbortTakeRecording(e.Message); Debug.LogException(e,this);}
+        }
         if(input.interact && NearDoor) doorOpen=!doorOpen;
         double previousDistance=trainDistance;
         AdvanceTrain(seconds);
@@ -116,21 +121,18 @@ public sealed class StationDemo : MonoBehaviour
         look.Simulate(input.look); walker.Simulate(input.movement,input.jump,seconds); Tick++;
     }
 
-    void BeginInputRecording(string directory) => RecordSafely(()=>recording=new StationRecording(this,directory));
-    void ObserveInputRecording(long sample) => RecordSafely(()=>recording?.Observe(sample,Tick));
-    void EndInputRecording(string directory,bool complete)
+    void BeginInputRecording(string directory) => recording=new StationRecording(this,directory);
+    void ObserveInputRecording(long sample) => recording?.Observe(sample,Tick);
+    void FinalizeInputRecording(string directory)
     {
-        RecordSafely(()=>recording?.Complete(complete)); recording?.Dispose(); recording=null;
+        if(recording==null)throw new InvalidOperationException("The required station input recording is missing.");
+        recording.Complete(true);
     }
-    void RecordSafely(Action action)
-    {
-        try { action(); }
-        catch(Exception e) { recording?.Dispose(); recording=null; Debug.LogException(e,this); }
-    }
+    void EndInputRecording(string directory,bool complete) {recording?.Dispose(); recording=null;}
     void OnDestroy()
     {
         recording?.Dispose(); playback?.Dispose();
-        if(manager!=null) { manager.RecordingStarted-=BeginInputRecording; manager.RecordingObserved-=ObserveInputRecording; manager.RecordingStopped-=EndInputRecording; }
+        if(manager!=null) { manager.RecordingStarted-=BeginInputRecording; manager.RecordingObserved-=ObserveInputRecording; manager.RecordingFinalizing-=FinalizeInputRecording; manager.RecordingStopped-=EndInputRecording; }
         if(walker!=null) walker.externalClock=false;
         if(look!=null) look.externalClock=false;
     }

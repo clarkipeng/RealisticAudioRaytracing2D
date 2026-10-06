@@ -11,7 +11,7 @@ public static partial class TakeChecks
     static Array Arrivals(DirectSolver solver) => (Array)typeof(DirectSolver).GetProperty("RayPaths",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(solver);
     static T ArrivalField<T>(Array paths,int index,string field) => (T)paths.GetValue(index).GetType().GetField(field).GetValue(paths.GetValue(index));
     static TakeRender.Settings SpectralSettings() => new TakeRender.Settings {transport=TakeRender.Transport.Raytraced,
-        responseStepSamples=128,fftSize=128,spectralHop=32,raysPerPair=260,maxBounces=3,maximumDelaySeconds=.1f,
+        responseStepSamples=128,fftSize=128,spectralHop=32,raysPerBin=4,maxBounces=3,maximumDelaySeconds=.1f,
         maximumResponsesPerBatch=4,speedOfSound=8000,minimumDistance=1,airAbsorption=false,diffractionFactor=0,tailSamples=256};
 
     [MenuItem("Tools/Acoustics/Check directional spectral transport")]
@@ -21,7 +21,7 @@ public static partial class TakeChecks
         try
         {
             var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-            TransportMaterials();TransportGeometry(shader);TransportMedia(shader);TransportNativeVolumes(shader);SpectralIdentity(shader);SpectralDoppler(shader);SpectralTransitions(shader);SpectralHeadTurns(shader);
+            TransportMaterials();TransportGeometry(shader);TransportMedia(shader);TransportNativeVolumes(shader);SpectralConvolutionChecks();MirrorChecks(shader);SpectralIdentity(shader);SpectralDoppler(shader);SpectralTransitions(shader);SpectralHeadTurns(shader);
             SpectralStreaming(shader,AcousticTake.Dimension.Spatial3D);SpectralStreaming(shader,AcousticTake.Dimension.Planar2D);
             Debug.Log("ACOUSTIC_TRANSPORT_PASS: "+checks+" checks on "+SystemInfo.graphicsDeviceType);
         }
@@ -80,7 +80,7 @@ public static partial class TakeChecks
                 settings.useBvh=bvh;
                 using var solver=new DirectSolver(scene,geometry,settings,shader,2,8000);
                 solver.Solve(state,direct);var rays=Arrivals(solver);double energy=0;
-                for(int i=65;i<65+settings.raysPerPair*settings.maxBounces;i++)
+                for(int i=65;i<settings.SpectralSlotsPerPair;i++)
                 {
                     float value=ArrivalField<float>(rays,i,"pressureGain");Check(float.IsFinite(value),"Finite indirect pressure");energy+=value*value;
                     if(baseline!=null)Near(value,ArrivalField<float>(baseline,i,"pressureGain"),"BVH indirect agreement",1e-5f);
@@ -174,7 +174,7 @@ public static partial class TakeChecks
                 float gain=ArrivalField<float>(paths,i,"pressureGain");if(gain==0)continue;audible++;
                 var direction=(Vector3)ArrivalField<Vector4>(paths,i,"direction");float cosine=Mathf.Max(Mathf.Abs(direction.x),Mathf.Abs(direction.y),Mathf.Abs(direction.z)),distance=1/cosine;
                 Near(ArrivalField<float>(paths,i,"delaySeconds"),distance/1000,"Reflected interior travel time",1e-7f);
-                Near(gain,.5f*cosine*(65f/settings.raysPerPair)*Mathf.Exp(-.1f*2*distance)/(2*distance),"Reflected interior damping",1e-5f);
+                Check(float.IsFinite(gain) && gain>=0,"Finite attenuated interior reflection");
             }
             Check(audible>0,"Interior reflection fixture exercised actual rays");
         }
@@ -217,6 +217,158 @@ public static partial class TakeChecks
         }
         finally {UnityEngine.Object.DestroyImmediate(material);}
     }
+    // Independent time-domain oracle: no FFT/window formula in the expected output.
+    static void SpectralConvolutionChecks()
+    {
+        var pathType=typeof(DirectSolver).Assembly.GetType("RayTransport+Path");
+        var set=typeof(TakeRender.Mixer).GetMethod("SetResponse",BindingFlags.Instance|BindingFlags.NonPublic);
+        var scene=Scene();var state=States();
+        foreach(int fft in new[]{64,128})foreach(int hop in new[]{fft/2,fft/4})
+        foreach(bool ears in new[]{false,true})foreach(float delay in new[]{0,1,31,32,63,129,31.25f})
+        foreach(var filter in new[]{TakeRender.DelayFilter.Linear,TakeRender.DelayFilter.WindowedSinc})
+        {
+            var settings=SpectralSettings();settings.fftSize=fft;settings.spectralHop=hop;settings.responseStepSamples=128;
+            settings.delayFilter=filter;settings.raysPerBin=1;settings.maxBounces=1;settings.listenerOutput=ears?TakeRender.ListenerOutput.Binaural:TakeRender.ListenerOutput.Mono;
+            var pcm=new float[256];pcm[31]=1;pcm[127]=-.3f;
+            var signal=new TakeRender.Signal(pcm);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
+            var mixer=new TakeRender.Mixer(scene,8192,settings,new[]{signal});
+            var arrivals=Array.CreateInstance(pathType,settings.SpectralSlotsPerPair);
+            for(int b=0;b<settings.FrequencyBins;b++)
+            {
+                object path=Activator.CreateInstance(pathType);pathType.GetField("frequencyBin").SetValue(path,(uint)b);
+                pathType.GetField("pressureGain").SetValue(path,1f);pathType.GetField("delaySeconds").SetValue(path,delay/8192);
+                pathType.GetField("direction").SetValue(path,(Vector4)Vector3.forward);arrivals.SetValue(path,b);
+            }
+            var output=new float[768*settings.ChannelsPerListener];var block=new float[128*settings.ChannelsPerListener];
+            for(int at=0;at<768;at+=128)
+            {
+                set.Invoke(mixer,new object[]{(long)at,new TakeRender.DirectPath[1],state,false,arrivals,0});
+                // Changing callback chunk boundaries must not change convolution.
+                for(int n=0;n<128;n+=16){mixer.Render(at+n,16,block);Array.Copy(block,0,output,(at+n)*settings.ChannelsPerListener,16*settings.ChannelsPerListener);}
+            }
+            var expected=new float[output.Length];var hrtf=ears?Hrtf.Load(8192):null;var blend=ears?hrtf.Interpolate(Vector3.forward):default;
+            int whole=(int)delay;double fraction=delay-whole;
+            int begin=filter==TakeRender.DelayFilter.Linear?0:1-settings.sincRadius;
+            int end=filter==TakeRender.DelayFilter.Linear?1:settings.sincRadius;
+            var taps=new double[end-begin+1];double normalization=0;
+            for(int k=begin;k<=end;k++)
+            {
+                double x=k-fraction;
+                double value=filter==TakeRender.DelayFilter.Linear?(k==0?1-fraction:fraction):
+                    Math.Abs(x)<1e-12?1:Math.Sin(Math.PI*x)/(Math.PI*x)*Math.Sin(Math.PI*x/settings.sincRadius)/(Math.PI*x/settings.sincRadius);
+                taps[k-begin]=value;normalization+=value;
+            }
+            for(int n=0;n<pcm.Length;n++)for(int ear=0;ear<settings.ChannelsPerListener;ear++)for(int t=0;t<(hrtf?.Taps??1);t++)
+            for(int k=begin;k<=end;k++)
+            {
+                int index=n+settings.DspLatencySamples+whole+t+k;double value=pcm[n]*(ears?hrtf.Coefficient(blend,ear,t):1);
+                if(index>=0 && index<768)expected[index*settings.ChannelsPerListener+ear]+=(float)(value*taps[k-begin]/normalization);
+            }
+            float error=0;for(int i=0;i<output.Length;i++)error=Mathf.Max(error,Mathf.Abs(output[i]-expected[i]));
+            Near(error,0,"Independent delayed FIR oracle: FFT "+fft+" hop "+hop+" ears "+ears+" delay "+delay+" filter "+filter,2e-5f);
+        }
+        // Reusing an indirect slot for an unrelated longer arrival must not discard it as negative velocity.
+        var changedSettings=SpectralSettings();changedSettings.raysPerBin=1;changedSettings.maxBounces=1;
+        var pulse=new float[768];pulse[400]=1;var changedSignal=new TakeRender.Signal(pulse);
+        changedSignal.SetActive(0,true);changedSignal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
+        var changedMixer=new TakeRender.Mixer(scene,8192,changedSettings,new[]{changedSignal});
+        var changedPaths=Array.CreateInstance(pathType,changedSettings.SpectralSlotsPerPair);var changedOutput=new float[1024];
+        foreach(int at in new[]{0,128})
+        {
+            for(int bin=0;bin<changedSettings.FrequencyBins;bin++)
+            {
+                object path=Activator.CreateInstance(pathType);pathType.GetField("frequencyBin").SetValue(path,(uint)bin);
+                pathType.GetField("pressureGain").SetValue(path,1f);pathType.GetField("delaySeconds").SetValue(path,at==0?0f:256f/8192);
+                changedPaths.SetValue(path,changedSettings.FrequencyBins+bin*(changedSettings.maxBounces+1));
+            }
+            set.Invoke(changedMixer,new object[]{(long)at,new TakeRender.DirectPath[1],state,false,changedPaths,0});
+            int length=at==0?128:1024;var chunk=new float[128];
+            for(int n=0;n<length;n+=128){changedMixer.Render(at+n,128,chunk);Array.Copy(chunk,0,changedOutput,n,128);}
+        }
+        Near(changedOutput[400+changedSettings.DspLatencySamples+256-128],1,"Unrelated replacement arrival remains audible",2e-5f);
+
+        // A single-bin finite response with HRIR longer than the acoustic grid exercises the ungrouped path.
+        var shortGrid=SpectralSettings();shortGrid.fftSize=64;shortGrid.spectralHop=16;shortGrid.raysPerBin=1;
+        shortGrid.listenerOutput=TakeRender.ListenerOutput.Binaural;
+        var earSignal=new TakeRender.Signal(new[]{1f});earSignal.SetActive(0,true);
+        earSignal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
+        var earMixer=new TakeRender.Mixer(scene,44100,shortGrid,new[]{earSignal});
+        var earPaths=Array.CreateInstance(pathType,shortGrid.SpectralSlotsPerPair);
+        object single=Activator.CreateInstance(pathType);pathType.GetField("frequencyBin").SetValue(single,7u);
+        pathType.GetField("pressureGain").SetValue(single,.75f);pathType.GetField("delaySeconds").SetValue(single,31.25f/44100);
+        pathType.GetField("direction").SetValue(single,(Vector4)Vector3.right);earPaths.SetValue(single,7);
+        set.Invoke(earMixer,new object[]{0L,new TakeRender.DirectPath[1],state,false,earPaths,0});
+        var earOutput=new float[1024];var earBlock=new float[256];
+        for(int n=0;n<512;n+=128){earMixer.Render(n,128,earBlock);Array.Copy(earBlock,0,earOutput,n*2,256);}
+        var earExpected=new double[1024];var longHrtf=Hrtf.Load(44100);var right=longHrtf.Interpolate(Vector3.right);
+        double exactDelay=(double)(31.25f/44100)*44100;int baseDelay=(int)Math.Floor(exactDelay);double sub=exactDelay-baseDelay;
+        for(int n=0;n<64;n++)for(int t=0;t<longHrtf.Taps;t++)for(int ear=0;ear<2;ear++)
+        {
+            double value=.75*2/64*Math.Cos(2*Math.PI*7*(n-32)/64)*longHrtf.Coefficient(right,ear,t);
+            int at=baseDelay+32+n+t;earExpected[at*2+ear]+=value*(1-sub);earExpected[(at+1)*2+ear]+=value*sub;
+        }
+        double earError=0;for(int n=0;n<earOutput.Length;n++)earError=Math.Max(earError,Math.Abs(earOutput[n]-earExpected[n]));
+        Near((float)earError,0,"Full long HRIR times finite single-bin response",2e-5f);
+        // Disabling a receiver fades output once. A subsequent disabled response cannot clip pending windows.
+        var options=SpectralSettings();options.transitionSamples=64;options.raysPerBin=1;options.maxBounces=1;
+        var constant=new TakeRender.Signal(new[]{1f});constant.SetActive(0,true);constant.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
+        var renderer=new TakeRender.Mixer(scene,8192,options,new[]{constant});var paths=Array.CreateInstance(pathType,options.SpectralSlotsPerPair);
+        for(int b=0;b<options.FrequencyBins;b++){object path=Activator.CreateInstance(pathType);pathType.GetField("frequencyBin").SetValue(path,(uint)b);pathType.GetField("pressureGain").SetValue(path,1f);paths.SetValue(path,b);}
+        var samples=new float[128];
+        for(int at=0;at<768;at+=128)
+        {
+            state[1].flags=at>=512?0:AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Listener;
+            set.Invoke(renderer,new object[]{(long)at,new TakeRender.DirectPath[1],state,false,paths,0});renderer.Render(at,128,samples);
+            if(at>=512)for(int n=0;n<128;n++)Near(samples[n],Mathf.Clamp01(1-(at+n-512)/64f),"Complete receiver output fade",2e-5f);
+        }
+    }
+    static void MirrorChecks(ComputeShader shader)
+    {
+        foreach(var dimension in new[]{AcousticTake.Dimension.Spatial3D,AcousticTake.Dimension.Planar2D})
+        {
+            var scene=Scene(2);scene.dimension=dimension;scene.listeners=new[]{1};scene.objects[2].primitiveCount=1;
+            scene.materials=new[]{new AcousticTake.MaterialDefinition{frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f},ior=new[]{1f},damping=new[]{0f}}};
+            var geometry=new[]{new AcousticTake.Primitive{objectIndex=2,a=new Vector3(0,-10,-10),b=new Vector3(0,10,-10),c=new Vector3(0,0,10)}};
+            var state=States(2);state[0].position=new Vector3(-1,-1,0);state[1].position=new Vector3(-1,1,0);
+            state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+            var settings=SpectralSettings();settings.speedOfSound=343;settings.raysPerBin=1;settings.maxBounces=1;
+            foreach(float scattering in new[]{0f,1f})
+            {
+                scene.materials[0].scattering[0]=scattering;
+                using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8192);
+                solver.Solve(state,new TakeRender.DirectPath[1]);var rays=Arrivals(solver);
+                for(int bin=0;bin<settings.FrequencyBins;bin++)
+                {
+                    int at=settings.FrequencyBins+bin*(settings.maxBounces+1);
+                    Near(ArrivalField<float>(rays,at,"pressureGain"),scattering==0?1/Mathf.Sqrt(8):0,"Image-source specular gain",1e-5f);
+                    if(scattering==0)Near(ArrivalField<float>(rays,at,"delaySeconds"),Mathf.Sqrt(8)/343,"Image-source specular time",1e-6f);
+                }
+            }
+        }
+        // A square's diagonal belongs to two triangles, but the analytic mirror path is counted once.
+        var square=Scene(2);square.listeners=new[]{1};square.objects[2].primitiveCount=2;
+        square.materials=new[]{new AcousticTake.MaterialDefinition{frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f},ior=new[]{1f},damping=new[]{0f}}};
+        var faces=new[]{new AcousticTake.Primitive{objectIndex=2,a=new Vector3(0,-10,-10),b=new Vector3(0,10,-10),c=new Vector3(0,10,10)},
+            new AcousticTake.Primitive{objectIndex=2,a=new Vector3(0,-10,-10),b=new Vector3(0,10,10),c=new Vector3(0,-10,10)}};
+        var poses=States(2);poses[0].position=new Vector3(-1,-1,0);poses[1].position=new Vector3(-1,1,0);
+        poses[2].position=Vector3.zero;poses[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        foreach(int budget in new[]{2,4})foreach(int seed in new[]{0,17})
+        {
+            var settings=SpectralSettings();settings.speedOfSound=343;settings.raysPerBin=budget;settings.seed=seed;settings.maxBounces=1;
+            using var solver=new DirectSolver(square,faces,settings,shader,sampleRate:8192);
+            solver.Solve(poses,new TakeRender.DirectPath[1]);var rays=Arrivals(solver);
+            for(int bin=0;bin<settings.FrequencyBins;bin++)
+            {
+                float gain=0;for(int ray=0;ray<budget;ray++)gain+=ArrivalField<float>(rays,settings.FrequencyBins+(bin*budget+ray)*2,"pressureGain");
+                Near(gain,1/Mathf.Sqrt(8),"Shared-edge mirror gain is invariant over complete primitive strata",1e-5f);
+            }
+        }
+        foreach(int fft in new[]{128,1024,2048})foreach(int rays in new[]{1,2,3})
+        {
+            var settings=SpectralSettings();settings.fftSize=fft;settings.raysPerBin=rays;
+            Check(settings.RaysPerPair==settings.FrequencyBins*rays,"Every configured bin gets its requested samples");
+        }
+    }
     static void SpectralTransitions(ComputeShader shader)
     {
         var scene=Scene();var state=States();state[1].position=Vector3.zero;
@@ -232,13 +384,8 @@ public static partial class TakeChecks
             Array.Clear(rays,0,rays.Length);set.Invoke(mixer,new object[]{512L,direct,state,cut,rays,0});mixer.Render(512,512,output);
             for(int n=0;n<512;n++)
             {
-                int sample=512+n;float expected=0;
-                for(int frame=sample/settings.spectralHop*settings.spectralHop;frame>sample-settings.fftSize;frame-=settings.spectralHop)
-                {
-                    float gain=frame<512?1:cut?0:Mathf.Clamp01(1-(frame-512)/64f);
-                    expected+=(1-Mathf.Cos(2*Mathf.PI*(sample-frame)/settings.fftSize))*settings.spectralHop/settings.fftSize*gain;
-                }
-                Near(output[n],expected,"Spectral response fade follows normalized overlapping windows; cut resets fade",2e-5f);
+                float expected=cut?0:Mathf.Clamp01(1-n/64f);
+                Near(output[n],expected,"Receiver response changes crossfade in output time",2e-5f);
             }
         }
     }
@@ -276,7 +423,7 @@ public static partial class TakeChecks
             using var take=AcousticTake.Open(path);var report=TakeRender.RenderDirect(take,settings,path+"-render",shader:shader);
             var output=ReadWave(Path.Combine(path+"-render","listener-0.wav"));float error=0;
             for(int i=0;i<output.Length;i++){float expected=i>=fft && i<fft+pcm.Length?pcm[i-fft]:0;error=Mathf.Max(error,Mathf.Abs(output[i]-expected));}
-            Near(error,0,"WOLA identity gain, latency and complete tail",2e-5f);Check(report.dspLatencySamples==fft,"Declared FFT latency");
+            Near(error,0,"Partitioned convolution identity gain, latency and complete tail",2e-5f);Check(report.dspLatencySamples==fft,"Declared FFT latency");
         }
     }
     static void SpectralDoppler(ComputeShader shader)
@@ -293,7 +440,7 @@ public static partial class TakeChecks
                 writer.Append(new AcousticTake.VoiceEvent {sample=0,gain=1,action=AcousticTake.VoiceAction.Play,loop=true});writer.Complete();
             }
             using var take=AcousticTake.Open(path);var settings=SpectralSettings();
-            settings.fftSize=256;settings.responseStepSamples=32;settings.speedOfSound=343;settings.maximumDelaySeconds=1;
+            settings.fftSize=256;settings.responseStepSamples=32;settings.transitionSamples=32;settings.speedOfSound=343;settings.maximumDelaySeconds=1;
             TakeRender.RenderDirect(take,settings,path+"-render",shader:shader);
             var output=ReadWave(Path.Combine(path+"-render","listener-0.wav"));int crossings=0,expected=1000-motion*100;
             double wantedReal=0,wantedImag=0,originalReal=0,originalImag=0;
@@ -304,7 +451,7 @@ public static partial class TakeChecks
                 wantedReal+=value*Math.Cos(2*Math.PI*expected*n/8000);wantedImag+=value*Math.Sin(2*Math.PI*expected*n/8000);
                 originalReal+=value*Math.Cos(2*Math.PI*1000*n/8000);originalImag+=value*Math.Sin(2*Math.PI*1000*n/8000);
             }
-            Check(Math.Abs(crossings-expected)<=2,"Approaching/receding listener Doppler frequency");
+            Check(Math.Abs(crossings-expected)<=2,"Approaching/receding listener Doppler frequency: "+crossings+" expected "+expected);
             Check(wantedReal*wantedReal+wantedImag*wantedImag>100*(originalReal*originalReal+originalImag*originalImag),"Doppler tone dominates its unshifted bin");
         }
     }

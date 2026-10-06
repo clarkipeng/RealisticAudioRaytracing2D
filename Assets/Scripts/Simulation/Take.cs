@@ -58,7 +58,7 @@ public sealed class AcousticTake : IDisposable
             var value=new Provenance {csharpModule=typeof(AcousticTake).Assembly.ManifestModule.ModuleVersionId.ToString(),
                 unityVersion=Application.unityVersion,buildGuid=Application.buildGUID,shaderName=shader==null ? null:shader.name};
 if(settings!=null && settings.transport==TakeRender.Transport.Raytraced)
-            {value.solverContract="geometric-spectral-preview-v2";value.dspContract="causal-wola-interpolated-hrtf-v2";}
+            {value.solverContract="geometric-spectral-preview-v3";value.dspContract="partitioned-linear-fir-hrtf-v1";}
 #if UNITY_EDITOR
             if (shader!=null)
             {
@@ -449,6 +449,14 @@ if(settings!=null && settings.transport==TakeRender.Transport.Raytraced)
             string temp = Path.Combine(DirectoryPath, "take.complete.json");
             File.WriteAllText(temp, JsonUtility.ToJson(Metadata, true));
             File.Replace(temp, Path.Combine(DirectoryPath, "take.json"), null);
+        }
+
+        // A required companion recorder may fail after the acoustic payload closes.
+        // Publish failure as well: a complete acoustic manifest must never mask it.
+        public void Invalidate()
+        {
+            failed=true; Metadata.complete=false;
+            File.WriteAllText(Path.Combine(DirectoryPath,"take.json"),JsonUtility.ToJson(Metadata,true));
         }
 
         public void Dispose()

@@ -45,9 +45,9 @@ internal sealed class RayTransport : IDisposable
         ComputeBuffer primitives,ComputeBuffer states,ComputeBuffer sources,ComputeBuffer listeners,ComputeBuffer bvhNodes,ComputeBuffer bvhIndices,int rate,int maximumFrames)
     {
         if(Marshal.SizeOf<Path>()!=32 || Marshal.SizeOf<Material>()!=32 || Marshal.SizeOf<Edge>()!=48 || Marshal.SizeOf<Volume>()!=48)throw new InvalidOperationException("Spectral GPU ABI mismatch.");
-        this.shader=shader;rayCount=settings.raysPerPair;frequencyBins=settings.fftSize/2+1;pairs=checked(scene.sources.Length*scene.listeners.Length);
+        this.shader=shader;rayCount=settings.RaysPerPair;frequencyBins=settings.fftSize/2+1;pairs=checked(scene.sources.Length*scene.listeners.Length);
         int bins=settings.fftSize/2+1;
-        SlotsPerPair=checked(bins+settings.raysPerPair*settings.maxBounces);PathsPerFrame=checked(pairs*SlotsPerPair);
+        SlotsPerPair=settings.SpectralSlotsPerPair;PathsPerFrame=checked(pairs*SlotsPerPair);
         Paths=new Path[checked(PathsPerFrame*maximumFrames)];completion=OnComplete;
         bool planar=scene.dimension==AcousticTake.Dimension.Planar2D;
         try
@@ -75,7 +75,7 @@ internal sealed class RayTransport : IDisposable
                 shader.SetBuffer(kernel,"Volumes",volumeBuffer);shader.SetBuffer(kernel,"RayPaths",pathBuffer);
                 if(bvhNodes!=null){shader.SetBuffer(kernel,"BvhNodes",bvhNodes);shader.SetBuffer(kernel,"BvhIndices",bvhIndices);}
             }
-            shader.SetInt("FrequencyBins",bins);shader.SetInt("RaysPerPair",settings.raysPerPair);shader.SetInt("MaxBounces",settings.maxBounces);
+            shader.SetInt("RaysPerBin",settings.RaysPerBin);shader.SetInt("RaySeed",settings.seed);shader.SetInt("FrequencyBins",bins);shader.SetInt("RaysPerPair",settings.RaysPerPair);shader.SetInt("MaxBounces",settings.maxBounces);
             shader.SetInt("SlotsPerPair",SlotsPerPair);shader.SetInt("EdgeCount",edges.Length);shader.SetInt("VolumeCount",volumes.Length);
             shader.SetFloat("FrequencyStep",(float)rate/settings.fftSize);shader.SetFloat("DiffractionFactor",settings.diffractionFactor);
             shader.SetFloat("MaximumPathDelay",settings.maximumDelaySeconds);shader.SetInt("UseAirAbsorption",settings.airAbsorption?1:0);
