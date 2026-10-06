@@ -2,85 +2,69 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Uniform partitioned linear convolution. Acoustic bins define a finite, centered
-// pressure FIR; propagation and the complete HRIR are composed in time, never
-// wrapped inside an STFT window. Input spectra live in a sample-keyed circular buffer.
+// Path-wise spectral rendering. Propagation is a continuous source-time read,
+// outside the short frequency/ear filter. Overlap-save discards circular wrap;
+// no scene IR or propagation-length filter partitions are constructed here.
 internal sealed class SpectralAudio
 {
+    sealed class PathFilter
+    {
+        public readonly Vector2[] spectrum;
+        public int pair;
+        public double delay,rate;
+        public long sample;
+        public PathFilter(int count){spectrum=new Vector2[count];}
+    }
     sealed class Response
     {
-        public readonly Vector2[] kernels;
-        public readonly int[] active,counts;
-        public readonly float[] overlap,block;
-        public bool reset=true;
-        public Response(int pairs,int listeners,int channels,int partitions,int bins,int hop)
-        {
-            kernels=new Vector2[checked(pairs*channels*partitions*bins)];
-            active=new int[checked(pairs*partitions)];counts=new int[pairs];
-            overlap=new float[checked(listeners*channels*hop)];block=new float[overlap.Length];
-        }
-        public long Bytes=>kernels.LongLength*8+(active.LongLength+counts.Length+overlap.Length+block.Length)*4;
+        public readonly List<PathFilter> paths=new List<PathFilter>();
+        public int count;
+        public readonly float[] block;
+        public Response(int count){block=new float[count];}
     }
-    readonly int size,hop,fft,bins,rate,channels,listeners,pairs,slots,partitions,irLength,hrirTaps,delayRadius,latencyOffset;
+    readonly int size,hop,fft,bins,rate,channels,listeners,pairs,slots,transition,latencyOffset,radius;
+    readonly TakeRender.DelayFilter delayFilter;
+    readonly double maximumDelay;
     readonly TakeRender.Signal[] signals;
-    readonly Vector2[][] history;
-    readonly long[] historyKeys;
-    readonly Vector2[] work,sum,native,pressureWork,earWork;
-    readonly Dictionary<(float,Vector4),int> groups;
-    readonly int[] groupHeads,next;
+    readonly Hrtf hrtf;
+    readonly Vector2[] native,pressure,ear,input,sum;
+    readonly int[] heads,next;
     readonly RayTransport.Path[] lastPaths;
     readonly Quaternion[] lastHeads;
     readonly bool[] lastEnabled;
-    readonly double[] impulse,cosine,sine,prefixReal,prefixImag;
-    readonly float[] delayWeights;
-    readonly Hrtf hrtf;
-    readonly int transition;
-    int fade;
+    readonly Dictionary<(float,Vector4,uint),int> groups;
+    readonly ImpulseResponseAudio ir;
     Response current,previous;
     long cursor,responseSample;
+    int fade;
     bool initialized;
-    public long NumericBytes {get;}
     public int ResponseSupportSamples {get;private set;}
+    public long NumericBytes => ir?.NumericBytes ?? (native.LongLength+pressure.Length+ear.Length+input.Length+sum.Length)*8+
+        (heads.LongLength+next.Length+current.block.Length+previous.block.Length)*4+lastPaths.LongLength*32+lastHeads.LongLength*16+lastEnabled.Length+
+        (current.paths.Count+previous.paths.Count)*(long)channels*bins*8;
     public SpectralAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals)
     {
-        this.rate=rate;this.signals=signals;size=settings.fftSize;hop=settings.spectralHop;fft=checked(2*hop);bins=hop+1;
-        channels=settings.ChannelsPerListener;listeners=scene.listeners.Length;pairs=checked(signals.Length*listeners);
-        slots=settings.SpectralSlotsPerPair;transition=settings.transitionSamples;
-        hrtf=channels==2?Hrtf.Load(rate):null;hrirTaps=hrtf?.Taps??1;
-        delayRadius=settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0;
-        delayWeights=new float[delayRadius==0?2:checked(2*delayRadius)];
-        // The block clock contributes hop samples; centering contributes size/2.
-        // Keep the declared size (+ fractional FIR latency) end-to-end DSP delay.
-        latencyOffset=size/2-hop;
-        irLength=checked((int)Math.Ceiling(settings.maximumDelaySeconds*(double)rate)+latencyOffset+size+hrirTaps+2*delayRadius+2);
-        partitions=checked((irLength+hop-1)/hop);
-        historyKeys=new long[partitions+1];Array.Fill(historyKeys,long.MinValue);
-        history=new Vector2[signals.Length][];
-        for(int s=0;s<signals.Length;s++)history[s]=new Vector2[checked(historyKeys.Length*bins)];
-        current=new Response(pairs,listeners,channels,partitions,bins,hop);
-        previous=new Response(pairs,listeners,channels,partitions,bins,hop);
-        work=new Vector2[fft];sum=new Vector2[checked(listeners*channels*bins)];impulse=new double[checked(channels*irLength)];
-        cosine=new double[checked((size/2+1)*size)];sine=new double[cosine.Length];
-        for(int b=0;b<=size/2;b++)for(int n=0;n<size;n++)
-        {double angle=2*Math.PI*b*n/size;cosine[b*size+n]=Math.Cos(angle);sine[b*size+n]=Math.Sin(angle);}
-        groups=new Dictionary<(float,Vector4),int>(slots);groupHeads=new int[slots];next=new int[slots];
-        lastPaths=new RayTransport.Path[checked(pairs*slots)];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];
-        native=new Vector2[size];int padded=1;while(padded<size+hrirTaps-1)padded=checked(padded*2);
-        pressureWork=new Vector2[padded];earWork=new Vector2[padded];
-        prefixReal=new double[checked(channels*(hrirTaps+1))];prefixImag=new double[prefixReal.Length];
-        NumericBytes=lastPaths.LongLength*32+lastHeads.LongLength*16+lastEnabled.Length+(groupHeads.LongLength+next.LongLength)*4+
-            (native.LongLength+pressureWork.LongLength+earWork.LongLength)*8+current.Bytes+previous.Bytes+historyKeys.LongLength*8+signals.Length*(long)historyKeys.Length*bins*8+
-            (work.LongLength+sum.LongLength)*8+(impulse.LongLength+cosine.LongLength+sine.LongLength+prefixReal.LongLength+prefixImag.LongLength)*8+delayWeights.LongLength*4;
+        if(settings.synthesis==TakeRender.Synthesis.ImpulseResponse){ir=new ImpulseResponseAudio(scene,rate,settings,signals);return;}
+        this.rate=rate;this.signals=signals;maximumDelay=settings.maximumDelaySeconds*(double)rate;size=settings.fftSize;hop=settings.spectralHop;channels=settings.ChannelsPerListener;
+        listeners=scene.listeners.Length;pairs=signals.Length*listeners;slots=settings.SpectralSlotsPerPair;transition=settings.transitionSamples;
+        hrtf=channels==2?Hrtf.Load(rate):null;delayFilter=settings.delayFilter;radius=settings.sincRadius;
+        latencyOffset=size/2+(delayFilter==TakeRender.DelayFilter.WindowedSinc?radius:0);
+        fft=1;while(fft<size+(hrtf?.Taps??1)+hop-2)fft=checked(fft*2);bins=fft/2+1;
+        native=new Vector2[size];pressure=new Vector2[fft];ear=new Vector2[fft];input=new Vector2[fft];sum=new Vector2[checked(listeners*channels*bins)];
+        lastPaths=new RayTransport.Path[pairs*slots];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];
+        heads=new int[slots];next=new int[slots];groups=new Dictionary<(float,Vector4,uint),int>(slots);
+        current=new Response(listeners*channels*hop);previous=new Response(current.block.Length);
     }
     public void SetResponse(long sample,bool cut,RayTransport.Path[] paths,int offset,AcousticTake.Scene scene,AcousticTake.State[] states)
     {
+        if(ir!=null){ir.SetResponse(sample,cut,paths,offset,scene,states);ResponseSupportSamples=ir.ResponseSupportSamples;return;}
         if(paths==null || offset<0 || paths.Length-offset<checked(pairs*slots))throw new ArgumentException("Missing directional ray response.");
         foreach(var state in states)cut|=(state.flags&AcousticTake.StateFlags.Cut)!=0;
-        bool unchanged=initialized;
+        bool unchanged=initialized && !cut;
         for(int i=0;i<lastPaths.Length && unchanged;i++)
         {
             var a=lastPaths[i];var b=paths[offset+i];
-            unchanged=a.pressureGain==b.pressureGain && a.delaySeconds==b.delaySeconds && a.frequencyBin==b.frequencyBin && a.direction.Equals(b.direction);
+            unchanged=a.delaySeconds==b.delaySeconds && a.pressureGain==b.pressureGain && a.frequencyBin==b.frequencyBin && a.identity==b.identity && a.direction.Equals(b.direction);
         }
         for(int l=0;l<listeners;l++)
         {
@@ -90,204 +74,95 @@ internal sealed class SpectralAudio
         }
         if(unchanged){fade=0;responseSample=sample;return;}
         Array.Copy(paths,offset,lastPaths,0,lastPaths.Length);
-        (current,previous)=(previous,current);fade=initialized && !cut?transition:0;
-        Array.Clear(current.counts,0,pairs);current.reset=true;
+        (current,previous)=(previous,current);current.count=0;fade=initialized && !cut?transition:0;
         for(int pair=0;pair<pairs;pair++)
         {
-            int listener=pair%listeners;
-            if(!TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener))continue;
-            Array.Clear(impulse,0,impulse.Length);
+            int listener=pair%listeners;if(!TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener))continue;
             var rotation=Quaternion.Inverse(states[scene.listeners[listener]].rotation);
-            int first=irLength,last=0,groupCount=0;groups.Clear();
-            int pathOffset=offset+pair*slots;
+            int basePath=offset+pair*slots,count=0;groups.Clear();
             for(int slot=0;slot<slots;slot++)
             {
-                var path=paths[pathOffset+slot];if(path.pressureGain==0)continue;
-                if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 || !float.IsFinite(path.direction.sqrMagnitude))
-                    throw new InvalidOperationException("Invalid spectral arrival.");
-                var key=(path.delaySeconds,path.direction);
-                if(!groups.TryGetValue(key,out int group)){group=groupCount++;groups.Add(key,group);groupHeads[group]=-1;}
-                next[slot]=groupHeads[group];groupHeads[group]=slot;
+                var path=paths[basePath+slot];if(path.pressureGain==0)continue;
+                if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 ||
+                    !float.IsFinite(path.direction.sqrMagnitude) || path.direction.w>=1)throw new InvalidOperationException("Invalid or noncausal spectral arrival at pair "+pair+", slot "+slot+": delay="+path.delaySeconds+", rate="+path.direction.w);
+                var key=(path.delaySeconds,path.direction,path.identity);
+                if(!groups.TryGetValue(key,out int group)){group=count++;groups.Add(key,group);heads[group]=-1;}
+                next[slot]=heads[group];heads[group]=slot;
             }
-            for(int group=0;group<groupCount;group++)
+            for(int group=0;group<count;group++)
             {
-                int slot=groupHeads[group];var path=paths[pathOffset+slot];
-                double delay=path.delaySeconds*(double)rate;int whole=checked((int)Math.Floor(delay));
-                int start=checked(whole+latencyOffset+(delayRadius==0?0:1));
-                int support=checked(size+hrirTaps+delayWeights.Length-2);
-                if(start<0 || start>irLength-support)throw new InvalidOperationException("Arrival exceeds declared spectral history.");
-                FractionalDelay(delay-whole);
-                int bin=(int)path.frequencyBin,basis=bin*size;
+                if(current.count==current.paths.Count)current.paths.Add(new PathFilter(channels*bins));
+                var filter=current.paths[current.count++];int slot=heads[group];var path=paths[basePath+slot];
+                filter.pair=pair;filter.rate=path.direction.w;filter.delay=path.delaySeconds*(double)rate;filter.sample=sample;
+                Array.Clear(native,0,size);
+                for(int member=slot;member>=0;member=next[member])
+                {var value=paths[basePath+member];native[value.frequencyBin].x+=value.pressureGain;}
+                // The solve supplies the retarded-time anchor. Carrying an
+                // approximate slope between solves can accumulate nonphysical drift.
+                if(filter.delay<0 || filter.delay>maximumDelay)throw new InvalidOperationException("Propagation clock is outside the declared delay horizon; retrace the path or increase Maximum Delay Seconds.");
+                for(int k=1;k<size/2;k++)native[size-k]=native[k];ImpulseResponseAudio.Fft(native,true);
+                Array.Clear(pressure,0,fft);
+                for(int n=0;n<size;n++)pressure[n].x=native[(n+size/2)%size].x;
+                ImpulseResponseAudio.Fft(pressure,false);
                 var blend=hrtf==null?default:hrtf.Interpolate(rotation*(Vector3)path.direction);
-                if(next[slot]>=0)
+                for(int channel=0;channel<channels;channel++)
                 {
-                    // Coalesce the same physical delay/direction across frequencies.
-                    // One short FFT and linear HRIR convolution replaces per-bin FIR work.
-                    Array.Clear(native,0,size);
-                    for(int member=slot;member>=0;member=next[member])
-                    {var arrival=paths[pathOffset+member];native[arrival.frequencyBin].x+=arrival.pressureGain;}
-                    for(int k=1;k<size/2;k++)native[size-k]=native[k];
-                    Fft(native,true);Array.Clear(pressureWork,0,pressureWork.Length);
-                    for(int n=0;n<size;n++)pressureWork[n].x=native[(n+size/2)%size].x;
-                    Fft(pressureWork,false);
-                    for(int ear=0;ear<channels;ear++)
-                    {
-                        Array.Clear(earWork,0,earWork.Length);
-                        for(int t=0;t<hrirTaps;t++)earWork[t].x=hrtf==null?1:hrtf.Coefficient(blend,ear,t);
-                        Fft(earWork,false);
-                        for(int k=0;k<earWork.Length;k++){var a=pressureWork[k];var b=earWork[k];earWork[k]=new Vector2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
-                        Fft(earWork,true);
-                        for(int n=0;n<size+hrirTaps-1;n++)for(int t=0;t<delayWeights.Length;t++)
-                            impulse[ear*irLength+start+n+t]+=earWork[n].x*delayWeights[t];
-                    }
+                    Array.Clear(ear,0,fft);
+                    for(int t=0;t<(hrtf?.Taps??1);t++)ear[t].x=hrtf==null?1:hrtf.Coefficient(blend,channel,t);
+                    ImpulseResponseAudio.Fft(ear,false);
+                    for(int k=0;k<bins;k++){var a=pressure[k];var b=ear[k];filter.spectrum[channel*bins+k]=new Vector2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
                 }
-                else
-                {
-                    for(int ear=0;ear<channels;ear++)
-                    {
-                        int p=ear*(hrirTaps+1);prefixReal[p]=prefixImag[p]=0;
-                        for(int t=0;t<hrirTaps;t++)
-                        {
-                            double h=hrtf==null?1:hrtf.Coefficient(blend,ear,t);
-                            prefixReal[p+t+1]=prefixReal[p+t]+h*cosine[basis+t%size];
-                            prefixImag[p+t+1]=prefixImag[p+t]-h*sine[basis+t%size];
-                        }
-                    }
-                    double gain=path.pressureGain*(bin==0 || bin==size/2?1.0:2.0)/size;
-                    for(int n=0;n<size+hrirTaps-1;n++)
-                    {
-                        int a=Math.Max(0,n-size+1),b=Math.Min(n+1,hrirTaps),phase=(n+size/2)%size;
-                        double re=cosine[basis+phase]*gain,im=sine[basis+phase]*gain;
-                        for(int ear=0;ear<channels;ear++)
-                        {
-                            int p=ear*(hrirTaps+1);
-                            double value=re*(prefixReal[p+b]-prefixReal[p+a])-im*(prefixImag[p+b]-prefixImag[p+a]);
-                            for(int t=0;t<delayWeights.Length;t++)impulse[ear*irLength+start+n+t]+=value*delayWeights[t];
-                        }
-                    }
-                }
-                first=Math.Min(first,start);last=Math.Max(last,start+support);
-            }
-            if(last>0)ResponseSupportSamples=Math.Max(ResponseSupportSamples,last+hop);
-            for(int partition=first/hop;partition*hop<last;partition++)
-            {
-                bool nonzero=false;
-                for(int ear=0;ear<channels;ear++)
-                {
-                    Array.Clear(work,0,fft);bool earNonzero=false;
-                    for(int n=0;n<hop && partition*hop+n<irLength;n++)
-                    {float value=(float)impulse[ear*irLength+partition*hop+n];work[n].x=value;earNonzero|=value!=0;}
-                    // Sparse propagation delays leave many empty partitions. Their FFT is exactly zero.
-                    if(earNonzero)Fft(work,false);nonzero|=earNonzero;
-                    Array.Copy(work,0,current.kernels,((pair*channels+ear)*partitions+partition)*bins,bins);
-                }
-                if(nonzero)current.active[pair*partitions+current.counts[pair]++]=partition;
+                ResponseSupportSamples=Math.Max(ResponseSupportSamples,checked((int)Math.Ceiling(filter.delay)+latencyOffset+size+(hrtf?.Taps??1)+radius));
             }
         }
         responseSample=sample;initialized=true;
     }
-    void FractionalDelay(double fraction)
-    {
-        if(delayRadius==0){delayWeights[0]=(float)(1-fraction);delayWeights[1]=(float)fraction;return;}
-        double sum=0;
-        for(int t=0;t<delayWeights.Length;t++)
-        {
-            double x=1-delayRadius+t-fraction;
-            double value=Math.Abs(x)<1e-12?1:Math.Sin(Math.PI*x)/(Math.PI*x)*Math.Sin(Math.PI*x/delayRadius)/(Math.PI*x/delayRadius);
-            delayWeights[t]=(float)value;sum+=value;
-        }
-        for(int t=0;t<delayWeights.Length;t++)delayWeights[t]/=(float)sum;
-    }
     public void Render(long sample,int count,float[] pcm)
     {
+        if(ir!=null){ir.Render(sample,count,pcm);return;}
         if(sample!=cursor)throw new InvalidOperationException("Spectral output must be consumed in order from initialization.");
         for(int n=0;n<count;n++,cursor++)
         {
-            if(cursor%hop==0)Synthesize(cursor);
+            if(cursor%hop==0)
+            {
+                Synthesize(current,cursor);
+                if(fade>0 && cursor-responseSample<fade)Synthesize(previous,cursor);
+            }
             int at=(int)(cursor%hop);float blend=fade==0?1:Mathf.Clamp01((float)(cursor-responseSample)/fade);
             for(int channel=0;channel<listeners*channels;channel++)
             {
-                int index=channel*hop+at;
-                float value=current.block[index]*blend+(blend<1?previous.block[index]*(1-blend):0);
+                int index=channel*hop+at;float value=current.block[index]*blend+(blend<1?previous.block[index]*(1-blend):0);
                 if(!float.IsFinite(value))throw new InvalidOperationException("Non-finite spectral audio.");
                 pcm[n*listeners*channels+channel]=value;
             }
         }
     }
-    void Synthesize(long sample)
-    {
-        long frame=sample/hop;int ring=(int)(frame%historyKeys.Length);
-        for(int s=0;s<signals.Length;s++)
-        {
-            Array.Clear(work,0,fft);
-            for(int n=0;n<hop;n++)work[n].x=signals[s].Read(sample-hop+n);
-            Fft(work,false);Array.Copy(work,0,history[s],ring*bins,bins);
-        }
-        historyKeys[ring]=frame;
-        Synthesize(current,frame);
-        if(fade>0 && sample-responseSample<fade)Synthesize(previous,frame);
-    }
-    void Synthesize(Response response,long frame)
-    {
-        if(response.reset)
-        {
-            Convolve(response,frame-1);
-            for(int c=0;c<listeners*channels;c++)
-            {Inverse(c);for(int n=0;n<hop;n++)response.overlap[c*hop+n]=work[hop+n].x;}
-            response.reset=false;
-        }
-        Convolve(response,frame);
-        for(int c=0;c<listeners*channels;c++)
-        {
-            Inverse(c);
-            for(int n=0;n<hop;n++)
-            {int at=c*hop+n;response.block[at]=work[n].x+response.overlap[at];response.overlap[at]=work[hop+n].x;}
-        }
-    }
-    void Inverse(int channel)
-    {
-        Array.Copy(sum,channel*bins,work,0,bins);work[0].y=work[hop].y=0;
-        for(int k=1;k<hop;k++)work[fft-k]=new Vector2(work[k].x,-work[k].y);
-        Fft(work,true);
-    }
-    void Convolve(Response response,long frame)
+    void Synthesize(Response response,long sample)
     {
         Array.Clear(sum,0,sum.Length);
-        for(int pair=0;pair<pairs;pair++)
+        for(int p=0;p<response.count;p++)
         {
-            int source=pair/listeners,listener=pair%listeners;
-            for(int p=0;p<response.counts[pair];p++)
+            var filter=response.paths[p];int source=filter.pair/listeners,listener=filter.pair%listeners;
+            double ratio=1-filter.rate;
+            for(int n=0;n<fft;n++)
             {
-                int partition=response.active[pair*partitions+p];long inputFrame=frame-partition;if(inputFrame<0)continue;
-                int ring=(int)(inputFrame%historyKeys.Length);if(historyKeys[ring]!=inputFrame)continue;
-                for(int ear=0;ear<channels;ear++)
-                {
-                    int output=(listener*channels+ear)*bins,kernel=((pair*channels+ear)*partitions+partition)*bins,input=ring*bins;
-                    for(int k=0;k<bins;k++)
-                    {var a=history[source][input+k];var b=response.kernels[kernel+k];sum[output+k]+=new Vector2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
-                }
+                double receiver=sample-(fft-hop)+n-latencyOffset;
+                double emission=receiver-filter.delay-filter.rate*(receiver-filter.sample);
+                input[n]=new Vector2(Doppler.Read(signals[source],emission,ratio,delayFilter,radius),0);
+            }
+            ImpulseResponseAudio.Fft(input,false);
+            for(int channel=0;channel<channels;channel++)for(int k=0;k<bins;k++)
+            {
+                var a=input[k];var b=filter.spectrum[channel*bins+k];int index=(listener*channels+channel)*bins+k;
+                sum[index].x+=a.x*b.x-a.y*b.y;sum[index].y+=a.x*b.y+a.y*b.x;
             }
         }
-    }
-    internal static void Fft(Vector2[] data,bool inverse)
-    {
-        int n=data.Length;
-        for(int i=1,j=0;i<n;i++)
+        for(int channel=0;channel<listeners*channels;channel++)
         {
-            int bit=n>>1;for(;(j&bit)!=0;bit>>=1)j^=bit;j^=bit;
-            if(i<j){var value=data[i];data[i]=data[j];data[j]=value;}
+            Array.Copy(sum,channel*bins,input,0,bins);input[0].y=input[fft/2].y=0;
+            for(int k=1;k<fft/2;k++)input[fft-k]=new Vector2(input[k].x,-input[k].y);
+            ImpulseResponseAudio.Fft(input,true);
+            for(int n=0;n<hop;n++)response.block[channel*hop+n]=input[fft-hop+n].x;
         }
-        for(int length=2;length<=n;length*=2)
-        {
-            double angle=(inverse?2:-2)*Math.PI/length;var step=new Vector2((float)Math.Cos(angle),(float)Math.Sin(angle));
-            for(int first=0;first<n;first+=length)
-            {
-                var w=Vector2.right;
-                for(int j=0;j<length/2;j++)
-                {var a=data[first+j];var b=data[first+j+length/2];b=new Vector2(b.x*w.x-b.y*w.y,b.x*w.y+b.y*w.x);data[first+j]=a+b;data[first+j+length/2]=a-b;w=new Vector2(w.x*step.x-w.y*step.y,w.x*step.y+w.y*step.x);}
-            }
-            if(length==n)break;
-        }
-        if(inverse)for(int i=0;i<n;i++)data[i]/=n;
     }
 }

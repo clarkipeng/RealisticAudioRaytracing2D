@@ -66,12 +66,12 @@ public partial class AudioManager : MonoBehaviour
     {
         [Serializable] public sealed class Report
         {
-            public int formatVersion=2,channelsPerListener;
+            public int formatVersion=3,channelsPerListener;
             public string scope="selected listener PCM; mono duplicates to device channels, binaural maps left/right; before Unity mixer/device processing";
             public string hrtfDataset,hrtfHash;
             public int hrtfTaps;
             public string callbackLayout="int64 firstSample, int32 frames, int32 channels, int64 startTicks, int64 durationTicks, float64 dspTimeSeconds";
-            public string responseLayout="int64 scheduledSample, int64 consumedSampleAtApplication, int64 applicationTicks, int32 pairs, float32(delaySeconds,gain,directionX,directionY,directionZ) per pair; world listener-to-arrival-origin";
+            public string responseLayout="int64 scheduledSample, int64 consumedSampleAtApplication, int64 applicationTicks, int32 pairs, float32(delaySeconds,gain,directionX,directionY,directionZ,delayRate) per pair; world listener-to-arrival-origin";
             public int sampleRate,leadSamples,listener,capacity;
             public double inputDspOriginSeconds;
             public long samples,callbacks,overflowSamples,channelMismatchSamples,stopwatchFrequency=Stopwatch.Frequency,requestedEndSample;

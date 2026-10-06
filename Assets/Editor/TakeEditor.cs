@@ -136,6 +136,7 @@ public sealed class TakeEditor : Editor
     {
         settings.transport=(TakeRender.Transport)EditorGUILayout.EnumPopup("Transport",settings.transport);
         if(settings.transport!=TakeRender.Transport.Raytraced)return;
+        settings.synthesis=(TakeRender.Synthesis)EditorGUILayout.EnumPopup("Synthesis",settings.synthesis);
         settings.raysPerBin=EditorGUILayout.IntField("Rays per frequency bin",settings.RaysPerBin);settings.raysPerPair=0;
         settings.seed=EditorGUILayout.IntField("Sampling seed",settings.seed);
         settings.maxBounces=EditorGUILayout.IntField("Maximum bounces",settings.maxBounces);

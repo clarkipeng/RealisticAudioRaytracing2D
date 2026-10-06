@@ -133,8 +133,8 @@ public static partial class TakeChecks
                 for(int i=0;i<expected.Length;i+=2) difference=Mathf.Max(difference,Mathf.Abs(expected[i]-expected[i+1]));
                 Near(error,0,"Binaural live/offline samples agree",1e-6f); Check(difference>.001f,"Export contains distinct left/right signals.");
             }
-            Check(report.hrtfHash==Hrtf.Load(rate).Hash && report.channelsPerListener==2 && report.formatVersion==2,"Export identifies its channel/direction format and HRTF.");
-            Check(new FileInfo(Path.Combine(path,"offline","responses.bin")).Length==(long)report.responseCount*(8+4*20),"Direction-bearing response rows have the declared layout.");
+            Check(report.hrtfHash==Hrtf.Load(rate).Hash && report.channelsPerListener==2 && report.formatVersion==3,"Export identifies its channel/direction format and HRTF.");
+            Check(new FileInfo(Path.Combine(path,"offline","responses.bin")).Length==(long)report.responseCount*(8+4*24),"Direction-bearing response rows have the declared layout.");
             using(var reader=new BinaryReader(File.OpenRead(Path.Combine(path,"offline","responses.bin"))))
             {reader.ReadInt64(); reader.ReadSingle(); reader.ReadSingle(); Vector3 direction=new Vector3(reader.ReadSingle(),reader.ReadSingle(),reader.ReadSingle()); Near(Vector3.Distance(direction,(states[0].position-states[2].position).normalized),0,"Exported direction points toward the source",1e-6f);}
         }

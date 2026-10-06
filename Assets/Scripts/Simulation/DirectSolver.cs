@@ -15,7 +15,7 @@ public sealed class DirectSolver : IDisposable
     }
     [StructLayout(LayoutKind.Sequential)] struct GpuState
     {
-        public Vector4 position,rotation;
+        public Vector4 position,rotation,velocity,angularVelocity;
         public uint flags,pad0,pad1,pad2;
     }
     readonly AcousticTake.Scene scene;
@@ -46,8 +46,8 @@ public sealed class DirectSolver : IDisposable
     public long PairPrimitiveUpperBound {get;private set;}
     public int SolveCount {get;private set;}
     public string Backend => shader==null ? "CPU":"GPU-"+SystemInfo.graphicsDeviceType;
-    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*48)+(bvh?.NumericBytes??0)+(transport?.CpuBytes??0);
-    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*48*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames+(bvh==null?0:(long)Math.Max(1,bvh.Nodes.Length)*48+(long)Math.Max(1,geometry.Length)*4)+(transport?.GpuBytes??0);
+    public long CpuBufferBytes => (long)cpuState.Length*80+(long)(cpuPaths.Length+completedPaths.Length)*TakeRender.DirectPathStride+(packed==null ? 0:(long)packed.Length*80)+(bvh?.NumericBytes??0)+(transport?.CpuBytes??0);
+    public long GpuBufferBytes => shader==null ? 0:(long)Math.Max(1,geometry.Length)*64+(long)scene.objects.Length*80*maximumFrames+(long)(scene.sources.Length+scene.listeners.Length)*4+(long)pairs*TakeRender.DirectPathStride*maximumFrames+(bvh==null?0:(long)Math.Max(1,bvh.Nodes.Length)*48+(long)Math.Max(1,geometry.Length)*4)+(transport?.GpuBytes??0);
     public double BvhBuildSeconds => bvh?.BuildSeconds??0;
     public double BvhUpdateSeconds => bvh?.UpdateSeconds??0;
     public int BvhUpdates => bvh?.UpdateCount??0;
@@ -67,7 +67,7 @@ public sealed class DirectSolver : IDisposable
         if (shader==null)
         {if(settings.transport==TakeRender.Transport.Raytraced)throw new InvalidOperationException("Raytraced transport requires the shared Direct compute shader.");return;}
         if (!SystemInfo.supportsComputeShaders || pairs==0) throw new InvalidOperationException("Direct GPU solve requires compute support and source/listener pairs.");
-        if (Marshal.SizeOf<GpuPrimitive>()!=64 || Marshal.SizeOf<GpuState>()!=48 || Marshal.SizeOf<DirectBvh.Node>()!=48 || Marshal.SizeOf<TakeRender.DirectPath>()!=TakeRender.DirectPathStride)
+        if (Marshal.SizeOf<GpuPrimitive>()!=64 || Marshal.SizeOf<GpuState>()!=80 || Marshal.SizeOf<DirectBvh.Node>()!=48 || Marshal.SizeOf<TakeRender.DirectPath>()!=TakeRender.DirectPathStride)
             throw new InvalidOperationException("Direct solver GPU ABI mismatch.");
         this.shader=UnityEngine.Object.Instantiate(shader);
         try
@@ -78,7 +78,7 @@ public sealed class DirectSolver : IDisposable
             for (int i=0; i<geometry.Length; i++) data[i]=new GpuPrimitive {a=geometry[i].a,b=geometry[i].b,c=geometry[i].c,
                 objectIndex=(uint)geometry[i].objectIndex,materialIndex=(uint)geometry[i].materialIndex};
             primitives=new ComputeBuffer(data.Length,64); primitives.SetData(data);
-            packed=new GpuState[checked(scene.objects.Length*maximumFrames)]; states=new ComputeBuffer(packed.Length,48);
+            packed=new GpuState[checked(scene.objects.Length*maximumFrames)]; states=new ComputeBuffer(packed.Length,80);
             var indices=new int[scene.sources.Length];
             for (int i=0; i<indices.Length; i++) indices[i]=scene.sources[i].objectIndex;
             sources=new ComputeBuffer(indices.Length,4); sources.SetData(indices);
@@ -141,7 +141,7 @@ public sealed class DirectSolver : IDisposable
             }
         }
         for (int i=0;i<frames*scene.objects.Length;i++) packed[i]=new GpuState {position=state[i].position,
-            rotation=new Vector4(state[i].rotation.x,state[i].rotation.y,state[i].rotation.z,state[i].rotation.w),flags=(uint)state[i].flags};
+            rotation=new Vector4(state[i].rotation.x,state[i].rotation.y,state[i].rotation.z,state[i].rotation.w),velocity=state[i].velocity,angularVelocity=state[i].angularVelocity,flags=(uint)state[i].flags};
         states.SetData(packed,0,0,frames*scene.objects.Length); shader.SetInt("FrameCount",frames); UploadSeconds+=TakeRender.Elapsed(start);
     }
     public void BeginSolve(AcousticTake.State[] state,int frames=1)

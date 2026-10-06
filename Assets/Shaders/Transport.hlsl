@@ -3,7 +3,7 @@
 // This is not a validated wave/diffraction reference.
 struct RayMaterial { float4 surface,medium; };
 struct Edge { float4 a,b; uint4 ids; };
-struct RayPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,reserved; };
+struct RayPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,identity; };
 StructuredBuffer<RayMaterial> RayMaterials;
 StructuredBuffer<Edge> Edges;
 struct Volume { float4 minimum,maximum; uint4 ids; };
@@ -28,11 +28,22 @@ float AirCoefficient(float hz)
     float at=clamp(log2(max(125,hz)/125),0,7);uint a=(uint)at;
     return lerp(losses[a],losses[min(a+1,7)],frac(at))/8.685889638;
 }
-float PrimitiveDistance(uint id,uint offset,float3 o,float3 d,bool planar,out float3 normal)
+float3 PastPoint(State state,float3 local,float lag)
+{
+    float3 worldPoint=Rotate(state.rotation,local);
+    if((state.flags.x&48)==32)
+    {
+        float angle=length(state.angularVelocity.xyz)*lag;
+        if(angle>0){float3 axis=normalize(state.angularVelocity.xyz);worldPoint=worldPoint*cos(angle)-cross(axis,worldPoint)*sin(angle)+axis*dot(axis,worldPoint)*(1-cos(angle));}
+        return state.position.xyz-state.velocity.xyz*lag+worldPoint;
+    }
+    return state.position.xyz+worldPoint;
+}
+float PrimitiveDistanceAt(uint id,uint offset,float3 o,float3 d,bool planar,float lag,out float3 normal)
 {
     Primitive p=Primitives[id];State state=States[offset+p.indices.x];normal=0;
     if((state.flags.x&3)!=3)return 1e30;
-    float3 a=state.position.xyz+Rotate(state.rotation,p.a.xyz),b=state.position.xyz+Rotate(state.rotation,p.b.xyz);
+    float3 a=PastPoint(state,p.a.xyz,lag),b=PastPoint(state,p.b.xyz,lag);
     if(planar)
     {
         float2 e=b.xy-a.xy,q=a.xy-o.xy;float det=d.x*e.y-d.y*e.x;
@@ -40,11 +51,13 @@ float PrimitiveDistance(uint id,uint offset,float3 o,float3 d,bool planar,out fl
         float t=(q.x*e.y-q.y*e.x)/det,u=(q.x*d.y-q.y*d.x)/det;
         normal=normalize(float3(-e.y,e.x,0));return t>RayEpsilon && u>=0 && u<=1?t:1e30;
     }
-    float3 c=state.position.xyz+Rotate(state.rotation,p.c.xyz),e1=b-a,e2=c-a,h=cross(d,e2);
+    float3 c=PastPoint(state,p.c.xyz,lag),e1=b-a,e2=c-a,h=cross(d,e2);
     float det=dot(e1,h);if(abs(det)<1e-12)return 1e30;
     float3 s=o-a,q=cross(s,e1);float u=dot(s,h)/det,v=dot(d,q)/det,t=dot(e2,q)/det;
     normal=normalize(cross(e1,e2));return t>RayEpsilon && u>=0 && v>=0 && u+v<=1?t:1e30;
 }
+float PrimitiveDistance(uint id,uint offset,float3 o,float3 d,bool planar,out float3 normal)
+{return PrimitiveDistanceAt(id,offset,o,d,planar,0,normal);}
 bool NearestHit(uint offset,float3 o,float3 d,float limit,bool planar,out uint hit,out float distance,out float3 normal)
 {
     hit=0xffffffff;distance=limit;normal=0;
@@ -110,41 +123,60 @@ void Travel(float distance,uint medium,uint bin,float hz,inout float time,inout 
     time+=distance*MediumIor(medium,bin)/SpeedOfSound;
     gain*=exp(-MediumLoss(medium,bin,hz)*distance);
 }
-RayPath Arrival(uint offset,uint listener,float3 origin,float3 end,float delay,float gain,uint bin)
+RayPath Arrival(uint offset,uint listener,float3 origin,float3 end,float delay,float gain,uint bin,float ratio=1,uint identity=0)
 {
     RayPath value=(RayPath)0;
     if(delay<0 || delay>MaximumPathDelay || gain==0)return value;
     float3 direction=origin-end;float distance=length(direction);direction=distance>0?direction/distance:float3(0,0,0);
-    value.direction=float4(direction,0);value.delaySeconds=delay;value.pressureGain=gain;
-    value.frequencyBin=bin;return value;
+    value.direction=float4(direction,1-ratio);value.delaySeconds=delay;value.pressureGain=gain;
+    value.frequencyBin=bin;value.identity=identity;return value;
 }
+// Retarded source position; interfaces retain the scene pose of this solve.
+// Iteration follows piecewise material travel time, not distance / air speed.
 void SpectralDirect(uint index,bool planar)
 {
     if(index>=FrameCount*PairCount*FrequencyBins)return;
     uint bin=index%FrequencyBins,query=index/FrequencyBins,frame=query/PairCount,pair=query%PairCount;
     uint offset=frame*ObjectCount,source=Sources[pair/ListenerCount],listener=Listeners[pair%ListenerCount];
-    float3 a=States[offset+source].position.xyz,b=States[offset+listener].position.xyz;if(planar){a.z=0;b.z=0;}
-    float lengthTo=length(b-a),gain=ReferenceDistance/max(MinimumDistance,lengthTo),hz=max(1,bin*FrequencyStep);
-    float3 direction=lengthTo>0?(b-a)/lengthTo:float3(0,0,0),position=a;float remaining=lengthTo,time=0;
-    uint medium=MediumAt(offset,a,planar);
-    // Deterministic direct/transmitted path: keep every frequency even at low ray budgets.
-    for(uint crossing=0;crossing<PrimitiveCount && remaining>2*RayEpsilon;crossing++)
+    float3 sourceNow=States[offset+source].position.xyz,b=States[offset+listener].position.xyz;
+    float3 sv=Velocity(offset+source),lv=Velocity(offset+listener);if(planar){sourceNow.z=0;b.z=0;sv.z=0;lv.z=0;}
+    float hz=max(1,bin*FrequencyStep),estimate=RetardedDelay(b-sourceNow,sv,SpeedOfSound/MediumIor(MediumAt(offset,sourceNow,planar),bin));
+    float time=0,gain=0,ratio=1,lower=0,upper=MaximumPathDelay;float3 a=sourceNow;uint identity=1;bool converged=false;
+    estimate=min(estimate,upper);
+    // Alternate fixed-point proposals with bisection. A bracket prevents slow
+    // material transitions or float-level cycles from defeating convergence.
+    for(uint iteration=0;iteration<64;iteration++)
     {
-        uint hit;float distance;float3 normal;
-        if(!NearestHit(offset,position,direction,remaining-RayEpsilon,planar,hit,distance,normal))break;
-        Travel(distance,medium,bin,hz,time,gain);
-        RayMaterial material=RayMaterials[Primitives[hit].indices.y*FrequencyBins+bin];
-        gain*=sqrt(saturate((1-material.surface.x)*material.surface.z));
-        if(gain==0)break;
-        position+=direction*distance;remaining-=distance;
-        medium=MediumAt(offset,position+direction*(2*RayEpsilon),planar);
+        a=sourceNow-sv*estimate;float remaining=length(b-a);float3 direction=remaining>0?(b-a)/remaining:float3(0,0,0),position=a;
+        gain=ReferenceDistance/max(MinimumDistance,remaining);time=0;identity=1;
+        uint medium=MediumAt(offset,a,planar);float speed=SpeedOfSound/MediumIor(medium,bin);
+        ratio=1/(1-dot(sv,direction)/speed);
+        for(uint crossing=0;crossing<PrimitiveCount && remaining>2*RayEpsilon;crossing++)
+        {
+            uint hit;float distance;float3 normal;
+            if(!NearestHit(offset,position,direction,remaining-RayEpsilon,planar,hit,distance,normal))break;
+            Travel(distance,medium,bin,hz,time,gain);
+            RayMaterial material=RayMaterials[Primitives[hit].indices.y*FrequencyBins+bin];
+            gain*=sqrt(saturate((1-material.surface.x)*material.surface.z));
+            position+=direction*distance;remaining-=distance;
+            uint next=MediumAt(offset,position+direction*(2*RayEpsilon),planar);
+            float nextSpeed=SpeedOfSound/MediumIor(next,bin);float3 velocity=PointVelocity(offset+Primitives[hit].indices.x,position);
+            ratio*=(1-dot(velocity,direction)/speed)/(1-dot(velocity,direction)/nextSpeed);
+            identity=HashRay(identity^(hit+1));medium=next;speed=nextSpeed;
+        }
+        Travel(remaining,medium,bin,hz,time,gain);ratio*=1-dot(lv,direction)/speed;
+        float tolerance=4e-7*max(1,time);
+        if(abs(time-estimate)<=tolerance){converged=true;break;}
+        if(time>MaximumPathDelay && estimate>=MaximumPathDelay)break;
+        if(time>estimate)lower=estimate;else upper=estimate;
+        if(upper-lower<=tolerance){time=estimate;converged=true;break;}
+        estimate=(iteration%2==0 && time>lower && time<upper)?time:(lower+upper)*.5;
     }
-    Travel(remaining,medium,bin,hz,time,gain);
-    RayPaths[query*SlotsPerPair+bin]=Arrival(offset,listener,a,b,time,gain,bin);
+    RayPaths[query*SlotsPerPair+bin]=Arrival(offset,listener,a,b,time,gain,bin,converged?ratio:asfloat(0x7fc00000),identity);
 }
-bool NearbyEdge(uint offset,float3 origin,float3 direction,float before,float threshold,bool planar,out float3 edgePoint,out float weight)
+bool NearbyEdge(uint offset,float3 origin,float3 direction,float before,float threshold,bool planar,out float3 edgePoint,out float weight,out uint edgeId)
 {
-    edgePoint=0;weight=0;float closest=before;
+    edgePoint=0;weight=0;edgeId=0;float closest=before;
     if(threshold<=0)return false;
     for(uint i=0;i<EdgeCount;i++)
     {
@@ -158,7 +190,7 @@ bool NearbyEdge(uint offset,float3 origin,float3 direction,float before,float th
         float distance=length(candidate-(origin+direction*along));
         if(along<=RayEpsilon || along>=closest || length(candidate-origin)<=threshold || distance>=threshold)continue;
         if(!Visible(offset,origin,candidate,planar))continue;
-        edgePoint=candidate;closest=along;weight=1-distance/threshold;
+        edgePoint=candidate;closest=along;weight=1-distance/threshold;edgeId=i;
     }
     return weight>0;
 }
@@ -170,29 +202,49 @@ RayPath MirrorPath(uint offset,uint source,uint listener,uint bin,uint sampleInd
     RayPath result=(RayPath)0;if(PrimitiveCount==0)return result;
     uint id=(sampleIndex+HashRay(source*0x85ebca6b+listener+RaySeed))%PrimitiveCount;
     Primitive p=Primitives[id];State pose=States[offset+p.indices.x];if((pose.flags.x&3)!=3)return result;
-    float3 a=pose.position.xyz+Rotate(pose.rotation,p.a.xyz),b=pose.position.xyz+Rotate(pose.rotation,p.b.xyz);
-    float3 normal=planar?normalize(float3(-(b-a).y,(b-a).x,0)):
-        normalize(cross(b-a,pose.position.xyz+Rotate(pose.rotation,p.c.xyz)-a));
-    float3 start=States[offset+source].position.xyz,end=States[offset+listener].position.xyz;
-    if(planar){start.z=0;end.z=0;}
-    if(dot(start-a,normal)*dot(end-a,normal)<=0)return result;
-    float3 image=start-2*normal*dot(start-a,normal),direction=normalize(end-image),unused;
-    float distance=PrimitiveDistance(id,offset,image,direction,planar,unused),imageLength=length(end-image);
-    if(distance>=imageLength-RayEpsilon)return result;
-    float3 reflectionPoint=image+direction*distance;
-    // A mirror reflectionPoint on a shared triangle edge belongs to one primitive only.
+    float3 sourceNow=States[offset+source].position.xyz,end=States[offset+listener].position.xyz;
+    float3 sv=Velocity(offset+source),lv=Velocity(offset+listener);if(planar){sourceNow.z=0;end.z=0;sv.z=0;lv.z=0;}
+    uint medium=MediumAt(offset,sourceNow,planar);float speed=SpeedOfSound/MediumIor(medium,bin);
+    float total=length(end-sourceNow)/speed,last=total*.5,distance=0;float3 start=sourceNow,reflectionPoint=0,image=0,direction=0,unused;
+    bool converged=false;
+    for(uint iteration=0;iteration<32;iteration++)
+    {
+        float3 a=PastPoint(pose,p.a.xyz,last),b=PastPoint(pose,p.b.xyz,last);
+        float3 normal=planar?normalize(float3(-(b-a).y,(b-a).x,0)):normalize(cross(b-a,PastPoint(pose,p.c.xyz,last)-a));
+        start=sourceNow-sv*total;
+        if(dot(start-a,normal)*dot(end-a,normal)<=0)return result;
+        image=start-2*normal*dot(start-a,normal);direction=normalize(end-image);
+        distance=PrimitiveDistanceAt(id,offset,image,direction,planar,last,unused);
+        if(distance>=length(end-image)-RayEpsilon)return result;
+        reflectionPoint=image+direction*distance;
+        float nextLast=length(end-reflectionPoint)/speed,nextTotal=length(start-reflectionPoint)/speed+nextLast;
+        if(abs(nextTotal-total)+abs(nextLast-last)<4e-7*max(1,nextTotal)){total=nextTotal;last=nextLast;converged=true;break;}
+        total=nextTotal;last=nextLast;
+    }
     for(uint other=0;other<id;other++)
     {
         if(Primitives[other].indices.x!=p.indices.x)continue;
-        float t=PrimitiveDistance(other,offset,image,direction,planar,unused);
+        float t=PrimitiveDistanceAt(other,offset,image,direction,planar,last,unused);
         if(abs(t-distance)<RayEpsilon)return result;
     }
-    if(!Visible(offset,start,reflectionPoint,planar) || !Visible(offset,reflectionPoint,end,planar))return result;
+    // Test the two legs against other objects at the solve pose. The reflecting
+    // primitive is tested at reflection time above, so omit its owner here.
+    for(uint other=0;other<PrimitiveCount;other++)
+    {
+        if(other==id)continue;
+        float lag=Primitives[other].indices.x==p.indices.x?last:0;
+        float firstLength=length(reflectionPoint-start),lastLength=length(end-reflectionPoint);
+        if(PrimitiveDistanceAt(other,offset,start,normalize(reflectionPoint-start),planar,lag,unused)<firstLength-RayEpsilon ||
+            PrimitiveDistanceAt(other,offset,reflectionPoint,normalize(end-reflectionPoint),planar,lag,unused)<lastLength-RayEpsilon)return result;
+    }
+    float3 incoming=normalize(reflectionPoint-start),outgoing=normalize(end-reflectionPoint),velocity=PointVelocity(offset+p.indices.x,reflectionPoint,last);
+    if(planar)velocity.z=0;
+    float ratio=(speed-dot(lv,outgoing))/(speed-dot(sv,incoming))*(speed-dot(velocity,incoming))/(speed-dot(velocity,outgoing));
     RayMaterial material=RayMaterials[p.indices.y*FrequencyBins+bin];
     float gain=sqrt(saturate((1-material.surface.x)*(1-material.surface.z)*(1-material.surface.y)));
-    float time=0,lengthTo=length(start-reflectionPoint)+length(end-reflectionPoint);
-    Travel(lengthTo,MediumAt(offset,start,planar),bin,max(1,bin*FrequencyStep),time,gain);
-    return Arrival(offset,listener,reflectionPoint,end,time,gain*(float)PrimitiveCount/RaysPerBin*ReferenceDistance/max(MinimumDistance,lengthTo),bin);
+    float time=0,lengthTo=total*speed;Travel(lengthTo,medium,bin,max(1,bin*FrequencyStep),time,gain);
+    return Arrival(offset,listener,reflectionPoint,end,time,gain*(float)PrimitiveCount/RaysPerBin*ReferenceDistance/max(MinimumDistance,lengthTo),bin,
+        converged?ratio:asfloat(0x7fc00000),HashRay(0x40000000u^id));
 }
 void TracePaths(uint index,bool planar)
 {
@@ -208,6 +260,9 @@ void TracePaths(uint index,bool planar)
     if(planar){position.z=0;end.z=0;}
     float3 direction=UnitDirection(rng,planar);float gain=1,time=0,pathLength=0;
     uint medium=MediumAt(offset,position,planar);
+    float3 sv=Velocity(offset+source),lv=Velocity(offset+listener);if(planar){sv.z=0;lv.z=0;}
+    float ratio=1/(1-dot(sv,direction)/(SpeedOfSound/MediumIor(medium,bin)));
+    uint identity=HashRay(0x80000000u^(ray%RaysPerBin));
     float weight=1.0/RaysPerBin;
     for(uint bounce=0;bounce<MaxBounces;bounce++)
     {
@@ -215,25 +270,32 @@ void TracePaths(uint index,bool planar)
         if(limit<=0 || gain==0)break;
         uint hit;float distance;float3 normal;
         bool intersects=NearestHit(offset,position,direction,limit,planar,hit,distance,normal);
-        float3 corner;float cornerWeight;
-        if(medium==AirMedium && NearbyEdge(offset,position,direction,distance,threshold,planar,corner,cornerWeight))
+        float3 corner;float cornerWeight;uint edgeId;
+        if(medium==AirMedium && NearbyEdge(offset,position,direction,distance,threshold,planar,corner,cornerWeight,edgeId))
         {
             float travelled=length(corner-position);time+=travelled/speed;pathLength+=travelled;
             gain*=cornerWeight*exp(-AirCoefficient(hz)*travelled);
-            float last=length(end-corner);
+            float last=length(end-corner);float3 outgoing=normalize(end-corner),velocity=PointVelocity(offset+Edges[edgeId].ids.x,corner);
+            if(planar)velocity.z=0;identity=HashRay(identity^(edgeId+0x20000000u));
+            float arrivalRatio=ratio*(1-dot(velocity,direction)/speed)/(1-dot(velocity,outgoing)/SpeedOfSound)*(1-dot(lv,outgoing)/SpeedOfSound);
             if(Visible(offset,corner,end,planar))RayPaths[first+bounce]=Arrival(offset,listener,corner,end,time+last/SpeedOfSound,
-                gain*weight*exp(-AirCoefficient(hz)*last)*ReferenceDistance/max(MinimumDistance,pathLength+last),bin);
-            direction=normalize(lerp(direction,normalize(corner-position),cornerWeight));position=corner+direction*RayEpsilon;continue;
+                gain*weight*exp(-AirCoefficient(hz)*last)*ReferenceDistance/max(MinimumDistance,pathLength+last),bin,arrivalRatio,identity);
+            float3 nextDirection=normalize(lerp(direction,normalize(corner-position),cornerWeight));
+            ratio*=(1-dot(velocity,direction)/speed)/(1-dot(velocity,nextDirection)/speed);direction=nextDirection;position=corner+direction*RayEpsilon;continue;
         }
         if(!intersects)break;
         position+=direction*distance;Travel(distance,medium,bin,hz,time,gain);pathLength+=distance;
         RayMaterial material=RayMaterials[Primitives[hit].indices.y*FrequencyBins+bin];
         gain*=sqrt(saturate(1-material.surface.x));
         bool entering=dot(direction,normal)<0;float3 n=entering?normal:-normal;
+        float3 velocity=PointVelocity(offset+Primitives[hit].indices.x,position);if(planar)velocity.z=0;
+        identity=HashRay(identity^(hit+1));
+        float3 toListener=normalize(end-position);
+        float arrivalRatio=ratio*(1-dot(velocity,direction)/speed)/(1-dot(velocity,toListener)/speed)*(1-dot(lv,toListener)/speed);
         float last=length(end-position),cosine=last>0?max(0,dot(n,(end-position)/last)):0;
         if(cosine>0 && Visible(offset,position+n*RayEpsilon,end,planar))
             RayPaths[first+bounce]=Arrival(offset,listener,position,end,time+last/speed,
-                gain*sqrt(saturate((1-material.surface.z)*material.surface.y))*weight*cosine*.5*exp(-MediumLoss(medium,bin,hz)*last)*ReferenceDistance/max(MinimumDistance,pathLength+last),bin);
+                gain*sqrt(saturate((1-material.surface.z)*material.surface.y))*weight*cosine*.5*exp(-MediumLoss(medium,bin,hz)*last)*ReferenceDistance/max(MinimumDistance,pathLength+last),bin,arrivalRatio,identity);
         uint nextMedium=MediumAt(offset,position+direction*(2*RayEpsilon),planar);
         float nextIor=MediumIor(nextMedium,bin);
         float reflectance=1-saturate(material.surface.z),cosTheta=abs(dot(direction,n));
@@ -241,10 +303,13 @@ void TracePaths(uint index,bool planar)
         if(RandomRay(rng)>reflectance)
         {
             float3 transmitted=refract(direction,n,currentIor/nextIor);
-            if(dot(transmitted,transmitted)>0){direction=normalize(transmitted);medium=nextMedium;continue;}
+            if(dot(transmitted,transmitted)>0)
+            {transmitted=normalize(transmitted);ratio*=(1-dot(velocity,direction)/speed)/(1-dot(velocity,transmitted)/(SpeedOfSound/nextIor));
+                identity=HashRay(identity^0x10000000u);direction=transmitted;medium=nextMedium;continue;}
         }
         float3 diffuse=UnitDirection(rng,planar);if(dot(diffuse,n)<0)diffuse=-diffuse;
-        direction=RandomRay(rng)<saturate(material.surface.y)?diffuse:reflect(direction,n);
+        float3 nextDirection=RandomRay(rng)<saturate(material.surface.y)?diffuse:reflect(direction,n);
+        ratio*=(1-dot(velocity,direction)/speed)/(1-dot(velocity,nextDirection)/speed);direction=nextDirection;
     }
 }
 [numthreads(64,1,1)] void SpectralDirect2D(uint3 id:SV_DispatchThreadID){SpectralDirect(id.x,true);}

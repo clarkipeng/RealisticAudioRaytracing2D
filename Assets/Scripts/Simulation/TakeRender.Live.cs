@@ -120,6 +120,7 @@ public static partial class TakeRender
                             while (interval+1<pending && sample>=observations[(head+interval)%observations.Length].end) interval++;
                             var observed=observations[(head+interval)%observations.Length];
                             AcousticTake.Interpolate(Math.Min(sample,observed.to),observed.from,observed.to,sampleRate,observed.left,observed.right,evaluated);
+                            if(sample>observed.to)FreezeMotion(evaluated);
                             Array.Copy(evaluated,0,batchStates,f*evaluated.Length,evaluated.Length);
                         }
                         long start=Stopwatch.GetTimestamp(); solver.BeginSolve(batchStates,batchCount);

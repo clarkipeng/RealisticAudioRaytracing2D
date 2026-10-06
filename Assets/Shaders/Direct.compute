@@ -12,7 +12,7 @@
 #pragma kernel Direct3DBvh USE_BVH
 
 struct Primitive { float4 a,b,c; uint4 indices; };
-struct State { float4 position,rotation; uint4 flags; };
+struct State { float4 position,rotation,velocity,angularVelocity; uint4 flags; };
 StructuredBuffer<Primitive> Primitives;
 StructuredBuffer<State> States;
 StructuredBuffer<uint> Sources,Listeners;
@@ -22,6 +22,17 @@ uint PrimitiveCount,PairCount,ListenerCount,ObjectCount,FrameCount;
 float SpeedOfSound,ReferenceDistance,MinimumDistance;
 
 float3 Rotate(float4 q,float3 v) { return v+2*cross(q.xyz,cross(q.xyz,v)+q.w*v); }
+// Motion is valid only within a continuous pose segment. Cuts never imply velocity.
+float3 Velocity(uint index) { State s=States[index];return (s.flags.x&48)==32?s.velocity.xyz:float3(0,0,0); }
+float3 PointVelocity(uint index,float3 location,float lag=0)
+{
+    State s=States[index];return Velocity(index)+((s.flags.x&48)==32?cross(s.angularVelocity.xyz,location-(s.position.xyz-Velocity(index)*lag)):float3(0,0,0));
+}
+float RetardedDelay(float3 displacement,float3 velocity,float speed)
+{
+    float a=speed*speed-dot(velocity,velocity),b=dot(displacement,velocity);
+    return a>0?(b+sqrt(max(0,b*b+a*dot(displacement,displacement))))/a:asfloat(0x7fc00000);
+}
 bool Segment(float2 o,float2 d,float2 a,float2 b)
 {
     float2 e=b-a,q=a-o;
@@ -91,7 +102,11 @@ void Solve(uint pair,bool planar)
     float3 o=States[stateOffset+Sources[localPair/ListenerCount]].position.xyz;
     float3 end=States[stateOffset+Listeners[localPair%ListenerCount]].position.xyz;
     if (planar) { o.z=0; end.z=0; }
-    float3 d=end-o;
+    float3 sv=Velocity(stateOffset+Sources[localPair/ListenerCount]),lv=Velocity(stateOffset+Listeners[localPair%ListenerCount]);
+    if(planar){sv.z=0;lv.z=0;}
+    float delay=RetardedDelay(end-o,sv,SpeedOfSound);o-=sv*delay;
+    float3 d=end-o,n=length(d)>0?normalize(d):float3(0,0,0);
+    float delayRate=1-(SpeedOfSound-dot(lv,n))/(SpeedOfSound-dot(sv,n));
     bool blocked=false;
 #ifdef USE_BVH
     blocked=BvhBlocked(stateOffset,o,d,planar);
@@ -106,8 +121,8 @@ void Solve(uint pair,bool planar)
 #endif
     float distance=length(d);
     DirectPath path=(DirectPath)0;
-    path.direction=float4(distance>0 ? -d/distance:float3(0,0,0),0);
-    path.response=float2(distance/SpeedOfSound,blocked ? 0:ReferenceDistance/max(distance,MinimumDistance));
+    path.direction=float4(distance>0 ? -d/distance:float3(0,0,0),delayRate);
+    path.response=float2(delay,blocked ? 0:ReferenceDistance/max(distance,MinimumDistance));
     Responses[pair]=path;
 }
 [numthreads(64,1,1)] void Direct2D(uint3 id:SV_DispatchThreadID) { Solve(id.x,true); }

@@ -10,7 +10,7 @@ public static partial class TakeChecks
     // Read the private GPU response contract without widening the production API for tests.
     static Array Arrivals(DirectSolver solver) => (Array)typeof(DirectSolver).GetProperty("RayPaths",BindingFlags.Instance|BindingFlags.NonPublic).GetValue(solver);
     static T ArrivalField<T>(Array paths,int index,string field) => (T)paths.GetValue(index).GetType().GetField(field).GetValue(paths.GetValue(index));
-    static TakeRender.Settings SpectralSettings() => new TakeRender.Settings {transport=TakeRender.Transport.Raytraced,
+    static TakeRender.Settings SpectralSettings() => new TakeRender.Settings {transport=TakeRender.Transport.Raytraced,synthesis=TakeRender.Synthesis.Spectral,
         responseStepSamples=128,fftSize=128,spectralHop=32,raysPerBin=4,maxBounces=3,maximumDelaySeconds=.1f,
         maximumResponsesPerBatch=4,speedOfSound=8000,minimumDistance=1,airAbsorption=false,diffractionFactor=0,tailSamples=256};
 
@@ -21,7 +21,7 @@ public static partial class TakeChecks
         try
         {
             var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-            TransportMaterials();TransportGeometry(shader);TransportMedia(shader);TransportNativeVolumes(shader);SpectralConvolutionChecks();MirrorChecks(shader);SpectralIdentity(shader);SpectralDoppler(shader);SpectralTransitions(shader);SpectralHeadTurns(shader);
+            TransportMaterials();TransportGeometry(shader);TransportMedia(shader);TransportNativeVolumes(shader);SpectralConvolutionChecks();MirrorChecks(shader);SpectralIdentity(shader);SpectralDoppler(shader);MotionDoppler(shader);SpectralTransitions(shader);SpectralHeadTurns(shader);
             SpectralStreaming(shader,AcousticTake.Dimension.Spatial3D);SpectralStreaming(shader,AcousticTake.Dimension.Planar2D);
             Debug.Log("ACOUSTIC_TRANSPORT_PASS: "+checks+" checks on "+SystemInfo.graphicsDeviceType);
         }
@@ -226,9 +226,10 @@ public static partial class TakeChecks
         foreach(int fft in new[]{64,128})foreach(int hop in new[]{fft/2,fft/4})
         foreach(bool ears in new[]{false,true})foreach(float delay in new[]{0,1,31,32,63,129,31.25f})
         foreach(var filter in new[]{TakeRender.DelayFilter.Linear,TakeRender.DelayFilter.WindowedSinc})
+        foreach(var method in new[]{TakeRender.Synthesis.Spectral,TakeRender.Synthesis.ImpulseResponse})
         {
             var settings=SpectralSettings();settings.fftSize=fft;settings.spectralHop=hop;settings.responseStepSamples=128;
-            settings.delayFilter=filter;settings.raysPerBin=1;settings.maxBounces=1;settings.listenerOutput=ears?TakeRender.ListenerOutput.Binaural:TakeRender.ListenerOutput.Mono;
+            settings.synthesis=method;settings.delayFilter=filter;settings.raysPerBin=1;settings.maxBounces=1;settings.listenerOutput=ears?TakeRender.ListenerOutput.Binaural:TakeRender.ListenerOutput.Mono;
             var pcm=new float[256];pcm[31]=1;pcm[127]=-.3f;
             var signal=new TakeRender.Signal(pcm);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
             var mixer=new TakeRender.Mixer(scene,8192,settings,new[]{signal});

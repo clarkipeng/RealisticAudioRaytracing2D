@@ -1,6 +1,6 @@
 # Acoustic simulation and reconstruction: design contract
 
-Updated 2026-10-05 against the current Unity 6 working tree. This is the single design specification for scenes, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
+Updated 2026-10-06 against the current Unity 6 working tree. This is the single design specification for scenes, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
 
 [README](../README.md) remains the operating guide for actual APIs and workflows. [Cleanup results](cleanup-results.md) contains the current station offline benchmarks and explicitly dated historical measurements.
 
@@ -32,7 +32,7 @@ The [system audit below](#system-audit-2026-10-05) sets the immediate repair ord
 |---|---|---|
 | Unity authoring and capture | Native 2D/3D geometry export, rigid motion, activation, stable IDs, source events, immutable take files; editable station, train service with stops and walking aboard, and door with two sources and one binaural listener. | AcousticLab and scripted dataset scenarios. |
 | Replay and computation | Pose replay/scrubbing, CPU/HLSL direct solvers with optional static BVH plus direct tests for moving objects, shared live/offline timeline and mixer, WAV/response export, batch jobs and measured station offline benchmarks. | Take browser, scene-independent playback, shared visual snapshots and continuous bounded playback; then validated indirect transport and richer saved response payloads. |
-| Directional spectral preview | Shared 2D/3D GPU transport with multi-bounce reflection/scattering, transmission/refraction, air/material losses and edge diffraction heuristics. Configurable frequency grid, partitioned linear convolution, interpolated per-arrival KEMAR orientation, samplewise response crossfades and first-order image-source reflections; same live/offline implementation. Closed 2D/3D objects use per-medium speed/damping, including nested solids and interior sources. | Physical normalization/convergence, higher-order mirror connections, directional dataset export and validation of complex moving boundaries. The preview is not an approved training reference. |
+| Directional spectral preview | Shared 2D/3D GPU transport with multi-bounce reflection/scattering, transmission/refraction, air/material losses and edge diffraction heuristics. Configurable frequency grid, selectable scene-IR or continuous path-clock spectral synthesis, interpolated per-arrival KEMAR orientation, samplewise response crossfades and first-order image-source reflections; same live/offline implementation. Closed 2D/3D objects use per-medium speed/damping, including nested solids and interior sources. | Physical normalization/convergence, higher-order mirror connections, directional dataset export and validation of complex moving boundaries. The preview is not an approved training reference. |
 | Multiple endpoints | Every source/listener pair; mono or binaural mix per head; one monitored listener. | Larger workload benchmarks and explicit local receiver selection for multiplayer. |
 | Comparison | Coarse/fine schedules, metrics/reference gate, native audio A/B/Difference, waveform/spectrogram plots and synchronized listener/top-down/free-camera views. | Per-pair target checks, learned outputs and validated reflection comparisons. |
 | Runtime | Bounded PCM/capture queues, live/offline GPU response batches, fractional-delay FIR, provenance and diagnostics. | Lower measured latency, GPU synthesis, reconstruction scheduling. |
@@ -56,11 +56,38 @@ Critical constraints:
 Still unresolved before their respective milestones: the indirect estimator's receiver/PDF normalization; phase-bearing reference physics; measured latency/memory thresholds on target workloads; and model sizes/quality thresholds selected from baseline evidence. These are explicit deliverables, not silently chosen defaults.
 
 
+### Continuous Doppler and synthesis methods, 2026-10-06
+
+The previous renderer is preserved at `6cc47f1`. The new `Synthesis` setting separates scene-IR convolution from path-wise spectral rendering. No new dependency, scene representation or recorder is needed. Existing serialized settings select `ImpulseResponse` (0); `Spectral` (1) is explicitly opt-in because the current CPU implementation is expensive. Direct transport uses its own continuous-delay mixer and ignores this setting.
+
+For a stationary homogeneous medium, let `n` point from the source at emission to the listener at reception. With velocities relative to that medium:
+
+```text
+q = receivedFrequency / emittedFrequency
+  = (c - dot(listenerVelocity, n)) / (c - dot(sourceVelocity, n))
+emissionTime = receiverTime - travelTime(receiverTime)
+delayRate = 1 - q
+```
+
+The direct solver solves `c*delay = |listenerNow - sourceNow + sourceVelocity*delay|`, then evaluates the direction and ratio. Thus source and listener motion have distinct factors. At a moving surface, the outgoing/incoming frequency ratio is `(1-dot(surfaceVelocity,incoming)/incomingSpeed) / (1-dot(surfaceVelocity,outgoing)/outgoingSpeed)`. Surface point velocity is linear velocity plus `angularVelocity × (hit-center)`. Segment speed is `airSpeed/IOR`. These local factors assume subsonic, nondispersive propagation; moving-fluid advection and Mach shocks are not modeled. See [time-varying delay Doppler](https://www.dsprelated.com/freebooks/pasp/Doppler_Simulation.html) and [physical delay-line modeling](https://www.dafx.de/paper-archive/2002/DAFX02_Smith_Serafin_Abel_Berners_doppler_leslie.pdf).
+
+The GPU receives 80-byte states: position, quaternion, linear velocity, angular velocity and flags, each in a 16-byte lane. `VelocityValid` is required; cuts invalidate velocity. CPU/GPU direct solves match. The 32-byte path keeps direction XYZ, delay-rate W, delay seconds, pressure gain, frequency-bin index and a topology/sample hash. It does not estimate velocity by differentiating unrelated slots.
+
+`SpectralAudio` continuously reads source history at the path's emission time. Each solve supplies a fresh retarded-time anchor; its local delay slope drives source reads until the next update. This avoids accumulating an approximate slope into nonphysical drift. The 32-bit topology/sample hash separates path groups; it is not a collision-free persistent geometric identity. Changing trajectories/topology can still introduce phase discontinuities between solves; crossfades smooth those response changes. This is not arbitrary-trajectory retarded reconstruction. No additional pitch shifter is applied. Linear interpolation is inexpensive but aliases pitch-up; windowed sinc widens its source support and low-passes when `q>1`.
+
+The native `N/2+1` material bins define an `N`-tap centered pressure basis. Each path applies that short response and its complete interpolated HRIR to the time-warped signal with zero-padded FFTs and overlap-save. The transform length covers `N + HRIR length + block - 2`; the valid last block contains no circular wrap. Propagation stays in the source clock, outside the short filter. This still performs short-filter convolution mathematically, but constructs no long scene IR or propagation-delay partitions. Declared DSP latency remains `N` plus sinc radius. `ImpulseResponseAudio` retains the previous partitioned scene-FIR algorithm; it deliberately ignores path delay rate and crossfades frozen responses. It is not a continuous moving-Doppler implementation.
+
+Direct transmission brackets the emission-time root using per-medium segment travel times (fixed-point proposals alternate with bisection to resolve slow convergence) while other boundaries remain at their solve pose. First planar mirrors iterate the source emission and rigid mirror pose at interaction time. The validated moving-wall case is normal translation. Frequency-dependent material coefficients remain evaluated on the configured bin grid; frequency changes between successive interactions and the distinction between phase/group velocity in dispersive materials are not tracked. Oblique/rotating moving surfaces, acceleration and changing occlusion require further validation. Sampled diffuse/diffraction paths use local velocity factors but frozen geometry/delays; their pressure estimator and full moving-path timing remain preview approximations. The tail freezes final pose and velocity, instead of extrapolating motion beyond the recording. Reported support is not a proof of arbitrary moving-wave tail completeness.
+
+Output/capture report version 3 adds delay rate to direct diagnostic rows (six float32 values per pair, after the frame sample). Comparison opens old v1/v2 reports. Take binaries and compact station input logs are unchanged. These diagnostic rows still cannot reconstruct indirect WAV content.
+
+Validation includes analytic approaching/receding source and listener cases in 2D/3D, equal source/listener velocity, and approaching/receding planar mirrors. Rendered tone frequency/coherence checks disable crossfades; a separate sinc fixture rejects a tone shifted beyond Nyquist. Both synthesis methods pass the independent static convolution/long-HRIR oracles and streaming/batch tests. This establishes those numerical cases, not a validated room teacher or realtime performance. [Measurements](cleanup-results.md) record the station cost.
+
 ### Renderer repairs, 2026-10-05
 
 The scene ABI, compact replay format, shared live/offline renderer and PCM handoff queue remain intact. No new package or runtime subsystem was added. The pre-repair implementation remains in Git at `1586cbb`; audit checkpoint `332f8f3` preserves its independently measured failures.
 
-The shared spectral DSP now implements uniform partitioned **linear convolution with overlap-add**:
+This historical repair at `6cc47f1` established the algorithm now retained by `ImpulseResponseAudio`. The optional spectral route is described above. The repaired IR DSP implements uniform partitioned **linear convolution with overlap-add**:
 
 1. An acoustic grid of `N/2+1` real-signal bins defines a centered finite `N`-sample pressure FIR. Equal delay/direction arrivals combine on this grid; individual bins have the same finite-basis meaning.
 2. Each directional FIR is linearly convolved with the complete interpolated HRIR. Propagation delay is deposited once using the selected linear or normalized windowed-sinc fractional-delay FIR. It is not a phase rotation inside a synthesis window.
@@ -415,9 +442,9 @@ The current CPU/HLSL direct ABI is:
 | Direct struct/buffer | Offsets/stride |
 |---|---|
 | Primitive | float4 a/b/c at 0/16/32; uint object/material/pad/pad at 48/52/56/60; 64 bytes. Local vertices; 2D uses a/b. |
-| State | float4 position/rotation at 0/16; uint flags/padding at 32; 48 bytes. |
+| State | float4 position/rotation/velocity/angularVelocity at 0/16/32/48; uint flags/padding at 64; 80 bytes. |
 | Source/listener bindings | int32 object indices, 4 bytes each. |
-| Response | float4 direction at 0 (xyz world listener-to-arrival-origin, w=0); float32 delay/gain at 16/20; reserved zero at 24/28; 32 bytes. Disk serialization is separately packed to five floats. |
+| Response | float4 direction at 0 (xyz world listener-to-arrival-origin, w=delay rate in seconds/second); float32 delay/gain at 16/20; reserved zero at 24/28; 32 bytes. v3 disk rows are separately packed to six floats. Spectral paths use the final two uint lanes for frequency bin and topology hash. |
 | Optional BVH node | float4 boundsMin/boundsMax at 0/16; uint left/right/first/count at 32/36/40/44; 48 bytes. World-space bounds; a separate int32 array maps leaves to original primitive IDs. |
 
 The future indirect world-space ABI uses full 16-byte record lanes. It is separate from direct's local-geometry/state layout:

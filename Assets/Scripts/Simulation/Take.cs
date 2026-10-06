@@ -51,14 +51,14 @@ public sealed class AcousticTake : IDisposable
 
     [Serializable] public sealed class Provenance
     {
-        public string solverContract="direct-opaque-v1", dspContract="fractional-delay-interpolated-hrtf-fir-v3";
+        public string solverContract="direct-retarded-opaque-v2", dspContract="continuous-delay-interpolated-hrtf-fir-v4";
         public string csharpModule,shaderName,shaderDependencyHash,unityVersion,buildGuid;
         public static Provenance Capture(ComputeShader shader=null,TakeRender.Settings settings=null)
         {
             var value=new Provenance {csharpModule=typeof(AcousticTake).Assembly.ManifestModule.ModuleVersionId.ToString(),
                 unityVersion=Application.unityVersion,buildGuid=Application.buildGUID,shaderName=shader==null ? null:shader.name};
-if(settings!=null && settings.transport==TakeRender.Transport.Raytraced)
-            {value.solverContract="geometric-spectral-preview-v3";value.dspContract="partitioned-linear-fir-hrtf-v1";}
+            if(settings!=null && settings.transport==TakeRender.Transport.Raytraced)
+            {value.solverContract="geometric-spectral-preview-v4";value.dspContract=settings.synthesis==TakeRender.Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-overlap-save-v1";}
 #if UNITY_EDITOR
             if (shader!=null)
             {

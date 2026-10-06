@@ -11,6 +11,7 @@ public static partial class TakeRender
     public enum ListenerOutput { Mono, Binaural }
     public enum DelayFilter { Linear, WindowedSinc }
     public enum Transport { Direct, Raytraced }
+    public enum Synthesis { ImpulseResponse, Spectral }
     [Serializable] public sealed class Settings : ISerializationCallbackReceiver
     {
         public int responseStepSamples = 512;
@@ -28,6 +29,7 @@ public static partial class TakeRender
         [Tooltip("Use a BVH for fixed geometry. Objects that move use direct intersection tests for the rest of the session.")]
         public bool useBvh;
         public Transport transport;
+        public Synthesis synthesis;
         [Min(1)] public int raysPerBin=1,maxBounces=5;
         public int seed;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
@@ -49,10 +51,10 @@ public static partial class TakeRender
 
     [Serializable] public sealed class Report
     {
-        public string method = "direct-opaque-v1";
-        public string motion = "frozen-geometry-held-per-response-step";
-        public int formatVersion=2;
-        public string responseLayout = "frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ); direction is world listener-to-arrival-origin";
+        public string method = "direct-retarded-opaque-v2";
+        public string motion = "local-constant-velocity-retarded-direct-and-first-mirror; other-boundaries-frozen-at-solve";
+        public int formatVersion=3;
+        public string responseLayout = "frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin";
         public int channelsPerListener,hrtfTaps;
         public string hrtfDataset,hrtfHash;
         public string sceneHash, takeStateHash, takeEventHash, responseHash;
@@ -84,14 +86,14 @@ public static partial class TakeRender
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     public struct DirectPath
     {
-        public Vector4 direction; // xyz: world listener-to-arrival-origin, w: reserved zero
+        public Vector4 direction; // xyz: world listener-to-arrival-origin, w: propagation delay rate (seconds/second)
         public float delaySeconds,pressureGain;
         Vector2 padding;
     }
     internal static void WritePath(BinaryWriter writer,DirectPath path)
     {
         writer.Write(path.delaySeconds); writer.Write(path.pressureGain);
-        writer.Write(path.direction.x); writer.Write(path.direction.y); writer.Write(path.direction.z);
+        writer.Write(path.direction.x); writer.Write(path.direction.y); writer.Write(path.direction.z); writer.Write(path.direction.w);
     }
 
     public static void SolveDirect(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
@@ -110,6 +112,10 @@ public static partial class TakeRender
             Vector3 end=state[scene.listeners[l]].position;
             if (scene.dimension == AcousticTake.Dimension.Planar2D) { origin.z=0; end.z=0; }
             var displacement=end-origin;
+            var sv=Doppler.Velocity(state[scene.sources[s].objectIndex]);var lv=Doppler.Velocity(state[scene.listeners[l]]);
+            if(scene.dimension==AcousticTake.Dimension.Planar2D){sv.z=0;lv.z=0;}
+            Doppler.Direct(displacement,sv,lv,settings.speedOfSound,out float delay,out float delayRate,out var direction);
+            origin-=sv*delay;displacement=end-origin;
             float distance=displacement.magnitude;
             bool blocked=bvh!=null && bvh.Blocked(origin,end,state);
             if(bvh==null)foreach (var p in geometry)
@@ -123,7 +129,7 @@ public static partial class TakeRender
                 else blocked=CrossesTriangle(origin,displacement,a,b,pose.position+pose.rotation*p.c);
                 if (blocked) break;
             }
-            output[s*scene.listeners.Length+l]=new DirectPath { direction=distance>0 ? (Vector4)(-displacement/distance):Vector4.zero,delaySeconds=distance/settings.speedOfSound,
+            output[s*scene.listeners.Length+l]=new DirectPath { direction=new Vector4(-direction.x,-direction.y,-direction.z,delayRate),delaySeconds=delay,
                 pressureGain=blocked ? 0 : settings.referenceDistance/Mathf.Max(distance,settings.minimumDistance) };
         }
         ValidatePaths(output);
@@ -132,7 +138,7 @@ public static partial class TakeRender
     internal static void ValidatePaths(DirectPath[] paths)
     {
         foreach (var p in paths)
-            if (!float.IsFinite(p.direction.sqrMagnitude) || float.IsNaN(p.delaySeconds) || float.IsInfinity(p.delaySeconds) || float.IsNaN(p.pressureGain) || float.IsInfinity(p.pressureGain))
+            if (p.direction.w>=1 || !float.IsFinite(p.direction.sqrMagnitude) || float.IsNaN(p.delaySeconds) || float.IsInfinity(p.delaySeconds) || float.IsNaN(p.pressureGain) || float.IsInfinity(p.pressureGain))
                 throw new InvalidOperationException("Non-finite direct response; check scene scale and solver settings.");
     }
 
@@ -176,9 +182,9 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="geometric-spectral-preview-v3";report.provenance.solverContract=report.method;report.provenance.dspContract="partitioned-linear-fir-hrtf-v1";
+            report.method="geometric-spectral-preview-v4";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-overlap-save-v1";
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
-            report.transportDescription="Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. Partitioned linear convolution has declared FIR/block latency. Specular first-order paths use image sources; diffuse/diffraction remain preview heuristics.";
+            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and wavelength-scaled edge diffraction heuristic; not a validated wave reference. IR uses partitioned linear convolution; Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and sampled diffuse/diffraction geometry remain frozen at solve time.";
         }
         if(settings.listenerOutput==ListenerOutput.Binaural)
         {var hrtf=Hrtf.Load(metadata.sampleRate); report.hrtfDataset=Hrtf.Dataset; report.hrtfHash=hrtf.Hash; report.hrtfTaps=hrtf.Taps;}
@@ -191,6 +197,7 @@ public static partial class TakeRender
         for (int c=0; c<pcm.Length; c++) { pcm[c]=take.ReadClip(c); report.preparedPcmBytes+=(long)pcm[c].Length*4; }
         for (int s=0; s<signals.Length; s++) signals[s]=Signal.FromTake(take,s,pcm[scene.sources[s].clipIndex]);
         var mixer=new Mixer(scene,metadata.sampleRate,settings,signals);
+        long initialMixerBytes=mixer.NumericBytes;
         var block=new float[checked(settings.responseStepSamples*scene.listeners.Length*settings.ChannelsPerListener)];
         int batchCapacity=shader==null || !SystemInfo.supportsAsyncGPUReadback ? 1:(int)Math.Min(settings.maximumResponsesPerBatch,(length-1)/settings.responseStepSamples+1);
         var batchStates=batchCapacity==1 ? state:new AcousticTake.State[checked(state.Length*batchCapacity)];
@@ -219,6 +226,7 @@ public static partial class TakeRender
                         for(int f=0;f<frames;f++)
                         {
                             take.Evaluate(Math.Min(first+(long)f*settings.responseStepSamples,metadata.durationSamples),state);
+                            if(first+(long)f*settings.responseStepSamples>metadata.durationSamples)FreezeMotion(state);
                             if(batchCapacity>1)Array.Copy(state,0,batchStates,f*state.Length,state.Length);
                         }
                         report.evaluationSeconds+=Elapsed(start);
@@ -260,6 +268,7 @@ public static partial class TakeRender
             report.uploadSeconds=solver.UploadSeconds; report.dispatchReadbackSeconds=solver.DispatchReadbackSeconds;
             report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;report.bvhStaticPrimitives=solver.StaticPrimitiveCount;
         }
+        report.workingNumericBytes+=mixer.NumericBytes-initialMixerBytes;
         report.responseSupportSamples=mixer.ResponseSupportSamples;
         report.tailCoversResponseSupport=settings.tailSamples>=report.responseSupportSamples;
         report.wallSeconds=watch.Elapsed.TotalSeconds;
@@ -359,17 +368,22 @@ public static partial class TakeRender
         readonly bool[] enabled,oldEnabled;
         readonly Hrtf hrtf;
         readonly SpectralAudio spectral;
-        long responseSample;
+        readonly TakeRender.DelayFilter delayFilter;
+        readonly int sincRadius;
+        readonly Hrtf.Blend[] earBlend,oldEarBlend;
+        long responseSample,previousResponseSample;
         bool initialized;
         int fade;
         long directSupport;
         public long ResponseSupportSamples => spectral!=null?spectral.ResponseSupportSamples:directSupport;
         public long NumericBytes => (long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
-            (long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0)+(spectral?.NumericBytes??0);
+            (long)(earBlend.Length+oldEarBlend.Length)*32+(long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0)+(spectral?.NumericBytes??0);
         public Mixer(AcousticTake.Scene scene,int sampleRate,Settings settings,Signal[] signals)
         {
             Validate(settings); this.scene=scene; this.sampleRate=sampleRate; this.signals=signals; transition=settings.transitionSamples;
             channels=settings.ChannelsPerListener; maximumBlock=settings.responseStepSamples;
+            delayFilter=settings.delayFilter;sincRadius=settings.sincRadius;
+            earBlend=new Hrtf.Blend[scene.sources.Length*scene.listeners.Length];oldEarBlend=new Hrtf.Blend[earBlend.Length];
             if(channels==2) hrtf=Hrtf.Load(sampleRate);
             current=new DirectPath[scene.sources.Length*scene.listeners.Length]; previous=new DirectPath[current.Length];
             enabled=new bool[scene.listeners.Length]; oldEnabled=new bool[enabled.Length];
@@ -392,6 +406,7 @@ public static partial class TakeRender
             ValidatePaths(paths);
             foreach(var path in paths) if(path.delaySeconds<0 || path.delaySeconds>maximumDelay)
                 throw new InvalidOperationException("Response exceeds Maximum Delay Seconds; increase the declared history horizon.");
+            previousResponseSample=responseSample;Array.Copy(earBlend,oldEarBlend,earBlend.Length);
             Array.Copy(current,previous,current.Length); Array.Copy(paths,current,current.Length);
             Array.Copy(delay,oldDelay,delay.Length); Array.Copy(weights,oldWeights,weights.Length); Array.Clear(weights,0,weights.Length);
             for(int pair=0;pair<paths.Length;pair++)
@@ -413,7 +428,7 @@ public static partial class TakeRender
                 {
                     int listener=scene.listeners[pair%scene.listeners.Length];
                     Vector3 local=Quaternion.Inverse(state[listener].rotation)*(Vector3)paths[pair].direction;
-                    var direction=hrtf.Interpolate(local);
+                    var direction=hrtf.Interpolate(local);earBlend[pair]=direction;
                     // Compose the fractional-delay FIR and HRIR once per response.
                     for(int ear=0;ear<2;ear++) for(int k=0;k<hrtf.Taps;k++) for(int t=0;t<delayTaps;t++)
                         weights[(pair*2+ear)*taps+hrtf.Taps-1-k+t]+=delayWeights[t]*hrtf.Coefficient(direction,ear,k);
@@ -451,6 +466,25 @@ public static partial class TakeRender
         }
         void Mix(int source,int listener,int pair,long sample,int count,float gain,long[] delays,float[] kernel,bool old)
         {
+            var path=old?previous[pair]:current[pair];
+            if(path.direction.w!=0)
+            {
+                double ratio=1-(double)path.direction.w;long anchor=old?previousResponseSample:responseSample;
+                var ears=old?oldEarBlend[pair]:earBlend[pair];
+                for(int n=0;n<count;n++)
+                {
+                    float blend=fade==0?1:Mathf.Clamp01((float)(sample+n-responseSample)/fade);if(old)blend=1-blend;
+                    if(blend==0)continue;
+                    for(int k=0;k<(hrtf?.Taps??1);k++)
+                    {
+                        double receiver=sample+n-latency-k;
+                        double emission=receiver-path.delaySeconds*sampleRate-path.direction.w*(receiver-anchor);
+                        float value=Doppler.Read(signals[source],emission,ratio,delayFilter,sincRadius);
+                        for(int ear=0;ear<channels;ear++)mixed[(n*enabled.Length+listener)*channels+ear]+=blend*gain*value*(hrtf==null?1:hrtf.Coefficient(ears,ear,k));
+                    }
+                }
+                return;
+            }
             long first=sample-delays[pair]+firstTap;
             // Evaluate source events once per needed sample, shared by both ears/FIR taps.
             for(int i=0;i<count+taps-1;i++) input[i]=signals[source].Read(first+i);
@@ -468,6 +502,12 @@ public static partial class TakeRender
             }
         }
     }
+    internal static void FreezeMotion(AcousticTake.State[] states)
+    {
+        // The requested export tail holds the last scene pose, so it must also hold its motion.
+        for(int i=0;i<states.Length;i++)
+        {states[i].velocity=states[i].angularVelocity=Vector3.zero;states[i].flags&=~(AcousticTake.StateFlags.VelocityValid|AcousticTake.StateFlags.AccelerationValid);}
+    }
     public static bool Enabled(AcousticTake.State state,AcousticTake.StateFlags role) =>
         (state.flags&(AcousticTake.StateFlags.Active|role))==(AcousticTake.StateFlags.Active|role);
     public static double Elapsed(long start) => (double)(Stopwatch.GetTimestamp()-start)/Stopwatch.Frequency;
@@ -479,6 +519,7 @@ public static partial class TakeRender
             (settings.delayFilter!=DelayFilter.Linear && settings.delayFilter!=DelayFilter.WindowedSinc) || settings.sincRadius<2 || settings.sincRadius>int.MaxValue/2 ||
             !PositiveFinite(settings.speedOfSound) || !PositiveFinite(settings.referenceDistance) || !PositiveFinite(settings.minimumDistance))
             throw new ArgumentException("Invalid render settings.");
+        if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.transport==Transport.Raytraced)
         {

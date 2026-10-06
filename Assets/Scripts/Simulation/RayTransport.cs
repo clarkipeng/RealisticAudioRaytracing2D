@@ -10,9 +10,9 @@ internal sealed class RayTransport : IDisposable
 {
     [StructLayout(LayoutKind.Sequential,Pack=4)] public struct Path
     {
-        public Vector4 direction;
+        public Vector4 direction; // xyz arrival direction; w = d(propagation seconds)/d(receiver second)
         public float delaySeconds,pressureGain;
-        public uint frequencyBin,reserved;
+        public uint frequencyBin,identity;
     }
     [StructLayout(LayoutKind.Sequential,Pack=4)] struct Material
     {

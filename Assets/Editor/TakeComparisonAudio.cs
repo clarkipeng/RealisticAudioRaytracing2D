@@ -50,12 +50,12 @@ internal static class TakeComparisonAudio
         if(r==null || !r.complete || (r.experiment!="direct-temporal-resolution-v1" && r.experiment!="spectral-temporal-resolution-v1")) throw new InvalidDataException("Select a completed temporal comparison.json.");
         foreach(var run in new[]{r.low,r.high})
         {
-            if(run==null || !run.complete || (run.formatVersion!=1 && run.formatVersion!=2) || run.sampleRate<=0 || run.outputSamples<=0 || run.listenerCount<=0 ||
+            if(run==null || !run.complete || (run.formatVersion<1 || run.formatVersion>3) || run.sampleRate<=0 || run.outputSamples<=0 || run.listenerCount<=0 ||
                run.audioHashes==null || run.audioHashes.Length!=run.listenerCount || string.IsNullOrEmpty(run.sceneHash) ||
                run.sceneHash!=r.sceneHash || run.takeStateHash!=r.stateHash || run.takeEventHash!=r.eventHash)
                 throw new InvalidDataException("Comparison contains incomplete, unsupported or mismatched runs.");
             TakeRender.Validate(run.settings);
-            if(run.formatVersion==2 && (run.channelsPerListener!=run.settings.ChannelsPerListener || (run.channelsPerListener==2 && (string.IsNullOrEmpty(run.hrtfHash) || run.hrtfTaps<=0))))
+            if(run.formatVersion>=2 && (run.channelsPerListener!=run.settings.ChannelsPerListener || (run.channelsPerListener==2 && (string.IsNullOrEmpty(run.hrtfHash) || run.hrtfTaps<=0))))
                 throw new InvalidDataException("Run channel/HRTF metadata does not match its renderer settings.");
         }
         var a=r.low; var b=r.high;
