@@ -75,6 +75,7 @@ public sealed class TakeEditor : Editor
             SceneRecording.ExportInputs(manager.takePath,output);Debug.Log("Input-only run: "+output,manager);
         });
         if (GUILayout.Button("Open audio comparison window")) TakeComparisonWindow.ShowWindow();
+        if (manager.takeDimension == AcousticTake.Dimension.Planar2D && GUILayout.Button("Open 2D ray debugger")) RayDebugWindow.ShowWindow();
         EditorGUILayout.LabelField("Offline acoustic render",EditorStyles.boldLabel);
         DrawTransportSettings(renderSettings);
         EditorGUILayout.HelpBox("Renders saved inputs through the selected shared transport. Compact recordings first reconstruct their scene motion.",MessageType.None);

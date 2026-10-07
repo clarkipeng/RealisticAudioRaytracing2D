@@ -10,6 +10,90 @@ public partial class TakeChecks
         responseStepSamples=128,fftSize=128,spectralHop=32,raysPerBin=4,maxBounces=3,maximumDelaySeconds=.1f,
         maximumResponsesPerBatch=4,speedOfSound=8000,minimumDistance=1,airAbsorption=false,diffractionFactor=0,tailSamples=256};
 
+    [TestCase(false,false),TestCase(false,true),TestCase(true,false),TestCase(true,true),Category("GPU"),Category("RayDebug")]
+    public void RayDebugPreservesArrivals(bool planar,bool bvh)
+    {
+        var shader=RequireGpu();KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);
+        var settings=EdgeSettings();settings.raysPerBin=32;settings.maxBounces=3;settings.useBvh=bvh;
+        // Two pair slots ensure the capture selects the requested pair, rather than always pair zero.
+        scene.listeners=new[]{0,1};state[0].flags|=AcousticTake.StateFlags.Listener;
+        using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
+        var direct=new TakeRender.DirectPath[2];solver.Solve(state,direct);
+        var expected=(RayTransport.Path[])solver.RayPaths.Clone();
+        int bin=10, pairOffset=settings.SpectralSlotsPerPair;
+        var segments=solver.CaptureRays(state,1,bin);
+        int arrivals=0,edges=0;
+        foreach(var s in segments)
+        {
+            if(s.kind==TransportSolver.RayEvent.None)continue;
+            Check(float.IsFinite(s.end.w) && s.end.w>=s.start.w,"Capture has ordered finite propagation times");
+            if(s.kind==TransportSolver.RayEvent.Diffraction)edges++;
+            if(s.kind!=TransportSolver.RayEvent.Listener)continue;
+            arrivals++;Near(Vector3.Distance(s.end,state[1].position),0,"Captured connection ends at selected listener");
+            int first=s.path==0?pairOffset+bin:pairOffset+settings.FrequencyBins+
+                (bin*settings.RaysPerBin+(int)(s.path-1)/2)*(settings.maxBounces+1);
+            bool matches=false;
+            int count=s.path==0?1:settings.maxBounces+1;
+            for(int i=first;i<first+count;i++)
+                matches|=Mathf.Abs(expected[i].delaySeconds-s.end.w)<1e-6f &&
+                    Mathf.Abs(expected[i].pressureGain-s.pressure)<1e-6f;
+            Check(matches,"Debug listener segment matches the uninstrumented audio arrival");
+        }
+        Check(arrivals>0 && edges>0,"Capture includes nonzero diffraction connections");
+        int start=pairOffset+settings.FrequencyBins+bin*settings.RaysPerBin*(settings.maxBounces+1);
+        for(int i=start;i<start+settings.RaysPerBin*(settings.maxBounces+1);i++)
+        {
+            var actual=solver.RayPaths[i];
+            Check(actual.identity==expected[i].identity,"Debugging does not change path sampling");
+            Near(actual.pressureGain,expected[i].pressureGain,"Debugging preserves signed gain",1e-6f);
+            Near(actual.delaySeconds,expected[i].delaySeconds,"Debugging preserves delay",1e-6f);
+        }
+        solver.Solve(state,direct);
+        Assert.That(solver.RayPaths,Is.EqualTo(expected),"Normal rendering is restored after capture");
+    }
+
+    [Test,Category("GPU"),Category("RayDebug")]
+    public void RayDebugUsesMaterialTravelTimes()
+    {
+        var shader=RequireGpu();var scene=Scene(2);scene.dimension=AcousticTake.Dimension.Planar2D;scene.listeners=new[]{1};
+        scene.materials=new[]{new AcousticTake.MaterialDefinition {name="slow",frequencies=new[]{0f},
+            absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{1f},ior=new[]{2f},damping=new[]{0f}}};
+        var geometry=TransportBox(scene.dimension,2,0,1);scene.objects[2].primitiveCount=geometry.Length;
+        var state=States(2);state[0].position=Vector3.left*2;state[1].position=Vector3.right*2;state[2].position=Vector3.zero;
+        state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        var settings=SpectralSettings();settings.speedOfSound=1000;
+        using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
+        var segments=solver.CaptureRays(state,0,1);
+        Near(segments[0].end.w,.001f,"Air leg takes one millisecond",1e-7f);
+        Near(segments[1].start.w,.001f,"Material starts when air leg ends",1e-7f);
+        Near(segments[1].end.w,.005f,"Two metres in half-speed material takes four milliseconds",1e-7f);
+        Near(segments[2].end.w,.006f,"Final air leg restores air speed",1e-7f);
+        Check(segments[2].kind==TransportSolver.RayEvent.Listener,"Direct capture reaches listener");
+        scene.sources[0].mutedListenerPlusOne=1;
+        foreach(var segment in solver.CaptureRays(state,0,1))
+            Check(segment.kind==TransportSolver.RayEvent.None,"Muted pair leaves no stale segments");
+    }
+
+    [Test,Category("GPU"),Category("RayDebug")]
+    public void RayDebugCapturesMirrorGeometry()
+    {
+        var shader=RequireGpu();var scene=Scene(2);scene.dimension=AcousticTake.Dimension.Planar2D;scene.listeners=new[]{1};
+        scene.materials=new[]{new AcousticTake.MaterialDefinition {frequencies=new[]{0f},absorption=new[]{0f},
+            scattering=new[]{0f},transmission=new[]{0f}}};scene.objects[2].primitiveCount=1;
+        var geometry=new[]{new AcousticTake.Primitive {objectIndex=2,a=new Vector3(-3,0,0),b=new Vector3(3,0,0)}};
+        var state=States(2);state[0].position=new Vector3(-1,1,0);state[1].position=new Vector3(1,1,0);
+        state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        var settings=SpectralSettings();settings.speedOfSound=1000;settings.raysPerBin=1;
+        using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
+        var segments=solver.CaptureRays(state,0,1);
+        Near(Vector3.Distance(segments[2].start,state[0].position),0,"Mirror starts at emitter");
+        Near(Vector3.Distance(segments[2].end,Vector3.zero),0,"Mirror hits image-source reflection point");
+        Near(segments[2].end.w,Mathf.Sqrt(2)/1000,"Mirror first leg delay",1e-7f);
+        Near(segments[3].end.w,2*Mathf.Sqrt(2)/1000,"Mirror full path delay",1e-7f);
+        Check(segments[2].kind==TransportSolver.RayEvent.Reflection && segments[3].kind==TransportSolver.RayEvent.Listener,
+            "Mirror capture distinguishes surface interaction and listener connection");
+    }
+
     [Test, Category("Core")]
     public void TransportMaterials()
     {

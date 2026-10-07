@@ -166,6 +166,11 @@ internal sealed class RayTransport : IDisposable
             throw;
         }
     }
+    internal void BindDebug(ComputeBuffer segments)
+    {
+        shader.SetBuffer(directKernel, "DebugSegments", segments);
+        shader.SetBuffer(traceKernel, "DebugSegments", segments);
+    }
     public void SetActivity(AcousticTake.Scene scene, AcousticTake.State[] states, int frames)
     {
         // Never-used slots and permanently muted pairs cannot contribute. Once activated,

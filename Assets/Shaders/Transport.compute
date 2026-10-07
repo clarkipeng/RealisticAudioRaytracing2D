@@ -11,6 +11,7 @@
 #pragma kernel Trace2DBvh USE_BVH
 #pragma kernel Trace3D
 #pragma kernel Trace3DBvh USE_BVH
+#pragma multi_compile_local _ ACOUSTIC_DEBUG
 
 #include "Geometry.hlsl"
 #include "Transport.hlsl"

@@ -8,6 +8,27 @@ using UnityEngine.Rendering;
 // offline rendering and shutdown may explicitly wait. Buffers outlive their request.
 public sealed class TransportSolver : IDisposable
 {
+    // Optional capture ABI. Times are cumulative propagation seconds, not scene time.
+    public enum RayEvent : uint
+    {
+        None,
+        Transmission,
+        Reflection,
+        Scatter,
+        Diffraction,
+        Listener,
+        Escape,
+        Rejected
+    }
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct RaySegment
+    {
+        public Vector4 start, end; // xyz position, w travel time
+        public RayEvent kind;
+        public int material;
+        public uint path;      // 0 direct; 1 + 2*ray mirror; 2 + 2*ray sampled walk
+        public float pressure; // Signed estimator weight; final gain on listener connections.
+    }
     [StructLayout(LayoutKind.Sequential)]
     struct GpuPrimitive
     {
@@ -92,8 +113,7 @@ public sealed class TransportSolver : IDisposable
         if (shader == null)
         {
             if (settings.transport == TakeRender.Transport.Raytraced)
-                throw new InvalidOperationException(
-                    "Raytraced transport requires Transport.compute.");
+                throw new InvalidOperationException("Raytraced transport requires Transport.compute.");
             return;
         }
         if (!SystemInfo.supportsComputeShaders || pairs == 0)
@@ -186,6 +206,37 @@ public sealed class TransportSolver : IDisposable
             TakeRender.ValidatePaths(output);
             CountSolve();
         }
+    }
+    // Explicit synchronous inspection of one pair/bin. The normal shader variant has
+    // no debug storage or readback. The caller owns the returned frozen CPU snapshot.
+    public RaySegment[] CaptureRays(AcousticTake.State[] state, int pair, int frequencyBin)
+    {
+        if (disposed || pending || transport == null)
+            throw new InvalidOperationException("Ray capture requires an idle GPU raytraced solver.");
+        if (state.Length != scene.objects.Length || pair < 0 || pair >= pairs || frequencyBin < 0 ||
+            frequencyBin >= settings.FrequencyBins)
+            throw new ArgumentException("Ray capture shape or selection is invalid.");
+        if (Marshal.SizeOf<RaySegment>() != 48)
+            throw new InvalidOperationException("Ray capture GPU ABI mismatch.");
+        int slots = checked(geometry.Length + 1 + settings.RaysPerBin * checked(2 + 2 * settings.maxBounces));
+        var segments = new RaySegment[slots];
+        using var buffer = new ComputeBuffer(slots, 48);
+        buffer.SetData(segments);
+        shader.EnableKeyword("ACOUSTIC_DEBUG");
+        try
+        {
+            shader.SetInt("DebugPair", pair);
+            shader.SetInt("DebugBin", frequencyBin);
+            transport.BindDebug(buffer);
+            Upload(state, 1);
+            transport.Dispatch(1, false);
+            buffer.GetData(segments);
+        }
+        finally
+        {
+            shader.DisableKeyword("ACOUSTIC_DEBUG");
+        }
+        return segments;
     }
     void CountSolve()
     {

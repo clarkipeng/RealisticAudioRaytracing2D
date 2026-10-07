@@ -145,6 +145,12 @@ yield return new WaitUntil(() => manager.Mode == RayTraceManager.SessionMode.Idl
 manager.BeginTakeReplay(newTakeDirectory, play: false);
 ```
 
+## Inspect 2D ray propagation
+
+Open `Assets/Scenes/SmollRoom.unity` (or Big Room / SampleScene), then **Acoustics → 2D Ray Debugger**. Choose the scene manager, source/listener pair, frequency bin and probe ray count, and click **Capture**. Use **Play** or **Travel ms** to follow propagation. Select a path or click a segment for its material, delay and signed weight; scroll to zoom and drag to pan. The field to the right of the time slider sets the displayed time range in milliseconds.
+
+This captures a frozen geometry probe from the actual GPU transport, including direct, mirror, surface and edge paths. Scene motion is paused for the probe; no audio playback is required. Capturing again picks up your scene edits. Rejected proposals are optional dotted lines. Ordinary playback has no debug buffers or readback. [Capture layout and limitations](docs/simulation-contracts.md#2d-propagation-debugger).
+
 ## Live scheduling and diagnostics
 
 Live rendering waits for the next observed pose before interpolating the interval, then renders only audio whose inputs are known. It does not extrapolate future movement. **Monitor Lead Samples** gives that producer time to run before playback; **Monitor Capacity Samples** bounds the PCM queue. Missed deadlines produce silence at the correct timestamp and late PCM is dropped rather than shifted later. Increase lead only if the extra latency is acceptable; use the counters to identify missed deadlines.

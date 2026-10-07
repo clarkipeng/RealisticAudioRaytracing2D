@@ -5,6 +5,23 @@ using System;
 
 public static class SceneToTake
 {
+    public static AcousticTake.State Observe(AcousticTake.Scene scene, int index, Transform transform)
+    {
+        var flags = scene.objects[index].primitiveCount > 0 ? AcousticTake.StateFlags.Geometry : 0;
+        var surface = transform.GetComponent<AcousticSurface>();
+        if (surface != null && !surface.enabled) flags &= ~AcousticTake.StateFlags.Geometry;
+        for (int s = 0; s < scene.sources.Length; s++) if (scene.sources[s].objectIndex == index)
+        {
+            var component = transform.GetComponent<RaytracedAudioSource>();
+            if (component == null || component.enabled) flags |= AcousticTake.StateFlags.Source;
+        }
+        if (Array.IndexOf(scene.listeners, index) >= 0) flags |= AcousticTake.StateFlags.Listener;
+        var state = AcousticTake.State.Observe(transform, flags);
+        if (scene.dimension == AcousticTake.Dimension.Planar2D &&
+            (Mathf.Abs(state.position.z) > .0001f || Mathf.Abs(Vector3.Dot(transform.forward, Vector3.forward)) < .99999f))
+            throw new InvalidOperationException("Planar capture uses the XY plane; use a 3D take for out-of-plane objects.");
+        return state;
+    }
     public static AcousticTake.Scene Compile(List<RayTraceManager.TakeObjectBinding> bindings,
         AcousticTake.Dimension dimension, float curveTolerance, AudioMaterial fallback,
         Transform[] sources, AudioClip[] clips, Transform[] listeners,

@@ -33,6 +33,57 @@ StructuredBuffer<uint> RayPairEnabled;
 uint RaysPerBin, RaySeed;
 uint FrequencyBins, RaysPerPair, MaxBounces, SlotsPerPair, EdgeCount, VolumeCount, UseAirAbsorption;
 float FrequencyStep, DiffractionFactor, MaximumPathDelay;
+// Fixed slots per captured ray avoid atomics and never truncate a path. All stores
+// and selection checks compile out of the normal transport variant.
+static const uint DebugTransmission = 1, DebugReflection = 2, DebugScatter = 3, DebugDiffraction = 4,
+                  DebugListener = 5, DebugEscape = 6, DebugRejected = 7;
+#if defined(ACOUSTIC_DEBUG)
+struct RaySegment
+{
+    float4 start, end;
+    uint kind;
+    int material;
+    uint path;
+    float pressure;
+};
+RWStructuredBuffer<RaySegment> DebugSegments;
+uint DebugPair, DebugBin;
+#endif
+bool DebugSelected(uint query, uint bin)
+{
+#if defined(ACOUSTIC_DEBUG)
+    return query == DebugPair && bin == DebugBin;
+#else
+    return true;
+#endif
+}
+void DebugClearDirect()
+{
+#if defined(ACOUSTIC_DEBUG)
+    // Retarded-time iteration may cross different boundaries. Keep only the final proposal.
+    for (uint i = 0; i <= PrimitiveCount; i++)
+        DebugSegments[i] = (RaySegment)0;
+#endif
+}
+void DebugWrite(uint slot, uint path, uint kind, int material, float3 a, float3 b, float t0, float t1,
+                float pressure)
+{
+#if defined(ACOUSTIC_DEBUG)
+    RaySegment segment;
+    segment.start = float4(a, t0);
+    segment.end = float4(b, t1);
+    segment.kind = kind;
+    segment.material = material;
+    segment.path = path;
+    segment.pressure = pressure;
+    DebugSegments[slot] = segment;
+#endif
+}
+void DebugArrival(uint slot, uint path, float3 a, float3 b, float time, RayPath arrival)
+{
+    if (arrival.pressureGain != 0)
+        DebugWrite(slot, path, DebugListener, -1, a, b, time, arrival.delaySeconds, arrival.pressureGain);
+}
 uint HashRay(uint x)
 {
     x ^= x >> 16;
@@ -284,7 +335,7 @@ void EvaluateDirect(uint index, bool is2D)
     uint frequencyBin = index % FrequencyBins, query = index / FrequencyBins, frame = query / PairCount,
          pair = query % PairCount;
     RayPaths[query * SlotsPerPair + frequencyBin] = (RayPath)0;
-    if (RayPairEnabled[query] == 0)
+    if (RayPairEnabled[query] == 0 || !DebugSelected(query, frequencyBin))
         return;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
          listener = Listeners[pair % ListenerCount];
@@ -312,6 +363,8 @@ void EvaluateDirect(uint index, bool is2D)
     // material transitions or float-level cycles from defeating convergence.
     for (uint iteration = 0; iteration < 64; iteration++)
     {
+        DebugClearDirect();
+        uint debugSlot = 0;
         a = sourceNow - sourceVelocity * estimate;
         float remaining = length(b - a);
         float3 direction = remaining > 0 ? (b - a) / remaining : float3(0, 0, 0), position = a;
@@ -329,11 +382,16 @@ void EvaluateDirect(uint index, bool is2D)
             if (!NearestHit(stateOffset, position, direction, remaining - RayEpsilon, is2D, hit, distance,
                             normal))
                 break;
+            float segmentTime = time, segmentGain = gain;
             Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
             RayMaterial material = RayMaterials[Primitives[hit].indices.y * FrequencyBins + frequencyBin];
             float transmitted = sqrt(saturate((1 - material.surface.x) * material.surface.z));
             gain *=
                 lerp(1, transmitted, BoundaryWeight(hit, stateOffset, position + direction * distance, is2D));
+            if (segmentGain != 0)
+                DebugWrite(debugSlot++, 0, gain == 0 ? DebugRejected : DebugTransmission,
+                           Primitives[hit].indices.y, position, position + direction * distance, segmentTime,
+                           time, gain);
             position += direction * distance;
             remaining -= distance;
             uint next = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
@@ -345,7 +403,11 @@ void EvaluateDirect(uint index, bool is2D)
             medium = next;
             speed = nextSpeed;
         }
+        float segmentTime = time;
         Travel(remaining, medium, frequencyBin, frequencyHz, time, gain);
+        if (gain != 0)
+            DebugWrite(debugSlot, 0, time <= MaximumPathDelay ? DebugListener : DebugRejected, -1, position,
+                       b, segmentTime, time, gain);
         frequencyRatio *= 1 - dot(listenerVelocity, direction) / speed;
         float tolerance = 4e-7 * max(1, time);
         if (abs(time - estimate) <= tolerance)
@@ -375,7 +437,7 @@ void EvaluateDirect(uint index, bool is2D)
 // primitive IDs avoids estimating a delta reflection with a diffuse connection.
 // A cyclic stratification covers each primitive once per complete sample stratum.
 RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequencyBin, uint sampleIndex,
-                        bool is2D)
+                        bool is2D, uint debugBase)
 {
     RayPath result = (RayPath)0;
     if (PrimitiveCount == 0)
@@ -461,10 +523,17 @@ RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequ
     gain *= BoundaryWeight(id, stateOffset, reflectionPoint, is2D);
     float time = 0, lengthTo = total * speed;
     Travel(lengthTo, medium, frequencyBin, max(1, frequencyBin * FrequencyStep), time, gain);
-    return Arrival(reflectionPoint, end, time,
-                   gain * (float)PrimitiveCount / RaysPerBin * ReferenceDistance /
-                       max(MinimumDistance, lengthTo),
-                   frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), HashRay(0x40000000u ^ id));
+    result = Arrival(
+        reflectionPoint, end, time,
+        gain * (float)PrimitiveCount / RaysPerBin * ReferenceDistance / max(MinimumDistance, lengthTo),
+        frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), HashRay(0x40000000u ^ id));
+    if (result.pressureGain != 0)
+    {
+        DebugWrite(debugBase, 1 + 2 * sampleIndex, DebugReflection, p.indices.y, start, reflectionPoint, 0,
+                   firstLength / speed, result.pressureGain);
+        DebugArrival(debugBase + 1, 1 + 2 * sampleIndex, reflectionPoint, end, firstLength / speed, result);
+    }
+    return result;
 }
 void TracePaths(uint index, bool is2D)
 {
@@ -477,10 +546,14 @@ void TracePaths(uint index, bool is2D)
     uint first = query * SlotsPerPair + FrequencyBins + ray * (MaxBounces + 1);
     for (uint k = 0; k <= MaxBounces; k++)
         RayPaths[first + k] = (RayPath)0;
-    if (RayPairEnabled[query] == 0)
+    if (RayPairEnabled[query] == 0 || !DebugSelected(query, ray / RaysPerBin))
         return;
     uint frequencyBin = ray / RaysPerBin, rng = HashRay((ray % RaysPerBin) + pair * 0x85ebca6b + RaySeed + 1);
-    RayPaths[first] = FirstReflection(stateOffset, source, listener, frequencyBin, ray % RaysPerBin, is2D);
+    uint debugBase = PrimitiveCount + 1 + (ray % RaysPerBin) * (2 + 2 * MaxBounces),
+         debugPath = 2 + 2 * (ray % RaysPerBin);
+    RayPaths[first] =
+        FirstReflection(stateOffset, source, listener, frequencyBin, ray % RaysPerBin, is2D, debugBase);
+    debugBase += 2;
     first++;
     float frequencyHz = max(1, frequencyBin * FrequencyStep);
     float3 position = States[stateOffset + source].position.xyz,
@@ -511,6 +584,9 @@ void TracePaths(uint index, bool is2D)
     float surfaceScatter = 1;
     for (uint bounce = 0; bounce < MaxBounces; bounce++)
     {
+        float3 segmentStart = position;
+        float segmentTime = time;
+        uint debugSlot = debugBase + 2 * bounce;
         float currentIor = MediumIor(medium, frequencyBin), speed = SpeedOfSound / currentIor,
               limit = (MaximumPathDelay - time) * speed;
         if (limit <= 0 || gain == 0)
@@ -530,7 +606,11 @@ void TracePaths(uint index, bool is2D)
             float distance = length(edgePoint - position);
             if (distance <= RayEpsilon || distance > limit ||
                 !Visible(stateOffset, position, edgePoint, is2D))
+            {
+                DebugWrite(debugSlot, debugPath, DebugRejected, -1, position, edgePoint, time,
+                           time + distance / speed, gain * weight);
                 break;
+            }
             float3 incoming = (edgePoint - position) / distance;
             frequencyRatio /= 1 - dot(vertexVelocity, incoming) / speed;
             if (previousEdge != 0xffffffff)
@@ -549,6 +629,8 @@ void TracePaths(uint index, bool is2D)
             vertexVelocity = PointVelocity(stateOffset + Edges[edge].ids.x, edgePoint);
             frequencyRatio *= 1 - dot(vertexVelocity, incoming) / speed;
             position = edgePoint;
+            DebugWrite(debugSlot, debugPath, DebugDiffraction, Primitives[Edges[edge].ids.y].indices.y,
+                       segmentStart, position, segmentTime, time, gain * weight);
             identity = HashRay(identity ^ (edge + 1) ^ 0x20000000u);
             float last = length(end - position);
             if (last > RayEpsilon && Visible(stateOffset, position, end, is2D))
@@ -561,6 +643,7 @@ void TracePaths(uint index, bool is2D)
                                  exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last);
                 RayPaths[first + bounce] =
                     Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity);
+                DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
             }
             previousEdge = edge;
             canSampleEdge = true;
@@ -573,7 +656,11 @@ void TracePaths(uint index, bool is2D)
         float3 normal;
         bool intersects = NearestHit(stateOffset, position, direction, limit, is2D, hit, distance, normal);
         if (!intersects)
+        {
+            DebugWrite(debugSlot, debugPath, DebugEscape, -1, position, position + direction * limit, time,
+                       MaximumPathDelay, gain * weight);
             break;
+        }
         frequencyRatio /= 1 - dot(vertexVelocity, direction) / speed;
         if (previousEdge != 0xffffffff)
         {
@@ -601,12 +688,15 @@ void TracePaths(uint index, bool is2D)
                              (1 - dot(listenerVelocity, toListener) / speed);
         float last = length(end - position), cosine = last > 0 ? max(0, dot(n, (end - position) / last)) : 0;
         if (cosine > 0 && Visible(stateOffset, position + n * RayEpsilon, end, is2D))
+        {
             RayPaths[first + bounce] =
                 Arrival(position, end, time + last / speed,
                         gain * sqrt(saturate((1 - material.surface.z) * material.surface.y)) * weight *
                             cosine * .5 * exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last) *
                             ReferenceDistance / max(MinimumDistance, spreadingDistance + last),
                         frequencyBin, arrivalRatio, identity);
+            DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
+        }
         surfaceNormal = n;
         surfaceScatter = sqrt(saturate((1 - material.surface.z) * material.surface.y));
         canSampleEdge = surfaceScatter > 0;
@@ -624,14 +714,18 @@ void TracePaths(uint index, bool is2D)
                 direction = transmitted;
                 medium = nextMedium;
                 canSampleEdge = false;
+                DebugWrite(debugSlot, debugPath, DebugTransmission, Primitives[hit].indices.y, segmentStart,
+                           position, segmentTime, time, gain * weight);
                 continue;
             }
         }
         float3 diffuse = UnitDirection(rng, is2D);
         if (dot(diffuse, n) < 0)
             diffuse = -diffuse;
-        float3 nextDirection =
-            RandomRay(rng) < saturate(material.surface.y) ? diffuse : reflect(direction, n);
+        bool scattered = RandomRay(rng) < saturate(material.surface.y);
+        float3 nextDirection = scattered ? diffuse : reflect(direction, n);
+        DebugWrite(debugSlot, debugPath, scattered ? DebugScatter : DebugReflection,
+                   Primitives[hit].indices.y, segmentStart, position, segmentTime, time, gain * weight);
         direction = nextDirection;
     }
 }

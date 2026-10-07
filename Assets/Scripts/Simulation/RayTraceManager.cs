@@ -411,21 +411,9 @@ public class RayTraceManager : MonoBehaviour
             if (binding.transform == null || binding.transform != captureObjects[i] || binding.id != scene.objects[i].id ||
                 (binding.transform.lossyScale - scene.objects[i].scale).sqrMagnitude > 1e-10f)
                 throw new InvalidOperationException("A recorded object was removed, reordered or resized; start a new take.");
-            var flags = scene.objects[i].primitiveCount > 0 ? AcousticTake.StateFlags.Geometry : 0;
-            var surface=binding.transform.GetComponent<AcousticSurface>();
-            if (surface != null && !surface.enabled) flags &= ~AcousticTake.StateFlags.Geometry;
-            for (int s=0; s<scene.sources.Length; s++) if (scene.sources[s].objectIndex == i)
-            {
-                var component = binding.transform.GetComponent<RaytracedAudioSource>();
-                if (component == null || component.enabled) flags |= AcousticTake.StateFlags.Source;
-            }
-            if (Array.IndexOf(scene.listeners,i) >= 0) flags |= AcousticTake.StateFlags.Listener;
+            takeState[i] = SceneToTake.Observe(scene, i, binding.transform);
             if (takeCuts.Contains(i) || (sample == previousTakeSample && (previousTakeState[i].flags & AcousticTake.StateFlags.Cut) != 0))
-                flags |= AcousticTake.StateFlags.Cut;
-            takeState[i] = AcousticTake.State.Observe(binding.transform, flags);
-            if (scene.dimension == AcousticTake.Dimension.Planar2D &&
-                (Mathf.Abs(takeState[i].position.z) > .0001f || Mathf.Abs(Vector3.Dot(binding.transform.forward,Vector3.forward)) < .99999f))
-                throw new InvalidOperationException("Planar capture uses the XY plane; use a 3D take for out-of-plane objects.");
+                takeState[i].flags |= AcousticTake.StateFlags.Cut;
             if (previousTakeSample >= 0 && sample > previousTakeSample)
                 takeState[i].MeasureMotion(previousTakeState[i], (double)(sample-previousTakeSample)/sampleRate);
         }
