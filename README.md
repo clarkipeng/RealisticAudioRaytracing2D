@@ -159,6 +159,10 @@ The audio callback copies PCM through a single-producer/single-consumer queue, w
 
 Unity Profiler markers `Acoustics.ValidateScene`, `Acoustics.SolveTransport` and `Acoustics.MixPCM` label scene validation, transport submission and CPU-reference mixing. These are CPU scopes, not GPU execution timers.
 
+GPU command markers `Acoustics.GPU.Direct`, `Trace`, `Compare`, `Group`, `Filters`, `InputFFT`, `Mix` and `PCM` separate the transport and audio stages. `InputFFT` includes source-time resampling; `Mix` includes per-ear reduction and inverse FFT. Use the GPU Profiler on supported backends, or Metal tools on macOS. Metal may combine several labeled stages in one encoder: its duration is not the duration of its first label. [Unity GPU profiling support](https://docs.unity.com/en-us/engine/6000.3/manual/analysis/graphics-performance-profiling/profile-rendering/profiler-gpu).
+
+Live and offline reports include `gpuAudio`: response updates/reuse, current/peak grouped paths, reserved path capacity and material-filter bytes. Counts arrive with PCM, without another readback. The comparison window shows them under **Timings, recorded deadlines and provenance**. Existing underrun/late/overflow and callback counters remain the live deadline evidence; offline timings cannot establish those deadlines.
+
 Live GPU rendering batches response samples across the queued, known motion intervals and uses [Unity asynchronous readback](https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Rendering.AsyncGPUReadback.html). One in-flight batch owns its pose/response buffers until completion. **Maximum Responses Per Batch** bounds that storage; **Maximum Pending Observations** bounds queued motion intervals. A full queue stops the session visibly. Finishing/cancelling waits for owned requests before releasing their buffers. Offline GPU renders use the same batch capacity; GPU DSP consumes transport buffers directly and the CPU waits for completed PCM before writing it. The CPU reference reads transport paths explicitly. Completion wall time includes scheduling and readback, not isolated GPU execution time.
 
 **Static geometry BVH** optionally accelerates CPU/HLSL direct intersections in both 2D and 3D. Geometry starts in the tree; when an object's pose first changes, its primitives leave the tree and use direct tests for the rest of that solver session, including when the object stops. Only that membership change rebuilds the tree; ongoing motion needs no refits. GPU batches share one static tree. No new scene tags or recording fields are required. The station enables it for multi-bounce tracing; new generic settings retain the direct baseline with BVH off. Toggle it in offline render settings or **Direct Settings → Use Bvh**. [Measured Low/High offline totals, preserved Git revisions and benchmark instructions](docs/cleanup-results.md) compare this split with the earlier moving-geometry BVH and brute force.
@@ -311,7 +315,7 @@ Writers mark the manifest complete only after payloads are closed and hashed. Re
 
 ```text
 CPU: compile scene once; upload object states for each response batch
-GPU: find edge routes → evaluate direct/diffracted sound → trace reflections
+GPU: evaluate direct/mirror sound → sample surface and edge paths in one bounce loop
 GPU: synthesize IR or spectral audio → read back PCM
 ```
 
@@ -362,6 +366,8 @@ Folders group responsibilities; the runtime, editor and test assembly definition
 | [Take.cs](Assets/Scripts/Simulation/Take.cs), [TakeComparison.cs](Assets/Scripts/Simulation/TakeComparison.cs) | Records implementation/settings provenance and optionally gates temporal training pairs against a third, finer direct-model run. |
 
 The next transport work is physical validation, reducing GPU path/filter cost and converged ray-budget comparisons. The separate prototype renderer is removed; its previous implementation remains in Git. All five scenes use the current renderer. General reflection training and learned reconstruction are not implemented by these cleanups.
+
+The current GPU stores one material spectrum per path group and response bank, shared by both ears. Each bank retains its own head blend for crossfades. Unchanged filters skip both small and large FFT construction. The station benchmark reserves **564 MB versus 916 MB** before this change; matched layout controls have similar wall times. A new `DirectBenchmark.MeasureReciprocity(planar, rays, scattering, seeds)` probe checks source/receiver reversal on a finite wall. The diffuse preview fails this necessary physical check even with 65,536 rays/bin, while the mirror control agrees. More rays are not a fix for this bias. [Measurements and limitations](docs/cleanup-results.md#gpu-response-storage-and-diagnostics--2026-10-07).
 
 ## Checks
 

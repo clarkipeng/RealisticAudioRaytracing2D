@@ -27,6 +27,7 @@ internal sealed class RayTransport : IDisposable
         public uint owner, firstFace, secondFace, pad;
     }
     readonly ComputeShader shader;
+    readonly CommandBuffer commands=new CommandBuffer {name="Acoustics GPU transport"};
     readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Volume
@@ -409,8 +410,13 @@ internal sealed class RayTransport : IDisposable
     {
         if (pending)
             throw new InvalidOperationException("Ray responses are still in flight.");
-        shader.Dispatch(directKernel, (frames * pairs * frequencyBins + 63) / 64, 1, 1);
-        shader.Dispatch(traceKernel, (frames * pairs * rayCount + 63) / 64, 1, 1);
+        commands.BeginSample("Acoustics.GPU.Direct");
+        commands.DispatchCompute(shader,directKernel,(frames*pairs*frequencyBins+63)/64,1,1);
+        commands.EndSample("Acoustics.GPU.Direct");
+        commands.BeginSample("Acoustics.GPU.Trace");
+        commands.DispatchCompute(shader,traceKernel,(frames*pairs*rayCount+63)/64,1,1);
+        commands.EndSample("Acoustics.GPU.Trace");
+        Graphics.ExecuteCommandBuffer(commands);commands.Clear();
         if (Paths.Length == 0)
             return;
         if (asynchronous)
@@ -465,5 +471,6 @@ internal sealed class RayTransport : IDisposable
         enabledBuffer?.Dispose();
         edgeRangeBuffer?.Dispose();
         edgeIndexBuffer?.Dispose();
+        commands.Dispose();
     }
 }

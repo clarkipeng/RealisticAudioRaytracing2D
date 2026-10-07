@@ -54,6 +54,11 @@ public static partial class TakeRender
         public long HistorySamples(int rate) => checked((long)Math.Ceiling((double)maximumDelaySeconds*rate)+2L*DspLatencySamples+2+(listenerOutput==ListenerOutput.Binaural ? Hrtf.Load(rate).Taps-1:0));
     }
 
+    [Serializable] public sealed class AudioDiagnostics
+    {
+        public long responseUpdates,reusedResponses,filterBytes;
+        public int pathCapacity,activeGroups,peakGroups;
+    }
     [Serializable] public sealed class Report
     {
         public string method = "direct-retarded-opaque-v2";
@@ -72,6 +77,7 @@ public static partial class TakeRender
         public long responseSupportSamples;
         public bool tailCoversResponseSupport;
         public long audioUploadBytes,audioReadbackBytes;
+        public AudioDiagnostics gpuAudio;
         public string backendScope="Transport backend; audio synthesis currently runs on CPU";
         public string traversalCounterScope="Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries";
         public long pairPrimitiveTestUpperBound;
@@ -287,6 +293,7 @@ public static partial class TakeRender
         report.workingNumericBytes+=(gpuAudio?.NumericBytes??mixer.NumericBytes)-initialMixerBytes;
         report.responseSupportSamples=gpuAudio?.ResponseSupportSamples??mixer.ResponseSupportSamples;
         report.audioUploadBytes=gpuAudio?.UploadedBytes??0;report.audioReadbackBytes=gpuAudio?.ReadbackBytes??0;
+        report.gpuAudio=gpuAudio?.Diagnostics;
         report.tailCoversResponseSupport=settings.tailSamples>=report.responseSupportSamples;
         report.wallSeconds=watch.Elapsed.TotalSeconds;
         report.responseHash=AcousticTake.HashFile(Path.Combine(outputDirectory,"responses.bin"));

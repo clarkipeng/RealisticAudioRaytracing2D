@@ -55,6 +55,9 @@ public partial class TakeChecks
         Check(energy>1e-6,"GPU parity fixture contains audible output.");
         double relative=Math.Sqrt(error/energy);
         Check(peak<2e-4 && relative<5e-4,"GPU/CPU "+method+" "+ears+" "+delay+" FFT "+size+" peak="+peak+" relative="+relative);
+        Assert.That(gpu.Diagnostics.responseUpdates,Is.EqualTo(12),"Partial PCM reads must not count a response twice.");
+        Assert.That(gpu.Diagnostics.reusedResponses,Is.EqualTo(2),"The two stationary responses reuse filters; turns, cuts and activity changes rebuild them.");
+        Assert.That(gpu.Diagnostics.peakGroups,Is.InRange(1,gpu.Diagnostics.pathCapacity));
     }
     [UnityTest, Category("GPU"), Category("Integration")]
     public IEnumerator GpuReadbackOwnsOutputUntilConsumed()
@@ -90,6 +93,28 @@ public partial class TakeChecks
             double energy=0;foreach(float sampleValue in pcm){Assert.That(float.IsFinite(sampleValue),Is.True);energy+=sampleValue*sampleValue;}
             Assert.That(energy,Is.GreaterThan(.01),"Both independently owned batches must contain audio.");
         }
+    }
+
+    [Test,Category("GPU")]
+    public void UnchangedLargeResponseDoesNotRunFilterFfts()
+    {
+        RequireGpu();var scene=Scene();var state=States();var settings=SpectralSettings();
+        settings.fftSize=2048;settings.spectralHop=512;settings.responseStepSamples=2048;settings.raysPerBin=1;settings.maxBounces=1;
+        var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
+        paths[0]=new RayTransport.Path{pressureGain=1};
+        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var gpu=new GpuAudio(scene,8192,settings,new[]{new TakeRender.Signal(new[]{0f})});
+        gpu.SetResponse(0,false,arrivals,0,scene,state);gpu.Render(0,2048,new float[2048]);
+        var fields=new[]{"work","transform"};var buffers=new ComputeBuffer[fields.Length];
+        var sentinel=new Vector2[8];for(int i=0;i<sentinel.Length;i++)sentinel[i]=new Vector2(i+1,-i-1);
+        for(int i=0;i<fields.Length;i++)
+        {
+            buffers[i]=(ComputeBuffer)typeof(GpuAudio).GetField(fields[i],System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(gpu);
+            buffers[i].SetData(sentinel,0,0,sentinel.Length);
+        }
+        gpu.SetResponse(2048,false,arrivals,0,scene,state);
+        foreach(var buffer in buffers)
+        {var actual=new Vector2[sentinel.Length];buffer.GetData(actual,0,0,actual.Length);Assert.That(actual,Is.EqualTo(sentinel),"Neither inverse nor forward filter FFT may touch scratch for an unchanged response.");}
     }
 
 }

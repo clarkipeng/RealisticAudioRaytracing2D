@@ -44,6 +44,7 @@ public static partial class TakeRender
         public bool TailCoversResponseSupport => settings.tailSamples>=ResponseSupportSamples;
         public Action<long,long,DirectPath[]> ResponseApplied;
         public string Backend => solver.Backend;
+        public AudioDiagnostics GpuDiagnostics => gpuAudio?.Diagnostics;
         public Live(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,float[][] pcm,int rate,Settings settings,
             AudioManager.PcmQueue queue,int lead,int listener,ComputeShader shader=null,SourceStream[] streams=null)
         {

@@ -78,6 +78,7 @@ public class RayTraceManager : MonoBehaviour
         public long pairPrimitiveTestUpperBound,validationCount,coalescedObservations,responseSupportSamples;
         public bool tailCoversResponseSupport;
         public double completionSeconds,maximumCompletionSeconds;
+        public TakeRender.AudioDiagnostics gpuAudio;
         public long channelMismatchSamples;
         public long observedSamples,leadSamples,underrunSamples,lateSamples,overflowSamples,overBudgetCallbacks,maximumObservationGapSamples;
         public double preparationSeconds,validationSeconds,maximumValidationSeconds,solveSeconds,audioSeconds,responsePreparationSeconds,maximumSolveSeconds,maximumCallbackSeconds;
@@ -343,6 +344,7 @@ public class RayTraceManager : MonoBehaviour
         liveDiagnostics.responseSupportSamples=liveDirect.ResponseSupportSamples;
         liveDiagnostics.tailCoversResponseSupport=liveDirect.TailCoversResponseSupport;
         liveDiagnostics.responseCount=liveDirect.ResponseCount; liveDiagnostics.solveSeconds=liveDirect.SolveSeconds;
+        liveDiagnostics.gpuAudio=liveDirect.GpuDiagnostics;
         liveDiagnostics.audioSeconds=liveDirect.AudioSeconds; liveDiagnostics.responsePreparationSeconds=liveDirect.ResponsePreparationSeconds; liveDiagnostics.maximumSolveSeconds=liveDirect.MaximumSolveSeconds;
         liveDiagnostics.channelMismatchSamples=System.Threading.Interlocked.Read(ref monitorQueue.ChannelMismatchSamples);
         liveDiagnostics.underrunSamples=System.Threading.Interlocked.Read(ref monitorQueue.UnderrunSamples);

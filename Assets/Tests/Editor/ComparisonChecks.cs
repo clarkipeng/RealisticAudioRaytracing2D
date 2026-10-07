@@ -5,6 +5,24 @@ using UnityEngine;
 
 public partial class TakeChecks
 {
+    [Test,Category("GPU"),Category("Integration")]
+    public void ConvergedRaytracedComparisonIsNotATeacher()
+    {
+        var shader=RequireGpu();var state=States();
+        using(var writer=Writer("static-preview",Scene(),new[]{1f,.5f,-.5f}))
+        {
+            writer.Append(0,state);writer.Append(128,state);
+            writer.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});writer.Complete();
+        }
+        using var take=AcousticTake.Open(Path.Combine(directory,"static-preview"));
+        var low=SpectralSettings();low.fftSize=16;low.spectralHop=4;low.maxBounces=1;low.raysPerBin=1;low.responseStepSamples=64;low.transitionSamples=0;
+        var high=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(low));high.responseStepSamples=32;
+        var result=TakeComparison.Run(take,low,high,Path.Combine(directory,"preview-comparison"),shader,referenceCheck:
+            new TakeComparison.ReferenceCheck{responseStepSamples=16,maximumRmsError=1e-5,maximumAbsoluteError=1e-5});
+        Assert.That(result.referenceAccepted,Is.True,"Static audio can agree at all three time grids.");
+        Assert.That(result.eligibleForTemporalTraining,Is.False,"Same-model agreement cannot approve the unvalidated reflection/diffraction model.");
+    }
+
     [Test, Category("Core")]
     public void DisplayFftMatchesDirectDft()
     {

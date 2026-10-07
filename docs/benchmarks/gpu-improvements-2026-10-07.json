@@ -1,0 +1,809 @@
+{
+  "baselineRevision": "83a62da",
+  "scope": "Station numeric replay, same six sources/one binaural listener, 564 triangles, 530501 frames. Batchmode Metal. Repeated runs, not an isolated GPU timing or realtime deadline result.",
+  "timingCaution": "Unfactored controls retain new command submission, skips and diagnostics but keep a separate material/ear spectrum per ear. Three controls followed by three final runs; runs are not randomized. The original HEAD baseline has one run. Profiled run excluded from timing comparisons.",
+  "fixture": {
+    "settings": {
+      "responseStepSamples": 1024,
+      "speedOfSound": 343.0,
+      "referenceDistance": 1.0,
+      "minimumDistance": 0.10000000149011612,
+      "tailSamples": 44100,
+      "transitionSamples": 512,
+      "delayFilter": 0,
+      "listenerOutput": 1,
+      "sincRadius": 16,
+      "maximumDelaySeconds": 10.0,
+      "maximumSignalEvents": 4096,
+      "maximumPendingObservations": 16,
+      "maximumResponsesPerBatch": 8,
+      "useBvh": true,
+      "transport": 1,
+      "synthesis": 0,
+      "audioBackend": 0,
+      "raysPerBin": 1,
+      "maxBounces": 5,
+      "seed": 0,
+      "raysPerPair": 0,
+      "diffractionFactor": 1.0,
+      "airAbsorption": true,
+      "fftSize": 1024,
+      "spectralHop": 256
+    },
+    "takeSourceHash": "314046d4975dad340e7b0c86da9c82d6995b01130033773ff788f8a483668352",
+    "takeStateHash": "fb40c9023cf9284c25e6633f97fc197c3df0430215804c67bae779dceedc9144",
+    "takeEventHash": "7c74d40ce15911adf59e9f1dbd5a7d42a7599b07942257f19dfa79b1a955a726",
+    "sceneHash": "d512698d34afd35b2477e79cdbf7cc35c17a7650d63c90eb98ca244fc08fbb83",
+    "sampleRate": 44100,
+    "sourceCount": 6,
+    "listenerCount": 1,
+    "primitiveCount": 564,
+    "outputSamples": 530501,
+    "unityVersion": "6000.4.1f1",
+    "processor": "Apple M5",
+    "graphicsDevice": "Apple M5"
+  },
+  "sourceHashes": {
+    "Assets/Scripts/Simulation/GpuAudio.cs": "9312241aa85305b87b8338419df042adcb56136ebc15b9663df29d8e6c0b4fe8",
+    "Assets/Resources/Acoustics/GpuAudio.compute": "ccfdbc3d3ebadc1e299783d1faf29afdbc37d55966038048665c88d1c6d47afc"
+  },
+  "runs": [
+    {
+      "name": "before-1",
+      "wallSeconds": 4.8107937,
+      "audioSeconds": 3.859597299999994,
+      "solveSeconds": 0.2925262,
+      "workingNumericBytes": 916339093,
+      "audioHashes": [
+        "80890655a006dc70072e4117e2b77309231c311b97975495b234338d5e60c7e0"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4252312,
+      "gpuAudio": null
+    },
+    {
+      "name": "after-1",
+      "wallSeconds": 5.289860399999999,
+      "audioSeconds": 4.323554700000004,
+      "solveSeconds": 0.32064420000000005,
+      "workingNumericBytes": 563674197,
+      "audioHashes": [
+        "5025b49595a8ab2eaf6663b8c3d766c2d143870a85e67dfdf39d5b7619c2522f"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 353354400,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    },
+    {
+      "name": "after-2",
+      "wallSeconds": 5.225704899999999,
+      "audioSeconds": 4.364037200000001,
+      "solveSeconds": 0.279526,
+      "workingNumericBytes": 563674197,
+      "audioHashes": [
+        "5025b49595a8ab2eaf6663b8c3d766c2d143870a85e67dfdf39d5b7619c2522f"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 353354400,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    },
+    {
+      "name": "unfactored-1",
+      "wallSeconds": 5.2745472,
+      "audioSeconds": 4.0026682000000005,
+      "solveSeconds": 0.2838556,
+      "workingNumericBytes": 917028597,
+      "audioHashes": [
+        "83bfdf8ad11bed6f7d8514e5d4be0cba19376e3f7743b42b2fa195945a74f3ce"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 706708800,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    },
+    {
+      "name": "unfactored-2",
+      "wallSeconds": 5.0335686,
+      "audioSeconds": 4.108155300000004,
+      "solveSeconds": 0.2684955,
+      "workingNumericBytes": 917028597,
+      "audioHashes": [
+        "83bfdf8ad11bed6f7d8514e5d4be0cba19376e3f7743b42b2fa195945a74f3ce"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 706708800,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    },
+    {
+      "name": "unfactored-3",
+      "wallSeconds": 5.2814296,
+      "audioSeconds": 4.360548899999991,
+      "solveSeconds": 0.29489119999999996,
+      "workingNumericBytes": 917028597,
+      "audioHashes": [
+        "83bfdf8ad11bed6f7d8514e5d4be0cba19376e3f7743b42b2fa195945a74f3ce"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 706708800,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    },
+    {
+      "name": "final-1",
+      "wallSeconds": 5.2636978999999995,
+      "audioSeconds": 4.3542344,
+      "solveSeconds": 0.3067965000000001,
+      "workingNumericBytes": 563674197,
+      "audioHashes": [
+        "59247161a2b4fc00ec0952bccd1c8e75aabfe96f438cb9fd50403a41d126b7dd"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 353354400,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    },
+    {
+      "name": "final-2",
+      "wallSeconds": 5.3440443,
+      "audioSeconds": 4.4416466,
+      "solveSeconds": 0.2867256000000001,
+      "workingNumericBytes": 563674197,
+      "audioHashes": [
+        "59247161a2b4fc00ec0952bccd1c8e75aabfe96f438cb9fd50403a41d126b7dd"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 353354400,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    },
+    {
+      "name": "final-3",
+      "wallSeconds": 5.1599414999999995,
+      "audioSeconds": 4.307580400000006,
+      "solveSeconds": 0.3120976,
+      "workingNumericBytes": 563674197,
+      "audioHashes": [
+        "59247161a2b4fc00ec0952bccd1c8e75aabfe96f438cb9fd50403a41d126b7dd"
+      ],
+      "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+      "audioUploadBytes": 12748632,
+      "audioReadbackBytes": 4260616,
+      "gpuAudio": {
+        "responseUpdates": 519,
+        "reusedResponses": 52,
+        "filterBytes": 353354400,
+        "pathCapacity": 21546,
+        "activeGroups": 377,
+        "peakGroups": 744
+      }
+    }
+  ],
+  "audioDifference": {
+    "maximumAbsoluteError": 2.9802322387695312e-08,
+    "relativeRms": 8.170524467287895e-08,
+    "snrDb": 141.75500130279474,
+    "directProbesBitIdentical": true,
+    "finalRunsBitIdentical": true
+  },
+  "medianSeconds": {
+    "unfactored": 5.2745472,
+    "final": 5.2636978999999995
+  },
+  "numericMemoryReductionFraction": 0.3848628730281619,
+  "metalCapture": {
+    "pid": 71462,
+    "scope": "Only Unity active GPU intervals in the profiled trace; encoder intervals may overlap, not total wall time or isolated kernels.",
+    "rows": 1236,
+    "channelMilliseconds": {
+      "Compute": 4033.808137,
+      "Fragment": 0.002792
+    },
+    "acousticsLabels": [
+      "Acoustics GPU audio",
+      "Acoustics GPU transport",
+      "Acoustics.GPU.Compare",
+      "Acoustics.GPU.Direct",
+      "Acoustics.GPU.Filters",
+      "Acoustics.GPU.Group",
+      "Acoustics.GPU.InputFFT",
+      "Acoustics.GPU.Mix",
+      "Acoustics.GPU.PCM",
+      "Acoustics.GPU.Trace",
+      "[C] Acoustics.GPU.Compare"
+    ]
+  },
+  "reciprocity": {
+    "fixture": "Source (-1,-1,0), listener (-4,2,0), swapped at identical static poses. Wall x=0, y in [-10,10], z in [-10,10] for 3D. First order only, no absorption/transmission/diffraction/air loss, 250 Hz. Excludes direct sound. Samples are [forward real, forward imag, reverse real, reverse imag]. Eight non-overlapping hashed ray-index ranges at the tested budgets.",
+    "relativeGapDefinition": "abs(meanForward-meanReverse)/max(abs(meanForward),abs(meanReverse)); this is reciprocity disagreement, not error against measured ground truth.",
+    "results": [
+      {
+        "scope": "First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",
+        "planar": true,
+        "rays": 1024,
+        "scattering": 1.0,
+        "samples": [
+          [
+            -0.006955666489982695,
+            -0.008233251539993271,
+            -0.0018168362215244531,
+            -0.0018236026082624826
+          ],
+          [
+            -0.006598660084128144,
+            -0.00869186954327729,
+            -0.0012503174352494525,
+            -0.003248287448273605
+          ],
+          [
+            -0.00635960519130522,
+            -0.009094135009573755,
+            -0.0012971859549963678,
+            -0.0018644740887746166
+          ],
+          [
+            -0.008439447279247777,
+            -0.008755684365361466,
+            -0.0017486066051508602,
+            -0.0020733537847736094
+          ],
+          [
+            -0.007585840961690153,
+            -0.008037489016816085,
+            -0.002313713688323009,
+            -0.0019098830063832507
+          ],
+          [
+            -0.008432193650602104,
+            -0.007604301229758863,
+            -0.0015886280541165265,
+            -0.0022838282318349205
+          ],
+          [
+            -0.00682872581686693,
+            -0.00794143008366619,
+            -0.0017533593987552267,
+            -0.001771318231675232
+          ],
+          [
+            -0.00730131226259112,
+            -0.00814938742508485,
+            -0.0029304396420522924,
+            -0.0020774797337273017
+          ]
+        ],
+        "meanForward": [
+          -0.007312681467051768,
+          -0.008313443526691472
+        ],
+        "meanReverse": [
+          -0.0018373858750210235,
+          -0.0021315283917131274
+        ],
+        "reciprocityGap": 0.00825802255725822,
+        "standardError": 0.0003725619438418365,
+        "relativeGap": 0.7458490268348897
+      },
+      {
+        "scope": "First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",
+        "planar": true,
+        "rays": 65536,
+        "scattering": 0.0,
+        "samples": [
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ],
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ],
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ],
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ],
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ],
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ],
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ],
+          [
+            3.738437481092517e-05,
+            -0.17149857769253563,
+            3.738437481092517e-05,
+            -0.17149857769253563
+          ]
+        ],
+        "meanForward": [
+          3.738437481092517e-05,
+          -0.17149857769253563
+        ],
+        "meanReverse": [
+          3.738437481092517e-05,
+          -0.17149857769253563
+        ],
+        "reciprocityGap": 0.0,
+        "standardError": 0.0,
+        "relativeGap": 0.0
+      },
+      {
+        "scope": "First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",
+        "planar": true,
+        "rays": 65536,
+        "scattering": 1.0,
+        "samples": [
+          [
+            -0.0071668621941581336,
+            -0.00880636881212023,
+            -0.0019326551156943815,
+            -0.0021979602003723785
+          ],
+          [
+            -0.007056053845375128,
+            -0.008733901419622008,
+            -0.0018016499873495335,
+            -0.002174213491064444
+          ],
+          [
+            -0.0070747430805936035,
+            -0.009024361986519137,
+            -0.001819998860585076,
+            -0.0020063144709322757
+          ],
+          [
+            -0.007117081304922876,
+            -0.008710710931981485,
+            -0.0018912451362847469,
+            -0.0020740812199540807
+          ],
+          [
+            -0.007090953630577141,
+            -0.008847877545903514,
+            -0.001840933589325239,
+            -0.0021412100826237192
+          ],
+          [
+            -0.007087594923267047,
+            -0.008502501218477133,
+            -0.0019404821981690802,
+            -0.0021193839354895286
+          ],
+          [
+            -0.007060535753697635,
+            -0.008682858214193572,
+            -0.0018921930404082166,
+            -0.0021032973946649345
+          ],
+          [
+            -0.007117101054070551,
+            -0.008887454422786876,
+            -0.0018776271841683086,
+            -0.0021363327790807295
+          ]
+        ],
+        "meanForward": [
+          -0.0070963657233327655,
+          -0.008774504318950495
+        ],
+        "meanReverse": [
+          -0.001874598138998073,
+          -0.0021190991967727614
+        ],
+        "reciprocityGap": 0.008459389696965035,
+        "standardError": 6.638337495886877e-05,
+        "relativeGap": 0.7496162462404724
+      },
+      {
+        "scope": "First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",
+        "planar": false,
+        "rays": 1024,
+        "scattering": 1.0,
+        "samples": [
+          [
+            -0.006011696026516521,
+            -0.0017264808433906055,
+            -0.0002609117946000926,
+            0.0002967104892642127
+          ],
+          [
+            -0.004631155653864529,
+            -0.002167199816116346,
+            -0.0006489271217471901,
+            -0.0007576685775732101
+          ],
+          [
+            -0.0050952882969282675,
+            -0.0018658596008844397,
+            -9.170118916404721e-05,
+            6.13750283589865e-05
+          ],
+          [
+            -0.004278311132654297,
+            0.00016569163470424718,
+            -0.00015152104190419062,
+            -0.0001476999044841645
+          ],
+          [
+            -0.004968101347935368,
+            -0.0023274468957611883,
+            -0.0004269266226733413,
+            -7.576028458837367e-05
+          ],
+          [
+            -0.00561571346043304,
+            -0.001032478696131704,
+            -0.0004027039107056974,
+            0.00015352065349219559
+          ],
+          [
+            -0.0047630515601367026,
+            -0.001078764302762099,
+            -0.0005451136549523081,
+            -0.00013907039742737634
+          ],
+          [
+            -0.0053462001978406525,
+            -0.0010576004344235673,
+            -0.00026348870429278103,
+            0.00044950052349799
+          ]
+        ],
+        "meanForward": [
+          -0.005088689709538673,
+          -0.001386267369345713
+        ],
+        "meanReverse": [
+          -0.000348911755004956,
+          -1.9886558682467482e-05
+        ],
+        "reciprocityGap": 0.004932797540750338,
+        "standardError": 0.00036061202753914605,
+        "relativeGap": 0.9352808611643432
+      },
+      {
+        "scope": "First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",
+        "planar": false,
+        "rays": 65536,
+        "scattering": 0.0,
+        "samples": [
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ],
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ],
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ],
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ],
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ],
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ],
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ],
+          [
+            3.738437481091663e-05,
+            -0.1714985776925253,
+            3.738437481091663e-05,
+            -0.1714985776925253
+          ]
+        ],
+        "meanForward": [
+          3.738437481091663e-05,
+          -0.1714985776925253
+        ],
+        "meanReverse": [
+          3.738437481091663e-05,
+          -0.1714985776925253
+        ],
+        "reciprocityGap": 0.0,
+        "standardError": 0.0,
+        "relativeGap": 0.0
+      },
+      {
+        "scope": "First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",
+        "planar": false,
+        "rays": 65536,
+        "scattering": 1.0,
+        "samples": [
+          [
+            -0.00509789265707905,
+            -0.0015678302015987686,
+            -0.0003649160315200506,
+            -2.903578878568037e-05
+          ],
+          [
+            -0.005002740315248763,
+            -0.0014466275420380664,
+            -0.0003445443295770251,
+            -4.640223410786009e-05
+          ],
+          [
+            -0.005074811584591025,
+            -0.001524428127466674,
+            -0.0003596898566148819,
+            -7.822118145950412e-05
+          ],
+          [
+            -0.004780578950055633,
+            -0.0014414348661075274,
+            -0.00033455739645773885,
+            -7.240031562676927e-05
+          ],
+          [
+            -0.004926105853698558,
+            -0.0015311168321354763,
+            -0.0003572686604267289,
+            -5.3564282226746534e-05
+          ],
+          [
+            -0.004864123722364002,
+            -0.0015178261257379974,
+            -0.0003382978699931405,
+            -5.554786797554594e-05
+          ],
+          [
+            -0.0049916776586900425,
+            -0.0015165052456993626,
+            -0.0004274482043121298,
+            -3.504016820944774e-05
+          ],
+          [
+            -0.00512545267482058,
+            -0.0016811261823229168,
+            -0.0003146887202700691,
+            -1.0981725990088478e-05
+          ]
+        ],
+        "meanForward": [
+          -0.004982922927068456,
+          -0.0015283618903883488
+        ],
+        "meanReverse": [
+          -0.0003551763836464706,
+          -4.7649195547705325e-05
+        ],
+        "reciprocityGap": 0.004858862845853582,
+        "standardError": 5.4082608617223996e-05,
+        "relativeGap": 0.9322373531258431
+      }
+    ],
+    "seedFormula": "unchecked int32(uint32(seedIndex) * 0x9e3779b9), seedIndex 0..7; transport hashes rayIndex + seed + 1"
+  },
+  "limits": [
+    "Diffuse pressure fails reciprocity even at high ray budgets; preview remains ineligible as a training teacher.",
+    "Exact specular-to-edge paths remain incomplete. A random diffuse connection cannot sample an ideal specular constraint.",
+    "Current filters still reserve worst-case groups; storage is factored, not dynamically pooled.",
+    "Metal encoder intervals can contain multiple labeled stages; do not attribute an encoder duration to the first stage name."
+  ],
+  "validation": {
+    "coreNormalEditor": {
+      "status": "completed",
+      "duration": 38.02,
+      "summary": {
+        "total": 150,
+        "passed": 150,
+        "failed": 0,
+        "skipped": 0,
+        "inconclusive": 0
+      }
+    },
+    "coreBatchMode": {
+      "status": "completed",
+      "duration": 24.69,
+      "summary": {
+        "total": 149,
+        "passed": 148,
+        "failed": 1,
+        "skipped": 0,
+        "inconclusive": 0
+      }
+    },
+    "note": "Normal Editor 150/150; earlier batchmode 148/149 with comparison-camera ground-sweep failure, also reproduced alone in batchmode. New teacher-gate test added before normal-Editor run.",
+    "stationDeviceDeadline": {
+      "test": {
+        "status": "completed",
+        "duration": 25.17,
+        "summary": {
+          "total": 1,
+          "passed": 0,
+          "failed": 1,
+          "skipped": 0,
+          "inconclusive": 0
+        }
+      },
+      "deviceFrames": 885760,
+      "underrunFrames": 4096,
+      "lateFrames": 3072,
+      "overflowFrames": 0,
+      "channelMismatchFrames": 0,
+      "overBudgetCallbacks": 0,
+      "leadFrames": 16384,
+      "producerSnapshot": {
+        "backend": "GPU-Metal",
+        "scope": "producer stopped; callback counters sampled at stop",
+        "sampleRate": 44100,
+        "responseCount": 948,
+        "queueCapacity": 96000,
+        "deviceBufferSamples": 1024,
+        "maximumPendingObservations": 4,
+        "retainedEvents": 12,
+        "pairPrimitiveTestUpperBound": 0,
+        "validationCount": 222,
+        "coalescedObservations": 1,
+        "responseSupportSamples": 8856,
+        "tailCoversResponseSupport": true,
+        "completionSeconds": 21.87382899999999,
+        "maximumCompletionSeconds": 0.1998893,
+        "gpuAudio": {
+          "responseUpdates": 939,
+          "reusedResponses": 86,
+          "filterBytes": 353354400,
+          "pathCapacity": 21546,
+          "activeGroups": 742,
+          "peakGroups": 743
+        },
+        "channelMismatchSamples": 0,
+        "observedSamples": 974848,
+        "leadSamples": 16384,
+        "underrunSamples": 3072,
+        "lateSamples": 3072,
+        "overflowSamples": 0,
+        "overBudgetCallbacks": 0,
+        "maximumObservationGapSamples": 5120,
+        "preparationSeconds": 0.4587437,
+        "validationSeconds": 0.0362155,
+        "maximumValidationSeconds": 0.0004949,
+        "solveSeconds": 0.018395499999999995,
+        "audioSeconds": 0.06153970000000064,
+        "responsePreparationSeconds": 0.014699699999999996,
+        "maximumSolveSeconds": 0.0025958,
+        "maximumCallbackSeconds": 6.64e-05
+      },
+      "note": "20 seconds after two seconds of device warmup; normal Editor under station graphics load. Counters overlap and the final producer snapshot may precede the last callback. No reliable-realtime claim."
+    },
+    "stationReplay": {
+      "status": "completed",
+      "duration": 33.33,
+      "summary": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "inconclusive": 0
+      }
+    },
+    "churchReplay": {
+      "status": "completed",
+      "duration": 25.9,
+      "summary": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "inconclusive": 0
+      }
+    }
+  },
+  "build": {
+    "final": {
+      "result": "Succeeded",
+      "totalErrors": 0,
+      "totalWarnings": 1,
+      "totalSizeBytes": 341945495,
+      "seconds": 2.5074579999999997
+    },
+    "first": {
+      "result": "Succeeded",
+      "totalErrors": 1,
+      "totalWarnings": 1877,
+      "totalSizeBytes": 341945495,
+      "seconds": 40.092258
+    },
+    "note": "Initial build succeeded but its 30-second Pipeline API timeout logged an error during the build. Repeated cached build scheduled outside the API wait completed with zero errors. Transport/Metal warnings were emitted by the first shader compilation; the cached build does not re-emit them."
+  }
+}

@@ -360,6 +360,13 @@ public sealed class TakeComparisonWindow : EditorWindow
         Row("Maximum solve",report.low.maximumSolveSeconds,report.high.maximumSolveSeconds);
         Row("Wall / audio duration",report.low.wallSeconds/(report.low.outputSamples/(double)report.low.sampleRate),report.high.wallSeconds/(report.high.outputSamples/(double)report.high.sampleRate));
         Row("Numeric working MiB (not process)",report.low.workingNumericBytes/1048576.0,report.high.workingNumericBytes/1048576.0);
+        if(report.low.gpuAudio!=null && report.high.gpuAudio!=null)
+        {
+            var low=report.low.gpuAudio;var high=report.high.gpuAudio;
+            Row("GPU material filter MiB",low.filterBytes/1048576.0,high.filterBytes/1048576.0);
+            Row("Reused / total responses",$"{low.reusedResponses} / {low.responseUpdates}",$"{high.reusedResponses} / {high.responseUpdates}");
+            Row("Peak groups / reserved paths",$"{low.peakGroups} / {low.pathCapacity}",$"{high.peakGroups} / {high.pathCapacity}");
+        }
         Row("Backend",report.low.backend,report.high.backend);
         EditorGUILayout.LabelField(report.referenceStatus,EditorStyles.wordWrappedLabel);
         EditorGUILayout.LabelField("Temporal training gate: "+(report.eligibleForTemporalTraining?"passed mixed-audio reference check; per-pair validation still required":"not accepted")+". Direct model only.",EditorStyles.wordWrappedMiniLabel);
