@@ -27,7 +27,7 @@ internal sealed class RayTransport : IDisposable
         public uint owner, firstFace, secondFace, pad;
     }
     readonly ComputeShader shader;
-    readonly CommandBuffer commands=new CommandBuffer {name="Acoustics GPU transport"};
+    readonly CommandBuffer commands;
     readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Volume
@@ -72,6 +72,7 @@ internal sealed class RayTransport : IDisposable
         bool planar = scene.dimension == AcousticTake.Dimension.Planar2D;
         try
         {
+            commands = new CommandBuffer {name="Acoustics GPU transport"};
             directKernel = shader.FindKernel((planar ? "EvaluateDirect2D" : "EvaluateDirect3D") +
                                              (settings.useBvh ? "Bvh" : ""));
             traceKernel =
@@ -471,6 +472,6 @@ internal sealed class RayTransport : IDisposable
         enabledBuffer?.Dispose();
         edgeRangeBuffer?.Dispose();
         edgeIndexBuffer?.Dispose();
-        commands.Dispose();
+        commands?.Dispose();
     }
 }

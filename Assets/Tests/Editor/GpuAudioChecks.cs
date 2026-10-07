@@ -96,6 +96,34 @@ public partial class TakeChecks
     }
 
     [Test,Category("GPU")]
+    public void GpuBatchUploadsOnlyFinalizedSourceSamples()
+    {
+        RequireGpu();var scene=Scene();var state=States();var settings=SpectralSettings();
+        settings.raysPerBin=1;settings.maxBounces=1;
+        int step=settings.responseStepSamples;
+        using var stream=new SourceStream(step*2);
+        var signal=new TakeRender.Signal(stream);signal.SetActive(0,true);
+        signal.Append(new AcousticTake.VoiceEvent{gain=1});
+        var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
+        for(int bin=0;bin<settings.FrequencyBins;bin++)paths[bin]=new RayTransport.Path{frequencyBin=(uint)bin,pressureGain=1};
+        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var gpu=new GpuAudio(scene,8192,settings,new[]{signal},maximumResponses:2);
+        gpu.SetResponse(0,false,arrivals,0,scene,state);
+        long before=gpu.UploadedBytes;
+        Assert.Throws<InvalidOperationException>(()=>gpu.QueueRender(0,step));
+        var input=new float[step];Array.Fill(input,.25f);stream.Append(input,0,step,step);
+        Assert.Throws<InvalidOperationException>(()=>gpu.PrepareInput(step*2));
+        Assert.That(gpu.UploadedBytes,Is.EqualTo(before),"Reject incomplete batches before uploading any samples.");
+        stream.Append(input,0,step,step*2);gpu.PrepareInput(step*2);
+        stream.Prune(step*2); // Queued work owns the uploaded copy, not the source history.
+        gpu.QueueRender(0,step);gpu.QueueRender(step,step);gpu.BeginReadback();
+        var pcm=new float[step*2];Assert.That(gpu.TryComplete(pcm,true),Is.True);
+        Assert.That(gpu.UploadedBytes-before,Is.EqualTo(step*2*4),"Upload the batch once, even when rendered in pieces.");
+        double energy=0;foreach(float sample in pcm){Assert.That(float.IsFinite(sample),Is.True);energy+=sample*sample;}
+        Assert.That(energy,Is.GreaterThan(.01));
+    }
+
+    [Test,Category("GPU")]
     public void UnchangedLargeResponseDoesNotRunFilterFfts()
     {
         RequireGpu();var scene=Scene();var state=States();var settings=SpectralSettings();

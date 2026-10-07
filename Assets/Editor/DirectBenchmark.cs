@@ -111,20 +111,45 @@ public static class DirectBenchmark
     // keep the ray-index ranges separate at the benchmark budgets.
     public static object MeasureReciprocity(bool planar,int rays,float scattering,int seeds=8)
     {
-        if(rays<1 || seeds<2 || !float.IsFinite(scattering) || scattering<0 || scattering>1)throw new ArgumentException("Use positive rays, at least two seeds and scattering in [0,1].");
-        var scene=new AcousticTake.Scene{dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D,
-            objects=new[]{new AcousticTake.ObjectDefinition{id="source",scale=Vector3.one},new AcousticTake.ObjectDefinition{id="listener",scale=Vector3.one},new AcousticTake.ObjectDefinition{id="wall",scale=Vector3.one,primitiveCount=planar?1:2}},
+        if(rays<1 || seeds<2 || !float.IsFinite(scattering) || scattering<0 || scattering>1)
+            throw new ArgumentException("Use positive rays, at least two seeds and scattering in [0,1].");
+        var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
+        var scene=new AcousticTake.Scene
+        {
+            dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D,
+            objects=new[]
+            {
+                new AcousticTake.ObjectDefinition{id="source",scale=Vector3.one},
+                new AcousticTake.ObjectDefinition{id="listener",scale=Vector3.one},
+                new AcousticTake.ObjectDefinition{id="wall",scale=Vector3.one,primitiveCount=planar?1:2}
+            },
             sources=new[]{new AcousticTake.SourceDefinition{objectIndex=0}},listeners=new[]{1},
-            materials=new[]{new AcousticTake.MaterialDefinition{frequencies=new[]{0f},absorption=new[]{0f},transmission=new[]{0f},scattering=new[]{scattering},ior=new[]{1f},damping=new[]{0f}}}};
+            materials=new[]{new AcousticTake.MaterialDefinition
+            {
+                frequencies=new[]{0f},absorption=new[]{0f},transmission=new[]{0f},
+                scattering=new[]{scattering},ior=new[]{1f},damping=new[]{0f}
+            }}
+        };
         var a=new Vector3(0,-10,planar?0:-10);var b=new Vector3(0,10,planar?0:-10);var c=new Vector3(0,10,10);var d=new Vector3(0,-10,10);
-        var geometry=planar?new[]{new AcousticTake.Primitive{objectIndex=2,a=a,b=b}}:new[]{new AcousticTake.Primitive{objectIndex=2,a=a,b=b,c=c},new AcousticTake.Primitive{objectIndex=2,a=a,b=c,c=d}};
-        var states=new[]{new AcousticTake.State{rotation=Quaternion.identity,flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Source},new AcousticTake.State{rotation=Quaternion.identity,flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Listener},new AcousticTake.State{rotation=Quaternion.identity,flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry}};
-        var settings=new TakeRender.Settings{transport=TakeRender.Transport.Raytraced,fftSize=4,spectralHop=1,maxBounces=1,raysPerBin=rays,diffractionFactor=0,airAbsorption=false,maximumDelaySeconds=1};
+        var geometry=planar?new[]{new AcousticTake.Primitive{objectIndex=2,a=a,b=b}}:new[]
+        {
+            new AcousticTake.Primitive{objectIndex=2,a=a,b=b,c=c},
+            new AcousticTake.Primitive{objectIndex=2,a=a,b=c,c=d}
+        };
+        var roles=new[]{AcousticTake.StateFlags.Source,AcousticTake.StateFlags.Listener,AcousticTake.StateFlags.Geometry};
+        var states=new AcousticTake.State[roles.Length];
+        for(int i=0;i<states.Length;i++)
+            states[i]=new AcousticTake.State{rotation=Quaternion.identity,flags=AcousticTake.StateFlags.Active|roles[i]};
+        var settings=new TakeRender.Settings
+        {
+            transport=TakeRender.Transport.Raytraced,fftSize=4,spectralHop=1,maxBounces=1,
+            raysPerBin=rays,diffractionFactor=0,airAbsorption=false,maximumDelaySeconds=1
+        };
         var samples=new double[seeds][];Complex forward=0,reverse=0;double differenceSquares=0;
         for(int seed=0;seed<samples.Length;seed++)
         {
             settings.seed=unchecked((int)((uint)seed*0x9e3779b9u));
-            using var solver=new TransportSolver(scene,geometry,settings,AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute"),sampleRate:1000,readbackPaths:false);
+            using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:1000,readbackPaths:false);
             var values=new Complex[2];
             for(int direction=0;direction<2;direction++)
             {
@@ -133,12 +158,17 @@ public static class DirectBenchmark
                     if(segment.kind==TransportSolver.RayEvent.Listener && segment.path!=0)
                         values[direction]+=segment.pressure*Complex.Exp(new Complex(0,-2*Math.PI*250*segment.end.w));
             }
-            forward+=values[0];reverse+=values[1];differenceSquares+=(values[0]-values[1]).Magnitude*(values[0]-values[1]).Magnitude;
+            forward+=values[0];reverse+=values[1];double difference=(values[0]-values[1]).Magnitude;
+            differenceSquares+=difference*difference;
             samples[seed]=new[]{values[0].Real,values[0].Imaginary,values[1].Real,values[1].Imaginary};
         }
         forward/=samples.Length;reverse/=samples.Length;double gap=(forward-reverse).Magnitude;
         double standardError=Math.Sqrt(Math.Max(0,(differenceSquares-samples.Length*gap*gap)/(samples.Length-1)/samples.Length));
-        var result=new {scope="First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",planar,rays,scattering,samples,meanForward=new[]{forward.Real,forward.Imaginary},meanReverse=new[]{reverse.Real,reverse.Imaginary},reciprocityGap=gap,standardError,relativeGap=gap/Math.Max(forward.Magnitude,reverse.Magnitude)};
-        return result;
+        return new
+        {
+            scope="First-order reflected complex pressure at 250 Hz; stationary reciprocal wall, no diffraction or air loss. Necessary consistency check, not teacher approval.",
+            planar,rays,scattering,samples,meanForward=new[]{forward.Real,forward.Imaginary},meanReverse=new[]{reverse.Real,reverse.Imaginary},
+            reciprocityGap=gap,standardError,relativeGap=gap/Math.Max(forward.Magnitude,reverse.Magnitude)
+        };
     }
 }

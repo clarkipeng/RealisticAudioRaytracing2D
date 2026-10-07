@@ -8,14 +8,14 @@ using UnityEngine.Rendering;
 internal sealed class GpuAudio : IDisposable
 {
     readonly ComputeShader shader;
-    readonly CommandBuffer commands=new CommandBuffer {name="Acoustics GPU audio"};
+    readonly CommandBuffer commands;
     readonly TakeRender.Settings settings;
     readonly TakeRender.Signal[] signals;
     readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock;
     readonly int reset,compare,commit,groups,filter,input,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
     readonly int[] kernels,transformKernels;
     readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
-    readonly ComputeBuffer meta,args,headsPose,source,work,transform,output;
+    readonly ComputeBuffer args,headsPose,source,work,transform,output;
     readonly float[] download;
     readonly Vector4[] poses;
     readonly Quaternion[] lastHeads;
@@ -48,15 +48,16 @@ internal sealed class GpuAudio : IDisposable
         poses=new Vector4[listeners*2];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];completion=Complete;
         var asset=Resources.Load<ComputeShader>("Acoustics/GpuAudio");
         if(asset==null)throw new InvalidOperationException("Missing GPU audio compute shader.");
-        shader=UnityEngine.Object.Instantiate(asset);
         try
         {
+            commands=new CommandBuffer {name="Acoustics GPU audio"};
+            shader=UnityEngine.Object.Instantiate(asset);
             reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");filter=Kernel("AudioFilter");input=Kernel("AudioInput");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
             kernels=new[]{reset,compare,commit,groups,filter,input,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(settings.SpectralSlotsPerPair*2+1);
-            meta=Buffer("AudioMeta",16,4);meta.SetData(new uint[16]);
+            Buffer("AudioMeta",16,4).SetData(new uint[16]);
             Buffer("AudioLast",capacity,32).SetData(new RayTransport.Path[capacity]);
             Buffer("AudioPaths",checked(capacity*2),32);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
             args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
@@ -166,10 +167,6 @@ internal sealed class GpuAudio : IDisposable
     {
         if(disposed || pending || queued!=0 || end<cursor || end-cursor>maximumBlock)throw new InvalidOperationException("Source uploads require a completed previous batch and a bounded input range.");
         for(int s=0;s<signals.Length;s++)if(audibleSources[s] && signals[s].ReadyEnd<end)throw new InvalidOperationException("GPU source input is not finalized.");
-        UploadUntil(end);
-    }
-    void UploadUntil(long end)
-    {
         while(uploaded<end)
         {
             int ring=(int)(uploaded%history),count=(int)Math.Min(Math.Min(end-uploaded,history-ring),maximumBlock);
@@ -189,7 +186,7 @@ internal sealed class GpuAudio : IDisposable
     {
         if(disposed || pending || sample!=cursor || count<1 || count>maximumBlock-queued)throw new InvalidOperationException("Invalid GPU audio submission.");
         if(!initialized)throw new InvalidOperationException("GPU audio needs a response before rendering.");
-        for(int s=0;s<signals.Length;s++)if(audibleSources[s] && signals[s].ReadyEnd<sample+count)throw new InvalidOperationException("GPU source input is not finalized.");
+        // Uploaded samples were finalized by PrepareInput and remain owned for this batch.
         if(uploaded<checked(sample+count))PrepareInput(sample+count);
         Set("AudioBuildingFilter",0);
         for(int at=0;at<count;)
@@ -252,7 +249,7 @@ internal sealed class GpuAudio : IDisposable
     {
         if(disposed)return;if(pending && !completed)request.WaitForCompletion();pending=false;disposed=true;
         foreach(var buffer in owned)buffer.Dispose();owned.Clear();
-        commands.Dispose();
+        commands?.Dispose();
         if(shader!=null){if(Application.isPlaying)UnityEngine.Object.Destroy(shader);else UnityEngine.Object.DestroyImmediate(shader);}
     }
 }
