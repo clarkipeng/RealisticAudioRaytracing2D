@@ -2370,7 +2370,7 @@ MonoBehaviour:
     maxBounces: 5
     seed: 0
     raysPerPair: 0
-    diffractionFactor: 0.5
+    diffractionFactor: 1
     airAbsorption: 1
     fftSize: 1024
     spectralHop: 256

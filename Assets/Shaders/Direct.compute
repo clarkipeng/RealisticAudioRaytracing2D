@@ -1,3 +1,7 @@
+#pragma kernel Edge2D
+#pragma kernel Edge2DBvh USE_BVH
+#pragma kernel Edge3D
+#pragma kernel Edge3DBvh USE_BVH
 #pragma kernel SpectralDirect2D
 #pragma kernel SpectralDirect2DBvh USE_BVH
 #pragma kernel SpectralDirect3D
