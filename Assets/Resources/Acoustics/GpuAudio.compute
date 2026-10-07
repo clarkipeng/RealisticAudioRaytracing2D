@@ -39,7 +39,7 @@ uint AudioPair,AudioWhich,AudioRadius,AudioSinc;
 int AudioLatency,AudioRingAt,AudioAvailableStart,AudioAvailableEnd;
 uint AudioBlockNegative;
 uint AudioWriteOffset,AudioWriteCount,AudioWriteAt;
-uint AudioTransformSize,AudioTransformCount,AudioTransformInverse,AudioStage;
+uint AudioWorkStride,AudioTransformSize,AudioTransformBase,AudioTransformInverse,AudioStage;
 float AudioMaximumDelay;
 static const float AUDIO_PI=3.14159265358979323846;
 static const uint AUDIO_SHARED=2048;
@@ -246,14 +246,14 @@ void AudioInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     if(AudioSkip!=0)return;uint g=AudioPair*AudioSlots+group.x,t=tid.x;
     for(uint n=t;n<AudioFft;n+=256)AudioShared[n]=float2(AudioSample(g,n),0);GroupMemoryBarrierWithGroupSync();
     AudioFftShared(AudioFft,false,t);
-    for(uint k=t;k<AudioBins;k+=256)AudioWork[g*AudioFft+k]=AudioShared[k];
+    for(uint k=t;k<AudioBins;k+=256)AudioWork[g*AudioWorkStride+k]=AudioShared[k];
 }
 float2 AudioSum(uint channel,uint bin)
 {
     uint bank=AudioBank(),listener=channel/AudioChannels,ear=channel%AudioChannels;float2 value=0;
     for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)if(AudioPairEnabled[pair]>0)for(uint p=0;p<AudioCounts[bank*AudioPairs+pair];p++)
     {
-        uint g=pair*AudioSlots+p;value+=AudioMultiply(AudioWork[g*AudioFft+bin],AudioFilters[((bank*AudioCapacity+g)*AudioChannels+ear)*AudioBins+bin]);
+        uint g=pair*AudioSlots+p;value+=AudioMultiply(AudioWork[g*AudioWorkStride+bin],AudioFilters[((bank*AudioCapacity+g)*AudioChannels+ear)*AudioBins+bin]);
     }
     return value;
 }
@@ -284,13 +284,13 @@ void AudioWrite(uint3 id:SV_DispatchThreadID)
 void AudioMaterialGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(AudioMeta[1]==0)return;uint g=AudioPair*AudioSlots+group.x;
-    for(uint k=tid.x;k<AudioSize;k+=256){uint bin=min(k,AudioSize-k);float gain=0;int i=AudioHeads[g];for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];if(p.frequencyBin==bin)gain+=p.pressureGain;i=AudioNext[i];}if(i>=0)AudioError(4);AudioTransform[g*AudioFft+k]=float2(gain,0);}
+    for(uint k=tid.x;k<AudioSize;k+=256){uint bin=min(k,AudioSize-k);float gain=0;int i=AudioHeads[g];for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];if(p.frequencyBin==bin)gain+=p.pressureGain;i=AudioNext[i];}if(i>=0)AudioError(4);AudioTransform[group.x*AudioFft+k]=float2(gain,0);}
 }
 [numthreads(256,1,1)]
 void AudioPadGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(AudioMeta[1]==0)return;uint g=AudioPair*AudioSlots+group.x;
-    for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[g*AudioFft+n]=n<AudioSize?float2(AudioTransform[g*AudioFft+(n+AudioSize/2)%AudioSize].x,0):0;
+    for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[g*AudioFft+n]=n<AudioSize?float2(AudioTransform[group.x*AudioFft+(n+AudioSize/2)%AudioSize].x,0):0;
 }
 [numthreads(256,1,1)]
 void AudioFilterGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
@@ -317,13 +317,13 @@ void AudioSaveGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 [numthreads(256,1,1)]
 void AudioBitReverse(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    uint g=AudioTransformCount!=0?group.x:AudioPair*AudioSlots+group.x,n=AudioTransformSize,bits=(uint)firstbithigh(n);
+    uint g=AudioTransformBase+group.x,n=AudioTransformSize,bits=(uint)firstbithigh(n);
     for(uint i=tid.x;i<n;i+=256){uint j=reversebits(i)>>(32-bits);if(j>i){float2 a=AudioTransform[g*AudioFft+i];AudioTransform[g*AudioFft+i]=AudioTransform[g*AudioFft+j];AudioTransform[g*AudioFft+j]=a;}}
 }
 [numthreads(256,1,1)]
 void AudioButterfly(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    uint g=AudioTransformCount!=0?group.x:AudioPair*AudioSlots+group.x,n=AudioTransformSize,step=AudioStage;
+    uint g=AudioTransformBase+group.x,n=AudioTransformSize,step=AudioStage;
     for(uint i=tid.x;i<n/2;i+=256)
     {
         uint k=i%(step/2),at=g*AudioFft+(i/(step/2))*step+k;float angle=(AudioTransformInverse!=0?2:-2)*AUDIO_PI*k/step;

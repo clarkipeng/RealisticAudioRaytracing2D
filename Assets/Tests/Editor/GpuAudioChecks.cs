@@ -15,6 +15,7 @@ public partial class TakeChecks
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Binaural, TakeRender.DelayFilter.Linear, 128, 1)]
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Binaural, TakeRender.DelayFilter.WindowedSinc, 128, 1)]
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Mono, TakeRender.DelayFilter.Linear, 2048, 1)]
+    [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Binaural, TakeRender.DelayFilter.Linear, 2048, 1)]
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Mono, TakeRender.DelayFilter.Linear, 128, 32)]
     [Category("GPU")]
     public void GpuAudioParity(TakeRender.Synthesis method,TakeRender.ListenerOutput ears,TakeRender.DelayFilter delay,int size,int rays)

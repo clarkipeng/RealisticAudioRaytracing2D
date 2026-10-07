@@ -1,0 +1,395 @@
+{
+  "baselineRevision": "305c949",
+  "candidateFileHashes": {
+    "Assets/Scripts/Simulation/GpuAudio.cs": "4290f788defca02654f69323b4f5105b9e0f3f3ddf650c72f05fb7446a8ef22a",
+    "Assets/Resources/Acoustics/GpuAudio.compute": "fb8d6a8a9e2166c2f5796e888ff739ee5bda9117ffe80b71e52f265dec7bc46f"
+  },
+  "hardware": "Apple M5 / Metal / Unity 6000.4.1f1",
+  "procedure": "Three sequential original runs, three candidate runs, original control restored from the same baseline files, then final candidate restored byte-for-byte. Same saved numeric station take and settings. Shader caches warm; no dedicated-machine isolation.",
+  "scope": "Whole offline render including preparation, transport/DSP, waits, writes and hashes. Numeric working storage is allocated CPU/GPU data, not measured process peak RSS.",
+  "runs": [
+    {
+      "name": "scratch-before-1",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "2f1feb7b-aff3-4085-bfad-5e91aef29612",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "workingNumericBytes": 1092671557,
+        "preparationSeconds": 1.1955168,
+        "wallSeconds": 19.171715499999998,
+        "solveSeconds": 0.7409117999999999,
+        "evaluationSeconds": 0.10760439999999998,
+        "audioSeconds": 16.8799417,
+        "responsePreparationSeconds": 0.07089120000000003,
+        "writeSeconds": 0.24017290000000038,
+        "maximumSolveSeconds": 0.0503957,
+        "uploadSeconds": 0.015427999999999996,
+        "dispatchReadbackSeconds": 0.004709799999999999,
+        "bvhBuildSeconds": 0.000932,
+        "bvhUpdateSeconds": 0.006597299999999989
+      }
+    },
+    {
+      "name": "scratch-before-2",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "2f1feb7b-aff3-4085-bfad-5e91aef29612",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "workingNumericBytes": 1092671557,
+        "preparationSeconds": 1.1963726,
+        "wallSeconds": 19.226657,
+        "solveSeconds": 0.7191899999999999,
+        "evaluationSeconds": 0.13203379999999995,
+        "audioSeconds": 16.642129500000014,
+        "responsePreparationSeconds": 0.08754089999999999,
+        "writeSeconds": 0.5309126999999993,
+        "maximumSolveSeconds": 0.0616027,
+        "uploadSeconds": 0.012407399999999999,
+        "dispatchReadbackSeconds": 0.0018161999999999998,
+        "bvhBuildSeconds": 0.0009393,
+        "bvhUpdateSeconds": 0.004020700000000008
+      }
+    },
+    {
+      "name": "scratch-before-3",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "2f1feb7b-aff3-4085-bfad-5e91aef29612",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "workingNumericBytes": 1092671557,
+        "preparationSeconds": 1.1420469,
+        "wallSeconds": 18.436201,
+        "solveSeconds": 0.6717807,
+        "evaluationSeconds": 0.10390100000000002,
+        "audioSeconds": 16.25320049999999,
+        "responsePreparationSeconds": 0.0724888000000001,
+        "writeSeconds": 0.2603356,
+        "maximumSolveSeconds": 0.0245864,
+        "uploadSeconds": 0.0141848,
+        "dispatchReadbackSeconds": 0.0020326999999999997,
+        "bvhBuildSeconds": 0.0007863,
+        "bvhUpdateSeconds": 0.005282299999999995
+      }
+    },
+    {
+      "name": "scratch-after-1",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "f5338dc7-a09c-4b30-b734-68d1937e0e25",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "5f04341e25cde1b9fad3cc3b08ea0f2c",
+        "workingNumericBytes": 916339093,
+        "preparationSeconds": 0.33181459999999996,
+        "wallSeconds": 6.9922157,
+        "solveSeconds": 0.3930415,
+        "evaluationSeconds": 0.0209522,
+        "audioSeconds": 6.123599800000009,
+        "responsePreparationSeconds": 0.03691690000000003,
+        "writeSeconds": 0.10944649999999999,
+        "maximumSolveSeconds": 0.039244,
+        "uploadSeconds": 0.005090899999999998,
+        "dispatchReadbackSeconds": 0.0011143000000000001,
+        "bvhBuildSeconds": 0.0006558,
+        "bvhUpdateSeconds": 0.0014698999999999992
+      }
+    },
+    {
+      "name": "scratch-after-2",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "f5338dc7-a09c-4b30-b734-68d1937e0e25",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "5f04341e25cde1b9fad3cc3b08ea0f2c",
+        "workingNumericBytes": 916339093,
+        "preparationSeconds": 1.0936972999999999,
+        "wallSeconds": 8.9531308,
+        "solveSeconds": 0.33324770000000004,
+        "evaluationSeconds": 0.19684429999999997,
+        "audioSeconds": 6.786595700000002,
+        "responsePreparationSeconds": 0.11637559999999998,
+        "writeSeconds": 0.5307183999999988,
+        "maximumSolveSeconds": 0.0149956,
+        "uploadSeconds": 0.015214499999999997,
+        "dispatchReadbackSeconds": 0.002832799999999999,
+        "bvhBuildSeconds": 0.0006561,
+        "bvhUpdateSeconds": 0.005270900000000018
+      }
+    },
+    {
+      "name": "scratch-after-3",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "f5338dc7-a09c-4b30-b734-68d1937e0e25",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "5f04341e25cde1b9fad3cc3b08ea0f2c",
+        "workingNumericBytes": 916339093,
+        "preparationSeconds": 0.6451273,
+        "wallSeconds": 7.6291758,
+        "solveSeconds": 0.35491890000000004,
+        "evaluationSeconds": 0.07565369999999999,
+        "audioSeconds": 6.290659599999988,
+        "responsePreparationSeconds": 0.08462860000000005,
+        "writeSeconds": 0.25228239999999996,
+        "maximumSolveSeconds": 0.0394102,
+        "uploadSeconds": 0.010729100000000002,
+        "dispatchReadbackSeconds": 0.0021728999999999997,
+        "bvhBuildSeconds": 0.0007229,
+        "bvhUpdateSeconds": 0.0033826999999999963
+      }
+    },
+    {
+      "name": "scratch-control",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "2f1feb7b-aff3-4085-bfad-5e91aef29612",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "workingNumericBytes": 1092671557,
+        "preparationSeconds": 1.187342,
+        "wallSeconds": 8.4900595,
+        "solveSeconds": 0.3438697,
+        "evaluationSeconds": 0.10782,
+        "audioSeconds": 6.3808973999999985,
+        "responsePreparationSeconds": 0.09007409999999991,
+        "writeSeconds": 0.46473650000000005,
+        "maximumSolveSeconds": 0.0163234,
+        "uploadSeconds": 0.013991000000000002,
+        "dispatchReadbackSeconds": 0.0023165,
+        "bvhBuildSeconds": 0.0013904,
+        "bvhUpdateSeconds": 0.005371500000000006
+      }
+    },
+    {
+      "name": "scratch-final",
+      "report": {
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "f5338dc7-a09c-4b30-b734-68d1937e0e25",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "37aa61e4ab94d48d31e129880d139a03",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "audioShaderDependencyHash": "5f04341e25cde1b9fad3cc3b08ea0f2c",
+        "workingNumericBytes": 916339093,
+        "preparationSeconds": 0.3506202,
+        "wallSeconds": 6.9155814,
+        "solveSeconds": 0.3473151999999999,
+        "evaluationSeconds": 0.020699200000000004,
+        "audioSeconds": 6.008317899999996,
+        "responsePreparationSeconds": 0.031194900000000025,
+        "writeSeconds": 0.17944939999999945,
+        "maximumSolveSeconds": 0.0462488,
+        "uploadSeconds": 0.006380100000000002,
+        "dispatchReadbackSeconds": 0.0010996999999999997,
+        "bvhBuildSeconds": 0.0012961,
+        "bvhUpdateSeconds": 0.0018094999999999904
+      }
+    }
+  ],
+  "summary": {
+    "beforeMedianSeconds": 19.171715499999998,
+    "afterMedianSeconds": 7.6291758,
+    "controlSeconds": 8.4900595,
+    "finalSeconds": 6.9155814,
+    "beforeNumericBytes": 1092671557,
+    "afterNumericBytes": 916339093,
+    "numericReductionPercent": 16.13773716999939,
+    "bitIdenticalAudioAndResponses": true,
+    "finiteAudio": true
+  },
+  "allocationProbe": {
+    "sampleRate": 8192,
+    "sources": 2,
+    "listeners": 2,
+    "raysPerBin": 1,
+    "maxBounces": 1,
+    "maximumDelaySeconds": 0.2,
+    "cases": [
+      {
+        "fftSize": 1024,
+        "channels": 1,
+        "sources": 2,
+        "listeners": 2,
+        "numericBytes": 152456540,
+        "beforeNumericBytes": 202837244,
+        "reductionPercent": 24.83799474222791
+      },
+      {
+        "fftSize": 1024,
+        "channels": 2,
+        "sources": 2,
+        "listeners": 2,
+        "numericBytes": 265077284,
+        "beforeNumericBytes": 315457988,
+        "reductionPercent": 15.970654070107116
+      },
+      {
+        "fftSize": 2048,
+        "channels": 1,
+        "sources": 2,
+        "listeners": 2,
+        "numericBytes": 909073660,
+        "beforeNumericBytes": 1211358460,
+        "reductionPercent": 24.954198941244854
+      },
+      {
+        "fftSize": 2048,
+        "channels": 2,
+        "sources": 2,
+        "listeners": 2,
+        "numericBytes": 1335624132,
+        "beforeNumericBytes": 1637908932,
+        "reductionPercent": 18.455531567978532
+      }
+    ]
+  },
+  "tests": {
+    "parity": {
+      "result": "Passed",
+      "total": "11",
+      "passed": "11",
+      "failed": "0",
+      "skipped": "0",
+      "duration": "5.8063715"
+    },
+    "core": {
+      "result": "Passed",
+      "total": "148",
+      "passed": "148",
+      "failed": "0",
+      "skipped": "0",
+      "duration": "35.5435373"
+    }
+  },
+  "limitations": [
+    "Timings varied with workstation load; this is not a realtime deadline or Windows/DirectX result.",
+    "Worst-case persistent filter banks still scale with ray budget, frequency grid, sources and listeners.",
+    "This changes scratch allocation only; it does not validate the experimental acoustic model."
+  ],
+  "macBuild": {
+    "result": "Succeeded",
+    "totalErrors": 0,
+    "totalWarnings": 1834,
+    "totalSizeBytes": 341947643,
+    "seconds": 29.209878
+  },
+  "sharedReport": {
+    "method": "integrated-edge-preview-v6",
+    "motion": "local-constant-velocity-retarded-direct-and-first-mirror; other-boundaries-frozen-at-solve",
+    "formatVersion": 3,
+    "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin",
+    "channelsPerListener": 2,
+    "hrtfTaps": 128,
+    "hrtfDataset": "MIT-KEMAR-compact-v1",
+    "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+    "sceneHash": "d512698d34afd35b2477e79cdbf7cc35c17a7650d63c90eb98ca244fc08fbb83",
+    "takeStateHash": "fb40c9023cf9284c25e6633f97fc197c3df0430215804c67bae779dceedc9144",
+    "takeEventHash": "7c74d40ce15911adf59e9f1dbd5a7d42a7599b07942257f19dfa79b1a955a726",
+    "takeSourceHash": "314046d4975dad340e7b0c86da9c82d6995b01130033773ff788f8a483668352",
+    "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+    "unityVersion": "6000.4.1f1",
+    "platform": "OSXEditor",
+    "processor": "Apple M5",
+    "graphicsDevice": "Apple M5",
+    "audioHashes": [
+      "80890655a006dc70072e4117e2b77309231c311b97975495b234338d5e60c7e0"
+    ],
+    "settingsHash": "74209393e9f6ea03da7ee921c01fec322954b6883a6c68ad3062574cc482f74b",
+    "dspLatencySamples": 1024,
+    "responseSupportSamples": 6019,
+    "tailCoversResponseSupport": true,
+    "audioUploadBytes": 12748632,
+    "audioReadbackBytes": 4252312,
+    "backendScope": "GPU transport and audio synthesis; CPU source timeline and PCM output",
+    "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+    "pairPrimitiveTestUpperBound": 1756296,
+    "settings": {
+      "responseStepSamples": 1024,
+      "speedOfSound": 343.0,
+      "referenceDistance": 1.0,
+      "minimumDistance": 0.10000000149011612,
+      "tailSamples": 44100,
+      "transitionSamples": 512,
+      "delayFilter": 0,
+      "listenerOutput": 1,
+      "sincRadius": 16,
+      "maximumDelaySeconds": 10.0,
+      "maximumSignalEvents": 4096,
+      "maximumPendingObservations": 16,
+      "maximumResponsesPerBatch": 8,
+      "useBvh": true,
+      "transport": 1,
+      "synthesis": 0,
+      "audioBackend": 0,
+      "raysPerBin": 1,
+      "maxBounces": 5,
+      "seed": 0,
+      "raysPerPair": 0,
+      "diffractionFactor": 1.0,
+      "airAbsorption": true,
+      "fftSize": 1024,
+      "spectralHop": 256
+    },
+    "sampleRate": 44100,
+    "sourceCount": 6,
+    "listenerCount": 1,
+    "responseCount": 519,
+    "objectCount": 60,
+    "primitiveCount": 564,
+    "responseBatchCapacity": 8,
+    "outputSamples": 530501,
+    "preparedPcmBytes": 1433780,
+    "backend": "GPU-Metal",
+    "bvhUpdates": 3,
+    "bvhStaticPrimitives": 396,
+    "transportDescription": "Synthesis=ImpulseResponse. Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.",
+    "complete": true
+  }
+}

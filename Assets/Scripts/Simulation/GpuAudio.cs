@@ -59,8 +59,11 @@ internal sealed class GpuAudio : IDisposable
             headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);
             source=Buffer("AudioSource",checked(signals.Length*history),4,mode:ComputeBufferMode.SubUpdates);
             Buffer("AudioFilters",checked(2*capacity*channels*bins),8);
-            work=Buffer("AudioWork",checked(capacity*fft),8);
-            transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(capacity,listeners*channels)*fft),8):work;
+            // Shared FFTs only write their nonredundant bins. Global filter preparation
+            // runs pair by pair, so its separate transform scratch can reuse the same rows.
+            int workStride=fft<=2048?bins:fft;
+            work=Buffer("AudioWork",checked(capacity*workStride),8);
+            transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(settings.SpectralSlotsPerPair,listeners*channels)*fft),8):work;
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
             var pairMask=new float[pairs];for(int p=0;p<pairs;p++)pairMask[p]=scene.sources[p/listeners].mutedListenerPlusOne==p%listeners+1?0:1;
@@ -68,6 +71,7 @@ internal sealed class GpuAudio : IDisposable
             PrepareEars(hrtf);
             Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioSlots",settings.SpectralSlotsPerPair);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
             Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
+            Set("AudioWorkStride",workStride);
             Set("AudioTransition",settings.transitionSamples);Set("AudioSpectral",settings.synthesis==TakeRender.Synthesis.Spectral?1:0);
             Set("AudioRadius",settings.sincRadius);Set("AudioSinc",settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?1:0);
             Set("AudioLatency",settings.fftSize/2+(settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0));shader.SetFloat("AudioMaximumDelay",settings.maximumDelaySeconds);
@@ -139,7 +143,8 @@ internal sealed class GpuAudio : IDisposable
     }
     void FftGlobal(ComputeBuffer buffer,int size,bool inverse,int pair,int which,int count=0)
     {
-        BindTransform(buffer);Set("AudioTransformSize",size);Set("AudioTransformInverse",inverse?1:0);Set("AudioTransformCount",count);
+        BindTransform(buffer);Set("AudioTransformSize",size);Set("AudioTransformInverse",inverse?1:0);
+        Set("AudioTransformBase",buffer==work && count==0?pair*settings.SpectralSlotsPerPair:0);
         if(count==0)Dispatch(reverse,pair,which);else shader.Dispatch(reverse,count,1,1);
         for(int stage=2;;stage=checked(stage*2))
         {Set("AudioStage",stage);if(count==0)Dispatch(butterfly,pair,which);else shader.Dispatch(butterfly,count,1,1);if(stage==size)break;}
