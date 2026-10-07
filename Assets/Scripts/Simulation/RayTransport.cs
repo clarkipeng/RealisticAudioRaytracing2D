@@ -8,226 +8,409 @@ using UnityEngine.Rendering;
 // frequency evaluation and sampled reflection paths consume the same scene.
 internal sealed class RayTransport : IDisposable
 {
-    [StructLayout(LayoutKind.Sequential,Pack=4)] public struct Path
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct Path
     {
         public Vector4 direction; // xyz arrival direction; w = d(propagation seconds)/d(receiver second)
-        public float delaySeconds,pressureGain;
-        public uint frequencyBin,identity;
+        public float delaySeconds, pressureGain;
+        public uint frequencyBin, identity;
     }
-    [StructLayout(LayoutKind.Sequential,Pack=4)] struct Material
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    struct Material
     {
         public Vector4 surface; // absorption, scattering, transmission, IOR
         public Vector4 medium;  // damping; reserved
     }
-    [StructLayout(LayoutKind.Sequential,Pack=4)] struct Edge
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    struct Edge
     {
-        public Vector4 a,b;
-        public uint owner,firstFace,secondFace,pad;
+        public Vector4 a, b;
+        public uint owner, firstFace, secondFace, pad;
     }
     readonly ComputeShader shader;
-    readonly int directKernel,traceKernel,edgeKernel,pairs,rayCount,frequencyBins;
-    [StructLayout(LayoutKind.Sequential,Pack=4)] struct Volume
+    readonly int directKernel, traceKernel, edgeKernel, pairs, rayCount, frequencyBins;
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    struct Volume
     {
-        public Vector4 minimum,maximum; // w: winding correction, enclosed volume/area (relative units)
-        public uint start,count,owner,material;
+        public Vector4 minimum, maximum; // w: winding correction, enclosed volume/area (relative units)
+        public uint start, count, owner, material;
     }
-    readonly ComputeBuffer materialBuffer,edgeBuffer,volumeBuffer,pathBuffer,enabledBuffer,routeBuffer;
+    readonly ComputeBuffer materialBuffer, edgeBuffer, volumeBuffer, pathBuffer, enabledBuffer, routeBuffer;
     readonly bool diffraction;
     readonly bool[] everActive;
     readonly uint[] enabledPairs;
     readonly Action<AsyncGPUReadbackRequest> completion;
     AsyncGPUReadbackRequest request;
-    bool pending,failed;
+    bool pending, failed;
     volatile bool completed;
     public readonly Path[] Paths;
-    public int PathsPerFrame {get;}
-    public int SlotsPerPair {get;}
+    public int PathsPerFrame { get; }
+    public int SlotsPerPair { get; }
     internal ComputeBuffer Buffer => pathBuffer;
-    public long CpuBytes => Paths.Length*32L+enabledPairs.Length*4L+everActive.Length;
-    public long GpuBytes {get;}
-    public RayTransport(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,TakeRender.Settings settings,ComputeShader shader,
-        ComputeBuffer primitives,ComputeBuffer states,ComputeBuffer sources,ComputeBuffer listeners,ComputeBuffer bvhNodes,ComputeBuffer bvhIndices,int rate,int maximumFrames,bool readback=true)
+    public long CpuBytes => Paths.Length * 32L + enabledPairs.Length * 4L + everActive.Length;
+    public long GpuBytes { get; }
+    public RayTransport(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
+                        TakeRender.Settings settings, ComputeShader shader, ComputeBuffer primitives,
+                        ComputeBuffer states, ComputeBuffer sources, ComputeBuffer listeners,
+                        ComputeBuffer bvhNodes, ComputeBuffer bvhIndices, int rate, int maximumFrames,
+                        bool readback = true)
     {
-        if(Marshal.SizeOf<Path>()!=32 || Marshal.SizeOf<Material>()!=32 || Marshal.SizeOf<Edge>()!=48 || Marshal.SizeOf<Volume>()!=48)throw new InvalidOperationException("Spectral GPU ABI mismatch.");
-        this.shader=shader;diffraction=settings.diffractionFactor>0;rayCount=settings.RaysPerPair;frequencyBins=settings.fftSize/2+1;pairs=checked(scene.sources.Length*scene.listeners.Length);
-        everActive=new bool[scene.sources.Length];enabledPairs=new uint[checked(pairs*maximumFrames)];
-        int bins=settings.fftSize/2+1;
-        SlotsPerPair=settings.SpectralSlotsPerPair;PathsPerFrame=checked(pairs*SlotsPerPair);
-        Paths=new Path[readback?checked(PathsPerFrame*maximumFrames):0];completion=OnComplete;
-        bool planar=scene.dimension==AcousticTake.Dimension.Planar2D;
+        if (Marshal.SizeOf<Path>() != 32 || Marshal.SizeOf<Material>() != 32 ||
+            Marshal.SizeOf<Edge>() != 48 || Marshal.SizeOf<Volume>() != 48)
+            throw new InvalidOperationException("Spectral GPU ABI mismatch.");
+        this.shader = shader;
+        diffraction = settings.diffractionFactor > 0;
+        rayCount = settings.RaysPerPair;
+        frequencyBins = settings.fftSize / 2 + 1;
+        pairs = checked(scene.sources.Length * scene.listeners.Length);
+        everActive = new bool[scene.sources.Length];
+        enabledPairs = new uint[checked(pairs * maximumFrames)];
+        int bins = settings.fftSize / 2 + 1;
+        SlotsPerPair = settings.SpectralSlotsPerPair;
+        PathsPerFrame = checked(pairs * SlotsPerPair);
+        Paths = new Path[readback ? checked(PathsPerFrame * maximumFrames) : 0];
+        completion = OnComplete;
+        bool planar = scene.dimension == AcousticTake.Dimension.Planar2D;
         try
         {
-            directKernel=shader.FindKernel((planar?"SpectralDirect2D":"SpectralDirect3D")+(settings.useBvh?"Bvh":""));
-            edgeKernel=shader.FindKernel((planar?"Edge2D":"Edge3D")+(settings.useBvh?"Bvh":""));
-            traceKernel=shader.FindKernel((planar?"Trace2D":"Trace3D")+(settings.useBvh?"Bvh":""));
-            if(!shader.IsSupported(directKernel) || !shader.IsSupported(traceKernel) || (diffraction && !shader.IsSupported(edgeKernel)))throw new NotSupportedException("Raytraced kernels are unavailable on this GPU.");
-            var materials=new Material[Math.Max(1,scene.materials.Length*bins)];
-            for(int m=0;m<scene.materials.Length;m++)for(int b=0;b<bins;b++)
+            directKernel = shader.FindKernel((planar ? "EvaluateDirect2D" : "EvaluateDirect3D") +
+                                             (settings.useBvh ? "Bvh" : ""));
+            edgeKernel = shader.FindKernel((planar ? "Edge2D" : "Edge3D") + (settings.useBvh ? "Bvh" : ""));
+            traceKernel =
+                shader.FindKernel((planar ? "Trace2D" : "Trace3D") + (settings.useBvh ? "Bvh" : ""));
+            if (!shader.IsSupported(directKernel) || !shader.IsSupported(traceKernel) ||
+                (diffraction && !shader.IsSupported(edgeKernel)))
+                throw new NotSupportedException("Raytraced kernels are unavailable on this GPU.");
+            var materials = new Material[Math.Max(1, scene.materials.Length * bins)];
+            for (int m = 0; m < scene.materials.Length; m++)
+                for (int b = 0; b < bins; b++)
+                {
+                    var material = scene.materials[m];
+                    float hz = (float)b * rate / settings.fftSize;
+                    materials[m * bins + b] =
+                        new Material { surface = new Vector4(Sample(material, material.absorption, hz, 0),
+                                                             Sample(material, material.scattering, hz, 0),
+                                                             Sample(material, material.transmission, hz, 0),
+                                                             Sample(material, material.ior, hz, 1)),
+                                       medium =
+                                           new Vector4(Sample(material, material.damping, hz, 0), 0, 0, 0) };
+                }
+            materialBuffer = new ComputeBuffer(materials.Length, 32);
+            materialBuffer.SetData(materials);
+            var edges = Edges(geometry, planar, materials, bins);
+            edgeBuffer = new ComputeBuffer(Math.Max(1, edges.Length), 48);
+            if (edges.Length > 0)
+                edgeBuffer.SetData(edges);
+            var volumes = Volumes(scene, geometry, materials, bins, planar);
+            volumeBuffer = new ComputeBuffer(Math.Max(1, volumes.Length), 48);
+            if (volumes.Length > 0)
+                volumeBuffer.SetData(volumes);
+            pathBuffer = new ComputeBuffer(checked(PathsPerFrame * maximumFrames), 32);
+            enabledBuffer = new ComputeBuffer(enabledPairs.Length, 4);
+            routeBuffer = new ComputeBuffer(diffraction ? checked(pairs * maximumFrames) : 1, 48);
+            foreach (int kernel in new[] { directKernel, traceKernel, edgeKernel })
             {
-                var material=scene.materials[m];float hz=(float)b*rate/settings.fftSize;
-                materials[m*bins+b]=new Material {surface=new Vector4(Sample(material,material.absorption,hz,0),Sample(material,material.scattering,hz,0),
-                    Sample(material,material.transmission,hz,0),Sample(material,material.ior,hz,1)),medium=new Vector4(Sample(material,material.damping,hz,0),0,0,0)};
+                shader.SetBuffer(kernel, "Primitives", primitives);
+                shader.SetBuffer(kernel, "States", states);
+                shader.SetBuffer(kernel, "Sources", sources);
+                shader.SetBuffer(kernel, "Listeners", listeners);
+                shader.SetBuffer(kernel, "RayMaterials", materialBuffer);
+                shader.SetBuffer(kernel, "Edges", edgeBuffer);
+                shader.SetBuffer(kernel, "EdgeRoutes", routeBuffer);
+                shader.SetBuffer(kernel, "Volumes", volumeBuffer);
+                shader.SetBuffer(kernel, "RayPaths", pathBuffer);
+                shader.SetBuffer(kernel, "RayPairEnabled", enabledBuffer);
+                if (bvhNodes != null)
+                {
+                    shader.SetBuffer(kernel, "BvhNodes", bvhNodes);
+                    shader.SetBuffer(kernel, "BvhIndices", bvhIndices);
+                }
             }
-            materialBuffer=new ComputeBuffer(materials.Length,32);materialBuffer.SetData(materials);
-            var edges=Edges(geometry,planar,materials,bins);edgeBuffer=new ComputeBuffer(Math.Max(1,edges.Length),48);if(edges.Length>0)edgeBuffer.SetData(edges);
-            var volumes=Volumes(scene,geometry,materials,bins,planar);
-            volumeBuffer=new ComputeBuffer(Math.Max(1,volumes.Length),48);if(volumes.Length>0)volumeBuffer.SetData(volumes);
-            pathBuffer=new ComputeBuffer(checked(PathsPerFrame*maximumFrames),32);enabledBuffer=new ComputeBuffer(enabledPairs.Length,4);
-            routeBuffer=new ComputeBuffer(diffraction?checked(pairs*maximumFrames):1,48);
-            foreach(int kernel in new[]{directKernel,traceKernel,edgeKernel})
-            {
-                shader.SetBuffer(kernel,"Primitives",primitives);shader.SetBuffer(kernel,"States",states);
-                shader.SetBuffer(kernel,"Sources",sources);shader.SetBuffer(kernel,"Listeners",listeners);
-                shader.SetBuffer(kernel,"RayMaterials",materialBuffer);shader.SetBuffer(kernel,"Edges",edgeBuffer);
-                shader.SetBuffer(kernel,"EdgeRoutes",routeBuffer);shader.SetBuffer(kernel,"Volumes",volumeBuffer);shader.SetBuffer(kernel,"RayPaths",pathBuffer);shader.SetBuffer(kernel,"RayPairEnabled",enabledBuffer);
-                if(bvhNodes!=null){shader.SetBuffer(kernel,"BvhNodes",bvhNodes);shader.SetBuffer(kernel,"BvhIndices",bvhIndices);}
-            }
-            shader.SetInt("RaysPerBin",settings.RaysPerBin);shader.SetInt("RaySeed",settings.seed);shader.SetInt("FrequencyBins",bins);shader.SetInt("RaysPerPair",settings.RaysPerPair);shader.SetInt("MaxBounces",settings.maxBounces);
-            shader.SetInt("SlotsPerPair",SlotsPerPair);shader.SetInt("EdgeCount",edges.Length);shader.SetInt("VolumeCount",volumes.Length);
-            shader.SetFloat("FrequencyStep",(float)rate/settings.fftSize);shader.SetFloat("DiffractionFactor",settings.diffractionFactor);
-            shader.SetFloat("MaximumPathDelay",settings.maximumDelaySeconds);shader.SetInt("UseAirAbsorption",settings.airAbsorption?1:0);
-            GpuBytes=(long)routeBuffer.count*48+(long)materials.Length*32+(long)Math.Max(1,edges.Length)*48+Math.Max(1,volumes.Length)*48L+(long)PathsPerFrame*maximumFrames*32+enabledPairs.Length*4L;
+            shader.SetInt("RaysPerBin", settings.RaysPerBin);
+            shader.SetInt("RaySeed", settings.seed);
+            shader.SetInt("FrequencyBins", bins);
+            shader.SetInt("RaysPerPair", settings.RaysPerPair);
+            shader.SetInt("MaxBounces", settings.maxBounces);
+            shader.SetInt("SlotsPerPair", SlotsPerPair);
+            shader.SetInt("EdgeCount", edges.Length);
+            shader.SetInt("VolumeCount", volumes.Length);
+            shader.SetFloat("FrequencyStep", (float)rate / settings.fftSize);
+            shader.SetFloat("DiffractionFactor", settings.diffractionFactor);
+            shader.SetFloat("MaximumPathDelay", settings.maximumDelaySeconds);
+            shader.SetInt("UseAirAbsorption", settings.airAbsorption ? 1 : 0);
+            GpuBytes = (long)routeBuffer.count * 48 + (long)materials.Length * 32 +
+                       (long)Math.Max(1, edges.Length) * 48 + Math.Max(1, volumes.Length) * 48L +
+                       (long)PathsPerFrame * maximumFrames * 32 + enabledPairs.Length * 4L;
         }
-        catch {Dispose();throw;}
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
-    public void SetActivity(AcousticTake.Scene scene,AcousticTake.State[] states,int frames)
+    public void SetActivity(AcousticTake.Scene scene, AcousticTake.State[] states, int frames)
     {
         // Never-used slots and permanently muted pairs cannot contribute. Once activated,
         // keep tracing a source after it leaves: earlier emission can still be arriving.
-        for(int f=0;f<frames;f++)for(int s=0;s<everActive.Length;s++)
-        {
-            everActive[s]|=TakeRender.Enabled(states[f*scene.objects.Length+scene.sources[s].objectIndex],AcousticTake.StateFlags.Source);
-            for(int l=0;l<scene.listeners.Length;l++)enabledPairs[f*pairs+s*scene.listeners.Length+l]=
-                everActive[s] && scene.sources[s].mutedListenerPlusOne!=l+1?1u:0u;
-        }
-        enabledBuffer.SetData(enabledPairs,0,0,frames*pairs);
+        for (int f = 0; f < frames; f++)
+            for (int s = 0; s < everActive.Length; s++)
+            {
+                everActive[s] |=
+                    TakeRender.Enabled(states[f * scene.objects.Length + scene.sources[s].objectIndex],
+                                       AcousticTake.StateFlags.Source);
+                for (int l = 0; l < scene.listeners.Length; l++)
+                    enabledPairs[f * pairs + s * scene.listeners.Length + l] =
+                        everActive[s] && scene.sources[s].mutedListenerPlusOne != l + 1 ? 1u : 0u;
+            }
+        enabledBuffer.SetData(enabledPairs, 0, 0, frames * pairs);
     }
     // Closed, consistently wound meshes/loops have thickness. Open sheets only
     // apply their surface coefficients. This is derived once, not saved in takes.
-    static Volume[] Volumes(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,Material[] materials,int bins,bool planar)
+    static Volume[] Volumes(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry, Material[] materials,
+                            int bins, bool planar)
     {
-        var result=new List<Volume>();
-        for(int owner=0;owner<scene.objects.Length;owner++)
+        var result = new List<Volume>();
+        for (int owner = 0; owner < scene.objects.Length; owner++)
         {
-            var obj=scene.objects[owner];if(obj.primitiveCount==0)continue;
-            int start=obj.primitiveStart,end=start+obj.primitiveCount;
-            var min=geometry[start].a;var max=min;
-            for(int i=start;i<end;i++)
+            var obj = scene.objects[owner];
+            if (obj.primitiveCount == 0)
+                continue;
+            int start = obj.primitiveStart, end = start + obj.primitiveCount;
+            var min = geometry[start].a;
+            var max = min;
+            for (int i = start; i < end; i++)
             {
-                var p=geometry[i];min=Vector3.Min(min,Vector3.Min(p.a,p.b));max=Vector3.Max(max,Vector3.Max(p.a,p.b));
-                if(!planar){min=Vector3.Min(min,p.c);max=Vector3.Max(max,p.c);}
+                var p = geometry[i];
+                min = Vector3.Min(min, Vector3.Min(p.a, p.b));
+                max = Vector3.Max(max, Vector3.Max(p.a, p.b));
+                if (!planar)
+                {
+                    min = Vector3.Min(min, p.c);
+                    max = Vector3.Max(max, p.c);
+                }
             }
             // Weld floating-point seams from curved colliders for topology only.
-            float tolerance=Mathf.Max(1e-7f,(max-min).magnitude*1e-6f);
-            var vertices=new Dictionary<Vector3Int,int>();
+            float tolerance = Mathf.Max(1e-7f, (max - min).magnitude * 1e-6f);
+            var vertices = new Dictionary<Vector3Int, int>();
             int Vertex(Vector3 p)
             {
-                p=(p-min)/tolerance;var key=new Vector3Int(Mathf.RoundToInt(p.x),Mathf.RoundToInt(p.y),planar?0:Mathf.RoundToInt(p.z));
-                if(!vertices.TryGetValue(key,out int id)){id=vertices.Count;vertices.Add(key,id);}return id;
-            }
-            var edges=new Dictionary<(int,int),(int count,int winding)>();
-            void Edge(int a,int b)
-            {
-                var key=a<b?(a,b):(b,a);edges.TryGetValue(key,out var value);
-                edges[key]=(value.count+1,value.winding+(a<b?1:-1));
-            }
-            double signed=0;var degree=new Dictionary<int,(int incoming,int outgoing)>();
-            for(int i=start;i<end;i++)
-            {
-                var p=geometry[i];int a=Vertex(p.a),b=Vertex(p.b);
-                if(planar)
+                p = (p - min) / tolerance;
+                var key = new Vector3Int(Mathf.RoundToInt(p.x), Mathf.RoundToInt(p.y),
+                                         planar ? 0 : Mathf.RoundToInt(p.z));
+                if (!vertices.TryGetValue(key, out int id))
                 {
-                    degree.TryGetValue(a,out var va);degree[a]=(va.incoming,va.outgoing+1);
-                    degree.TryGetValue(b,out var vb);degree[b]=(vb.incoming+1,vb.outgoing);
-                    signed+=(double)p.a.x*p.b.y-(double)p.a.y*p.b.x;
+                    id = vertices.Count;
+                    vertices.Add(key, id);
                 }
-                else {int c=Vertex(p.c);Edge(a,b);Edge(b,c);Edge(c,a);signed+=Vector3.Dot(p.a-min,Vector3.Cross(p.b-min,p.c-min));}
+                return id;
             }
-            bool closed=signed!=0;
-            foreach(var edge in edges.Values)closed&=edge.count==2 && edge.winding==0;
-            foreach(var vertex in degree.Values)closed&=vertex.incoming==1 && vertex.outgoing==1;
-            if(!closed)continue;
-            int material=geometry[start].materialIndex;
-            for(int i=start+1;i<end;i++)for(int b=0;b<bins;b++)
+            var edges = new Dictionary<(int, int), (int count, int winding)>();
+            void Edge(int a, int b)
             {
-                var a=materials[material*bins+b];var other=materials[geometry[i].materialIndex*bins+b];
-                if(a.surface.w!=other.surface.w || a.medium.x!=other.medium.x)
-                    throw new ArgumentException(obj.name+": a closed acoustic object must share interior IOR/damping across its surface materials.");
+                var key = a < b ? (a, b) : (b, a);
+                edges.TryGetValue(key, out var value);
+                edges[key] = (value.count + 1, value.winding + (a < b ? 1 : -1));
             }
-            result.Add(new Volume {minimum=new Vector4(min.x,min.y,min.z,(signed>0?1:-1)*(planar?-1:1)),maximum=new Vector4(max.x,max.y,max.z,(float)Math.Abs(signed)),
-                start=(uint)start,count=(uint)obj.primitiveCount,owner=(uint)owner,material=(uint)material});
+            double signed = 0;
+            var degree = new Dictionary<int, (int incoming, int outgoing)>();
+            for (int i = start; i < end; i++)
+            {
+                var p = geometry[i];
+                int a = Vertex(p.a), b = Vertex(p.b);
+                if (planar)
+                {
+                    degree.TryGetValue(a, out var va);
+                    degree[a] = (va.incoming, va.outgoing + 1);
+                    degree.TryGetValue(b, out var vb);
+                    degree[b] = (vb.incoming + 1, vb.outgoing);
+                    signed += (double)p.a.x * p.b.y - (double)p.a.y * p.b.x;
+                }
+                else
+                {
+                    int c = Vertex(p.c);
+                    Edge(a, b);
+                    Edge(b, c);
+                    Edge(c, a);
+                    signed += Vector3.Dot(p.a - min, Vector3.Cross(p.b - min, p.c - min));
+                }
+            }
+            bool closed = signed != 0;
+            foreach (var edge in edges.Values)
+                closed &= edge.count == 2 && edge.winding == 0;
+            foreach (var vertex in degree.Values)
+                closed &= vertex.incoming == 1 && vertex.outgoing == 1;
+            if (!closed)
+                continue;
+            int material = geometry[start].materialIndex;
+            for (int i = start + 1; i < end; i++)
+                for (int b = 0; b < bins; b++)
+                {
+                    var a = materials[material * bins + b];
+                    var other = materials[geometry[i].materialIndex * bins + b];
+                    if (a.surface.w != other.surface.w || a.medium.x != other.medium.x)
+                        throw new ArgumentException(obj.name +
+                                                    (": a closed acoustic object must share interior " +
+                                                     "IOR/damping across its surface materials."));
+                }
+            result.Add(new Volume {
+                minimum = new Vector4(min.x, min.y, min.z, (signed > 0 ? 1 : -1) * (planar ? -1 : 1)),
+                maximum = new Vector4(max.x, max.y, max.z, (float)Math.Abs(signed)), start = (uint)start,
+                count = (uint)obj.primitiveCount, owner = (uint)owner, material = (uint)material
+            });
         }
         return result.ToArray();
     }
-    static float Sample(AcousticTake.MaterialDefinition material,float[] values,float frequency,float fallback)
+    static float Sample(AcousticTake.MaterialDefinition material, float[] values, float frequency,
+                        float fallback)
     {
-        if(values==null || values.Length==0)return fallback;
-        var knots=material.frequencies;
-        if(knots==null || knots.Length!=values.Length)throw new ArgumentException("Material coefficient grids do not match.");
-        int upper=0;
-        for(int i=0;i<values.Length;i++)
+        if (values == null || values.Length == 0)
+            return fallback;
+        var knots = material.frequencies;
+        if (knots == null || knots.Length != values.Length)
+            throw new ArgumentException("Material coefficient grids do not match.");
+        int upper = 0;
+        for (int i = 0; i < values.Length; i++)
         {
-            if(!float.IsFinite(values[i]) || values[i]<0 || !float.IsFinite(knots[i]) || knots[i]<0 || (i>0 && knots[i]<=knots[i-1]))
+            if (!float.IsFinite(values[i]) || values[i] < 0 || !float.IsFinite(knots[i]) || knots[i] < 0 ||
+                (i > 0 && knots[i] <= knots[i - 1]))
                 throw new ArgumentException("Invalid material coefficient curve.");
         }
-        while(upper<knots.Length-1 && frequency>knots[upper])upper++;
-        int lower=Math.Max(0,upper-1);return Mathf.Lerp(values[lower],values[upper],lower==upper?0:Mathf.InverseLerp(knots[lower],knots[upper],frequency));
+        while (upper < knots.Length - 1 && frequency > knots[upper])
+            upper++;
+        int lower = Math.Max(0, upper - 1);
+        return Mathf.Lerp(values[lower], values[upper],
+                          lower == upper ? 0 : Mathf.InverseLerp(knots[lower], knots[upper], frequency));
     }
-    static Edge[] Edges(AcousticTake.Primitive[] geometry,bool planar,Material[] materials,int bins)
+    static Edge[] Edges(AcousticTake.Primitive[] geometry, bool planar, Material[] materials, int bins)
     {
-        var candidates=new Dictionary<(int,Vector3,Vector3),(Vector3 normal,int first,int second,bool keep,int count)>();
-        int Compare(Vector3 a,Vector3 b) {int r=a.x.CompareTo(b.x);if(r==0)r=a.y.CompareTo(b.y);return r==0?a.z.CompareTo(b.z):r;}
-        void Add(int face,Vector3 a,Vector3 b,Vector3 normal)
+        var candidates = new Dictionary<(int, Vector3, Vector3),
+                                        (Vector3 normal, int first, int second, bool keep, int count)>();
+        int Compare(Vector3 a, Vector3 b)
         {
-            if(Compare(a,b)>0){var swap=a;a=b;b=swap;}
-            var key=(geometry[face].objectIndex,a,b);
-            if(candidates.TryGetValue(key,out var old))candidates[key]=(old.normal,old.first,face,old.count==1 && Mathf.Abs(Vector3.Dot(old.normal,normal))<.99999f,old.count+1);
-            else candidates.Add(key,(normal,face,face,true,1));
+            int r = a.x.CompareTo(b.x);
+            if (r == 0)
+                r = a.y.CompareTo(b.y);
+            return r == 0 ? a.z.CompareTo(b.z) : r;
         }
-        for(int i=0;i<geometry.Length;i++)
+        void Add(int face, Vector3 a, Vector3 b, Vector3 normal)
         {
-            var p=geometry[i];
-            if(planar){var n=new Vector3(-(p.b-p.a).y,(p.b-p.a).x,0).normalized;Add(i,p.a,p.a,n);Add(i,p.b,p.b,n);}
-            else {var n=Vector3.Cross(p.b-p.a,p.c-p.a).normalized;Add(i,p.a,p.b,n);Add(i,p.b,p.c,n);Add(i,p.c,p.a,n);}
+            if (Compare(a, b) > 0)
+            {
+                var swap = a;
+                a = b;
+                b = swap;
+            }
+            var key = (geometry[face].objectIndex, a, b);
+            if (candidates.TryGetValue(key, out var old))
+                candidates[key] =
+                    (old.normal, old.first, face,
+                     old.count == 1 && Mathf.Abs(Vector3.Dot(old.normal, normal)) < .99999f, old.count + 1);
+            else
+                candidates.Add(key, (normal, face, face, true, 1));
+        }
+        for (int i = 0; i < geometry.Length; i++)
+        {
+            var p = geometry[i];
+            if (planar)
+            {
+                var n = new Vector3(-(p.b - p.a).y, (p.b - p.a).x, 0).normalized;
+                Add(i, p.a, p.a, n);
+                Add(i, p.b, p.b, n);
+            }
+            else
+            {
+                var n = Vector3.Cross(p.b - p.a, p.c - p.a).normalized;
+                Add(i, p.a, p.b, n);
+                Add(i, p.b, p.c, n);
+                Add(i, p.c, p.a, n);
+            }
         }
         bool Opaque(int face)
         {
-            int start=geometry[face].materialIndex*bins;
-            for(int bin=0;bin<bins;bin++){var m=materials[start+bin].surface;if((1-m.x)*m.z<1)return true;}
+            int start = geometry[face].materialIndex * bins;
+            for (int bin = 0; bin < bins; bin++)
+            {
+                var m = materials[start + bin].surface;
+                if ((1 - m.x) * m.z < 1)
+                    return true;
+            }
             return false;
         }
-        var result=new List<Edge>();
-        foreach(var item in candidates)if(item.Value.keep && (Opaque(item.Value.first) || Opaque(item.Value.second)))
-            result.Add(new Edge {owner=(uint)item.Key.Item1,a=item.Key.Item2,b=item.Key.Item3,firstFace=(uint)item.Value.first,secondFace=(uint)item.Value.second});
-        result.Sort((a,b)=>{int r=a.owner.CompareTo(b.owner);if(r==0)r=Compare(a.a,b.a);return r==0?Compare(a.b,b.b):r;});
+        var result = new List<Edge>();
+        foreach (var item in candidates)
+            if (item.Value.keep && (Opaque(item.Value.first) || Opaque(item.Value.second)))
+                result.Add(new Edge { owner = (uint)item.Key.Item1, a = item.Key.Item2, b = item.Key.Item3,
+                                      firstFace = (uint)item.Value.first,
+                                      secondFace = (uint)item.Value.second });
+        result.Sort((a, b) =>
+                    {
+                        int r = a.owner.CompareTo(b.owner);
+                        if (r == 0)
+                            r = Compare(a.a, b.a);
+                        return r == 0 ? Compare(a.b, b.b) : r;
+                    });
         return result.ToArray();
     }
-    public void Dispatch(int frames,bool asynchronous)
+    public void Dispatch(int frames, bool asynchronous)
     {
-        if(pending)throw new InvalidOperationException("Ray responses are still in flight.");
-        if(diffraction)shader.Dispatch(edgeKernel,(frames*pairs+63)/64,1,1);
-        shader.Dispatch(directKernel,(frames*pairs*frequencyBins+63)/64,1,1);
-        shader.Dispatch(traceKernel,(frames*pairs*rayCount+63)/64,1,1);
-        if(Paths.Length==0)return;
-        if(asynchronous){pending=true;completed=false;failed=false;request=AsyncGPUReadback.Request(pathBuffer,checked(frames*PathsPerFrame*32),0,completion);}
-        else pathBuffer.GetData(Paths,0,0,frames*PathsPerFrame);
+        if (pending)
+            throw new InvalidOperationException("Ray responses are still in flight.");
+        if (diffraction)
+            shader.Dispatch(edgeKernel, (frames * pairs + 63) / 64, 1, 1);
+        shader.Dispatch(directKernel, (frames * pairs * frequencyBins + 63) / 64, 1, 1);
+        shader.Dispatch(traceKernel, (frames * pairs * rayCount + 63) / 64, 1, 1);
+        if (Paths.Length == 0)
+            return;
+        if (asynchronous)
+        {
+            pending = true;
+            completed = false;
+            failed = false;
+            request =
+                AsyncGPUReadback.Request(pathBuffer, checked(frames * PathsPerFrame * 32), 0, completion);
+        }
+        else
+            pathBuffer.GetData(Paths, 0, 0, frames * PathsPerFrame);
     }
     void OnComplete(AsyncGPUReadbackRequest value)
     {
-        failed=value.hasError;
-        if(!failed){var data=value.GetData<Path>();for(int i=0;i<data.Length;i++)Paths[i]=data[i];}
-        completed=true;
+        failed = value.hasError;
+        if (!failed)
+        {
+            var data = value.GetData<Path>();
+            for (int i = 0; i < data.Length; i++)
+                Paths[i] = data[i];
+        }
+        completed = true;
     }
     public bool TryComplete(bool wait)
     {
-        if(!pending)return true;
-        if(!completed){if(wait)request.WaitForCompletion();else request.Update();}
-        if(!completed)return false;
-        pending=false;if(failed)throw new InvalidOperationException("Ray response readback failed.");return true;
+        if (!pending)
+            return true;
+        if (!completed)
+        {
+            if (wait)
+                request.WaitForCompletion();
+            else
+                request.Update();
+        }
+        if (!completed)
+            return false;
+        pending = false;
+        if (failed)
+            throw new InvalidOperationException("Ray response readback failed.");
+        return true;
     }
     public void Dispose()
     {
-        if(pending && !completed)request.WaitForCompletion();pending=false;
-        materialBuffer?.Dispose();edgeBuffer?.Dispose();volumeBuffer?.Dispose();pathBuffer?.Dispose();enabledBuffer?.Dispose();routeBuffer?.Dispose();
+        if (pending && !completed)
+            request.WaitForCompletion();
+        pending = false;
+        materialBuffer?.Dispose();
+        edgeBuffer?.Dispose();
+        volumeBuffer?.Dispose();
+        pathBuffer?.Dispose();
+        enabledBuffer?.Dispose();
+        routeBuffer?.Dispose();
     }
 }

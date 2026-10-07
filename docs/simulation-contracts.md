@@ -162,11 +162,11 @@ Keep one codebase and reuse existing components:
 ```text
 Assets/
   Scripts/
-    Scene/         AcousticSurface, AudioMaterial, SceneHelper
-    Simulation/    RayTraceManager, Take, TakeRender, DirectSolver, DirectBvh, TakeComparison
+    Scene/         AcousticSurface, AudioMaterial, SceneToTake
+    Simulation/    RayTraceManager, Take, TakeRender, TransportSolver, DirectBvh, TakeComparison
     Audio/         AudioManager, RaytracedAudioSource, Hrtf
-    Demo/          existing movement, scene controls and legacy fixtures
-  Shaders/         Direct.compute and existing legacy shaders/includes
+    Demo/          movement, scene controls and 2D fixtures
+  Shaders/         Transport.compute, Geometry.hlsl, Transport.hlsl
   Editor/          TakeEditor, TakeDemo, TakeComparisonWindow, TakeComparisonAudio/View,
                    SceneReplay, DirectBenchmark
   Tests/Editor/    TakeChecks and numerical fixtures
@@ -187,7 +187,7 @@ docs/
 
 Use the existing runtime/editor/test assemblies. No additional package hierarchy, generic plugin framework, scene database or orchestration service. Preserve Unity `.meta` GUIDs. Retire legacy code/assets only after checking references and replacement coverage.
 
-Keep `DirectBvh`, `DirectSolver`, `RayTransport`, the two CPU synthesis implementations and `GpuAudio`. Extend those boundaries when required; do not add duplicate Bvh/IndirectSolver/AcousticDsp layers or empty files. Rename misleading entry points such as `RenderDirect` when their callers are migrated together.
+Keep `DirectBvh`, `TransportSolver`, `RayTransport`, the two CPU synthesis implementations and `GpuAudio`. Extend those boundaries when required; do not add duplicate Bvh/IndirectSolver/AcousticDsp layers or empty files. Rename misleading entry points such as `RenderDirect` when their callers are migrated together.
 
 Dependencies flow Unity authoring → numeric scene/state → solver → response → audio rendering. Capture and normal simulation work without ML. Offline uses the same C#/HLSL solver and DSP. A small Python job loop is sufficient if existing Editor/batch jobs become tedious. NumPy/PyTorch serve training; SciPy is optional for independent DSP checks. Test ONNX → Unity `com.unity.ai.inference` before substantial training. Networking adds Netcode for GameObjects/Unity Transport only at its milestone. Pin compatible versions then.
 
@@ -201,8 +201,8 @@ This is a focused extraction while building the second scene, not a renderer rew
 
 | Existing code | Change | Deletion/reuse condition |
 |---|---|---|
-| `RayTraceManager.Legacy.cs`, `AudioManager.Legacy.cs` | Migrate `Big Room` and `SmollRoom` to the current 3D/2D renderer; retain their useful fixtures. | Then remove both legacy partials (~1,100 lines), old shader-only helpers, unused debug buffers/UI and legacy branches. Verify all scenes/prefabs first; Git retains old code. |
-| `SceneHelper.cs`, `AudioMaterial.cs` | Keep numeric scene export; remove old 2D projection/packed material adapters after scene/material migration. | Preserve GUIDs and compare exported geometry/coefficients; never delete shared code by filename alone. |
+| Legacy renderer | Removed after migrating Big Room, SmollRoom and SampleScene to the shared 2D renderer. | Git retains the old renderer; current scene objects, clips and material assets remain editable. |
+| `SceneToTake.cs`, `AudioMaterial.cs` | Numeric scene export retained; old 2D projection removed. Packed material authoring conversion still feeds existing material presets. | Preserve GUIDs and compare exported geometry/coefficients; never delete shared code by filename alone. |
 | `StationDemo.cs` | Input, session startup/save/replay and cursor handling now live in `SceneSession`; train service/motion remains in the existing station component. | No `ChurchDemo` or `ForestDemo` copies of the recorder. `SlidingDoor` is shared by station and church. |
 | `SceneRecording.cs`, `SceneReplay.cs` (renamed) | Evolve to scene input recording and reconstruction, retaining the station-v2 reader. | Same initialization/step code live and offline; remove train-specific settings from the shared contract. |
 | `RaytracedAudioSource.cs`, `TakeRender.Signal`, `TakeRender.Live` | Add a stream source alongside clips, with bounded source history and explicit availability. | CPU/GPU and mic/network use this same sample-read boundary. |
@@ -1078,7 +1078,7 @@ The implementation uses `SceneSession` for session ownership, `MultiplayerSessio
 
 ## 13. Implementation sequence and acceptance
 
-The shared SceneSession, generic scene input recording/reconstruction, shared player/speaker prefabs and editable Church blockout are now implemented. Church currently uses the existing diagnostic chime and provisional material/transport settings. Microphone streams, LAN sessions and saved-source replay are also implemented. Legacy room/material migration, LakeForest and model training remain planned. Keep each change reviewable and reuse the independent CPU/GPU oracles.
+The shared SceneSession, generic scene input recording/reconstruction, shared player/speaker prefabs and editable Church blockout are now implemented. Church currently uses the existing diagnostic chime and provisional material/transport settings. Microphone streams, LAN sessions and saved-source replay are also implemented. The old room scenes now use the current renderer. Material calibration, LakeForest and model training remain planned. Keep each change reviewable and reuse the independent CPU/GPU oracles.
 
 | Stage | Smallest concrete change | Completion gate |
 |---|---|---|

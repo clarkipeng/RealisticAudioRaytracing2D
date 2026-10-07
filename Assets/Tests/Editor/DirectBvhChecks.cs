@@ -66,8 +66,8 @@ public partial class TakeChecks
             if(count>0)geometry[0]=new AcousticTake.Primitive {objectIndex=0,a=new Vector3(0,-1,-1),b=new Vector3(0,1,-1),c=new Vector3(0,0,1)};
             var state=new AcousticTake.State[8];var expected=new TakeRender.DirectPath[4];var actual=new TakeRender.DirectPath[4];
             var settings=new TakeRender.Settings {useBvh=true};
-            using var oracle=new DirectSolver(scene,geometry,new TakeRender.Settings(),shader,3);
-            using var accelerated=new DirectSolver(scene,geometry,settings,shader,3);
+            using var oracle=new TransportSolver(scene,geometry,new TakeRender.Settings(),shader,3);
+            using var accelerated=new TransportSolver(scene,geometry,settings,shader,3);
             var batch=new AcousticTake.State[24];var expectedBatch=new TakeRender.DirectPath[12];var actualBatch=new TakeRender.DirectPath[12];
             for(int frame=0;frame<12;frame++)
             {
@@ -113,8 +113,8 @@ public partial class TakeChecks
             var state=new AcousticTake.State[4];
             for(int i=0;i<4;i++)state[i]=new AcousticTake.State {rotation=Quaternion.identity,flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry};
             state[0].position=new Vector3(0,10,0);state[2].position=new Vector3(-2,0,0);state[3].position=new Vector3(2,0,0);
-            using var oracle=new DirectSolver(scene,geometry,new TakeRender.Settings(),shader,3);
-            using var accelerated=new DirectSolver(scene,geometry,new TakeRender.Settings {useBvh=true},shader,3);
+            using var oracle=new TransportSolver(scene,geometry,new TakeRender.Settings(),shader,3);
+            using var accelerated=new TransportSolver(scene,geometry,new TakeRender.Settings {useBvh=true},shader,3);
             var batch=new AcousticTake.State[12];var expected=new TakeRender.DirectPath[3];var actual=new TakeRender.DirectPath[3];
             for(int f=0;f<3;f++)
             {

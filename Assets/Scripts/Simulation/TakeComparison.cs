@@ -60,7 +60,7 @@ public static class TakeComparison
         // Warm the backend/JIT before either measured solve. File preparation remains part of each wall time.
         var state=new AcousticTake.State[take.Metadata.scene.objects.Length]; take.Evaluate(0,state);
         var response=new TakeRender.DirectPath[take.Metadata.scene.sources.Length*take.Metadata.scene.listeners.Length];
-        using (var warmup=new DirectSolver(take.Metadata.scene,take.Geometry,high,shader,sampleRate:take.Metadata.sampleRate)) warmup.Solve(state,response);
+        using (var warmup=new TransportSolver(take.Metadata.scene,take.Geometry,high,shader,sampleRate:take.Metadata.sampleRate)) warmup.Solve(state,response);
         report.low=TakeRender.RenderDirect(take,low,Path.Combine(output,"low"),p=>progress?.Invoke(p/(referenceCheck==null ? 2:3)),shader);
         report.high=TakeRender.RenderDirect(take,high,Path.Combine(output,"high"),p=>progress?.Invoke((1+p)/(referenceCheck==null ? 2:3)),shader);
         if (report.low.outputSamples!=report.high.outputSamples || report.low.sceneHash!=report.high.sceneHash ||

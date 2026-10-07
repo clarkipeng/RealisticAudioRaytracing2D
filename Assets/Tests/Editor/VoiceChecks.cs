@@ -22,7 +22,7 @@ public partial class TakeChecks
     public void UnusedSlotsDoNotTraceButDeactivationRetainsArrivalPaths()
     {
         var scene=Scene();var states=States();var settings=SpectralSettings();settings.raysPerBin=1;settings.maxBounces=1;
-        using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,RequireGpu(),sampleRate:8192);
+        using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,RequireGpu(),sampleRate:8192);
         var direct=new TakeRender.DirectPath[1];states[0].flags&=~AcousticTake.StateFlags.Active;
         solver.Solve(states,direct);foreach(var path in solver.RayPaths)Assert.That(path.pressureGain,Is.Zero);
         states[0].flags|=AcousticTake.StateFlags.Active;solver.Solve(states,direct);
@@ -115,7 +115,7 @@ public partial class TakeChecks
         using var stream=new SourceStream(length);stream.Append(pcm,0,pcm.Length,length);stream.Finish();
         var signals=new[]{new TakeRender.Signal(pcm),new TakeRender.Signal(stream,32)};
         foreach(var signal in signals) {signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent {gain=1});}
-        using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:rate);
+        using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:rate);
         var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);
         using var a=gpu?new GpuAudio(scene,rate,settings,new[]{signals[0]}):null;
         using var b=gpu?new GpuAudio(scene,rate,settings,new[]{signals[1]}):null;

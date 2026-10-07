@@ -36,8 +36,8 @@ public partial class TakeChecks
     {
         if(!SystemInfo.supportsComputeShaders || !SystemInfo.supportsAsyncGPUReadback)
             Assert.Ignore("Requires compute shaders and asynchronous GPU readback; CPU fallback would not test this contract.");
-        var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-        Assert.That(shader,Is.Not.Null,"Direct.compute must import successfully.");
+        var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
+        Assert.That(shader,Is.Not.Null,"Transport.compute must import successfully.");
         return shader;
     }
 
@@ -297,16 +297,15 @@ public partial class TakeChecks
     {
         var host=new GameObject("Capture host"); var a=new GameObject("Source A"); var b=new GameObject("Source B"); var listener=new GameObject("Listener");
         var clip=AudioClip.Create("Shared PCM",32,1,1000,false); clip.SetData(new float[32],0);
-        var manager=host.AddComponent<RayTraceManager>(); manager.source=a.transform; manager.listener=listener.transform; manager.inputClip=clip; manager.sampleRate=1000;
+        var manager=host.AddComponent<RayTraceManager>(); manager.takeListeners.Add(listener.transform); manager.sampleRate=1000;
         try
         {
             var first=a.AddComponent<RaytracedAudioSource>(); first.rayTraceManager=manager; first.clip=clip;
             var second=b.AddComponent<RaytracedAudioSource>(); second.rayTraceManager=manager; second.clip=clip;
-            second.Apply(); Check(manager.source==a.transform,"Additional emitter must not replace primary emitter.");
             manager.takeSources.Add(first); manager.takeSources.Add(second); manager.RegisterTakeObjects();
             string path=Path.Combine(directory,"manager"); manager.BeginTakeRecording(path);
-            manager.RecordSourceEvent(a.transform,AcousticTake.VoiceAction.Play);
-            manager.RecordSourceEvent(b.transform,AcousticTake.VoiceAction.Play);
+            first.Play();
+            second.Play();
             first.SetGain(.25f);
             Reject(()=>first.SetGain(float.NaN),"Source control rejects nonfinite gain.");
             manager.EndTakeRecording();
@@ -329,7 +328,7 @@ public partial class TakeChecks
             manager.AbortTakeRecording("Injected tick failure");
             Reject(()=>AcousticTake.ReadManifest(aborted),"Tick failure cannot be saved as a completed take");
             manager.audioManager=host.AddComponent<AudioManager>();
-            manager.useTakeRenderer=true;
+            manager.monitorLive=true;
             manager.sampleRate=AudioSettings.outputSampleRate==48000 ? 44100:48000;
             string livePath=Path.Combine(directory,"manager-live-rate");
             manager.BeginTakeRecording(livePath);
@@ -354,7 +353,7 @@ public partial class TakeChecks
         var mesh=UnityEngine.Object.Instantiate(box.GetComponent<MeshFilter>().sharedMesh); box.GetComponent<MeshFilter>().sharedMesh=mesh;
         try
         {
-            manager.takeDefaultMaterial=material; manager.obstacleObjects=new List<GameObject> {box}; manager.RegisterTakeObjects();
+            manager.takeDefaultMaterial=material; manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {transform=box.transform,geometry=true}); manager.RegisterTakeObjects();
             manager.BeginTakeRecording(Path.Combine(directory,"rigid")); box.transform.rotation=Quaternion.Euler(21,37,54); box.transform.position=Vector3.one;
             manager.EndTakeRecording(); Check(File.Exists(Path.Combine(directory,"rigid","take.json")),"Rigid movement passes strict validation.");
             manager.BeginTakeRecording(Path.Combine(directory,"mutated-mesh"));
@@ -456,7 +455,6 @@ public partial class TakeChecks
             Check(manager.Mode==RayTraceManager.SessionMode.Recording,"Recording owns the session.");
             var observe=typeof(RayTraceManager).GetMethod("CaptureTakeState",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance);
             box.transform.position=Vector3.right; observe.Invoke(manager,new object[] {0L}); box.transform.position=Vector3.zero;
-            Reject(manager.StartPrecomputedPlayback,"Legacy precomputation cannot share a capture session.");
             Reject(manager.RegisterTakeObjects,"Active registration is immutable.");
             manager.EndTakeRecording(); Check(manager.Mode==RayTraceManager.SessionMode.Idle,"Closing a silent take releases session ownership.");
             using (var take=AcousticTake.Open(Path.Combine(directory,"owned-session")))
@@ -707,7 +705,7 @@ public partial class TakeChecks
         foreach (var dimension in new[] {AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
         {
             scene.dimension=dimension;
-            using (var solver=new DirectSolver(scene,geometry,settings,shader))
+            using (var solver=new TransportSolver(scene,geometry,settings,shader))
                 for (int i=0; i<25; i++)
                 {
                     state[0].rotation=Quaternion.AngleAxis(i*7,Vector3.forward);
@@ -725,7 +723,7 @@ public partial class TakeChecks
         var shader=RequireGpu();
         var scene=Scene(); var states=new AcousticTake.State[10]; var result=new TakeRender.DirectPath[5];
         for (int f=0;f<5;f++) { var state=States(); state[1].position.x=f+1; Array.Copy(state,0,states,f*2,2); }
-        using (var solver=new DirectSolver(scene,new AcousticTake.Primitive[0],new TakeRender.Settings(),shader,5))
+        using (var solver=new TransportSolver(scene,new AcousticTake.Primitive[0],new TakeRender.Settings(),shader,5))
         {
             solver.BeginSolve(states,5); Reject(()=>solver.BeginSolve(states,5),"Pending GPU response owns its buffers.");
             Check(solver.TryComplete(result,true),"Explicit shutdown wait completes async readback.");

@@ -1871,9 +1871,6 @@ MonoBehaviour:
   mutedListenerPlusOne: 1
   loop: 1
   gain: 1
-  prepareOnStart: 0
-  assignSourceTransform: 1
-  assignClip: 1
   disableUnityAudioSources: 1
 --- !u!4 &391527489
 Transform:
@@ -1940,9 +1937,6 @@ MonoBehaviour:
   mutedListenerPlusOne: 0
   loop: 1
   gain: 1
-  prepareOnStart: 0
-  assignSourceTransform: 1
-  assignClip: 1
   disableUnityAudioSources: 1
 --- !u!1 &410746106
 GameObject:
@@ -3222,8 +3216,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytraceControlPanel
   rayTraceManager: {fileID: 672996098}
-  audioManager: {fileID: 672996097}
-  trainMotion: {fileID: 0}
   session: {fileID: 672996096}
   buildOnStart: 1
   anchoredPosition: {x: 24, y: -24}
@@ -3261,20 +3253,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a2b430a59924455e84d12c6a2e3434d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Acoustics::AudioManager
-  shader: {fileID: 0}
-  showWaveform: 0
-  waveformTextureSize: {x: 1024, y: 256}
-  waveformGain: 10
-  waveformTexture: {fileID: 0}
-  writeHead: 0
-  readHead_Debug: 0
-  bufferCapacity: 0
-  writeSampleCursor_Debug: 0
-  readSampleCursor_Debug: 0
-  writeLoopCount_Debug: 0
-  readLoopCount_Debug: 0
-  underrunCount_Debug: 0
-  rayTraceManager: {fileID: 672996098}
   paused: 0
 --- !u!114 &672996098
 MonoBehaviour:
@@ -3288,30 +3266,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2913e124272014f598570cc1c30f24bc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Acoustics::RayTraceManager
-  raytraceShader: {fileID: 0}
-  rayCount: 1000
-  maxBounces: 5
-  speedOfSound: 343
-  dynamicObstacles: 0
-  inputClip: {fileID: 8300000, guid: 7f547180c6c5d4144bf1cf3e9042c002, type: 3}
-  chunkSamples: 1024
-  inputGain: 1
-  loopAudio: 0
-  enableKeyboardShortcuts: 0
-  precomputedPlaybackSource: {fileID: 0}
-  precomputedClip: {fileID: 0}
-  autoPlayPrecomputed: 1
-  precomputeChunksPerFrame: 4
-  reverbDuration: 5
-  loop: 0
-  listenerRadius: 0.5
-  showDebugTexture: 0
-  verboseAudioDebug: 0
-  debugRayCount: 100
-  waveformGain: 1000
-  spectrogramGain: 1000
-  waveformTexture: {fileID: 0}
-  useTakeRenderer: 1
+  audioManager: {fileID: 672996097}
+  sampleRate: 44100
+  monitorLive: 1
   directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
   directSettings:
     responseStepSamples: 1024
@@ -3582,11 +3539,6 @@ MonoBehaviour:
     slots: 0
     localSlot: 0
     serverTimeOrigin: 0
-  audioManager: {fileID: 672996097}
-  sampleRate: 44100
-  source: {fileID: 1592370148}
-  listener: {fileID: 1915303080}
-  obstacleObjects: []
 --- !u!4 &672996099
 Transform:
   m_ObjectHideFlags: 0
@@ -6067,9 +6019,6 @@ MonoBehaviour:
   mutedListenerPlusOne: 0
   loop: 1
   gain: 1
-  prepareOnStart: 0
-  assignSourceTransform: 1
-  assignClip: 1
   disableUnityAudioSources: 1
 --- !u!1 &1057176063
 GameObject:
@@ -9745,9 +9694,6 @@ MonoBehaviour:
   mutedListenerPlusOne: 0
   loop: 1
   gain: 1
-  prepareOnStart: 0
-  assignSourceTransform: 1
-  assignClip: 1
   disableUnityAudioSources: 1
 --- !u!1 &1823882324
 GameObject:

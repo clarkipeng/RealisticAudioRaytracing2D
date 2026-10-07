@@ -13,7 +13,7 @@ OcclusionCullingSettings:
 --- !u!104 &2
 RenderSettings:
   m_ObjectHideFlags: 0
-  serializedVersion: 9
+  serializedVersion: 10
   m_Fog: 0
   m_FogColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   m_FogMode: 3
@@ -42,8 +42,8 @@ RenderSettings:
 --- !u!157 &3
 LightmapSettings:
   m_ObjectHideFlags: 0
-  serializedVersion: 12
-  m_GIWorkflowMode: 1
+  serializedVersion: 13
+  m_BakeOnSceneLoad: 0
   m_GISettings:
     serializedVersion: 2
     m_BounceScale: 1
@@ -66,9 +66,6 @@ LightmapSettings:
     m_LightmapParameters: {fileID: 0}
     m_LightmapsBakeMode: 1
     m_TextureCompression: 1
-    m_FinalGather: 0
-    m_FinalGatherFiltering: 1
-    m_FinalGatherRayCount: 256
     m_ReflectionCompression: 2
     m_MixedBakeMode: 2
     m_BakeBackend: 0
@@ -133,6 +130,8 @@ GameObject:
   - component: {fileID: 128884547}
   - component: {fileID: 128884546}
   - component: {fileID: 128884548}
+  - component: {fileID: 128884549}
+  - component: {fileID: 128884550}
   m_Layer: 0
   m_Name: Compute
   m_TagString: Untagged
@@ -152,27 +151,107 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2913e124272014f598570cc1c30f24bc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shader: {fileID: 7200000, guid: 264c520a1daf84bc791075daf62d8965, type: 3}
-  rayCount: 15000
-  debugLines: 100
-  maxBounces: 5
-  speedOfSound: 343
-  dynamicObstacles: 1
+  audioManager: {fileID: 128884549}
   sampleRate: 44100
-  impulseLengthSeconds: 1
-  inputClip: {fileID: 8300000, guid: b492a9c86a55f446f8f5bf9a6d1d3024, type: 3}
-  bakeOnSpace: 1
-  reverbDuration: 2
-  source: {fileID: 1860376488}
-  listener: {fileID: 849675356}
-  listenerRadius: 0.5
-  obstacleObjects:
-  - {fileID: 1302675186}
-  - {fileID: 636130203}
-  - {fileID: 1669129185}
-  showDebugTexture: 1
-  debugTextureSize: {x: 512, y: 512}
-  waveformGain: 50
+  monitorLive: 1
+  directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
+  directSettings:
+    responseStepSamples: 1024
+    speedOfSound: 343
+    referenceDistance: 1
+    minimumDistance: 0.1
+    tailSamples: 96000
+    transitionSamples: 0
+    delayFilter: 0
+    listenerOutput: 0
+    sincRadius: 16
+    maximumDelaySeconds: 2
+    maximumSignalEvents: 4096
+    maximumPendingObservations: 16
+    maximumResponsesPerBatch: 64
+    useBvh: 0
+    transport: 1
+    synthesis: 0
+    audioBackend: 0
+    raysPerBin: 1
+    maxBounces: 3
+    seed: 0
+    raysPerPair: 0
+    diffractionFactor: 1
+    airAbsorption: 1
+    fftSize: 128
+    spectralHop: 32
+  monitorListener: 0
+  monitorLeadSamples: 16384
+  monitorCapacitySamples: 262144
+  liveDiagnostics:
+    backend:
+    scope: producer stopped; callback counters sampled at stop
+    sampleRate: 0
+    responseCount: 0
+    queueCapacity: 0
+    deviceBufferSamples: 0
+    maximumPendingObservations: 0
+    retainedEvents: 0
+    pairPrimitiveTestUpperBound: 0
+    validationCount: 0
+    coalescedObservations: 0
+    responseSupportSamples: 0
+    tailCoversResponseSupport: 0
+    completionSeconds: 0
+    maximumCompletionSeconds: 0
+    channelMismatchSamples: 0
+    observedSamples: 0
+    leadSamples: 0
+    underrunSamples: 0
+    lateSamples: 0
+    overflowSamples: 0
+    overBudgetCallbacks: 0
+    maximumObservationGapSamples: 0
+    preparationSeconds: 0
+    validationSeconds: 0
+    maximumValidationSeconds: 0
+    solveSeconds: 0
+    audioSeconds: 0
+    responsePreparationSeconds: 0
+    maximumSolveSeconds: 0
+    maximumCallbackSeconds: 0
+  takeDimension: 0
+  takeRoot: {fileID: 0}
+  takeDefaultMaterial: {fileID: 11400000, guid: ed4ccb841357f455bb36bde4c0036059, type: 2}
+  takeCurveTolerance: 0.01
+  takeObjects:
+  - id: 29f7eb99e0bb43f38e6049625e4fca09
+    transform: {fileID: 1302675188}
+    geometry: 1
+  - id: 4a2209da46b54ccf81fe8efc95c56cec
+    transform: {fileID: 849675356}
+    geometry: 0
+  - id: 9d48d271c72f4379a0666e9e3a89329a
+    transform: {fileID: 1860376488}
+    geometry: 0
+  - id: c529b099221f4600a3f1739df2bdb6b4
+    transform: {fileID: 636130207}
+    geometry: 1
+  - id: dccb000a21984e7298ce8f23eb94f9e4
+    transform: {fileID: 1669129189}
+    geometry: 1
+  takeSources:
+  - {fileID: 1860376489}
+  takeListeners:
+  - {fileID: 849675356}
+  replayMotionWriters: []
+  takePath:
+  replaySeconds: 0
+  SessionInfo:
+    scene:
+    sessionId:
+    clientId:
+    mode:
+    build:
+    slots: 0
+    localSlot: 0
+    serverTimeOrigin: 0
 --- !u!4 &128884547
 Transform:
   m_ObjectHideFlags: 0
@@ -199,6 +278,7 @@ AudioSource:
   serializedVersion: 4
   OutputAudioMixerGroup: {fileID: 0}
   m_audioClip: {fileID: 0}
+  m_Resource: {fileID: 0}
   m_PlayOnAwake: 1
   m_Volume: 1
   m_Pitch: 1
@@ -284,6 +364,37 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!114 &128884549
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 128884545}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7a2b430a59924455e84d12c6a2e3434d, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::AudioManager
+  paused: 0
+--- !u!114 &128884550
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 128884545}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8d4f7df1ef1c4a348a1c6747e02f0c40, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::RaytraceControlPanel
+  rayTraceManager: {fileID: 128884546}
+  session: {fileID: 0}
+  buildOnStart: 1
+  anchoredPosition: {x: 16, y: -16}
+  buttonSize: {x: 180, y: 32}
+  spacing: 8
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -387,7 +498,7 @@ GameObject:
   - component: {fileID: 636130207}
   - component: {fileID: 636130206}
   - component: {fileID: 636130205}
-  - component: {fileID: 636130204}
+  - component: {fileID: 636130208}
   m_Layer: 0
   m_Name: Wall (1)
   m_TagString: Untagged
@@ -395,19 +506,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &636130204
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 636130203}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  absorption: 0.1
 --- !u!61 &636130205
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -416,6 +514,7 @@ BoxCollider2D:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 636130203}
   m_Enabled: 1
+  serializedVersion: 3
   m_Density: 1
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -439,7 +538,8 @@ BoxCollider2D:
     m_Bits: 4294967295
   m_IsTrigger: 0
   m_UsedByEffector: 0
-  m_UsedByComposite: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
@@ -450,11 +550,11 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  serializedVersion: 2
   m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
 --- !u!212 &636130206
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -470,6 +570,11 @@ SpriteRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 0
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -491,9 +596,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -503,7 +610,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &636130207
 Transform:
@@ -520,6 +626,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &636130208
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 636130203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 0
+  material: {fileID: 0}
+  submeshMaterials: []
 --- !u!1 &849675352
 GameObject:
   m_ObjectHideFlags: 0
@@ -577,6 +698,11 @@ MeshRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 2
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -598,9 +724,11 @@ MeshRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
 --- !u!33 &849675355
 MeshFilter:
@@ -646,6 +774,7 @@ GameObject:
   m_IsActive: 1
 --- !u!212 &1302675187
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -661,6 +790,11 @@ SpriteRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 0
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -682,9 +816,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -694,7 +830,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &1302675188
 Transform:
@@ -719,6 +854,7 @@ BoxCollider2D:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1302675186}
   m_Enabled: 1
+  serializedVersion: 3
   m_Density: 1
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -742,7 +878,8 @@ BoxCollider2D:
     m_Bits: 4294967295
   m_IsTrigger: 0
   m_UsedByEffector: 0
-  m_UsedByComposite: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
@@ -753,7 +890,6 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  serializedVersion: 2
   m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
 --- !u!114 &1302675190
@@ -765,10 +901,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 1302675186}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
-  absorption: 0.1
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 0
+  material: {fileID: 0}
+  submeshMaterials: []
 --- !u!1 &1669129185
 GameObject:
   m_ObjectHideFlags: 0
@@ -780,7 +918,7 @@ GameObject:
   - component: {fileID: 1669129189}
   - component: {fileID: 1669129188}
   - component: {fileID: 1669129187}
-  - component: {fileID: 1669129186}
+  - component: {fileID: 1669129190}
   m_Layer: 0
   m_Name: Wall (2)
   m_TagString: Untagged
@@ -788,19 +926,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1669129186
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1669129185}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  absorption: 0.1
 --- !u!61 &1669129187
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -809,6 +934,7 @@ BoxCollider2D:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1669129185}
   m_Enabled: 1
+  serializedVersion: 3
   m_Density: 1
   m_Material: {fileID: 0}
   m_IncludeLayers:
@@ -832,7 +958,8 @@ BoxCollider2D:
     m_Bits: 4294967295
   m_IsTrigger: 0
   m_UsedByEffector: 0
-  m_UsedByComposite: 0
+  m_CompositeOperation: 0
+  m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
@@ -843,11 +970,11 @@ BoxCollider2D:
     drawMode: 0
     adaptiveTiling: 0
   m_AutoTiling: 0
-  serializedVersion: 2
   m_Size: {x: 1, y: 1}
   m_EdgeRadius: 0
 --- !u!212 &1669129188
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -863,6 +990,11 @@ SpriteRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 0
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -884,9 +1016,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -896,7 +1030,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &1669129189
 Transform:
@@ -913,6 +1046,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 77.214}
+--- !u!114 &1669129190
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1669129185}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 0
+  material: {fileID: 0}
+  submeshMaterials: []
 --- !u!1 &1860376486
 GameObject:
   m_ObjectHideFlags: 0
@@ -923,6 +1071,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1860376488}
   - component: {fileID: 1860376487}
+  - component: {fileID: 1860376489}
   m_Layer: 0
   m_Name: Source
   m_TagString: Untagged
@@ -932,6 +1081,7 @@ GameObject:
   m_IsActive: 1
 --- !u!212 &1860376487
 SpriteRenderer:
+  serializedVersion: 2
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -947,6 +1097,11 @@ SpriteRenderer:
   m_ReflectionProbeUsage: 1
   m_RayTracingMode: 0
   m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_ForceMeshLod: -1
+  m_MeshLodSelectionBias: 0
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
@@ -968,9 +1123,11 @@ SpriteRenderer:
   m_AutoUVMaxDistance: 0.5
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
+  m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
+  m_MaskInteraction: 0
   m_Sprite: {fileID: -2413806693520163455, guid: a86470a33a6bf42c4b3595704624658b, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -980,7 +1137,6 @@ SpriteRenderer:
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
-  m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &1860376488
 Transform:
@@ -997,6 +1153,25 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1860376489
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1860376486}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
+  rayTraceManager: {fileID: 128884546}
+  clip: {fileID: 8300000, guid: b492a9c86a55f446f8f5bf9a6d1d3024, type: 3}
+  streamed: 0
+  mutedListenerPlusOne: 0
+  loop: 1
+  gain: 1
+  disableUnityAudioSources: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

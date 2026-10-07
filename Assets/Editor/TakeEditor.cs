@@ -48,7 +48,7 @@ public sealed class TakeEditor : Editor
             });
             if (manager.IsRecordingTake && GUILayout.Button("Save run")) Run(()=> {if(station!=null)station.SaveRecording();else manager.EndTakeRecording();});
             if(station!=null && !manager.IsRecordingTake && !station.Busy && GUILayout.Button("Replay saved run from beginning")) Run(()=>station.ReplayInputs(manager.takePath));
-            if (manager.useTakeRenderer && !manager.IsRecordingTake && !manager.IsReplayingTake)
+            if (manager.monitorLive && !manager.IsRecordingTake && !manager.IsReplayingTake)
             {
                 if (manager.Mode==RayTraceManager.SessionMode.Idle && GUILayout.Button("Start live preview")) Run(manager.BeginLiveSimulation);
                 if (manager.IsLiveSimulation && GUILayout.Button("Stop live preview")) Run(manager.StopLiveSimulation);
@@ -150,9 +150,8 @@ public sealed class TakeEditor : Editor
     }
     void DrawConfiguration(RayTraceManager manager)
     {
-        if(!manager.useTakeRenderer) {DrawDefaultInspector();return;}
         serializedObject.Update();
-        foreach(string name in new[]{"useTakeRenderer","audioManager","directShader","directSettings","monitorListener",
+        foreach(string name in new[]{"monitorLive","audioManager","directShader","directSettings","monitorListener",
             "monitorLeadSamples","monitorCapacitySamples","takeDimension","takeRoot","takeDefaultMaterial","takeCurveTolerance",
             "takeObjects","takeSources","takeListeners","replayMotionWriters","takePath","replaySeconds"})
             EditorGUILayout.PropertyField(serializedObject.FindProperty(name),true);
@@ -230,9 +229,7 @@ public sealed class AudioOutputEditor : Editor
     public override void OnInspectorGUI()
     {
         var audio=(AudioManager)target;
-        if(audio.rayTraceManager==null || !audio.rayTraceManager.useTakeRenderer){DrawDefaultInspector();return;}
         serializedObject.Update();
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("rayTraceManager"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("paused"));
         serializedObject.ApplyModifiedProperties();
         var queue=audio.OutputQueue;

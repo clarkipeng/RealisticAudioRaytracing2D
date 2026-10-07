@@ -8,8 +8,6 @@ using UnityEngine.UI;
 public class RaytraceControlPanel : MonoBehaviour
 {
     public RayTraceManager rayTraceManager;
-    public AudioManager audioManager;
-    public Oscillator trainMotion;
     public SceneSession session;
     public bool buildOnStart = true;
 
@@ -53,9 +51,6 @@ public class RaytraceControlPanel : MonoBehaviour
     void Start()
     {
         if (rayTraceManager == null) rayTraceManager = FindObjectOfType<RayTraceManager>();
-        if (audioManager == null) audioManager = FindObjectOfType<AudioManager>();
-        if (trainMotion == null && rayTraceManager != null && rayTraceManager.source != null)
-            trainMotion = rayTraceManager.source.GetComponent<Oscillator>();
         if (buildOnStart) Build();
     }
 
@@ -100,21 +95,13 @@ public class RaytraceControlPanel : MonoBehaviour
             sensitivityControls.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
             return;
         }
-        if(rayTraceManager!=null && rayTraceManager.useTakeRenderer)
+        if (rayTraceManager != null)
         {
-            AddButton(panel,"Start preview",rayTraceManager.BeginLiveSimulation);
-            AddButton(panel,"Stop preview",rayTraceManager.StopLiveSimulation);
-            return;
+            AddButton(panel, "Play", () => {
+                foreach (var source in rayTraceManager.takeSources) source.Play();
+            });
+            AddButton(panel, "Stop", rayTraceManager.StopLiveSimulation);
         }
-        AddButton(panel, "Stream", () => rayTraceManager?.StartStreaming());
-        AddButton(panel, "Stop", () => rayTraceManager?.StopStreaming());
-        AddButton(panel, "Precompute", () => rayTraceManager?.StartPrecomputedPlayback());
-        AddButton(panel, "Play Precomputed", () => rayTraceManager?.PlayPrecomputedClip());
-        AddButton(panel, "Move Train", ToggleTrainMotion);
-        AddButton(panel, "Reset", () => rayTraceManager?.ResetSimulation());
-        AddButton(panel, "Test Sine", () => rayTraceManager?.QueueTestSineWave());
-        AddButton(panel, "Pause Audio", () => audioManager?.TogglePause());
-        AddButton(panel, "Record", () => audioManager?.ToggleRecording());
     }
 
     void Update()
@@ -143,17 +130,6 @@ public class RaytraceControlPanel : MonoBehaviour
         var label=obj.GetComponent<Text>(); label.font=buttonFont; label.fontSize=size;
         label.text=value; label.color=new Color(.92f,.96f,1); label.raycastTarget=false;
         label.alignment=TextAnchor.MiddleLeft; return label;
-    }
-
-    void ToggleTrainMotion()
-    {
-        if (trainMotion == null)
-        {
-            Debug.LogWarning("No train Oscillator assigned to RaytraceControlPanel.");
-            return;
-        }
-
-        trainMotion.ToggleMoving();
     }
 
     Transform CreatePanel()

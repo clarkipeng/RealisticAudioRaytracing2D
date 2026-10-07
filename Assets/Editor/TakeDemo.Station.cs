@@ -92,22 +92,22 @@ public static partial class TakeDemo
 
         var host=new GameObject("Acoustic simulation");
         var manager=host.AddComponent<RayTraceManager>();
-        manager.useTakeRenderer=true; manager.takeRoot=world; manager.takeDimension=AcousticTake.Dimension.Spatial3D;
+        manager.monitorLive=true; manager.takeRoot=world; manager.takeDimension=AcousticTake.Dimension.Spatial3D;
         manager.sampleRate=AudioSettings.outputSampleRate;
         manager.takeDefaultMaterial=AssetDatabase.LoadAssetAtPath<AudioMaterial>("Assets/Materials/Material.asset");
-        manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-        manager.showDebugTexture=false; manager.enableKeyboardShortcuts=false;
+        manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
+
         manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Binaural;
         manager.directSettings.transport=TakeRender.Transport.Raytraced; manager.directSettings.useBvh=true;
         manager.directSettings.responseStepSamples=1024; manager.directSettings.transitionSamples=512;
         manager.directSettings.tailSamples=manager.sampleRate;
         manager.monitorLeadSamples=16384;
-        manager.audioManager=host.AddComponent<AudioManager>(); manager.audioManager.showWaveform=false; manager.audioManager.rayTraceManager=manager;
+        manager.audioManager=host.AddComponent<AudioManager>();
         var horn=StationSource(train,"Train horn",new Vector3(0,4,1.8f),AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/train_horn.mp3"),manager,true);
         var signal=StationSource(world,"Room signal",new Vector3(5.6f,2.1f,13.98f),StationSignal(),manager,true);
         var player=SharedPlayer(world,new Vector3(4,0,-20));
         var camera=player.GetComponentInChildren<Camera>();
-        manager.source=horn.transform; manager.inputClip=horn.clip; manager.listener=camera.transform;
+
         manager.takeListeners.Add(camera.transform);
         manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding{transform=player});
         manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding{transform=train});
@@ -117,7 +117,7 @@ public static partial class TakeDemo
         session.actors=new SceneActor[]{demo,sliding};
         ConfigureStationLoop(demo,session); manager.RegisterTakeObjects();
         // SceneSession checks replay mode before writing motion and keeps UI/escape available.
-        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.audioManager=manager.audioManager; panel.session=session; panel.buttonSize=new Vector2(260,30); panel.spacing=3; panel.anchoredPosition=new Vector2(24,-24);
+        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.session=session; panel.buttonSize=new Vector2(260,30); panel.spacing=3; panel.anchoredPosition=new Vector2(24,-24);
         var sun=new GameObject("Sun").AddComponent<Light>(); sun.type=LightType.Directional; sun.transform.rotation=Quaternion.Euler(42,-32,0); sun.intensity=1.2f; sun.color=new Color(1,.94f,.83f); sun.shadows=LightShadows.Soft;
         var sky=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Sky.mat");
         if(sky==null) {sky=new Material(Shader.Find("Skybox/Procedural")); AssetDatabase.CreateAsset(sky,StationAssets+"/Sky.mat");}

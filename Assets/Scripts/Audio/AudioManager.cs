@@ -5,7 +5,7 @@ using System.Threading;
 using System.Diagnostics;
 using Debug = UnityEngine.Debug;
 
-public partial class AudioManager : MonoBehaviour
+public class AudioManager : MonoBehaviour
 {
     // One main-thread producer, one audio-thread consumer. Publish after writing the entire block.
     public sealed class PcmQueue
@@ -175,8 +175,6 @@ public partial class AudioManager : MonoBehaviour
     public PlaybackCapture.Report LastOutputCapture {get;private set;}
     AudioClip driverClip;
     AudioSource driverSource;
-    public long LegacyBufferBytes => ringBuffer==null ? 0:(long)ringBuffer.Length*4;
-    volatile bool pcmMode;
     public PcmQueue OutputQueue => Volatile.Read(ref pcmQueue);
     public PcmQueue StartPcmStream(int rate,int capacity,int leadSamples,PlaybackCapture capture=null)
     {
@@ -191,7 +189,7 @@ public partial class AudioManager : MonoBehaviour
     {
         if (queue==null || queue.rate!=AudioSettings.outputSampleRate) throw new ArgumentException("Prepared queue must use the output device sample rate.");
         if (OutputCapture!=null || OutputQueue!=null) throw new InvalidOperationException("Finish the previous output stream before activating another.");
-        sampleRate=queue.rate; OutputCapture=queue.capture; pcmMode=true; Volatile.Write(ref pcmQueue,queue);
+        sampleRate=queue.rate; OutputCapture=queue.capture; Volatile.Write(ref pcmQueue,queue);
     }
     public void StopPcmStream()
     {
@@ -199,23 +197,11 @@ public partial class AudioManager : MonoBehaviour
         OutputCapture?.Dispose(); OutputCapture=null;
     }
 
-    [Header("Debug")]
-    public int writeHead;
-    public int readHead_Debug;
-    public int bufferCapacity;
-    public long writeSampleCursor_Debug;
-    public long readSampleCursor_Debug;
-    public int writeLoopCount_Debug;
-    public int readLoopCount_Debug;
-    public int underrunCount_Debug;
-    
-    public RayTraceManager rayTraceManager;
     public bool paused;
     int sampleRate;
 
     void Awake()
     {
-        pcmMode=rayTraceManager!=null && rayTraceManager.useTakeRenderer;
         sampleRate = AudioSettings.outputSampleRate;
         
         var src = driverSource = gameObject.AddComponent<AudioSource>();
@@ -229,14 +215,9 @@ public partial class AudioManager : MonoBehaviour
 
     void OnAudioFilterRead(float[] data, int channels)
     {
-        if (pcmMode)
-        {
-            var queue=Volatile.Read(ref pcmQueue);
-            if (queue==null) Array.Clear(data,0,data.Length);
-            else queue.Consume(data,channels,paused,AudioSettings.dspTime);
-            return;
-        }
-        ConsumeLegacy(data,channels);
+        var queue = Volatile.Read(ref pcmQueue);
+        if (queue == null) Array.Clear(data, 0, data.Length);
+        else queue.Consume(data, channels, paused, AudioSettings.dspTime);
     }
 
     void Update()
@@ -252,18 +233,8 @@ public partial class AudioManager : MonoBehaviour
                 OutputCapture=null;
             }
         }
-        if (pcmMode)
-        {
-            var queue=OutputQueue;
-            if (queue!=null)
-            {
-                if (queue.IsDrained && OutputCapture==null) Volatile.Write(ref pcmQueue,null);
-                bufferCapacity=queue.Capacity; readSampleCursor_Debug=queue.ReadSample; writeSampleCursor_Debug=queue.WrittenSample;
-                underrunCount_Debug=(int)Math.Min(int.MaxValue,Interlocked.Read(ref queue.UnderrunSamples));
-            }
-            return;
-        }
-        UpdateLegacy();
+        var queue = OutputQueue;
+        if (queue != null && queue.IsDrained && OutputCapture == null) Volatile.Write(ref pcmQueue, null);
     }
 
     void OnDestroy()
@@ -271,6 +242,5 @@ public partial class AudioManager : MonoBehaviour
         StopPcmStream();
         if (driverSource!=null) driverSource.Stop();
         if (driverClip!=null) { if (Application.isPlaying) Destroy(driverClip); else DestroyImmediate(driverClip); }
-        DisposeLegacy();
     }
 }

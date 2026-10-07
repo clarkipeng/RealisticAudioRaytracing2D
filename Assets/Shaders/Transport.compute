@@ -1,0 +1,72 @@
+// GPU entry points. Geometry and acoustic transport are shared by all variants.
+#pragma kernel Direct2D
+#pragma kernel Direct2DBvh USE_BVH
+#pragma kernel Direct3D
+#pragma kernel Direct3DBvh USE_BVH
+#pragma kernel Edge2D
+#pragma kernel Edge2DBvh USE_BVH
+#pragma kernel Edge3D
+#pragma kernel Edge3DBvh USE_BVH
+#pragma kernel EvaluateDirect2D
+#pragma kernel EvaluateDirect2DBvh USE_BVH
+#pragma kernel EvaluateDirect3D
+#pragma kernel EvaluateDirect3DBvh USE_BVH
+#pragma kernel Trace2D
+#pragma kernel Trace2DBvh USE_BVH
+#pragma kernel Trace3D
+#pragma kernel Trace3DBvh USE_BVH
+
+#include "Geometry.hlsl"
+#include "Transport.hlsl"
+
+void EvaluateDirectProbe(uint pair, bool is2D)
+{
+    if (pair >= PairCount * FrameCount)
+        return;
+    uint frame = pair / PairCount, localPair = pair % PairCount, stateOffset = frame * ObjectCount;
+    float3 o = States[stateOffset + Sources[localPair / ListenerCount]].position.xyz;
+    float3 end = States[stateOffset + Listeners[localPair % ListenerCount]].position.xyz;
+    if (is2D)
+    {
+        o.z = 0;
+        end.z = 0;
+    }
+    float3 sourceVelocity = Velocity(stateOffset + Sources[localPair / ListenerCount]),
+           listenerVelocity = Velocity(stateOffset + Listeners[localPair % ListenerCount]);
+    if (is2D)
+    {
+        sourceVelocity.z = 0;
+        listenerVelocity.z = 0;
+    }
+    float delay = RetardedDelay(end - o, sourceVelocity, SpeedOfSound);
+    o -= sourceVelocity * delay;
+    float3 d = end - o, n = length(d) > 0 ? normalize(d) : float3(0, 0, 0);
+    float delayRate = 1 - (SpeedOfSound - dot(listenerVelocity, n)) / (SpeedOfSound - dot(sourceVelocity, n));
+    bool blocked = Blocked(stateOffset, o, d, 1e-6, 1 - 1e-6, is2D);
+    float distance = length(d);
+    DirectPath path = (DirectPath)0;
+    path.direction = float4(distance > 0 ? -d / distance : float3(0, 0, 0), delayRate);
+    path.response = float2(delay, blocked ? 0 : ReferenceDistance / max(distance, MinimumDistance));
+    Responses[pair] = path;
+}
+
+// clang-format off
+[numthreads(64, 1, 1)] void Direct2D(uint3 id : SV_DispatchThreadID) { EvaluateDirectProbe(id.x, true); }
+[numthreads(64, 1, 1)] void Direct2DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirectProbe(id.x, true); }
+[numthreads(64, 1, 1)] void Direct3D(uint3 id : SV_DispatchThreadID) { EvaluateDirectProbe(id.x, false); }
+[numthreads(64, 1, 1)] void Direct3DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirectProbe(id.x, false); }
+
+[numthreads(64, 1, 1)] void Edge2D(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, true); }
+[numthreads(64, 1, 1)] void Edge2DBvh(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, true); }
+[numthreads(64, 1, 1)] void Edge3D(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, false); }
+[numthreads(64, 1, 1)] void Edge3DBvh(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, false); }
+
+[numthreads(64, 1, 1)] void EvaluateDirect2D(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, true); }
+[numthreads(64, 1, 1)] void EvaluateDirect2DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, true); }
+[numthreads(64, 1, 1)] void EvaluateDirect3D(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, false); }
+[numthreads(64, 1, 1)] void EvaluateDirect3DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, false); }
+
+[numthreads(64, 1, 1)] void Trace2D(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, true); }
+[numthreads(64, 1, 1)] void Trace2DBvh(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, true); }
+[numthreads(64, 1, 1)] void Trace3D(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, false); }
+[numthreads(64, 1, 1)] void Trace3DBvh(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, false); }

@@ -9,7 +9,6 @@ public class Oscillator : MonoBehaviour
     public bool moving = false;
     public KeyCode toggleKey = KeyCode.M;
     public RaytracedAudioSource raytracedAudioSource;
-    public RayTraceManager rayTraceManager;
     public bool startAudioOnMove = true;
     public bool startAudioOnlyOnce = true;
     
@@ -76,8 +75,6 @@ public class Oscillator : MonoBehaviour
 
         if (raytracedAudioSource != null)
             raytracedAudioSource.Play();
-        else if (rayTraceManager != null)
-            rayTraceManager.StartStreaming();
 
         startedAudio = true;
     }

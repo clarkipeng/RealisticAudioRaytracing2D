@@ -52,26 +52,26 @@ public static partial class TakeDemo
         door.id="side-room-door"; door.openOffset=new Vector3(0,0,-2.6f);
         var host=new GameObject("Acoustic simulation");
         var manager=host.AddComponent<RayTraceManager>();
-        manager.useTakeRenderer=true; manager.takeRoot=world; manager.takeDimension=AcousticTake.Dimension.Spatial3D;
+        manager.monitorLive=true; manager.takeRoot=world; manager.takeDimension=AcousticTake.Dimension.Spatial3D;
         manager.sampleRate=AudioSettings.outputSampleRate;
         manager.takeDefaultMaterial=AssetDatabase.LoadAssetAtPath<AudioMaterial>("Assets/Materials/Border.asset");
-        manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
-        manager.showDebugTexture=false; manager.enableKeyboardShortcuts=false;
+        manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
+
         manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Binaural;
         manager.directSettings.transport=TakeRender.Transport.Raytraced;
         manager.directSettings.audioBackend=TakeRender.AudioBackend.Gpu; manager.directSettings.useBvh=true;
         manager.directSettings.responseStepSamples=1024; manager.directSettings.transitionSamples=512;
         manager.directSettings.tailSamples=3*manager.sampleRate; manager.monitorLeadSamples=16384;
-        manager.audioManager=host.AddComponent<AudioManager>(); manager.audioManager.showWaveform=false; manager.audioManager.rayTraceManager=manager;
+        manager.audioManager=host.AddComponent<AudioManager>();
         var player=SharedPlayer(world,new Vector3(0,0,-12.5f));
         var head=player.GetComponentInChildren<Camera>().transform;
         var speaker=StationSource(world,"Test speaker",new Vector3(0,1.6f,12),AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/station_signal.wav"),manager,true);
         StationBox(speaker.transform,"Housing",new Vector3(0,0,.25f),new Vector3(.55f,.8f,.4f),steel,false);
-        manager.source=speaker.transform; manager.inputClip=speaker.clip; manager.listener=head; manager.takeListeners.Add(head);
+        manager.takeListeners.Add(head);
         manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {transform=player});
         var session=host.AddComponent<SceneSession>(); session.manager=manager; session.player=player;
         session.actors=new SceneActor[]{door}; session.startSounds=new[]{speaker};
-        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.audioManager=manager.audioManager;
+        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager;
         panel.session=session; panel.buttonSize=new Vector2(260,30); panel.spacing=3; panel.anchoredPosition=new Vector2(24,-24);
         var sun=new GameObject("Daylight").AddComponent<Light>(); sun.type=LightType.Directional;
         sun.transform.rotation=Quaternion.Euler(55,-25,0); sun.intensity=.35f; sun.shadows=LightShadows.Soft;
@@ -106,9 +106,9 @@ public static partial class TakeDemo
         var mic=session.GetComponent<MicrophoneInput>()??session.gameObject.AddComponent<MicrophoneInput>();network.microphone=mic;
         if(mic.source==null)
         {
-            var mouth=new GameObject("Microphone source");mouth.transform.SetParent(manager.listener,false);
+            var mouth=new GameObject("Microphone source");mouth.transform.SetParent(manager.takeListeners[0],false);
             mic.source=mouth.AddComponent<RaytracedAudioSource>();mic.source.rayTraceManager=manager;
-            mic.source.streamed=true;mic.source.mutedListenerPlusOne=1;mic.source.prepareOnStart=false;
+            mic.source.streamed=true;mic.source.mutedListenerPlusOne=1;
             manager.takeSources.Add(mic.source);
             manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {id="voice-local",transform=mouth.transform});
         }
@@ -120,7 +120,7 @@ public static partial class TakeDemo
                 var avatar=new GameObject("Remote player "+(i+1));avatar.transform.SetParent(manager.takeRoot,false);
                 var shape=GameObject.CreatePrimitive(PrimitiveType.Capsule);shape.name="Body";shape.transform.SetParent(avatar.transform,false);shape.transform.localPosition=Vector3.up;
                 var mouth=new GameObject("Voice");mouth.transform.SetParent(avatar.transform,false);mouth.transform.localPosition=Vector3.up*1.65f;
-                var voice=mouth.AddComponent<RaytracedAudioSource>();voice.rayTraceManager=manager;voice.streamed=true;voice.prepareOnStart=false;
+                var voice=mouth.AddComponent<RaytracedAudioSource>();voice.rayTraceManager=manager;voice.streamed=true;
                 network.remoteVoices[i]=voice;manager.takeSources.Add(voice);
                 manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {id="voice-remote-"+i,transform=mouth.transform});
                 manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {id="player-remote-"+i,transform=avatar.transform});

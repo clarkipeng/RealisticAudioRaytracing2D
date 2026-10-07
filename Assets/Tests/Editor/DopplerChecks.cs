@@ -24,7 +24,7 @@ public partial class TakeChecks
             var settings=SpectralSettings();settings.speedOfSound=speed;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
             var cpu=new TakeRender.DirectPath[1];var gpu=new TakeRender.DirectPath[1];
             TakeRender.SolveDirect(scene,Array.Empty<AcousticTake.Primitive>(),state,settings,cpu);
-            using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:rate);
+            using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:rate);
             solver.Solve(state,gpu);double ratio=(speed-motion.y)/(speed-motion.x),delay=100/(speed-motion.x);
             Near(cpu[0].delaySeconds,(float)delay,"Retarded source travel time CPU",1e-6f);
             Near(gpu[0].delaySeconds,(float)delay,"Retarded source travel time GPU",1e-6f);
@@ -63,7 +63,7 @@ public partial class TakeChecks
             state[2].velocity=new Vector3(wallSpeed,0,0);state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry|AcousticTake.StateFlags.VelocityValid;
             var geometry=new[]{new AcousticTake.Primitive{objectIndex=2,a=new Vector3(0,-100,-100),b=new Vector3(0,100,-100),c=new Vector3(0,0,100)}};
             var settings=SpectralSettings();settings.speedOfSound=speed;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
-            using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
+            using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
             double ratio=(speed-wallSpeed)/(speed+wallSpeed),delay=200/(speed+wallSpeed);int mirror=settings.FrequencyBins;
             Near(rays[mirror].delaySeconds,(float)delay,"Moving mirror retarded round trip",1e-6f);
             Near(1-rays[mirror].direction.w,(float)ratio,"Moving mirror double Doppler",1e-6f);
@@ -87,7 +87,7 @@ public partial class TakeChecks
             state[0].velocity=Vector3.right*17.15f;state[0].flags|=AcousticTake.StateFlags.VelocityValid;
             state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
             var settings=SpectralSettings();settings.speedOfSound=speed;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
-            using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);
+            using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);
             var paths=solver.RayPaths;
             Near(paths[1].delaySeconds,100/(171.5f-17.15f),"Material-speed retarded source",1e-6f);
             Near(1-paths[1].direction.w,171.5f/(171.5f-17.15f),"Material-speed Doppler",1e-6f);
@@ -109,7 +109,7 @@ public partial class TakeChecks
             state[0].velocity=Vector3.left*450;state[0].flags|=AcousticTake.StateFlags.VelocityValid;
             state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
             var settings=SpectralSettings();settings.speedOfSound=1000;settings.maximumDelaySeconds=4;settings.raysPerBin=1;
-            using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);
+            using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);
             var paths=solver.RayPaths;
             Near(paths[1].delaySeconds,2.5f/1.9f,"Bracketed retarded root through two media",2e-6f);
             Near(1-paths[1].direction.w,1/1.9f,"Two-medium emitted-frequency factor",1e-6f);
@@ -133,7 +133,7 @@ public partial class TakeChecks
         var pcm=new float[128];for(int n=0;n<pcm.Length;n++)pcm[n]=Mathf.Sin((float)(2*Math.PI*frequency*n/rate));
         var signal=new TakeRender.Signal(pcm);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
         var mixer=new TakeRender.Mixer(scene,rate,settings,new[]{signal});var state=(AcousticTake.State[])initial.Clone();
-        using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:rate);
+        using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate);
 
         var direct=new TakeRender.DirectPath[1];var block=new float[128];var output=new float[total];
         for(int sample=0;sample<total;sample+=128)

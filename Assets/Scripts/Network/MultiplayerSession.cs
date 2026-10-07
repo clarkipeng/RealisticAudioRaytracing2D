@@ -65,7 +65,7 @@ public sealed class MultiplayerSession : MonoBehaviour
         replay=saved!=null;LocalSlot=saved?.localSlot??0;
         if(saved!=null && saved.slots!=Capacity)throw new InvalidDataException("Recorded roster does not match this scene.");
         occupants=new ulong[Capacity];present=new bool[Capacity];poses=new Pose[Capacity];voices=new VoicePeer[Capacity];presented=new Pose[Capacity];shown=new bool[Capacity];poseEpochs=new int[Capacity];shownEpochs=new int[Capacity];
-        for(int i=0;i<Capacity;i++) {occupants[i]=ulong.MaxValue;poses[i]=new Pose(session.player.position,session.manager.listener.rotation);voices[i]=new VoicePeer();}
+        for(int i=0;i<Capacity;i++) {occupants[i]=ulong.MaxValue;poses[i]=new Pose(session.player.position,session.manager.takeListeners[session.manager.monitorListener].rotation);voices[i]=new VoicePeer();}
         foreach(var voice in remoteVoices)voice.transform.parent.gameObject.SetActive(false);
         microphone.source.mutedListenerPlusOne=microphone.monitorSelf?0:1;
         microphone.Clock=()=>Connected?net.LocalTime.Time:AudioSettings.dspTime;
@@ -110,7 +110,7 @@ public sealed class MultiplayerSession : MonoBehaviour
     void Joined(ulong id)
     {
         if(!IsHost)return;
-        int slot=clients[id];present[slot]=true;poses[slot]=new Pose(spawnPoints[slot].position,session.manager.listener.rotation);
+        int slot=clients[id];present[slot]=true;poses[slot]=new Pose(spawnPoints[slot].position,session.manager.takeListeners[session.manager.monitorListener].rotation);
         if(id==net.LocalClientId) {sessionId=Guid.NewGuid().ToString("N");hostOrigin=net.ServerTime.Time;LocalSlot=slot;Ready=true;}
         else
         {
@@ -268,7 +268,7 @@ public sealed class MultiplayerSession : MonoBehaviour
         var manager=session.manager;long sample=manager.LiveSample;
         if(Connected)
         {
-            poses[LocalSlot]=new Pose(session.player.position,manager.listener.rotation);poseEpochs[LocalSlot]=localEpoch;
+            poses[LocalSlot]=new Pose(session.player.position,manager.takeListeners[manager.monitorListener].rotation);poseEpochs[LocalSlot]=localEpoch;
             double now=net.ServerTime.Time;
             if(now-lastSend>=1.0/30)
             {

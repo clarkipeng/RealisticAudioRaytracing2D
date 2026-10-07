@@ -40,13 +40,13 @@ public partial class TakeChecks
         foreach(var dimension in new[]{AcousticTake.Dimension.Spatial3D,AcousticTake.Dimension.Planar2D})
         {
             scene.dimension=dimension;
-            using(var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8000))
+            using(var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000))
             {
                 solver.Solve(state,direct);Near(direct[0].pressureGain,0,"Opaque diagnostic is blocked");
                 var rays=solver.RayPaths;Near(rays[10].pressureGain,0,"Opaque spectral direct is blocked");
             }
             scene.materials[0].transmission[0]=1;
-            using(var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8000))
+            using(var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000))
             {
                 solver.Solve(state,direct);var rays=solver.RayPaths;
                 Near(rays[10].pressureGain,.5f,"Transparent wall passes pressure");
@@ -54,7 +54,7 @@ public partial class TakeChecks
             scene.materials[0].transmission[0]=0;
             {
                 settings.diffractionFactor=.5f;
-                using var edgeSolver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8000);
+                using var edgeSolver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
                 edgeSolver.Solve(state,direct);var edgeRays=edgeSolver.RayPaths;double edgeEnergy=0;
                 for(int i=65;i<edgeRays.Length;i++)edgeEnergy+=Math.Pow(edgeRays[i].pressureGain,2);
                 Check(edgeEnergy>0,"Wavelength edge paths carry sound around an opaque geometry");settings.diffractionFactor=0;
@@ -64,7 +64,7 @@ public partial class TakeChecks
             foreach(bool bvh in new[]{false,true})
             {
                 settings.useBvh=bvh;
-                using var solver=new DirectSolver(scene,geometry,settings,shader,2,8000);
+                using var solver=new TransportSolver(scene,geometry,settings,shader,2,8000);
                 solver.Solve(state,direct);var rays=solver.RayPaths;double energy=0;
                 for(int i=65;i<settings.SpectralSlotsPerPair;i++)
                 {
@@ -79,7 +79,7 @@ public partial class TakeChecks
             }
             state[1].position=Vector3.right;settings.useBvh=false;
             scene.materials[0].absorption[0]=1;
-            using(var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8000))
+            using(var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000))
             {
                 solver.Solve(state,direct);var rays=solver.RayPaths;
                 for(int i=0;i<rays.Length;i++)Near(rays[i].pressureGain,0,"Absorber cannot create reflected pressure");
@@ -92,7 +92,7 @@ public partial class TakeChecks
         foreach(float turn in new[]{0f,90f,180f,270f})
         {
             state[1].rotation=Quaternion.Euler(0,turn,0);
-            using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
+            using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
             solver.Solve(state,direct);var rays=solver.RayPaths;
             Near(Vector3.Distance((Vector3)rays[10].direction,(Vector3)direct[0].direction),0,"Transport retains world arrival direction");
         }
@@ -132,7 +132,7 @@ public partial class TakeChecks
             void Direct(float source,float listener,float time,float attenuation,string name)
             {
                 state[0].position=Vector3.right*source;state[1].position=Vector3.right*listener;
-                using var solver=new DirectSolver(scene,geometry.ToArray(),settings,shader,sampleRate:8000);
+                using var solver=new TransportSolver(scene,geometry.ToArray(),settings,shader,sampleRate:8000);
                 solver.Solve(state,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
                 Near(rays[10].delaySeconds,time,name+" travel time "+dimension,1e-7f);
                 Near(rays[10].pressureGain,Mathf.Exp(-attenuation)/Mathf.Max(1,Mathf.Abs(listener-source)),name+" pressure loss",1e-5f);
@@ -155,7 +155,7 @@ public partial class TakeChecks
             // for both legs, including the final connection to the listener.
             geometry=new List<AcousticTake.Primitive>(TransportBox(dimension,2,0,1));scene.objects[2].primitiveCount=geometry.Count;
             scene.materials[0].transmission[0]=0;state[0].position=state[1].position=Vector3.zero;
-            using var reflected=new DirectSolver(scene,geometry.ToArray(),settings,shader,sampleRate:8000);
+            using var reflected=new TransportSolver(scene,geometry.ToArray(),settings,shader,sampleRate:8000);
             reflected.Solve(state,new TakeRender.DirectPath[1]);var paths=reflected.RayPaths;int audible=0;
             for(int i=65;i<paths.Length;i++)
             {
@@ -193,7 +193,7 @@ public partial class TakeChecks
                         var state=States(2);state[0].position=Vector3.down*.1f;state[1].position=Vector3.up*.1f;state[2].position=Vector3.zero;
                         state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
                         var settings=SpectralSettings();settings.speedOfSound=1000;
-                        using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8000);
+                        using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
                         solver.Solve(state,new TakeRender.DirectPath[1]);var paths=solver.RayPaths;
                         foreach(int bin in new[]{0,16,32,64})
                         {
@@ -334,7 +334,7 @@ public partial class TakeChecks
             foreach(float scattering in new[]{0f,1f})
             {
                 scene.materials[0].scattering[0]=scattering;
-                using var solver=new DirectSolver(scene,geometry,settings,shader,sampleRate:8192);
+                using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8192);
                 solver.Solve(state,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
                 for(int bin=0;bin<settings.FrequencyBins;bin++)
                 {
@@ -354,7 +354,7 @@ public partial class TakeChecks
         foreach(int budget in new[]{2,4})foreach(int seed in new[]{0,17})
         {
             var settings=SpectralSettings();settings.speedOfSound=343;settings.raysPerBin=budget;settings.seed=seed;settings.maxBounces=1;
-            using var solver=new DirectSolver(square,faces,settings,shader,sampleRate:8192);
+            using var solver=new TransportSolver(square,faces,settings,shader,sampleRate:8192);
             solver.Solve(poses,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
             for(int bin=0;bin<settings.FrequencyBins;bin++)
             {
@@ -378,7 +378,7 @@ public partial class TakeChecks
             var settings=SpectralSettings();settings.responseStepSamples=512;settings.transitionSamples=64;
             var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
             var mixer=new TakeRender.Mixer(scene,8000,settings,new[]{signal});
-            using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
+            using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
             var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);var rays=solver.RayPaths;
 
             mixer.SetResponse(0L,direct,state,false,rays,0);var output=new float[1024];mixer.Render(0,512,output);
@@ -401,7 +401,7 @@ public partial class TakeChecks
             state[1].rotation=Quaternion.Euler(0,turn,0);
             var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1});
             var mixer=new TakeRender.Mixer(scene,8000,settings,new[]{signal});
-            using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
+            using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
             var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);
 
             mixer.SetResponse(0L,direct,state,false,solver.RayPaths,0);var output=new float[1024];mixer.Render(0,512,output);return output;
@@ -538,7 +538,7 @@ public partial class TakeChecks
     public void KnifeEdgeMatchesFresnelField(bool planar,bool bvh)
     {
         KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);var settings=EdgeSettings();settings.useBvh=bvh;
-        using var solver=new DirectSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
         double distance=state[0].position.magnitude+state[1].position.magnitude,excess=distance-Vector3.Distance(state[0].position,state[1].position);
         int first=settings.SpectralSlotsPerPair-settings.FrequencyBins;float previous=1;
         foreach(int bin in new[]{0,1,4,16,32})
@@ -557,7 +557,7 @@ public partial class TakeChecks
         foreach(int rays in new[]{1,7})
         {
             settings.raysPerBin=rays;settings.seed=rays*31;
-            using var solver=new DirectSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
+            using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
             var p=solver.RayPaths[settings.SpectralSlotsPerPair-settings.FrequencyBins+4];
             if(rays==1)baseline=p;
             else {Assert.That(p.pressureGain,Is.EqualTo(baseline.pressureGain));Assert.That(p.delaySeconds,Is.EqualTo(baseline.delaySeconds));Assert.That(p.identity,Is.EqualTo(baseline.identity));}
@@ -567,7 +567,7 @@ public partial class TakeChecks
     public void KnifeEdgeShadowBoundaryIsContinuous(bool planar)
     {
         KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        using var solver=new DirectSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);float previous=0;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);float previous=0;
         foreach(float dy in new[]{-.005f,0,.005f})
         {
             state[1].position=new Vector3(2,-1+dy,0);solver.Solve(state,new TakeRender.DirectPath[1]);
@@ -582,7 +582,7 @@ public partial class TakeChecks
         KnifeEdgeFixture(planar,out var scene,out _,out var state);var settings=EdgeSettings();
         var geometry=TransportBox(scene.dimension,2,0,1);scene.objects[2].primitiveCount=geometry.Length;
         state[0].position=Vector3.left*3;state[1].position=Vector3.right*3;
-        using var solver=new DirectSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
         for(int bin=0;bin<settings.FrequencyBins;bin++)Assert.That(solver.RayPaths[settings.SpectralSlotsPerPair-settings.FrequencyBins+bin].pressureGain,Is.Zero,"A single edge must not shortcut through a thick solid.");
     }
     [Test,Category("GPU"),Category("Diffraction")]
@@ -590,7 +590,7 @@ public partial class TakeChecks
     {
         KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();settings.useBvh=true;
         state[2].flags|=AcousticTake.StateFlags.VelocityValid;state[2].velocity=Vector3.up;
-        using var solver=new DirectSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);int slot=settings.SpectralSlotsPerPair-settings.FrequencyBins+4;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);int slot=settings.SpectralSlotsPerPair-settings.FrequencyBins+4;
         solver.Solve(state,new TakeRender.DirectPath[1]);var first=solver.RayPaths[slot];
         state[2].position+=state[2].velocity*.01f;solver.Solve(state,new TakeRender.DirectPath[1]);var next=solver.RayPaths[slot];
         Assert.That(solver.StaticPrimitiveCount,Is.Zero);
@@ -605,7 +605,7 @@ public partial class TakeChecks
         {
             scene.materials[0].transmission[0]=transparent?1:0;
             state[1].position=transparent?new Vector3(2,-2,0):new Vector3(-2,-2,0);
-            using var solver=new DirectSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
+            using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
             Assert.That(solver.RayPaths[4].pressureGain,Is.EqualTo(1/Vector3.Distance(state[0].position,state[1].position)).Within(1e-6));
             Assert.That(solver.RayPaths[settings.SpectralSlotsPerPair-settings.FrequencyBins+4].pressureGain,Is.Zero);
         }
@@ -619,7 +619,7 @@ public partial class TakeChecks
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
         var signals=new[]{signal};var cpu=new TakeRender.Mixer(scene,8000,settings,signals);
         using var gpu=new GpuAudio(scene,8000,settings,signals);
-        using var solver=new DirectSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);
         var direct=new TakeRender.DirectPath[1];var a=new float[256];var b=new float[256];double error=0,energy=0,peak=0;
         for(int frame=0;frame<8;frame++)
         {
@@ -630,5 +630,24 @@ public partial class TakeChecks
             for(int i=0;i<a.Length;i++){double d=a[i]-b[i];error+=d*d;energy+=a[i]*a[i];peak=Math.Max(peak,Math.Abs(d));}
         }
         Assert.That(energy,Is.GreaterThan(1e-6));Assert.That(peak,Is.LessThan(2e-4));Assert.That(Math.Sqrt(error/energy),Is.LessThan(5e-4));
+    }
+    [Test, Category("GPU")]
+    public void GpuOnlyTransportRetainsOwnershipUntilAudioCompletes()
+    {
+        KnifeEdgeFixture(false, out var scene, out var geometry, out var state);
+        using var solver = new TransportSolver(scene, geometry, EdgeSettings(), RequireGpu(), sampleRate:8000, readbackPaths:false);
+        solver.BeginSolve(state, diagnostics:false);
+        Assert.That(solver.IsPending, Is.True);
+        Assert.That(solver.PairPrimitiveUpperBound, Is.Zero, "GPU playback does not trace diagnostic probes.");
+        Assert.Throws<InvalidOperationException>(() => solver.BeginSolve(state));
+        Assert.Throws<InvalidOperationException>(() => solver.TryComplete(new TakeRender.DirectPath[1]));
+        // Stand in for the downstream PCM readback on the same GPU queue.
+        var consumer = UnityEngine.Rendering.AsyncGPUReadback.Request(solver.RayBuffer);
+        consumer.WaitForCompletion();
+        Assert.That(consumer.hasError, Is.False);
+        solver.CompleteAfterGpuAudio();
+        Assert.That(solver.IsPending, Is.False);
+        Assert.Throws<InvalidOperationException>(() => solver.CompleteAfterGpuAudio());
+        solver.BeginSolve(state, diagnostics:false); // Disposal must also fence a cancelled batch.
     }
 }

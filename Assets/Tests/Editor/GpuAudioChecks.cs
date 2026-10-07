@@ -30,7 +30,7 @@ public partial class TakeChecks
         var signals=new[]{new TakeRender.Signal(clip),new TakeRender.Signal(clip)};
         for(int s=0;s<2;s++){signals[s].SetActive(0,true);signals[s].Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1-s*.3f,clipOffset=s*31,loop=true});}
         using var gpu=new GpuAudio(scene,rate,settings,signals);var cpu=new TakeRender.Mixer(scene,rate,settings,signals);
-        using var solver=new DirectSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:rate);
+        using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:rate);
         var direct=new TakeRender.DirectPath[4];var a=new float[size*2*settings.ChannelsPerListener];var b=new float[a.Length];
         double peak=0,error=0,energy=0;
         for(int frame=0;frame<12;frame++)

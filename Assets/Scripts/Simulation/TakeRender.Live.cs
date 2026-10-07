@@ -18,7 +18,7 @@ public static partial class TakeRender
         readonly Settings settings;
         readonly int sampleRate,listener,lead;
         readonly long historySamples;
-        readonly DirectSolver solver;
+        readonly TransportSolver solver;
         readonly Mixer mixer;
         readonly GpuAudio gpuAudio;
         readonly Signal[] signals;
@@ -29,7 +29,7 @@ public static partial class TakeRender
         readonly Observation[] observations;
         int head,pending,batchCount;
         long batchFirst,batchEnd,previousResponse=-1;
-        bool batchActive,batchReady,audioQueued,audioReady;
+        bool batchActive,batchReady,audioQueued,audioReady,batchDiagnostics;
         readonly List<long> cuts=new List<long>();
         public long Cursor {get;private set;}
         public double SolveSeconds,AudioSeconds,ResponsePreparationSeconds,MaximumSolveSeconds;
@@ -67,7 +67,7 @@ public static partial class TakeRender
                     gpuAudio=new GpuAudio(scene,rate,settings,signals,settings.maximumResponsesPerBatch);
                 }
                 else mixer=new Mixer(scene,rate,settings,signals);
-                solver=new DirectSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate,gpuAudio==null);
+                solver=new TransportSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate,gpuAudio==null);
             }
             catch {gpuAudio?.Dispose();throw;}
         }
@@ -141,7 +141,8 @@ public static partial class TakeRender
             }
             if(batchCount>0)
             {
-                long start=Stopwatch.GetTimestamp();solver.BeginSolve(batchStates,batchCount);
+                batchDiagnostics=gpuAudio==null || ResponseApplied!=null;
+                long start=Stopwatch.GetTimestamp();solver.BeginSolve(batchStates,batchCount,batchDiagnostics);
                 double elapsed=Elapsed(start);SolveSeconds+=elapsed;MaximumSolveSeconds=Math.Max(MaximumSolveSeconds,elapsed);
             }
             batchActive=true;batchReady=batchCount==0;audioQueued=audioReady=false;
@@ -163,6 +164,13 @@ public static partial class TakeRender
         bool CompleteBatch(bool wait)
         {
             if(batchReady)return true;
+            if (!batchDiagnostics)
+            {
+                if (!audioReady) return false;
+                solver.CompleteAfterGpuAudio();
+                batchReady = true;
+                return true;
+            }
             if(!solver.TryComplete(batchPaths,wait))return false;
             batchReady=true;
             if(gpuAudio!=null && ResponseApplied!=null)

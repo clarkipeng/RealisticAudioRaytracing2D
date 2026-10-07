@@ -4,7 +4,7 @@ Unity **6000.4.1f1 (Unity 6.4)**, C# and HLSL. The shared renderer runs directio
 
 **Implemented now:** editable 3D station and church with asset/voice sources and a binaural listener, train service with station stops and walking aboard, sliding door and walkthrough controls, strict take capture, live directional spectral monitoring, pose replay/scrubbing, CPU/HLSL direct solvers for 2D/3D, offline WAV/response export, bounded asynchronous GPU batches, captured output PCM/timing, configurable fractional-delay FIR, binaural headphone rendering, and a native comparison window with synchronized audio, plots and recorded scene views. Live and offline share interpolation, the source timeline and scheduling. Raytraced DSP has a GPU implementation and a selectable CPU reference. The direct/opaque baseline still has matching CPU/GPU implementations. The GPU spectral preview adds reflections, scattering, transmission/refraction, material/air attenuation and deterministic edge diffraction with frequency-dependent attenuation, with per-arrival head orientation.
 
-**Still planned:** LakeForest, validated/converged indirect transport, training-example curation and learned reconstruction. Church, microphone sources, LAN multiplayer and offline client replay are implemented. The old 2D renderer remains available when **Use Take Renderer** is disabled. Its geometric heuristics have been adapted into the shared spectral preview; this is not a validated high-fidelity training teacher.
+**Still planned:** LakeForest, validated/converged indirect transport, training-example curation and learned reconstruction. Church, microphone sources, LAN multiplayer and offline client replay are implemented. All five scenes use the current renderer; the obsolete 2D renderer is retained in Git history. The geometric preview is not a validated high-fidelity training teacher.
 
 **Audit repairs:** [current implementation and remaining limits](docs/simulation-contracts.md#renderer-repairs-2026-10-05). CPU IR synthesis uses partitioned linear convolution; GPU IR evaluates equivalent delayed short filters; the optional spectral synthesis uses continuous path clocks for Doppler and short spectral/ear filters. Both retain sample-by-sample response fades, complete per-frequency ray budgets and first-order image-source reflections. Compact recording failures invalidate the save. Independent convolution/reflection/replay checks cover the repaired errors; diffuse transport and diffraction still need physical validation before training.
 
@@ -105,10 +105,10 @@ The official `com.unity.pipeline` editor bridge starts with this project. `unity
 
 For a working starting scene, choose **Tools → Acoustics → Create 3D walkthrough**. It creates native walls, a moving occluder, a walking listener and an emitter using the existing audio/material assets. Save the scene, enter Play, select the simulation manager, record, and start the emitter through its context menu. WASD/mouse move the listener. The scene stays editable through ordinary Unity components.
 
-1. Add/use a `RayTraceManager` on a separate, always-active GameObject. Set **Take Root** to the root of the objects you want to capture. Enable **Use Take Renderer** for the shared direct path and assign an `AudioManager`. **Direct Shader** can be empty for CPU, or `Assets/Shaders/Direct.compute` for GPU. The legacy Raytrace Shader field is separate. Leave Use Take Renderer disabled for silent capture; legacy playback must be stopped before starting a take.
-2. Create ordinary Unity objects. For 3D, add `AcousticSurface` to acoustic geometry: Auto uses `MeshFilter.sharedMesh` first, then a supported collider. For 2D, choose **Planar2D**, use Collider2D shapes in the XY plane, and add `AcousticSurface`. Existing entries in **Obstacle Objects** are also registered.
+1. Add/use a `RayTraceManager` on a separate, always-active GameObject. Set **Take Root** to the root of the objects you want to capture. Enable **Monitor Live** and assign an `AudioManager` for audible output. **Direct Shader** can be empty for CPU, or `Assets/Shaders/Transport.compute` for GPU. Disable Monitor Live for silent capture.
+2. Create ordinary Unity objects. For 3D, add `AcousticSurface` to acoustic geometry: Auto uses `MeshFilter.sharedMesh` first, then a supported collider. For 2D, choose **Planar2D**, use Collider2D shapes in the XY plane, and add `AcousticSurface`. List geometry outside Take Root explicitly in **Take Objects**.
 3. Assign an `AudioMaterial` on each surface, or **Take Default Material** as a fallback. Optional submesh overrides share one material table. `AudioMaterial.energyCurve` accepts any number of ordered frequency knots; an empty curve preserves the existing material. Coefficients use linear interpolation in Hz and clamp outside the authored range. The direct baseline records these curves but treats all geometry as opaque.
-4. Add `RaytracedAudioSource` components with clips and a manager reference under Take Root, or list them explicitly in **Take Sources**. Clips must be readable/preloaded (Decompress On Load). Preparation for the new path happens once when capture/preview starts. Assign the walking camera/player transform to **Listener**, or list receiver transforms in **Take Listeners**.
+4. Add `RaytracedAudioSource` components with clips and a manager reference under Take Root, or list them explicitly in **Take Sources**. Clips must be readable/preloaded (Decompress On Load). Preparation for the new path happens once when capture/preview starts. List walking camera/player receiver transforms in **Take Listeners**.
 5. In Edit mode, click **Register scene objects / persist IDs**, then save the scene. Review the resulting object/source lists. IDs live on the manager; don't register again during a take.
 6. Enter Play mode, click **Record take**, and choose an output parent outside `Assets` (for example `Recordings`, already gitignored). Use existing controllers, animation or physics to move objects. Start/stop sounds through `RaytracedAudioSource.Play()` / `.Stop()`; the component context menu exposes both. Start voices after recording begins.
 7. Click **Stop and save take**, then wait for **Idle** before leaving Play mode so the monitored output finishes recording. **Choose saved take** reopens it later. **Replay recorded poses** applies recorded world poses; **Pause replay** lets you edit **Replay Seconds** to scrub. Stop restores the original scene poses, activity and suspended movement components.
@@ -157,9 +157,9 @@ Live GPU rendering batches response samples across the queued, known motion inte
 
 **Static geometry BVH** optionally accelerates CPU/HLSL direct intersections in both 2D and 3D. Geometry starts in the tree; when an object's pose first changes, its primitives leave the tree and use direct tests for the rest of that solver session, including when the object stops. Only that membership change rebuilds the tree; ongoing motion needs no refits. GPU batches share one static tree. No new scene tags or recording fields are required. The station enables it for multi-bounce tracing; new generic settings retain the direct baseline with BVH off. Toggle it in offline render settings or **Direct Settings → Use Bvh**. [Measured Low/High offline totals, preserved Git revisions and benchmark instructions](docs/cleanup-results.md) compare this split with the earlier moving-geometry BVH and brute force.
 
-The default station lead is 16,384 sample frames (371.5 ms at 44.1 kHz), plus device latency. The station assigns `Direct.compute`. Spectral synthesis adds 1,024 samples (23.22 ms at 44.1 kHz) of declared DSP latency, plus path/HRIR delay. Measure completion time and deadline counters when selecting a lead.
+The default station lead is 16,384 sample frames (371.5 ms at 44.1 kHz), plus device latency. The station assigns `Transport.compute`. Spectral synthesis adds 1,024 samples (23.22 ms at 44.1 kHz) of declared DSP latency, plus path/HRIR delay. Measure completion time and deadline counters when selecting a lead.
 
-The manager exposes **Idle**, **Live**, **Recording**, **Replay** and **Draining** states. Legacy playback/precomputation cannot enter an active take session. Direct audio initializes only its bounded queues and output driver; legacy buffers/debug textures are allocated when their callers need them.
+The manager exposes **Idle**, **Live**, **Recording**, **Replay** and **Draining** states. One session owns the bounded PCM queue and output driver. **Monitor Live** controls audible monitoring during capture; disabling it records silently.
 
 **Maximum Delay Seconds** declares the source-history horizon. Direct responses beyond it fail explicitly; raytraced paths are truncated at this horizon. Completed intervals discard older voice/activity history while retaining the boundary state and original loop phase. **Maximum Signal Events** bounds retained history per source and catches excessive event density. `live.json` includes retained-event counts, maximum pending observations, completion latency and a source/listener-pair × primitive test upper bound. That upper bound describes the direct diagnostic queries only, not the added multi-bounce/edge work. It is not a measured hit count. CPU remains useful for small workloads.
 
@@ -175,7 +175,7 @@ On the manager Inspector, choose a saved take and click **Render saved take to r
 
 One listener stays one scene object and yields one WAV: mono or interleaved left/right. Source clips remain mono. Live binaural output requires Unity's stereo speaker configuration. Queue capacities, lead and counters always count sample frames, regardless of channel count. Old take files can render either output mode. Batch settings use `"listenerOutput": 1` for binaural, or omit it for mono; comparisons must use the same mode. Run/output manifests identify channel count, HRTF hash/taps and DSP contract. Direct response and output-capture manifests now use format version 3: each pair stores six floats (delay, gain, direction XYZ, delay rate in seconds/second). Comparison still reads v1/v2 reports. Take/input recording formats are unchanged.
 
-**Transport → Raytraced** requires `Direct.compute` and uses the same scene/state and source-event pipeline. It supports segments in XY and full 3D triangles, including moving objects. Every arrival retains delay, frequency and world direction until its left/right KEMAR filters are applied. Sources/listeners use the existing source-major/listener-minor indexing; ears are output channels, not additional scene listeners.
+**Transport → Raytraced** requires `Transport.compute` and uses the same scene/state and source-event pipeline. It supports segments in XY and full 3D triangles, including moving objects. Every arrival retains delay, frequency and world direction until its left/right KEMAR filters are applied. Sources/listeners use the existing source-major/listener-minor indexing; ears are output channels, not additional scene listeners.
 
 The station starts at **one ray per frequency bin** (513 total per source/listener pair), five bounces, acoustic FFT size 1,024, convolution block 256, and a 1,024-sample response step. Rays per bin, sampling seed, bounces, frequency grid and block length are configurable. Each bin receives the same integer budget and weight `1/raysPerBin`; common random samples across frequencies keep broadband paths coherent. Old serialized total-ray budgets migrate by rounding up to complete per-bin budgets. Acoustic FFT size must be a power of two; the block divides it and is at most half its size; response steps are whole blocks. CPU IR synthesis uses separate zero-padded transforms of twice the block length. Spectral synthesis pads for the short acoustic filter plus the full HRIR and block; neither truncates the HRIR. Frequency bins follow the acoustic FFT, without a new fixed-band representation. Existing material controls supply absorption, scattering, transmission, IOR and damping curves sampled onto that grid. Take format v2 authenticates the additional curves. V1 takes remain readable, with absent transmission/damping zero and IOR one.
 
@@ -220,7 +220,7 @@ For a batch job, save this JSON next to your data directory; paths are relative 
   -logFile /absolute/path/render.log
 ```
 
-Use an output directory that does not exist. The process exits 0 on completion and 1 on failure. CPU direct rendering works with `-nographics`; raytraced transport requires a graphics device. A shell/Python loop can invoke jobs sequentially; there is no separate orchestration service. To use the GPU, add `"shader": "Assets/Shaders/Direct.compute"` to the job and omit `-nographics`. A missing or unsupported shader fails explicitly.
+Use an output directory that does not exist. The process exits 0 on completion and 1 on failure. CPU direct rendering works with `-nographics`; raytraced transport requires a graphics device. A shell/Python loop can invoke jobs sequentially; there is no separate orchestration service. To use the GPU, add `"shader": "Assets/Shaders/Transport.compute"` to the job and omit `-nographics`. A missing or unsupported shader fails explicitly.
 
 To compare budgets, click **Compare two response budgets** in the Inspector, or add a `comparison` settings object to the job. The main `settings` object describes the coarser run; `comparison.responseStepSamples` must be smaller, with all other settings identical. For the example above:
 
@@ -301,19 +301,29 @@ Binary data is little-endian. Geometry rows contain `float3 a,b,c; int32 objectI
 
 Writers mark the manifest complete only after payloads are closed and hashed. Readers reject incomplete files, mismatched hashes and unsupported versions. Failed/cancelled jobs remain incomplete. Render reports separate preparation, state evaluation, solve, DSP and file-writing costs, maximum solve duration, PCM/core-buffer accounting and Unity/CPU/GPU identity. The buffer figures exclude managed object overhead and some scratch/history storage; they are not process memory measurements. Render wall time excludes opening/validating the take before the render call. These are diagnostic measurements, not a claim of realtime feasibility on arbitrary workloads. No database, networking service, compiler migration or new package dependency is introduced.
 
+## Transport flow
+
+```text
+CPU: compile scene once; upload object states for each response batch
+GPU: find edge routes → evaluate direct/diffracted sound → trace reflections
+GPU: synthesize IR or spectral audio → read back PCM
+```
+
+Normal GPU playback uses PCM completion to fence the response batch. Diagnostic probes are dispatched/read back only when requested; offline reports retain them. `Geometry.hlsl` owns intersection and BVH traversal, `Transport.hlsl` owns acoustic calculations, and `Transport.compute` holds the entry points. The CPU reference provides direct transport and audio synthesis; it is not a second full raytracer. Frequency-dependent transport still evaluates each configured FFT bin. No new runtime dependencies were added.
+
 ## Repository map
 
 ```text
 Assets/
   Scripts/
-    Scene/        AcousticSurface, AudioMaterial, SceneHelper
-    Simulation/   RayTraceManager + Take/Legacy partials, Take, TakeRender + Live partial,
-                  DirectSolver, DirectBvh, RayTransport, GpuAudio, Doppler, SpectralAudio, ImpulseResponseAudio,
-                  TakeComparison, ComputeHelper
-    Audio/        AudioManager + Legacy partial, RaytracedAudioSource, Hrtf
+    Scene/        AcousticSurface, AudioMaterial, SceneToTake
+    Simulation/   RayTraceManager, Take, TakeRender + Live partial,
+                  TransportSolver, DirectBvh, RayTransport, GpuAudio, Doppler, SpectralAudio, ImpulseResponseAudio,
+                  TakeComparison
+    Audio/        AudioManager, RaytracedAudioSource, Hrtf
     Demo/         SceneSession, SceneRecording, StationDemo, StationLoop, SlidingDoor, PlayerController,
                   MouseLook, Oscillator, RaytraceControlPanel
-  Shaders/        Direct.compute, Transport.hlsl, Raytrace2D.compute, Common.hlsl, WorldText.shader
+  Shaders/        Transport.compute, Geometry.hlsl, Transport.hlsl, WorldText.shader
   Audio/          source clips and DefaultMixer
   Materials/      acoustic material assets
   Resources/      Acoustics/GpuAudio.compute; bundled KEMAR filters and attribution
@@ -336,16 +346,16 @@ Folders group responsibilities; the runtime, editor and test assembly definition
 
 | Files | Result |
 |---|---|
-| [SceneHelper.cs](Assets/Scripts/Scene/SceneHelper.cs) | Reuses authoring snapshots and comparison storage, deduplicates shared meshes/materials, and detects in-place changes without per-observation scene export. |
-| [RayTraceManager.cs](Assets/Scripts/Simulation/RayTraceManager.cs), [RayTraceManager.Take.cs](Assets/Scripts/Simulation/RayTraceManager.Take.cs) | Defines exclusive session states and retains ownership while output drains. Legacy precomputation/playback is excluded during a take session. |
-| [AudioManager.cs](Assets/Scripts/Audio/AudioManager.cs) | Defers legacy allocation and captures actual component PCM, callback timing and response applications through bounded storage. |
-| [DirectSolver.cs](Assets/Scripts/Simulation/DirectSolver.cs), [Direct.compute](Assets/Shaders/Direct.compute), [DirectBvh.cs](Assets/Scripts/Simulation/DirectBvh.cs) | Batches live/offline response frames with explicit resource ownership; optional static CPU/HLSL BVH plus direct tests for moving geometry. Reports completion latency, classification/rebuild costs and traversal workload bounds. |
+| [SceneToTake.cs](Assets/Scripts/Scene/SceneToTake.cs) | Reuses authoring snapshots and comparison storage, deduplicates shared meshes/materials, and detects in-place changes without per-observation scene export. |
+| [RayTraceManager.cs](Assets/Scripts/Simulation/RayTraceManager.cs) | Defines exclusive session states and retains ownership while output drains. One renderer serves live monitoring, capture and replay. |
+| [AudioManager.cs](Assets/Scripts/Audio/AudioManager.cs) | Consumes the bounded PCM queue and optionally captures output and callback diagnostics. |
+| [TransportSolver.cs](Assets/Scripts/Simulation/TransportSolver.cs), [Transport.compute](Assets/Shaders/Transport.compute), [DirectBvh.cs](Assets/Scripts/Simulation/DirectBvh.cs) | Batches live/offline response frames with explicit resource ownership; optional static CPU/HLSL BVH plus direct tests for moving geometry. Reports completion latency, classification/rebuild costs and traversal workload bounds. |
 | [RayTransport.cs](Assets/Scripts/Simulation/RayTransport.cs), [Transport.hlsl](Assets/Shaders/Transport.hlsl), [SpectralAudio.cs](Assets/Scripts/Simulation/SpectralAudio.cs) | Directional 2D/3D spectral transport, bounded GPU arrival buffers, material curves, image-source first reflections and selectable IR/spectral binaural synthesis. |
 | [GpuAudio.cs](Assets/Scripts/Simulation/GpuAudio.cs), [GpuAudio.compute](Assets/Resources/Acoustics/GpuAudio.compute) | Own GPU source history, path filters/FFTs, per-ear synthesis and asynchronous PCM batches; CPU DSP remains the reference. |
 | [TakeRender.cs](Assets/Scripts/Simulation/TakeRender.cs), [TakeRender.Live.cs](Assets/Scripts/Simulation/TakeRender.Live.cs) | Bounds event/cut/observation history and shares configurable linear/windowed-sinc delay filtering between live and offline rendering. |
 | [Take.cs](Assets/Scripts/Simulation/Take.cs), [TakeComparison.cs](Assets/Scripts/Simulation/TakeComparison.cs) | Records implementation/settings provenance and optionally gates temporal training pairs against a third, finer direct-model run. |
 
-The next transport work is physical validation, reducing spectral CPU cost and converged ray-budget comparisons. [Raytrace2D.compute](Assets/Shaders/Raytrace2D.compute) and [Common.hlsl](Assets/Shaders/Common.hlsl) remain available for the legacy reflection prototype. General reflection training and learned reconstruction are not implemented by these cleanups.
+The next transport work is physical validation, reducing spectral CPU cost and converged ray-budget comparisons. The separate prototype renderer is removed; its previous implementation remains in Git. All five scenes use the current renderer. General reflection training and learned reconstruction are not implemented by these cleanups.
 
 ## Checks
 

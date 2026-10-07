@@ -217,7 +217,7 @@ public static partial class TakeRender
         var batchStates=batchCapacity==1 ? state:new AcousticTake.State[checked(state.Length*batchCapacity)];
         var batchPaths=batchCapacity==1 ? response:new DirectPath[checked(response.Length*batchCapacity)];
         report.responseBatchCapacity=batchCapacity;
-        using (var solver=new DirectSolver(scene,take.Geometry,settings,shader,batchCapacity,metadata.sampleRate,!useGpuAudio))
+        using (var solver=new TransportSolver(scene,take.Geometry,settings,shader,batchCapacity,metadata.sampleRate,!useGpuAudio))
         {
             report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+(long)state.Length*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+initialMixerBytes+
                 (batchCapacity==1?0:(long)batchStates.Length*80+(long)batchPaths.Length*DirectPathStride);

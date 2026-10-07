@@ -49,7 +49,7 @@ public static class DirectBenchmark
             if(Application.isPlaying)throw new InvalidOperationException("Stop Play before benchmarking offline renders.");
             if(Directory.Exists(output) || lowStep<=highStep || highStep<=0 || repetitions<1)throw new ArgumentException("Use a new output directory and valid response steps/repetitions.");
             Directory.CreateDirectory(output); created=true;
-            var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Direct.compute");
+            var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
             if(shader==null || !SystemInfo.supportsComputeShaders)throw new NotSupportedException("This comparison requires both CPU and GPU backends.");
             var manifest=AcousticTake.ReadManifest(takePath);
             report.durationSeconds=(double)(manifest.durationSamples+1)/manifest.sampleRate;
