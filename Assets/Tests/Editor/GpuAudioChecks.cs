@@ -77,6 +77,7 @@ public partial class TakeChecks
             Assert.Throws<InvalidOperationException>(()=>gpu.QueueRender(sample+pcm.Length,pcm.Length));
             Assert.Throws<InvalidOperationException>(()=>gpu.SetResponse(sample+pcm.Length,false,buffer,0,scene,state));
             Assert.Throws<InvalidOperationException>(gpu.BeginReadback);
+            Assert.Throws<InvalidOperationException>(()=>gpu.PrepareInput(sample+pcm.Length));
             double deadline=UnityEditor.EditorApplication.timeSinceStartup+10;
             while(!gpu.TryComplete(pcm))
             {

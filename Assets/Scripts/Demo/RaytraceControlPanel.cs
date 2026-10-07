@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -19,6 +22,33 @@ public class RaytraceControlPanel : MonoBehaviour
     Text recordLabel;
     GameObject sensitivityControls;
     float nextUiUpdate;
+    Text microphoneLabel,networkLabel;
+    Dropdown takes;
+    Button replayButton;
+    readonly List<string> takePaths=new List<string>();
+    bool wasRecording;
+    void RefreshTakes()
+    {
+        if(takes==null)return;
+        takePaths.Clear();var names=new List<string>();
+        if(Directory.Exists(SceneSession.RecordingsDirectory))
+        {
+            var paths=Directory.GetDirectories(SceneSession.RecordingsDirectory);Array.Sort(paths,StringComparer.Ordinal);Array.Reverse(paths);
+            foreach(string path in paths)
+            {
+                try
+                {
+                    var meta=AcousticTake.ReadManifest(path);if(!meta.complete)continue;
+                    string scene=meta.session?.scene;
+                    if(scene==null && File.Exists(Path.Combine(path,"input.json")))scene=JsonUtility.FromJson<SceneRecording.Manifest>(File.ReadAllText(Path.Combine(path,"input.json"))).scene;
+                    if(scene!=session.gameObject.scene.path)continue;
+                    takePaths.Add(path);names.Add(Path.GetFileName(path));
+                }
+                catch(Exception e) when(e is IOException || e is InvalidDataException || e is ArgumentException) {} // Invalid/unfinished runs are not replay choices.
+            }
+        }
+        takes.ClearOptions();takes.AddOptions(names);
+    }
 
     void Start()
     {
@@ -48,6 +78,26 @@ public class RaytraceControlPanel : MonoBehaviour
             sensitivityObject.GetComponent<RectTransform>().sizeDelta=new Vector2(buttonSize.x,18);
             var sensitivity=sensitivityObject.GetComponent<Slider>(); sensitivity.minValue=30; sensitivity.maxValue=360; sensitivity.value=look.sensitivity;
             sensitivity.onValueChanged.AddListener(value=> {look.sensitivity=value; sensitivityLabel.text="Mouse sensitivity: "+value.ToString("F0");});
+            if(session.multiplayer!=null)
+            {
+                var network=session.multiplayer;
+                microphoneLabel=AddButton(sensitivityControls.transform,"Microphone off",()=> {if(!session.IsInputReplay)network.microphone.Toggle();});
+                networkLabel=AddLabel(sensitivityControls.transform,"Solo",12,32);
+                var addressObject=DefaultControls.CreateInputField(new DefaultControls.Resources());addressObject.transform.SetParent(sensitivityControls.transform,false);
+                addressObject.GetComponent<RectTransform>().sizeDelta=buttonSize;
+                var address=addressObject.GetComponent<InputField>();address.text=network.address;address.onEndEdit.AddListener(value=>network.address=value.Trim());
+                AddButton(sensitivityControls.transform,"Host LAN",()=>network.Restart("host"));
+                AddButton(sensitivityControls.transform,"Join LAN",()=>network.Restart("client"));
+                AddButton(sensitivityControls.transform,"Solo / restart",()=>network.Restart(null));
+            }
+            var chooser=DefaultControls.CreateDropdown(new DefaultControls.Resources());chooser.transform.SetParent(sensitivityControls.transform,false);
+            chooser.GetComponent<RectTransform>().sizeDelta=buttonSize;takes=chooser.GetComponent<Dropdown>();RefreshTakes();
+            replayButton=AddButton(sensitivityControls.transform,"Replay saved run",()=> {
+                if(takePaths.Count==0 || session.Busy)return;
+                session.ReplayInputs(takePaths[takes.value]);
+            }).GetComponentInParent<Button>(true);
+            wasRecording=rayTraceManager.IsRecordingTake;
+            sensitivityControls.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
             return;
         }
         if(rayTraceManager!=null && rayTraceManager.useTakeRenderer)
@@ -73,9 +123,17 @@ public class RaytraceControlPanel : MonoBehaviour
         nextUiUpdate=Time.unscaledTime+.2f;
         bool waiting=session.Busy || rayTraceManager.Mode==RayTraceManager.SessionMode.Draining;
         bool recording=rayTraceManager.IsRecordingTake;
-        recordLabel.text=waiting?"…":session.IsInputReplay?(session.InputReplayFinished?"Replay finished":"Replaying"):recording?"Save run  [R]":"Saved";
-        recordLabel.GetComponentInParent<Button>().interactable=!waiting && recording && !rayTraceManager.IsReplayingTake && !session.IsInputReplay;
+        recordLabel.text=waiting?"…":session.IsInputReplay?(session.InputReplayFinished?"Replay finished":"Replaying"):recording?"Save run  [R]":rayTraceManager.RecordingFailed?"Save failed":"Saved";
+        recordLabel.GetComponentInParent<Button>(true).interactable=!waiting && recording && !rayTraceManager.IsReplayingTake && !session.IsInputReplay;
         sensitivityControls.SetActive(Cursor.lockState!=CursorLockMode.Locked);
+        if(replayButton!=null)replayButton.interactable=!waiting && !recording && takePaths.Count>0;
+        if(wasRecording && !recording)RefreshTakes();wasRecording=recording;
+        if(microphoneLabel!=null)
+        {
+            microphoneLabel.text=session.multiplayer.microphone.Status;
+            microphoneLabel.GetComponentInParent<Button>(true).interactable=!session.IsInputReplay && !waiting;
+            networkLabel.text=session.multiplayer.Status+(session.multiplayer.Connected?" ("+session.multiplayer.ConnectedPlayers+"/"+session.multiplayer.Capacity+")":"");
+        }
     }
 
     Text AddLabel(Transform parent,string value,int size,float height)

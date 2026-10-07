@@ -4,6 +4,10 @@ public class RaytracedAudioSource : MonoBehaviour
 {
     public RayTraceManager rayTraceManager;
     public AudioClip clip;
+    public bool streamed;
+    [Tooltip("Zero monitors every receiver; 1 excludes receiver zero (local self voice). Fixed for a capture.")]
+    public int mutedListenerPlusOne;
+    [System.NonSerialized] public SourceStream Stream;
     [Tooltip("Applied on the next Play call.")]
     public bool loop = true;
     [Tooltip("Input gain on Play; use SetGain for recorded live changes.")]
@@ -73,7 +77,7 @@ public class RaytracedAudioSource : MonoBehaviour
         if (rayTraceManager != null && rayTraceManager.useTakeRenderer)
         {
             if (!rayTraceManager.IsLiveSimulation) rayTraceManager.BeginLiveSimulation();
-            rayTraceManager.RecordSourceEvent(transform,AcousticTake.VoiceAction.Play,gain,loop);
+            rayTraceManager.RecordSourceEvent(transform,AcousticTake.VoiceAction.Play,gain,!streamed && loop);
         }
         else if (rayTraceManager != null && rayTraceManager.source == transform)
             rayTraceManager.StartStreaming();

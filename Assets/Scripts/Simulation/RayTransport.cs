@@ -31,7 +31,9 @@ internal sealed class RayTransport : IDisposable
         public Vector4 minimum,maximum; // w: winding correction, enclosed volume/area (relative units)
         public uint start,count,owner,material;
     }
-    readonly ComputeBuffer materialBuffer,edgeBuffer,volumeBuffer,pathBuffer;
+    readonly ComputeBuffer materialBuffer,edgeBuffer,volumeBuffer,pathBuffer,enabledBuffer;
+    readonly bool[] everActive;
+    readonly uint[] enabledPairs;
     readonly Action<AsyncGPUReadbackRequest> completion;
     AsyncGPUReadbackRequest request;
     bool pending,failed;
@@ -40,13 +42,14 @@ internal sealed class RayTransport : IDisposable
     public int PathsPerFrame {get;}
     public int SlotsPerPair {get;}
     internal ComputeBuffer Buffer => pathBuffer;
-    public long CpuBytes => Paths.Length*32L;
+    public long CpuBytes => Paths.Length*32L+enabledPairs.Length*4L+everActive.Length;
     public long GpuBytes {get;}
     public RayTransport(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,TakeRender.Settings settings,ComputeShader shader,
         ComputeBuffer primitives,ComputeBuffer states,ComputeBuffer sources,ComputeBuffer listeners,ComputeBuffer bvhNodes,ComputeBuffer bvhIndices,int rate,int maximumFrames,bool readback=true)
     {
         if(Marshal.SizeOf<Path>()!=32 || Marshal.SizeOf<Material>()!=32 || Marshal.SizeOf<Edge>()!=48 || Marshal.SizeOf<Volume>()!=48)throw new InvalidOperationException("Spectral GPU ABI mismatch.");
         this.shader=shader;rayCount=settings.RaysPerPair;frequencyBins=settings.fftSize/2+1;pairs=checked(scene.sources.Length*scene.listeners.Length);
+        everActive=new bool[scene.sources.Length];enabledPairs=new uint[checked(pairs*maximumFrames)];
         int bins=settings.fftSize/2+1;
         SlotsPerPair=settings.SpectralSlotsPerPair;PathsPerFrame=checked(pairs*SlotsPerPair);
         Paths=new Path[readback?checked(PathsPerFrame*maximumFrames):0];completion=OnComplete;
@@ -67,22 +70,34 @@ internal sealed class RayTransport : IDisposable
             var edges=Edges(geometry,planar);edgeBuffer=new ComputeBuffer(Math.Max(1,edges.Length),48);if(edges.Length>0)edgeBuffer.SetData(edges);
             var volumes=Volumes(scene,geometry,materials,bins,planar);
             volumeBuffer=new ComputeBuffer(Math.Max(1,volumes.Length),48);if(volumes.Length>0)volumeBuffer.SetData(volumes);
-            pathBuffer=new ComputeBuffer(checked(PathsPerFrame*maximumFrames),32);
+            pathBuffer=new ComputeBuffer(checked(PathsPerFrame*maximumFrames),32);enabledBuffer=new ComputeBuffer(enabledPairs.Length,4);
             foreach(int kernel in new[]{directKernel,traceKernel})
             {
                 shader.SetBuffer(kernel,"Primitives",primitives);shader.SetBuffer(kernel,"States",states);
                 shader.SetBuffer(kernel,"Sources",sources);shader.SetBuffer(kernel,"Listeners",listeners);
                 shader.SetBuffer(kernel,"RayMaterials",materialBuffer);shader.SetBuffer(kernel,"Edges",edgeBuffer);
-                shader.SetBuffer(kernel,"Volumes",volumeBuffer);shader.SetBuffer(kernel,"RayPaths",pathBuffer);
+                shader.SetBuffer(kernel,"Volumes",volumeBuffer);shader.SetBuffer(kernel,"RayPaths",pathBuffer);shader.SetBuffer(kernel,"RayPairEnabled",enabledBuffer);
                 if(bvhNodes!=null){shader.SetBuffer(kernel,"BvhNodes",bvhNodes);shader.SetBuffer(kernel,"BvhIndices",bvhIndices);}
             }
             shader.SetInt("RaysPerBin",settings.RaysPerBin);shader.SetInt("RaySeed",settings.seed);shader.SetInt("FrequencyBins",bins);shader.SetInt("RaysPerPair",settings.RaysPerPair);shader.SetInt("MaxBounces",settings.maxBounces);
             shader.SetInt("SlotsPerPair",SlotsPerPair);shader.SetInt("EdgeCount",edges.Length);shader.SetInt("VolumeCount",volumes.Length);
             shader.SetFloat("FrequencyStep",(float)rate/settings.fftSize);shader.SetFloat("DiffractionFactor",settings.diffractionFactor);
             shader.SetFloat("MaximumPathDelay",settings.maximumDelaySeconds);shader.SetInt("UseAirAbsorption",settings.airAbsorption?1:0);
-            GpuBytes=(long)materials.Length*32+(long)Math.Max(1,edges.Length)*48+Math.Max(1,volumes.Length)*48L+(long)PathsPerFrame*maximumFrames*32;
+            GpuBytes=(long)materials.Length*32+(long)Math.Max(1,edges.Length)*48+Math.Max(1,volumes.Length)*48L+(long)PathsPerFrame*maximumFrames*32+enabledPairs.Length*4L;
         }
         catch {Dispose();throw;}
+    }
+    public void SetActivity(AcousticTake.Scene scene,AcousticTake.State[] states,int frames)
+    {
+        // Never-used slots and permanently muted pairs cannot contribute. Once activated,
+        // keep tracing a source after it leaves: earlier emission can still be arriving.
+        for(int f=0;f<frames;f++)for(int s=0;s<everActive.Length;s++)
+        {
+            everActive[s]|=TakeRender.Enabled(states[f*scene.objects.Length+scene.sources[s].objectIndex],AcousticTake.StateFlags.Source);
+            for(int l=0;l<scene.listeners.Length;l++)enabledPairs[f*pairs+s*scene.listeners.Length+l]=
+                everActive[s] && scene.sources[s].mutedListenerPlusOne!=l+1?1u:0u;
+        }
+        enabledBuffer.SetData(enabledPairs,0,0,frames*pairs);
     }
     // Closed, consistently wound meshes/loops have thickness. Open sheets only
     // apply their surface coefficients. This is derived once, not saved in takes.
@@ -198,6 +213,6 @@ internal sealed class RayTransport : IDisposable
     public void Dispose()
     {
         if(pending && !completed)request.WaitForCompletion();pending=false;
-        materialBuffer?.Dispose();edgeBuffer?.Dispose();volumeBuffer?.Dispose();pathBuffer?.Dispose();
+        materialBuffer?.Dispose();edgeBuffer?.Dispose();volumeBuffer?.Dispose();pathBuffer?.Dispose();enabledBuffer?.Dispose();
     }
 }

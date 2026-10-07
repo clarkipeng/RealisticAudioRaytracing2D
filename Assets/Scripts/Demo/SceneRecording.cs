@@ -16,6 +16,7 @@ public sealed class SceneRecording : IDisposable
         Directory.CreateDirectory(output);
         foreach(string name in new[]{"take.json","events.bin","input.bin","input-observations.bin","input.json"})
             File.Copy(Path.Combine(directory,name),Path.Combine(output,name));
+        AcousticTake.CopyStreams(directory,output,AcousticTake.ReadManifest(directory));
     }
     [Serializable] public struct Input
     {
@@ -151,7 +152,11 @@ public sealed class SceneRecording : IDisposable
         var files=new System.Collections.Generic.List<string>();
         foreach(string folder in new[]{"Assets","Packages","ProjectSettings"})
             foreach(string file in Directory.GetFiles(Path.Combine(root,folder),"*",SearchOption.AllDirectories))
-                files.Add(Path.GetRelativePath(root,file).Replace('\\','/'));
+            {
+                string relative=Path.GetRelativePath(root,file).Replace('\\','/');
+                if(relative.StartsWith("Assets/Resources/NetworkBuildStamp.txt",StringComparison.Ordinal) || relative.StartsWith("Assets/Resources/PerformanceTestRun",StringComparison.Ordinal))continue;
+                files.Add(relative);
+            }
         files.Sort(StringComparer.Ordinal);
         using var bytes=new MemoryStream();
         using(var writer=new BinaryWriter(bytes,System.Text.Encoding.UTF8,true))
@@ -199,7 +204,7 @@ public sealed class SceneRecording : IDisposable
                 throw new InvalidDataException("Input counts do not match payload lengths.");
             try
             {
-                TakeMetadata=AcousticTake.ReadManifest(directory);Events=AcousticTake.ReadEvents(directory,TakeMetadata);
+                TakeMetadata=AcousticTake.ReadManifest(directory);AcousticTake.ValidateStreams(directory,TakeMetadata);Events=AcousticTake.ReadEvents(directory,TakeMetadata);
                 if(Metadata.observationCount!=TakeMetadata.frameCount) throw new InvalidDataException("Observation count mismatch.");
                 reader=new BinaryReader(File.OpenRead(Path.Combine(directory,"input.bin")));
                 observations=new BinaryReader(File.OpenRead(Path.Combine(directory,"input-observations.bin")));

@@ -9,6 +9,7 @@ StructuredBuffer<Edge> Edges;
 struct Volume { float4 minimum,maximum; uint4 ids; };
 StructuredBuffer<Volume> Volumes;
 RWStructuredBuffer<RayPath> RayPaths;
+StructuredBuffer<uint> RayPairEnabled;
 uint RaysPerBin,RaySeed;
 uint FrequencyBins,RaysPerPair,MaxBounces,SlotsPerPair,EdgeCount,VolumeCount,UseAirAbsorption;
 float FrequencyStep,DiffractionFactor,MaximumPathDelay;
@@ -137,6 +138,8 @@ void SpectralDirect(uint index,bool planar)
 {
     if(index>=FrameCount*PairCount*FrequencyBins)return;
     uint bin=index%FrequencyBins,query=index/FrequencyBins,frame=query/PairCount,pair=query%PairCount;
+    RayPaths[query*SlotsPerPair+bin]=(RayPath)0;
+    if(RayPairEnabled[query]==0)return;
     uint offset=frame*ObjectCount,source=Sources[pair/ListenerCount],listener=Listeners[pair%ListenerCount];
     float3 sourceNow=States[offset+source].position.xyz,b=States[offset+listener].position.xyz;
     float3 sv=Velocity(offset+source),lv=Velocity(offset+listener);if(planar){sourceNow.z=0;b.z=0;sv.z=0;lv.z=0;}
@@ -253,6 +256,7 @@ void TracePaths(uint index,bool planar)
     uint offset=frame*ObjectCount,source=Sources[pair/ListenerCount],listener=Listeners[pair%ListenerCount];
     uint first=query*SlotsPerPair+FrequencyBins+ray*(MaxBounces+1);
     for(uint k=0;k<=MaxBounces;k++)RayPaths[first+k]=(RayPath)0;
+    if(RayPairEnabled[query]==0)return;
     uint bin=ray/RaysPerBin,rng=HashRay((ray%RaysPerBin)+pair*0x85ebca6b+RaySeed+1);
     RayPaths[first]=MirrorPath(offset,source,listener,bin,ray%RaysPerBin,planar);first++;
     float hz=max(1,bin*FrequencyStep),threshold=SpeedOfSound/hz*DiffractionFactor;

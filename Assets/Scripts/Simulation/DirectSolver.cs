@@ -143,7 +143,7 @@ public sealed class DirectSolver : IDisposable
         }
         for (int i=0;i<frames*scene.objects.Length;i++) packed[i]=new GpuState {position=state[i].position,
             rotation=new Vector4(state[i].rotation.x,state[i].rotation.y,state[i].rotation.z,state[i].rotation.w),velocity=state[i].velocity,angularVelocity=state[i].angularVelocity,flags=(uint)state[i].flags};
-        states.SetData(packed,0,0,frames*scene.objects.Length); shader.SetInt("FrameCount",frames); UploadSeconds+=TakeRender.Elapsed(start);
+        transport?.SetActivity(scene,state,frames);states.SetData(packed,0,0,frames*scene.objects.Length); shader.SetInt("FrameCount",frames); UploadSeconds+=TakeRender.Elapsed(start);
     }
     public void BeginSolve(AcousticTake.State[] state,int frames=1)
     {

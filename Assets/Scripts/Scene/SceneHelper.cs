@@ -82,6 +82,12 @@ public static class SceneToTake
         var clipIndices = new Dictionary<AudioClip,int>();
         for (int i = 0; i < sources.Length; i++)
         {
+            var source=sources[i].GetComponent<RaytracedAudioSource>();
+            if(clips[i]==null)
+            {
+                sourceDefinitions[i]=new AcousticTake.SourceDefinition {objectIndex=objectIndices[sources[i]],clipIndex=-1,streamed=true,mutedListenerPlusOne=source==null?0:source.mutedListenerPlusOne};
+                continue;
+            }
             if (!clipIndices.TryGetValue(clips[i],out int clipIndex))
             {
                 clipIndex=clipDefinitions.Count; clipIndices.Add(clips[i],clipIndex);
@@ -109,6 +115,8 @@ public static class SceneToTake
         readonly int[] sourceComponentIds;
         readonly Transform[] sourceObjects;
         readonly AudioClip[] sourceClips;
+        readonly bool[] streamed;
+        readonly int[] muted;
         readonly Transform[] listenerBindings;
         readonly BindingSnapshot[] bindings;
         readonly List<AcousticSurface> surfaces=new List<AcousticSurface>(), surfaceScratch=new List<AcousticSurface>();
@@ -120,6 +128,8 @@ public static class SceneToTake
             this.manager=manager; root=manager.takeRoot; primarySource=manager.source; primaryListener=manager.listener;
             dimension=manager.takeDimension; tolerance=manager.takeCurveTolerance; fallback=manager.takeDefaultMaterial;
             sourceBindings=manager.takeSources.ToArray(); listenerBindings=manager.takeListeners.ToArray();
+            streamed=Array.ConvertAll(sources,t=>t.GetComponent<RaytracedAudioSource>()?.streamed??false);
+            muted=Array.ConvertAll(sources,t=>t.GetComponent<RaytracedAudioSource>()?.mutedListenerPlusOne??0);
             sourceObjects=sources; sourceClips=clips; sourceComponentIds=new int[sources.Length];
             for (int i=0;i<sources.Length;i++) sourceComponentIds[i]=Identity(sources[i].GetComponent<RaytracedAudioSource>());
             bindings=new BindingSnapshot[manager.takeObjects.Count];
@@ -143,7 +153,8 @@ public static class SceneToTake
                 for (int i=0;i<sourceObjects.Length;i++)
                 {
                     var component=sourceObjects[i].GetComponent<RaytracedAudioSource>();
-                    if (Identity(component)!=sourceComponentIds[i] || (component!=null ? component.clip!=sourceClips[i]:sourceObjects[i]==primarySource && manager.inputClip!=sourceClips[i])) Changed();
+                    if(component!=null && (component.streamed!=streamed[i] || component.mutedListenerPlusOne!=muted[i]))Changed();
+                    if (Identity(component)!=sourceComponentIds[i] || (component!=null ? (component.streamed?null:component.clip)!=sourceClips[i]:sourceObjects[i]==primarySource && manager.inputClip!=sourceClips[i])) Changed();
                 }
                 if (root!=null)
                 {

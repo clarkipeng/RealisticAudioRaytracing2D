@@ -34,7 +34,7 @@ public partial class RayTraceManager
     [Min(0)] public int monitorListener;
     [Min(1)] public int monitorLeadSamples=4096;
     [Min(1)] public int monitorCapacitySamples=96000;
-    public bool IsLiveSimulation => liveDirect!=null;
+    public bool IsLiveSimulation => captureScene!=null && liveDirect!=null;
     [Serializable] public sealed class LiveDiagnostics
     {
         public string backend,scope="producer stopped; callback counters sampled at stop";
@@ -67,6 +67,7 @@ public partial class RayTraceManager
     public string takePath;
     [Min(0)] public double replaySeconds;
     public bool IsRecordingTake => takeWriter != null;
+    public bool RecordingFailed {get;private set;}
     public bool IsReplayingTake => replayTake != null;
     public bool IsTakeReplayPlaying => replayTake != null && replayPlaying;
     public long LiveSample => captureScene!=null ? TakeSampleNow():0;
@@ -77,6 +78,10 @@ public partial class RayTraceManager
     public event Action<string,bool> RecordingStopped;
 
     AcousticTake.Writer takeWriter;
+    SourceStream[] captureStreams;
+    SourceStream.Capture streamCapture;
+    readonly List<AcousticTake.StreamEpoch> streamEpochs=new List<AcousticTake.StreamEpoch>();
+    public AcousticTake.SessionDefinition SessionInfo;
     AcousticTake replayTake;
     [NonSerialized] AcousticTake.State[] takeState, previousTakeState, restoreTakeState;
     [NonSerialized] bool[] restoreActiveSelf;
@@ -131,23 +136,46 @@ public partial class RayTraceManager
         if (takeObjects.Count == 0) throw new InvalidOperationException("Register objects before recording.");
     }
 
-    public void BeginTakeRecording(string directory, bool retainPayloads=true)
+    public void BeginTakeRecording(string directory, bool retainPayloads=true, bool monitorOutput=true)
     {
         if (string.IsNullOrEmpty(directory)) throw new ArgumentException("Choose a take directory.");
-        BeginCapture(directory,retainPayloads);
+        BeginCapture(directory,retainPayloads,monitorOutput);
     }
     public void BeginLiveSimulation()
     {
         if (!useTakeRenderer) throw new InvalidOperationException("Enable Use Take Renderer first.");
         BeginCapture(null);
     }
-    public void BeginInputPlayback() { BeginLiveSimulation(); externalCaptureClock=true; }
+    SourceStream[] replayStreams;
+    readonly float[] replaySourceBlock=new float[4096];
+    public bool IsSourceReplay => externalCaptureClock || replayTake!=null;
+    public bool CanReplayObservation => liveDirect!=null && liveDirect.CanObserve;
+    public void BeginInputPlayback(string directory=null)
+    {
+        BeginLiveSimulation(); externalCaptureClock=true;
+        if(directory!=null)replayStreams=AcousticTake.OpenStreams(directory,AcousticTake.ReadManifest(directory));
+    }
+    void ReplaySourcesThrough(long end)
+    {
+        if(replayStreams==null)return;
+        for(int s=0;s<replayStreams.Length;s++)if(replayStreams[s]!=null)
+        {
+            var target=captureStreams[s];
+            while(target.End<end)
+            {
+                int count=(int)Math.Min(replaySourceBlock.Length,end-target.End);
+                for(int i=0;i<count;i++)replaySourceBlock[i]=replayStreams[s].Read(target.End+i);
+                target.Append(replaySourceBlock,0,count,end);
+            }
+        }
+    }
     public void ReplayObservation(long sample,bool final)
     {
         if(!externalCaptureClock)throw new InvalidOperationException("Begin input playback before replaying observations.");
+        ReplaySourcesThrough(sample+1);
         if(final)EndCapture(sample);else CaptureTakeState(sample);
     }
-    void BeginCapture(string directory, bool retainPayloads=true)
+    void BeginCapture(string directory, bool retainPayloads=true, bool monitorOutput=true)
     {
         RequireIdle();
         if (Application.isPlaying && !isActiveAndEnabled) throw new InvalidOperationException("The session manager must stay active while capturing.");
@@ -169,8 +197,8 @@ public partial class RayTraceManager
         var sources = new List<Transform>(); var clips = new List<AudioClip>();
         foreach (var audio in takeSources)
         {
-            if (audio == null || audio.clip == null || sources.Contains(audio.transform)) throw new InvalidOperationException("Take sources must be unique and have prepared clips.");
-            sources.Add(audio.transform); clips.Add(audio.clip);
+            if (audio == null || (!audio.streamed && audio.clip == null) || sources.Contains(audio.transform)) throw new InvalidOperationException("Take sources must be unique and have prepared clips or stream bindings.");
+            sources.Add(audio.transform); clips.Add(audio.streamed?null:audio.clip);
         }
         if (sources.Count == 0 && source != null && inputClip != null) { sources.Add(source); clips.Add(inputClip); }
         var receivers = new List<Transform>(takeListeners);
@@ -180,6 +208,7 @@ public partial class RayTraceManager
         var pcm = new float[scene.clips.Length][];
         for (int i=0; i<clips.Count; i++)
         {
+            if(scene.sources[i].streamed)continue;
             int clipIndex=scene.sources[i].clipIndex;
             if (pcm[clipIndex] == null) pcm[clipIndex]=LoadSample(clips[i],sampleRate);
         }
@@ -197,23 +226,32 @@ public partial class RayTraceManager
         previousTakeSample = -1;
         try
         {
+            captureStreams=new SourceStream[scene.sources.Length];streamEpochs.Clear();
+            for(int i=0;i<captureStreams.Length;i++)if(scene.sources[i].streamed)
+            {
+                var audio=captureSources[i].GetComponent<RaytracedAudioSource>();
+                captureStreams[i]=audio.Stream=new SourceStream(checked((int)directSettings.HistorySamples(sampleRate)+2*sampleRate+monitorCapacitySamples));
+            }
             if (directory!=null)
             {
-                takePath=Path.GetFullPath(directory);
+                RecordingFailed=false;takePath=Path.GetFullPath(directory);
                 takeWriter=new AcousticTake.Writer(takePath,sampleRate,scene,geometry,pcm,retainPayloads);
                 takeWriter.Metadata.captureProvenance=AcousticTake.Provenance.Capture(useTakeRenderer?directShader:null,useTakeRenderer?directSettings:null);
                 takeWriter.Metadata.observationPolicy="first-observation-per-audio-sample";
+                takeWriter.Metadata.session=SessionInfo;
+                if(Array.Exists(captureStreams,v=>v!=null))streamCapture=new SourceStream.Capture(takePath,captureStreams,takeWriter.Metadata);
             }
             if (useTakeRenderer)
             {
                 var settings=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(directSettings));
+                if(takeWriter!=null)takeWriter.Metadata.captureSettings=settings;
                 sessionAudio=audioManager;
-                if (directory!=null && retainPayloads) playbackCapture=new AudioManager.PlaybackCapture(Path.Combine(takePath,"monitor"),sampleRate,monitorCapacitySamples,
+                if (directory!=null && retainPayloads && monitorOutput) playbackCapture=new AudioManager.PlaybackCapture(Path.Combine(takePath,"monitor"),sampleRate,monitorCapacitySamples,
                     liveDiagnostics.deviceBufferSamples,monitorLeadSamples,monitorListener,settings,directShader);
                 monitorQueue=new AudioManager.PcmQueue(monitorCapacitySamples,sampleRate,playbackCapture,settings.ChannelsPerListener);
                 if (monitorLeadSamples<0 || monitorLeadSamples>monitorCapacitySamples) throw new ArgumentOutOfRangeException(nameof(monitorLeadSamples));
                 monitorQueue.Publish(0,null,monitorLeadSamples);
-                liveDirect=new TakeRender.Live(scene,geometry,pcm,sampleRate,settings,monitorQueue,monitorLeadSamples,monitorListener,directShader);
+                liveDirect=new TakeRender.Live(scene,geometry,pcm,sampleRate,settings,monitorQueue,monitorLeadSamples,monitorListener,directShader,captureStreams);
                 liveDiagnostics.backend=liveDirect.Backend;
                 if (playbackCapture!=null) liveDirect.ResponseApplied=playbackCapture.RecordResponse;
             }
@@ -223,9 +261,14 @@ public partial class RayTraceManager
             if (playbackCapture!=null) playbackCapture.Metadata.inputDspOriginSeconds=takeClockOrigin;
             if (monitorQueue!=null) sessionAudio.StartPcmStream(monitorQueue);
             CaptureTakeState(0);
+            for(int i=0;i<captureStreams.Length;i++)if(captureStreams[i]!=null)
+            {
+                var e=new AcousticTake.VoiceEvent {sourceIndex=i,action=AcousticTake.VoiceAction.Play,gain=captureSources[i].GetComponent<RaytracedAudioSource>().gain};
+                takeWriter?.Append(e);liveDirect?.Append(e);
+            }
             TakeStatus = directory==null ? "Live acoustic simulation":"Recording: " + takePath;
         }
-        catch(Exception e) { CloseCapture(false); TakeStatus="Recording failed: "+e.Message; throw; }
+        catch(Exception e) { CloseCapture(false);if(directory!=null)RecordingFailed=true; TakeStatus="Recording failed: "+e.Message; throw; }
     }
 
     public void EndTakeRecording() { if (takeWriter!=null) EndCapture(); }
@@ -236,10 +279,13 @@ public partial class RayTraceManager
         try
         {
             long end=finalSample??TakeSampleNow(); ValidateCapturedScene(); CaptureTakeState(end);
-            liveDirect?.Finish(end,takeState); UpdateLiveDiagnostics(end);
+            if(captureStreams!=null)foreach(var stream in captureStreams)if(stream!=null)
+            {stream.SilenceUntil(end+1,end,SourceStream.Status.Missing);stream.Finish();}
+            liveDirect?.Finish(end,takeState,wait:false); UpdateLiveDiagnostics(end);
             if (takeWriter!=null)
             {
                 if (liveDirect!=null) File.WriteAllText(Path.Combine(takePath,"live.json"),JsonUtility.ToJson(liveDiagnostics,true));
+                streamCapture?.Complete(takeWriter.Metadata);takeWriter.Metadata.streamEpochs=streamEpochs.ToArray();
                 takeWriter.Complete(); RecordingFinalizing?.Invoke(takePath); TakeStatus="Saved: "+takePath;
             }
             else TakeStatus="Live simulation stopped.";
@@ -278,16 +324,20 @@ public partial class RayTraceManager
     {
         string recordedDirectory=takeWriter?.DirectoryPath;
         bool recordedComplete=takeWriter!=null && takeWriter.Metadata.complete;
-        try { liveDirect?.Dispose(); }
+        if(recordedDirectory!=null)RecordingFailed=!recordedComplete;
+        try { if(!drain) {liveDirect?.Dispose();liveDirect=null;} }
         finally
         {
-            liveDirect=null; takeWriter?.Dispose(); takeWriter=null;
-            if (drain && monitorQueue!=null) monitorQueue.Complete();
+            try {streamCapture?.Dispose();}catch(Exception e) {Debug.LogWarning("Source writer stopped: "+e.Message,this);}
+            finally {streamCapture=null;takeWriter?.Dispose();takeWriter=null;}
+            if(captureStreams!=null)foreach(var stream in captureStreams)stream?.Dispose();captureStreams=null;
+            if (drain && monitorQueue!=null) {if(liveDirect==null || liveDirect.Completed)monitorQueue.Complete();}
             else
             {
                 sessionAudio?.StopPcmStream(); playbackCapture?.Dispose();
                 monitorQueue=null; playbackCapture=null; sessionAudio=null;
             }
+            if(replayStreams!=null)foreach(var stream in replayStreams)stream?.Dispose();replayStreams=null;
             captureScene=null; captureGuard=null; takeCuts.Clear(); externalCaptureClock=false;
             if(recordedDirectory!=null) RecordingStopped?.Invoke(recordedDirectory,recordedComplete);
         }
@@ -302,8 +352,8 @@ public partial class RayTraceManager
 
     public void MarkTakeDiscontinuity(Transform target)
     {
-        int index = takeObjects.FindIndex(b => b.transform == target);
-        if (index >= 0) takeCuts.Add(index);
+        for(int i=0;i<takeObjects.Count;i++)
+            if(takeObjects[i].transform==target || takeObjects[i].transform.IsChildOf(target))takeCuts.Add(i);
     }
 
     void ValidateCapturedScene()
@@ -358,6 +408,12 @@ public partial class RayTraceManager
         if(takeWriter!=null) RecordingObserved?.Invoke(sample);
     }
 
+    public void RecordStreamEpoch(RaytracedAudioSource source,AcousticTake.StreamEpoch epoch)
+    {
+        epoch.sourceIndex=Array.IndexOf(captureSources,source.transform);
+        if(epoch.sourceIndex<0 || !source.streamed)throw new InvalidOperationException("Unregistered source stream.");
+        streamEpochs.Add(epoch);
+    }
     public void RecordSourceEvent(Transform target, AcousticTake.VoiceAction action, float gain = 1, bool repeat = false, long clipOffset = 0)
     {
         if (captureScene == null) return;
@@ -383,6 +439,18 @@ public partial class RayTraceManager
     {
         try
         {
+            if(takeWriter!=null && streamCapture?.Failure is Exception failure)
+            {
+                RecordingFailed=true;string directory=takeWriter.DirectoryPath;takeWriter.Invalidate();takeWriter.Dispose();takeWriter=null;
+                try {streamCapture.Dispose();}catch(Exception) {} // The originating fault is reported below.
+                streamCapture=null;RecordingStopped?.Invoke(directory,false);
+                TakeStatus="Recording failed: "+failure.Message+" Live playback continues.";Debug.LogError(TakeStatus,this);
+            }
+            if(Mode==SessionMode.Draining && liveDirect!=null)
+            {
+                liveDirect.Pump();
+                if(liveDirect.Completed) {liveDirect.Dispose();liveDirect=null;monitorQueue.Complete();}
+            }
             if (Mode==SessionMode.Draining && monitorQueue.IsDrained && (playbackCapture==null || playbackCapture.Closed))
             { monitorQueue=null; playbackCapture=null; sessionAudio=null; }
             if (captureScene != null)
@@ -393,22 +461,29 @@ public partial class RayTraceManager
             if (replayTake != null)
             {
                 if (replayPlaying) replaySeconds = AudioSettings.dspTime-takeClockOrigin;
-                long sample=(long)Math.Round(replaySeconds*replayTake.Metadata.sampleRate);
-                sample=Math.Max(0,Math.Min(sample,replayTake.Metadata.durationSamples));
-                replayTake.Evaluate(sample,takeState); ApplyTakeState(takeState);
-                if (sample == replayTake.Metadata.durationSamples) replayPlaying=false;
+                long clockSample=(long)Math.Round(replaySeconds*replayTake.Metadata.sampleRate);
+                long sample=Math.Max(0,Math.Min(clockSample,replayTake.Metadata.durationSamples));
+                if(replayAudio!=null)PumpReplayAudio(sample);
+                long visual=replayAudio!=null || replayAudioFinished?Math.Max(0,Math.Min(clockSample-monitorLeadSamples,replayTake.Metadata.durationSamples)):sample;
+                replayTake.Evaluate(visual,takeState); ApplyTakeState(takeState);
+                if (sample == replayTake.Metadata.durationSamples && (monitorQueue==null || monitorQueue.IsDrained))
+                { replayTake.Evaluate(sample,takeState);ApplyTakeState(takeState);replayPlaying=false; }
             }
         }
         catch (Exception e)
         {
-            if (captureScene != null) CloseCapture(false);
+            if (captureScene != null || liveDirect!=null) CloseCapture(false);
             if (replayTake != null || restoreTakeState != null) StopTakeReplay();
             TakeStatus="Take stopped: "+e.Message;
             Debug.LogError(TakeStatus,this);
         }
     }
 
-    public void BeginTakeReplay(string directory, bool play = true)
+    TakeRender.Live replayAudio;
+    AcousticTake.State[] replayAudioLeft,replayAudioRight;
+    int replayFrame,replayEvent;
+    bool replayAudioFinished;
+    public void BeginTakeReplay(string directory, bool play = true, bool audio=false)
     {
         if (takeWriter != null) throw new InvalidOperationException("Stop recording before replaying.");
         if (IsLiveSimulation) StopLiveSimulation();
@@ -453,13 +528,48 @@ public partial class RayTraceManager
             foreach (var writer in replayMotionWriters) Suspend(writer);
             replayTake=loaded; replaySeconds=0; replayPlaying=play; takeClockOrigin=AudioSettings.dspTime;
             replayTake.Evaluate(0,takeState); ApplyTakeState(takeState);
-            TakeStatus="Replaying recorded poses (audio renders separately): "+directory;
+            if(audio)BeginReplayAudio();
+            TakeStatus=(audio?"Replaying scene and recorded source audio: ":"Replaying recorded poses: ")+directory;
         }
         catch { loaded.Dispose(); StopTakeReplay(); throw; }
     }
 
+    void BeginReplayAudio()
+    {
+        var meta=replayTake.Metadata;
+        if(meta.sampleRate!=AudioSettings.outputSampleRate)throw new InvalidOperationException("Set the output device to the recorded sample rate before auditioning this take. Offline rendering supports its original rate.");
+        if(audioManager==null)throw new InvalidOperationException("Replay audio needs an AudioManager.");
+        var pcm=new float[meta.scene.clips.Length][];for(int i=0;i<pcm.Length;i++)pcm[i]=replayTake.ReadClip(i);
+        var streams=new SourceStream[meta.scene.sources.Length];for(int i=0;i<streams.Length;i++)if(meta.scene.sources[i].streamed)streams[i]=replayTake.ReadStream(i);
+        monitorQueue=new AudioManager.PcmQueue(monitorCapacitySamples,meta.sampleRate,null,directSettings.ChannelsPerListener);
+        monitorQueue.Publish(0,null,monitorLeadSamples);sessionAudio=audioManager;
+        replayAudio=new TakeRender.Live(meta.scene,replayTake.Geometry,pcm,meta.sampleRate,directSettings,monitorQueue,monitorLeadSamples,monitorListener,directShader,streams);
+        replayAudioLeft=new AcousticTake.State[meta.scene.objects.Length];replayAudioRight=new AcousticTake.State[meta.scene.objects.Length];
+        replayTake.ReadStoredFrame(0,replayAudioLeft);replayFrame=1;replayEvent=0;replayAudioFinished=false;
+        takeClockOrigin=AudioSettings.dspTime;sessionAudio.StartPcmStream(monitorQueue);
+    }
+    void PumpReplayAudio(long sample)
+    {
+        // Recorded future inputs are available. Fill only the existing bounded queues,
+        // instead of waiting until each pose is due and treating a burst as live input.
+        replayAudio.Pump();
+        long horizon=Math.Min(replayTake.Metadata.durationSamples,sample+monitorCapacitySamples-monitorLeadSamples);
+        while(replayEvent<replayTake.Events.Length && replayTake.Events[replayEvent].sample<=horizon)
+            replayAudio.Append(replayTake.Events[replayEvent++]);
+        while(replayAudio.CanObserve && replayFrame<replayTake.Metadata.frameCount && replayTake.FrameSample(replayFrame)<=horizon)
+        {
+            replayTake.ReadStoredFrame(replayFrame,replayAudioRight);
+            replayAudio.Observe(replayTake.FrameSample(replayFrame-1),replayTake.FrameSample(replayFrame),replayAudioLeft,replayAudioRight);
+            var swap=replayAudioLeft;replayAudioLeft=replayAudioRight;replayAudioRight=swap;replayFrame++;
+        }
+        replayAudio.Pump();
+        if(replayFrame==replayTake.Metadata.frameCount && !replayAudio.Finishing)replayAudio.Finish(replayTake.Metadata.durationSamples,replayAudioLeft,wait:false);
+        if(replayAudio.Completed)
+        {replayAudio.Dispose();replayAudio=null;replayAudioFinished=true;monitorQueue.Complete();}
+    }
     public void SetTakeReplayPlaying(bool play)
     {
+        if(replayAudio!=null || replayAudioFinished)throw new InvalidOperationException("Source-audio replay plays from the beginning; reopen the take to restart.");
         if (replayTake == null) throw new InvalidOperationException("Open a take before playing it.");
         if (double.IsNaN(replaySeconds) || double.IsInfinity(replaySeconds)) throw new ArgumentException("Invalid replay time.");
         replaySeconds=Math.Max(0,Math.Min(replaySeconds,(double)replayTake.Metadata.durationSamples/replayTake.Metadata.sampleRate));
@@ -489,6 +599,11 @@ public partial class RayTraceManager
     public void StopTakeReplay()
     {
         bool wasReplaying = replayTake != null;
+        if(replayAudio!=null || replayAudioFinished)
+        {
+            replayAudio?.Dispose();replayAudio=null;replayAudioFinished=false;
+            sessionAudio?.StopPcmStream();monitorQueue=null;sessionAudio=null;
+        }
         if (restoreTakeState != null)
         {
             ApplyTakeState(restoreTakeState);

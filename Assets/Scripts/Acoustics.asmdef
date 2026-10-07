@@ -1,6 +1,9 @@
 {
   "name": "Acoustics",
   "references": [
-    "Unity.ugui"
+    "Unity.ugui",
+    "Unity.Netcode.Runtime",
+    "Unity.Networking.Transport",
+    "Unity.Collections"
   ]
 }

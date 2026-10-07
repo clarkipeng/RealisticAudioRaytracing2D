@@ -95,7 +95,7 @@ internal sealed class ImpulseResponseAudio
         for(int pair=0;pair<pairs;pair++)
         {
             int listener=pair%listeners;
-            if(!TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener))continue;
+            if(scene.sources[pair/listeners].mutedListenerPlusOne==listener+1 || !TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener))continue;
             Array.Clear(impulse,0,impulse.Length);
             var rotation=Quaternion.Inverse(states[scene.listeners[listener]].rotation);
             int first=irLength,last=0,groupCount=0;groups.Clear();

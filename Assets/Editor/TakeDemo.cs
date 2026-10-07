@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -83,6 +84,7 @@ public static partial class TakeDemo
         roomLight.range=7; roomLight.intensity=1.1f; roomLight.color=new Color(1,.92f,.8f);
         RenderSettings.ambientMode=AmbientMode.Flat; RenderSettings.ambientLight=new Color(.22f,.24f,.28f); RenderSettings.fog=false;
         manager.RegisterTakeObjects();
+        ConfigureMultiplayer(session);
         EditorSceneManager.SaveScene(scene,"Assets/Scenes/Church.unity"); AssetDatabase.SaveAssets();
         if(SceneView.lastActiveSceneView!=null) SceneView.lastActiveSceneView.LookAt(new Vector3(0,3,0),Quaternion.Euler(20,35,0),24);
         Selection.activeGameObject=host;
@@ -95,5 +97,54 @@ public static partial class TakeDemo
         if(prefab==null) throw new FileNotFoundException("Missing shared Player prefab.");
         var player=((GameObject)PrefabUtility.InstantiatePrefab(prefab,parent)).transform;
         player.localPosition=position; return player;
+    }
+    public static void ConfigureMultiplayer(SceneSession session,int players=4)
+    {
+        var manager=session.manager;
+        var network=session.GetComponent<MultiplayerSession>()??session.gameObject.AddComponent<MultiplayerSession>();
+        session.multiplayer=network;network.session=session;
+        var mic=session.GetComponent<MicrophoneInput>()??session.gameObject.AddComponent<MicrophoneInput>();network.microphone=mic;
+        if(mic.source==null)
+        {
+            var mouth=new GameObject("Microphone source");mouth.transform.SetParent(manager.listener,false);
+            mic.source=mouth.AddComponent<RaytracedAudioSource>();mic.source.rayTraceManager=manager;
+            mic.source.streamed=true;mic.source.mutedListenerPlusOne=1;mic.source.prepareOnStart=false;
+            manager.takeSources.Add(mic.source);
+            manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {id="voice-local",transform=mouth.transform});
+        }
+        if(network.remoteVoices.Length==0)
+        {
+            network.remoteVoices=new RaytracedAudioSource[players-1];
+            for(int i=0;i<network.remoteVoices.Length;i++)
+            {
+                var avatar=new GameObject("Remote player "+(i+1));avatar.transform.SetParent(manager.takeRoot,false);
+                var shape=GameObject.CreatePrimitive(PrimitiveType.Capsule);shape.name="Body";shape.transform.SetParent(avatar.transform,false);shape.transform.localPosition=Vector3.up;
+                var mouth=new GameObject("Voice");mouth.transform.SetParent(avatar.transform,false);mouth.transform.localPosition=Vector3.up*1.65f;
+                var voice=mouth.AddComponent<RaytracedAudioSource>();voice.rayTraceManager=manager;voice.streamed=true;voice.prepareOnStart=false;
+                network.remoteVoices[i]=voice;manager.takeSources.Add(voice);
+                manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {id="voice-remote-"+i,transform=mouth.transform});
+                manager.takeObjects.Add(new RayTraceManager.TakeObjectBinding {id="player-remote-"+i,transform=avatar.transform});
+                avatar.SetActive(false);
+            }
+        }
+        var shared=new List<Transform>();
+        foreach(var actor in session.actors)
+        {
+            if(actor is StationDemo train) {shared.Add(train.train);shared.Add(train.carriage);}
+            else if(actor is SlidingDoor door)shared.Add(door.transform);
+        }
+        network.sharedObjects=shared.ToArray();
+        manager.takeObjects.Sort((a,b)=>StringComparer.Ordinal.Compare(a.id,b.id));
+        if(network.spawnPoints.Length==0)
+        {
+            network.spawnPoints=new Transform[network.Capacity];
+            for(int i=0;i<network.Capacity;i++)
+            {
+                var point=new GameObject("Player spawn "+i).transform;point.SetParent(manager.takeRoot,false);
+                point.SetPositionAndRotation(session.player.position+session.player.right*(i*1.2f),session.player.rotation);
+                network.spawnPoints[i]=point;
+            }
+        }
+        PlayerSettings.macOS.microphoneUsageDescription="Use your microphone as an acoustic source and save it with recorded runs.";
     }
 }

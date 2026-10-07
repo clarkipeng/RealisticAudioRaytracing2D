@@ -21,6 +21,7 @@ public class PlayerController : MonoBehaviour
     void Awake() => Initialize();
     public void Initialize()
     {
+        Ground=null;verticalSpeed=0;airborneVelocity=Vector3.zero;
         controller = GetComponent<CharacterController>();
         controller.minMoveDistance = 0;
         groundMask=0;

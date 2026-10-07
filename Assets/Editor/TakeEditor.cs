@@ -47,7 +47,7 @@ public sealed class TakeEditor : Editor
                 manager.BeginTakeRecording(Path.Combine(parent,"take-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff")));
             });
             if (manager.IsRecordingTake && GUILayout.Button("Save run")) Run(()=> {if(station!=null)station.SaveRecording();else manager.EndTakeRecording();});
-            if(station!=null && !manager.IsRecordingTake && !station.Busy && GUILayout.Button("Replay saved inputs from beginning")) Run(()=>station.ReplayInputs(manager.takePath));
+            if(station!=null && !manager.IsRecordingTake && !station.Busy && GUILayout.Button("Replay saved run from beginning")) Run(()=>station.ReplayInputs(manager.takePath));
             if (manager.useTakeRenderer && !manager.IsRecordingTake && !manager.IsReplayingTake)
             {
                 if (manager.Mode==RayTraceManager.SessionMode.Idle && GUILayout.Button("Start live preview")) Run(manager.BeginLiveSimulation);

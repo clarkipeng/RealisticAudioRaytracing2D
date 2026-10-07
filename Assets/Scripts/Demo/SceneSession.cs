@@ -10,6 +10,7 @@ public sealed class SceneSession : MonoBehaviour
 {
     public RayTraceManager manager;
     public Transform player;
+    public MultiplayerSession multiplayer;
     public SceneActor[] actors=Array.Empty<SceneActor>();
     public RaytracedAudioSource[] startSounds=Array.Empty<RaytracedAudioSource>();
     [Tooltip("Also save full poses, geometry, source PCM and monitored audio for verification.")]
@@ -27,8 +28,8 @@ public sealed class SceneSession : MonoBehaviour
     public bool ReadPlayerInput {get;set;}=true;
     public PlayerController Walker => walker;
     public MouseLook Look => look;
-    public bool IsInputReplay => playback!=null;
-    public bool InputReplayFinished => playback!=null && Tick==playback.Metadata.ticks;
+    public bool IsInputReplay => playback!=null || manager.IsReplayingTake;
+    public bool InputReplayFinished => playback!=null ? Tick==playback.Metadata.ticks : manager.IsReplayingTake && !manager.IsTakeReplayPlaying;
 
     // Called once on a fresh scene, both for live capture and replay.
     public void InitializeSimulation()
@@ -55,26 +56,36 @@ public sealed class SceneSession : MonoBehaviour
     IEnumerator Start()
     {
         InitializeSimulation();
+        string replay=pendingReplay; pendingReplay=null;
+        if(multiplayer!=null)
+        {
+            multiplayer.Prepare(replay==null?null:AcousticTake.ReadManifest(replay).session);
+            if(replay==null) {yield return multiplayer.Connect();if(!multiplayer.Ready)yield break;}
+        }
         manager.RecordingStarted+=BeginInputRecording;
         manager.RecordingObserved+=ObserveInputRecording;
         manager.RecordingFinalizing+=FinalizeInputRecording;
         manager.RecordingStopped+=EndInputRecording;
         Application.runInBackground=true;
-        SetWalking(pendingReplay==null);
+        SetWalking(replay==null);
         yield return null; // Let the audio components finish Start before opening the session.
-        string replay=pendingReplay; pendingReplay=null;
         ready=Try(()=> {
             if(replay!=null)
             {
-                playback=new SceneRecording.Playback(replay); playback.ValidateScene(this);
-                manager.BeginInputPlayback();
+                if(File.Exists(Path.Combine(replay,"states.bin")) && AcousticTake.ReadManifest(replay).session?.mode=="lan-client-presented-v1")
+                    manager.BeginTakeReplay(replay,true,true);
+                else
+                {
+                    playback=new SceneRecording.Playback(replay); playback.ValidateScene(this);
+                    manager.BeginInputPlayback(replay);
+                }
                 manager.takePath=replay; ReadPlayerInput=false;
             }
             else
             {
-                string root=Application.isEditor ? Path.GetFullPath(Path.Combine(Application.dataPath,"..","Recordings")) : Path.Combine(Application.persistentDataPath,"Recordings");
-                string path=Path.Combine(root,gameObject.scene.name.ToLowerInvariant()+"-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
-                manager.BeginTakeRecording(path,retainFullReference); StartSceneSounds();
+                string path=Path.Combine(RecordingsDirectory,gameObject.scene.name.ToLowerInvariant()+"-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
+                manager.SessionInfo=multiplayer?.Description();
+                manager.BeginTakeRecording(path,retainFullReference || (multiplayer!=null && multiplayer.Connected),retainFullReference); multiplayer?.CaptureStarted();StartSceneSounds();
             }
         });
     }
@@ -111,17 +122,22 @@ public sealed class SceneSession : MonoBehaviour
             catch(Exception e) {manager.AbortTakeRecording(e.Message); Debug.LogException(e,this);}
         }
         bool moved=false;
-        foreach(var actor in actors) moved|=actor.Step(input,player,seconds);
+        if(multiplayer==null || multiplayer.ControlsWorld)
+            foreach(var actor in actors)moved|=actor.Step(input,player,seconds);
+        else if(input.interact)multiplayer.RequestInteraction();
         if(moved) Physics.SyncTransforms();
         look.Simulate(input.look); walker.Simulate(input.movement,input.jump,seconds); Tick++;
     }
 
-    void BeginInputRecording(string directory) => recording=new SceneRecording(this,directory);
+    void BeginInputRecording(string directory)
+    {
+        if(multiplayer==null || !multiplayer.Connected)recording=new SceneRecording(this,directory);
+    }
     void ObserveInputRecording(long sample) => recording?.Observe(sample,Tick);
     void FinalizeInputRecording(string directory)
     {
-        if(recording==null)throw new InvalidOperationException("The required scene input recording is missing.");
-        recording.Complete(true);
+        if(recording!=null)recording.Complete(true);
+        else if(multiplayer==null || manager.SessionInfo?.mode!="lan-client-presented-v1")throw new InvalidOperationException("The required scene input recording is missing.");
     }
     void EndInputRecording(string directory,bool complete) {recording?.Dispose(); recording=null;}
     void OnDestroy()
@@ -144,13 +160,18 @@ public sealed class SceneSession : MonoBehaviour
     }
     void StartSceneSounds()
     {
-        foreach(var source in startSounds) source.Play();
+        foreach(var source in startSounds)
+        {
+            long offset=source.loop?(long)((multiplayer?.SceneSoundOffset??0)*manager.sampleRate)%Math.Max(1,(long)(source.clip.length*manager.sampleRate)):0;
+            manager.RecordSourceEvent(source.transform,AcousticTake.VoiceAction.Play,source.gain,source.loop,offset);
+        }
     }
     void StartLiveAudio()
     {
         manager.BeginLiveSimulation();
         StartSceneSounds();
     }
+    public static string RecordingsDirectory=>Application.isEditor?Path.GetFullPath(Path.Combine(Application.dataPath,"..","Recordings")):Path.Combine(Application.persistentDataPath,"Recordings");
     public void SaveRecording()
     {
         if(Busy || !manager.IsRecordingTake || manager.IsReplayingTake || IsInputReplay) return;
@@ -160,16 +181,31 @@ public sealed class SceneSession : MonoBehaviour
     public void ReplayInputs(string path)
     {
         if(Busy || manager.IsRecordingTake) throw new InvalidOperationException("Save the run before replaying.");
-        using(var input=new SceneRecording.Playback(path)) input.ValidateScene(this);
+        var metadata=AcousticTake.ReadManifest(path);
+        if(metadata.session?.mode=="lan-client-presented-v1")
+        {
+            if(metadata.session.scene!=gameObject.scene.path)throw new InvalidDataException("Open the take's recorded scene first: "+metadata.session.scene);
+            using(var take=AcousticTake.Open(path)) {}
+        }
+        else using(var input=new SceneRecording.Playback(path))input.ValidateScene(this);
         StartCoroutine(AfterStop(()=> {
-            pendingReplay=Path.GetFullPath(path);
+            multiplayer?.Shutdown();pendingReplay=Path.GetFullPath(path);
+            ReloadScene();
+        }));
+    }
+    public void RestartScene()
+    {
+        if(Busy)return;
+        StartCoroutine(AfterStop(()=> {multiplayer?.Shutdown();ReloadScene();}));
+    }
+    void ReloadScene()
+    {
 #if UNITY_EDITOR
             UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(gameObject.scene.path,
                 new UnityEngine.SceneManagement.LoadSceneParameters(UnityEngine.SceneManagement.LoadSceneMode.Single));
 #else
             UnityEngine.SceneManagement.SceneManager.LoadScene(gameObject.scene.path);
 #endif
-        }));
     }
     void LateUpdate()
     {
@@ -181,7 +217,7 @@ public sealed class SceneSession : MonoBehaviour
             long now=manager.LiveSample;
             while(nextSound<playback.Events.Length && playback.Events[nextSound].sample<=now)
                 manager.AppendReplaySound(playback.Events[nextSound++]);
-            while(playback.NextObservation(now,out long sample,out long tick))
+            while(manager.CanReplayObservation && playback.NextObservation(now,out long sample,out long tick))
             {
                 while(Tick<tick) Step(playback.Read(Tick),playback.Metadata.stepSeconds);
                 manager.ReplayObservation(sample,InputReplayFinished && sample==playback.TakeMetadata.durationSamples);
@@ -192,6 +228,7 @@ public sealed class SceneSession : MonoBehaviour
     {
         Busy=true;
         bool stopped=Try(()=> {
+            multiplayer?.microphone.StopCapture();
             if(manager.IsRecordingTake) manager.EndTakeRecording();
             else if(manager.IsLiveSimulation) manager.StopLiveSimulation();
         });

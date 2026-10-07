@@ -26,7 +26,7 @@ RWStructuredBuffer<int> AudioHeads,AudioNext;
 RWStructuredBuffer<uint> AudioMeta,AudioCounts,AudioArgs;
 StructuredBuffer<float4> AudioHeadsPose,AudioRings;
 StructuredBuffer<float2> AudioAngles,AudioEars;
-StructuredBuffer<float> AudioSource;
+StructuredBuffer<float> AudioSource,AudioPairEnabled;
 RWStructuredBuffer<float2> AudioFilters,AudioWork,AudioTransform;
 RWStructuredBuffer<float> AudioBlocks,AudioOutput;
 struct EarBlend { uint4 index; float4 weight; };
@@ -251,7 +251,7 @@ void AudioInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 float2 AudioSum(uint channel,uint bin)
 {
     uint bank=AudioBank(),listener=channel/AudioChannels,ear=channel%AudioChannels;float2 value=0;
-    for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)for(uint p=0;p<AudioCounts[bank*AudioPairs+pair];p++)
+    for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)if(AudioPairEnabled[pair]>0)for(uint p=0;p<AudioCounts[bank*AudioPairs+pair];p++)
     {
         uint g=pair*AudioSlots+p;value+=AudioMultiply(AudioWork[g*AudioFft+bin],AudioFilters[((bank*AudioCapacity+g)*AudioChannels+ear)*AudioBins+bin]);
     }

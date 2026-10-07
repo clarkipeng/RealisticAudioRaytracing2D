@@ -43,7 +43,7 @@ internal sealed class TakeComparisonView : IDisposable
         try
         {
             var meta=take.Metadata;
-            if(meta.sceneHash!=report.sceneHash || meta.stateHash!=report.stateHash || meta.eventHash!=report.eventHash) throw new InvalidOperationException("The selected take does not match this comparison.");
+            if(meta.sceneHash!=report.sceneHash || meta.stateHash!=report.stateHash || meta.eventHash!=report.eventHash || (AcousticTake.SourceHash(meta)??"")!=(report.sourceHash??"")) throw new InvalidOperationException("The selected take does not match this comparison.");
             RayTraceManager manager=null;
             foreach(var candidate in UnityEngine.Object.FindObjectsByType<RayTraceManager>())
             {

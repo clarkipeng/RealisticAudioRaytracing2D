@@ -17,10 +17,14 @@ public sealed class SlidingDoor : SceneActor
         closedPosition=transform.localPosition; IsOpen=initiallyOpen;
         initial=(openOffset,speed,interactionDistance,initiallyOpen);
     }
-    public override bool Step(SceneRecording.Input input,Transform player,float seconds)
+    public void Interact(Vector3 playerPosition)
     {
         var anchor=transform.parent!=null?transform.parent.TransformPoint(closedPosition):closedPosition;
-        if(input.interact && Vector3.Distance(player.position+Vector3.up,anchor)<=interactionDistance) IsOpen=!IsOpen;
+        if(Vector3.Distance(playerPosition+Vector3.up,anchor)<=interactionDistance)IsOpen=!IsOpen;
+    }
+    public override bool Step(SceneRecording.Input input,Transform player,float seconds)
+    {
+        if(input.interact)Interact(player.position);
         var previous=transform.localPosition;
         transform.localPosition=Vector3.MoveTowards(previous,closedPosition+(IsOpen?openOffset:Vector3.zero),speed*seconds);
         return transform.localPosition!=previous;

@@ -24,21 +24,21 @@ Contents:
 12. [Multiplayer](#12-multiplayer)
 13. [Implementation sequence and acceptance](#13-implementation-sequence-and-acceptance)
 
-**Implemented next-scene foundation:** shared session, generic compact replay and Church blockout. **Remaining:** legacy/material migration → Church acoustic validation → local microphone → LakeForest → multiplayer on the same scenes. [Section 13](#13-implementation-sequence-and-acceptance) defines delivery gates. The remaining additions are specified, not implemented. The existing simulation/training contracts remain applicable; scene demos do not establish teacher accuracy.
+**Implemented:** shared sessions, compact solo replay, Church blockout, microphone capture, LAN voice/gameplay and offline client replay on Church and TrainStation. **Remaining:** legacy/material migration, physical acoustic validation, LakeForest, broader hardware/network tests and learned reconstruction. [Section 13](#13-implementation-sequence-and-acceptance) defines delivery gates; scene demos do not establish teacher accuracy.
 
-Review the [runtime changes](#runtime-cleanup-and-shared-scene-session), [scene designs](#scene-composition), [recording formats](#scene-independent-input-implemented-and-stream-recording-proposed), [microphone pipeline](#microphone-and-streamed-source-audio-proposed), and [multiplayer contracts](#12-multiplayer).
+Review the [runtime changes](#runtime-cleanup-and-shared-scene-session), [scene designs](#scene-composition), [recording formats](#scene-independent-input-and-stream-recording-implemented), [microphone pipeline](#microphone-and-streamed-source-audio), and [multiplayer contracts](#12-multiplayer).
 
 ## 1. Status and decisions
 
 | Capability | Current implementation | Planned work |
 |---|---|---|
 | Unity authoring and capture | Native 2D/3D geometry export, rigid motion, activation, stable IDs, source events, immutable take files; editable station, train service with stops and walking aboard, and door with two sources and one binaural listener; Church blockout with the same session/player/door and compact recorder. | Church acoustic validation and LakeForest; migrate the old rooms as small 2D/3D fixtures. |
-| Replay and computation | Shared compact scene-input reconstruction, pose replay/scrubbing, CPU/HLSL direct solvers with optional static BVH plus direct tests for moving objects, shared live/offline timeline and mixer, WAV/response export, batch jobs and measured station offline benchmarks. | Streamed source files; small recordings picker. Portable decorative snapshots and continuous audition remain deferred. |
+| Replay and computation | Shared compact scene-input reconstruction, pose replay/scrubbing, CPU/HLSL direct solvers with optional static BVH plus direct tests for moving objects, shared live/offline timeline and mixer, per-source stream files, saved-take picker, offline client replay, WAV/response export, batch jobs and measured offline benchmarks. | Portable decorative snapshots and continuous audition remain deferred. |
 | Directional spectral preview | Shared 2D/3D GPU transport with multi-bounce reflection/scattering, transmission/refraction, air/material losses and edge diffraction heuristics. Configurable frequency grid, selectable scene-IR or continuous path-clock spectral synthesis, interpolated per-arrival KEMAR orientation, samplewise response crossfades and first-order image-source reflections; same live/offline implementation. Closed 2D/3D objects use per-medium speed/damping, including nested solids and interior sources. | Physical normalization/convergence, higher-order mirror connections, directional dataset export and validation of complex moving boundaries. The preview is not an approved training reference. |
 | Multiple endpoints | Every source/listener pair; mono or binaural mix per head; one monitored listener. | Larger workload benchmarks and explicit local receiver selection for multiplayer. |
 | Comparison | Coarse/fine schedules, metrics/reference gate, native audio A/B/Difference, waveform/spectrogram plots and synchronized listener/top-down/free-camera views. | Per-pair target checks, learned outputs and validated reflection comparisons. |
 | Runtime | Bounded PCM/capture queues, GPU transport and DSP with asynchronous PCM batches, selectable CPU reference, fractional-delay FIR, provenance and diagnostics. | Lower measured latency/memory and reconstruction scheduling. |
-| Microphone and networking | Sources currently require prepared clips; no mic capture, voice codec or network gameplay. | Timestamped stream input, saved source audio, actual host/join and local acoustic rendering of remote voices. |
+| Microphone and networking | Opt-in device capture, timestamped source streams, Opus voice, LAN host/join, presented-state recording and local acoustic rendering of remote voices. | Two-machine and four-player testing, measured hardware timing, clock-drift correction and echo cancellation. |
 | Learning | Not implemented. | Validated teachers, dataset loader, models and inference. |
 
 The current project uses Unity **6000.4.1f1**, C# and HLSL. Earlier CPU/Metal checks and the repaired legacy FFT are documented in the README. Windows/DirectX still needs its own checks. The legacy reflection shader has different physics and is not a validated reference.
@@ -198,7 +198,7 @@ This is a focused extraction while building the second scene, not a renderer rew
 | `RaytracedAudioSource.cs`, `TakeRender.Signal`, `TakeRender.Live` | Add a stream source alongside clips, with bounded source history and explicit availability. | CPU/GPU and mic/network use this same sample-read boundary. |
 | `RaytraceControlPanel`, `TakeEditor`, comparison window | Replace station-specific session calls with shared ones; preserve existing views/diagnostics. | One small control surface; no per-environment menus. |
 
-`SceneSession.cs` and `SlidingDoor.cs` implement the shared scene clock and door; add `MicrophoneInput.cs` only at the microphone milestone. Shared source-buffer types can live with `Signal`; recording/replay are moves of existing files with their `.meta` files. Network adapters are added only at the multiplayer milestone. Keep the independent CPU oracle and genuine IR/Spectral algorithms.
+`SceneSession.cs` and `SlidingDoor.cs` implement the shared scene clock and door. `MicrophoneInput.cs` and `SourceStream.cs` deliver canonical source history; `MultiplayerSession.cs` and `VoiceCodec.cs` handle LAN poses/voice. Recording/replay reuse the existing take format and preserve older clip-only readers. Keep the independent CPU oracle and genuine IR/Spectral algorithms.
 
 The shared session owns the player/head, manager, fixed-step index, input mode and explicit ordered list of supported scene actors. Actor initialization and stepping form one small contract in the session file; no reflection registry or generic service framework. Use persisted actor IDs for order and interaction targets. Authoring changes require a new capture; arbitrary scripts/rigid bodies are not silently replayable.
 
@@ -367,19 +367,19 @@ Play begins capture at initialization. Save completes it; another run starts by 
 
 The current adapter covers shared walking/sliding-door inputs in Station and Church, plus the station train. Arbitrary scene edits, rigid-body behavior and cross-platform determinism are not promised. Editor project identity hashes all files under `Assets`, `Packages` and `ProjectSettings` with relative paths; it excludes generated `Library` contents and checkout location. Older manifests without that hash retain their original module/scene checks; Player recordings require the matching runtime build. Preserve the matching Git revision/assets; identity hashes cannot recover missing source files. The README describes current usage and validation.
 
-### Scene-independent input (implemented) and stream recording (proposed)
+### Scene-independent input and stream recording (implemented)
 
 Keep compact recording from initialization as the default for the new supported scenes. Record the scene/build identity, fixed actor settings, accepted input changes, interactions, source events and sample-to-completed-tick map. Train/door motion is reconstructed by the same actor code; static geometry stays in the authored scene. The new `scene-input-from-init-v1` header identifies its actor/input contract and preserves the old station-v2 reader. Keep the existing 25-byte local walking/look/button records and 16-byte observation mapping. The header binds the player and ordered actor IDs, component contract versions and immutable initialization settings; new action payloads require a versioned contract rather than untyped event blobs. Do not weaken project identity to make old recordings open against changed code.
 
 **Microphone audio is new input data and must be saved.** Neither Git, input buttons nor an RNG seed can reconstruct speech. Compact mic takes therefore add the source PCM and timing metadata, while continuing to omit regenerable poses/geometry/asset clips and optional monitored output. Live mic preview without saved source data is allowed, but that run cannot be offered as replayable/renderable mic data.
 
-Propose acoustic take **v3** for source kinds; current v1/v2 files retain their existing interpretation. `SourceDefinition` gains `kind: Clip | Stream`; Clip uses the existing clip index, Stream uses a stream index. Resolve bindings before capture; a disabled mic can occupy its source slot from initialization. Stream tables are separate from immutable clip assets and finalized independently of the geometry/scene identity, avoiding an end-of-recording change to the scene hash. The completed take manifest authenticates all stream descriptors and the shared source-block log path/hash; no unauthenticated sidecar determines rendering.
+Acoustic take **v3** implements streamed sources; v1/v2 files retain their existing interpretation. `SourceDefinition.streamed` selects source history by source index; otherwise the existing clip index applies. `mutedListenerPlusOne` excludes one receiver (zero means audible to all). Resolve bindings before capture; a disabled mic can occupy its source slot from initialization. Stream tables are separate from immutable clip assets and finalized independently of the geometry/scene identity, avoiding an end-of-recording change to the scene hash. The completed take manifest authenticates all stream descriptors and the shared source-block log path/hash; no unauthenticated sidecar determines rendering.
 
 | Stream record | Meaning |
 |---|---|
-| Stream descriptor in take manifest | Stable source binding, relative payload path/hash, int64 first scene sample and sample count, canonical mono float32 at the take's fixed rate; original device/codec and processing identity. |
+| Stream descriptor in take manifest | `sourceIndex`, relative `file`, `sha256` and int64 `samples`; mono float32 at the take rate, beginning at scene sample zero. Device/codec/processing details live in `streamEpochs`. |
 | `source-<index>.f32` | Little-endian canonical PCM entering source gain/transport, written sequentially; file length is `4 * sampleCount`. No per-block files and no load-entire-recording requirement. |
-| `source-blocks.bin` | Shared append-only timeline: int32 stream index, int64 first scene sample, int32 frame count, int64 available-at scene sample, uint32 status = 28 bytes/record. Spans are ordered/nonoverlapping per stream and cover its payload. |
+| `source-blocks.bin` | Shared append-only timeline: int32 source index, int64 first scene sample, int32 frame count, int64 available-at scene sample, uint32 status = 28 bytes/record. Spans are ordered/nonoverlapping per stream and cover its payload. |
 | Status values | Captured/decoded data; intentional silence; missing capture; concealed network loss. A bit identifies discontinuity. Unknown values or unaccounted ranges are invalid. |
 | Clock metadata | Device/remote origin, source rate, mapping/resampler version, epoch changes and measured uncertainty. Availability denotes completed canonical input, not inferred acoustic capture time. |
 
@@ -553,7 +553,9 @@ This is a generic far-field mannequin model for headphones, not personalized HRT
 
 Use the active Editor for authoring-time jobs, or batch mode when that project is closed. A second Editor must not share the open project. Existing CPU batch jobs can use -nographics; HLSL jobs need a graphics device. A built worker is an option when simultaneous authoring/jobs justify it, not required infrastructure. Interrupted runs restart initially; resumability later must restore DSP history and verify all identities.
 
-### Microphone and streamed source audio (proposed)
+### Microphone and streamed source audio
+
+Capture, resampling, stream persistence and playback are implemented. The clock-drift/physical timing requirements below remain acceptance work; the current fixed rate mapping reports unmeasured uncertainty explicitly.
 
 The new source path supports a local microphone, decoded remote voice and saved streamed PCM. These are producers of the same source samples; they do not introduce a third renderer or a new shader family. Existing clips remain the simplest source. A microphone emitter follows the player's mouth transform; each client has one local listening head, whose two ears remain the existing binaural output.
 
@@ -566,7 +568,7 @@ asset clip → existing event-driven source reads ──────────
 canonical stream input + timing/status → recording writer
 ```
 
-**Source boundary.** Extend `TakeRender.Signal` with Clip/Stream storage and retain its existing sample reads for DSP. A stream has a bounded circular sample history plus absolute int64 positions and a committed availability frontier. Add only append/range-readiness operations; no audio-provider plugin hierarchy is needed.
+**Implemented source boundary.** `TakeRender.Signal` reads clips or `SourceStream` using the existing DSP sample interface. Live streams have bounded circular history, absolute int64 positions and a committed availability frontier; saved streams use paged file reads. There is no audio-provider plugin hierarchy.
 
 ```text
 append(source, firstSample, pcm, availableAtSample, status):
@@ -970,7 +972,7 @@ Batch generation stays a small saved JSON job list around `TakeBatch` and existi
 
 Multiplayer is a mode for the same Church, LakeForest and TrainStation assets, not a copied environment or a second acoustic engine. The first network acceptance run is two separate processes, then two machines over LAN/direct IP. Test independent walking/head direction and a shared door/speaker before adding voice. Player count is configured and benchmarked; two is the validation starting point, not a hardcoded maximum.
 
-Use **Netcode for GameObjects + Unity Transport** for session/object replication, with compatible versions pinned when implementation begins. Host owns shared actors and accepted interaction/sound events; clients own local input/camera and receive authoritative state. Start with package-supported transform replication and measure control latency. Do not implement competitive rollback, host migration, matchmaking or internet Relay until requested. Physics is simulated by the authoritative owner; peers do not infer identical outcomes from input alone ([Unity network physics](https://docs.unity3d.com/Packages/com.unity.netcode.gameobjects@2.7/manual/advanced-topics/physics.html)).
+Use **Netcode for GameObjects 2.7.0 + Unity Transport 2.6.0** for connections, clocks and message delivery. The implementation reuses the authored acoustic/player transforms through numeric world snapshots rather than creating a second NetworkObject prefab hierarchy. Host owns shared actors and accepted interaction/sound events; clients own local input/camera and receive authoritative state. World snapshots run at 30 Hz with a bounded interpolation history; measure control latency. Do not implement competitive rollback, host migration, matchmaking or internet Relay until requested. Physics is simulated by the authoritative owner; peers do not infer identical outcomes from input alone ([Unity network physics](https://docs.unity3d.com/Packages/com.unity.netcode.gameobjects@2.7/manual/advanced-topics/physics.html)).
 
 ### World, sound and listener ownership
 
@@ -985,7 +987,7 @@ Use one declared presentation clock for replicated remote actors, voice and scen
 
 ### Microphone voice transport
 
-NGO does not itself supply the required voice codec/jitter pipeline. Use a maintained Unity-compatible **Opus** implementation for compressed mono speech; verify its package/platform/license support before selecting/pinning it. A voice SDK is acceptable only if decoded PCM can enter our source pipeline and automatic spatialized playback can be disabled. Do not write a codec. Codec packet duration/bitrate/loss handling are saved settings and are independent of our STFT grid ([Opus specification](https://www.rfc-editor.org/rfc/rfc6716)).
+NGO does not itself supply the required voice codec/jitter pipeline. The runtime pins managed **Concentus 2.2.2** for Opus and Speex resampling; its license, upstream revision and package/DLL hashes are included in `Assets/External/Concentus`. A voice SDK is acceptable only if decoded PCM can enter our source pipeline and automatic spatialized playback can be disabled. Do not write a codec. Codec packet duration/bitrate/loss handling are saved settings and are independent of our STFT grid ([Opus specification](https://www.rfc-editor.org/rfc/rfc6716)).
 
 ```text
 local canonical mic → encoder → timestamped packets → remote jitter buffer
@@ -995,21 +997,32 @@ local canonical mic → encoder → timestamped packets → remote jitter buffer
 
 Packet contract: session/source ID, capture epoch, sequence number, sender frame/sample timestamp, frame count, codec configuration identity and payload. Session handshake supplies rate/channel/clock details; codec changes begin a declared epoch. Use bounded unreliable delivery for voice frames so retransmission cannot hold later speech behind a lost packet; reliable session/control messages remain separate. The transport adapter chooses a tested packet size/framing within its limits, not a large reliable RPC stream. A LAN PCM fixture may isolate timing during tests but is not the shipping bandwidth plan.
 
-The jitter buffer orders frames and finalizes each playout range once. Duplicates are ignored; late packets cannot replace committed speech. Record packet gaps and the actual decoder concealment/silence used. Adaptive jitter delay/clock drift must preserve a declared monotonic scene-time mapping, with corrections recorded. Starting a remote voice waits for its prebuffer without blocking the audio callback. Network decode creates no Unity scene objects on its worker thread.
+The jitter buffer orders frames and finalizes each playout range once. Duplicates are ignored; late packets cannot replace committed speech. Record packet gaps and the actual decoder concealment/silence used. Adaptive jitter delay/clock drift must preserve a declared monotonic scene-time mapping, with corrections recorded. Starting a remote voice waits for its prebuffer without blocking the audio callback. Codec work runs on the control thread; the audio callback only consumes prepared PCM.
 
 Each receiving client can hear a different acoustic result because its head and occlusion differ. It can also receive different packets; do not hide those differences behind a shared host recording. Local self-monitoring uses the pre-encode source only when enabled, avoiding a second looped-back copy. Muting/disconnect stops new emission and drains retained paths; a disappearing source's data slot remains valid until no pending renderer work references it.
 
 ### Recording and replay
 
-A host recording keeps accepted inputs/events for all actors plus authoritative corrections needed to reproduce the host world. A **client acoustic recording** keeps the actual interpolated scene states/events consumed by that renderer and the canonical decoded pre-acoustic PCM, including concealment. Local input alone cannot reconstruct remote interpolation, packet loss or authoritative physics corrections.
+Both host and joining players currently save a **client acoustic recording**. It keeps the actual interpolated scene states/events consumed by that renderer and the canonical decoded pre-acoustic PCM, including concealment. Local input alone cannot reconstruct remote interpolation, packet loss or authoritative physics corrections.
 
-Keep this distinction explicit: compact deterministic single-player takes remain compact. Exact network-client acoustic capture opts into the necessary dynamic-state observations and streamed source payloads; static geometry still references its matching scene/build until offline reconstruction creates a portable numeric take. Initially reuse the existing full `State[]` observation layout (including static poses); sparse pose encoding is a later measured storage optimization, not a prerequisite. Geometry/assets and optional monitored output are still not mandatory snapshots for every run. Never advertise an input-only network recording as exact client replay.
+Keep this distinction explicit: compact deterministic single-player takes remain compact. Exact network-client acoustic capture opts into the existing portable numeric take, with geometry/clip payloads, full `State[]` observations (including static poses), and streamed source samples. Sparse pose encoding and geometry deduplication are later measured storage optimizations. Monitored output remains optional. Never advertise an input-only network recording as exact client replay.
 
 Low/High comparisons for a client reuse that client's exact scene/source timeline, with identical network artifacts. Separate experiments can evaluate codec/network quality, but cannot count those errors as acoustic reconstruction error. All host/client views of one session and their voice-speaker ancestry stay in the same dataset split.
 
-Keep the existing fixed-roster acoustic segment invariant initially. Join/leave closes the current segment before rebinding, then starts another with current actor/source state and the dry pre-roll needed for pending propagation/filter history. A small session index records segment offsets, gaps and warmup; do not truncate old echoes silently. If overlap/pre-roll is not yet implemented, declare the transition discontinuity and exclude affected comparison windows. A disconnect finalizes valid data; host departure ends the first implementation's session visibly.
+The implementation keeps one fixed, authored roster for the entire take. Joining activates a reserved slot; leaving freezes its last pose and ends its voice stream. A used slot is not reassigned until a new session, which preserves speaker identity and retained source history without segment stitching. Four slots are authored by default, with the roster/spawn points editable. Roster exhaustion requires a new session. Host departure finalizes the client recording; replay is offline. Segment overlap/pre-roll and slot reuse remain future work.
 
-### Turning multiplayer captures into training examples (planned)
+
+### Implemented runtime boundary
+
+`MicrophoneInput` handles permission, the looping Unity device ring, mono conversion and stateful Speex rate conversion. Whole-ring cursor ambiguity interrupts the capture epoch instead of guessing. `SourceStream` is bounded live history or a paged file reader. Unfinalized input is distinct from zero: live CPU/GPU scheduling waits for finalized audible source samples. A source excluded from every rendered listener does not stall the other sources. A bounded worker writes per-source float32 PCM and the 28-byte block records; incomplete captures cannot be used as completed takes. Streamed sources cannot loop or seek their emission clock.
+
+`MultiplayerSession` owns LAN connection approval (matching project inputs/scene/roster), owner-controlled player poses, host-controlled shared actor poses and validated nearby door requests. One local head renders all voices; remote avatars do not create AudioListeners. `VoiceCodec` uses managed Concentus Opus, 48 kHz mono, 960-sample packets, 32 kbit/s, complexity 5. Reliable epoch/start/stop messages are separate from unreliable sequenced voice payloads. Late join supplies the speaking epoch and current frame index; missing decoder history is not represented as pristine source audio. No competitive anti-cheat or arbitrary replicated gameplay scripts are implied.
+
+Outgoing voice epochs use NGO LocalTime; remote presentation uses NGO ServerTime plus the configurable presentation delay (100 ms default), matching remote pose interpolation. A late epoch start gets at least the configured prebuffer instead of immediately concealing its not-yet-arrived packets. Source epochs save that chosen mapping and its adjusted presentation delay into the client's absolute sample timeline. `uncertaintySeconds=-1` explicitly means physical ADC/network timing uncertainty was not measured. This makes replay exact with respect to committed source PCM/presented observations; it does not establish sample-accurate physical ADC timestamps or eliminate independent device clock drift. Adaptive jitter/drift correction, AEC and physical device latency measurement are still open.
+
+A LAN take uses the existing portable numeric take payloads, including static geometry/clip snapshots and full State[] observations. This deliberate initial storage tradeoff avoids implementing an additional network physics reconstruction path. Solo input takes keep their existing compact format, plus required source audio. Network gameplay input and every wire packet are not required for this acoustic replay and are not archived. Monitored WAV/callback capture is independent and opt-in. Acoustic tails drain across frames against available output capacity, rather than synchronously overflowing the recorder/device queue at save.
+
+### Turning multiplayer captures into training examples
 
 Capture at the **source-history boundary**, immediately after receive-side decoding, concealment and rate/clock conversion, before source gain, propagation or HRTF. Commit those same canonical samples once to live source history and the recording queue. A separate recording of the microphone or speaker output is not an exact copy of what the acoustic renderer consumed. Keep one mono stream per source; do not premix speakers or store a stereo file for every source/listener pair. Local mic uses its pre-encode canonical stream; each remote source uses that client's post-decode canonical stream.
 
@@ -1025,7 +1038,7 @@ client-<id>/segment-<id>/
   clock mapping                      sender epochs → this segment's sample clock
 ```
 
-This is the proposed streamed-take extension, not files the current clip recorder already writes. Keep clock mappings in the segment manifest initially; use sample-indexed records only if updates become numerous. Matching scene assets supply fixed geometry and clips. Finalization binds all payload hashes/counts and marks completion last. A bounded writer queue moves disk IO off the audio callback; an overrun makes the capture incomplete instead of silently dropping speech. Runtime playback can continue even if recording fails.
+Take version 3 implements the per-take source files/block log and manifest clock epochs below. A separate session index and training-enrollment system are not implemented. Keep clock mappings in the segment manifest initially; use sample-indexed records only if updates become numerous. Compact solo takes reconstruct geometry and clips from matching scene assets; numeric LAN takes already contain them. Finalization binds all payload hashes/counts and marks completion last. A bounded writer queue moves disk IO off the audio callback; an overrun makes the capture incomplete instead of silently dropping speech. Runtime playback can continue even if recording fails.
 
 | Recorded identity/state | Why training needs it |
 |---|---|
@@ -1049,13 +1062,13 @@ Offline generation uses the existing reconstruction/render path:
 
 Acoustic reconstruction learns missing acoustic detail with the same decoded speech in both budgets. High must not use clean sender speech while Low uses lost/concealed receiver speech: that would silently turn the task into codec enhancement or missing-speech synthesis. Keep concealment windows labeled; report their results separately, and exclude ambiguous timing/capture failure windows. Test single-source and overlapping talkers; per-pair response labels are reusable across dry clips, while mixed audio targets must include all contributing sources.
 
-Do not label today's maximum budget “ground truth” automatically. Church higher-order reflection/diffuse limits still need physical checks and convergence. Approve the teacher per target, then compare learned reconstruction to unmodified Low, simple temporal interpolation and spending the same total GPU time on more simulation. Report held-out quality, head/voice latency, deadline misses, memory and total render-plus-inference cost. Actual microphone, network transport, streaming persistence and model training remain later implementation stages.
+Do not label today's maximum budget “ground truth” automatically. Church higher-order reflection/diffuse limits still need physical checks and convergence. Approve the teacher per target, then compare learned reconstruction to unmodified Low, simple temporal interpolation and spending the same total GPU time on more simulation. Report held-out quality, head/voice latency, deadline misses, memory and total render-plus-inference cost. Microphone, LAN transport and streaming persistence are implemented; model training, hardware timing validation and a validated teacher remain later stages.
 
-The implementation can use three small adapters: session/clock ownership, network player/actor binding, and network source/voice delivery. Keep Unity package replication for ordinary transforms; avoid a networking class per prop. Reuse the microphone stream/history, recording writer and local DSP.
+The implementation uses `SceneSession` for session ownership, `MultiplayerSession` for transport/transform binding, and `MicrophoneInput`/`VoiceCodec` for source delivery. Reuse the authored transform roster through the NGO message adapter; avoid a networking class per prop. Reuse the microphone stream/history, recording writer and local DSP.
 
 ## 13. Implementation sequence and acceptance
 
-The shared SceneSession, generic scene input recording/reconstruction, shared player/speaker prefabs and editable Church blockout are now implemented. Church currently uses the existing diagnostic chime and provisional material/transport settings. Legacy room/material migration, microphone streams, LakeForest, networking and training remain planned. Keep each change reviewable and reuse the independent CPU/GPU oracles.
+The shared SceneSession, generic scene input recording/reconstruction, shared player/speaker prefabs and editable Church blockout are now implemented. Church currently uses the existing diagnostic chime and provisional material/transport settings. Microphone streams, LAN sessions and saved-source replay are also implemented. Legacy room/material migration, LakeForest and model training remain planned. Keep each change reviewable and reuse the independent CPU/GPU oracles.
 
 | Stage | Smallest concrete change | Completion gate |
 |---|---|---|

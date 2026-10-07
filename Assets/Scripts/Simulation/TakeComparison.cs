@@ -20,7 +20,7 @@ public static class TakeComparison
     {
         public string experiment="direct-temporal-resolution-v1";
         public string referenceStatus="finer temporal sampling of the same direct model; not a converged reflection teacher";
-        public string sceneHash,stateHash,eventHash;
+        public string sceneHash,stateHash,eventHash,sourceHash;
         public string takeDirectory; // Relative to this comparison directory; optional for older reports.
         public string[] listenerIds,listenerNames;
         public TakeRender.Report low,high,reference;
@@ -49,7 +49,7 @@ public static class TakeComparison
         }
         if (Directory.Exists(output)) throw new IOException("Comparison output directory already exists.");
         Directory.CreateDirectory(output);
-        var report=new Report {referenceCheck=referenceCheck,sceneHash=take.Metadata.sceneHash,stateHash=take.Metadata.stateHash,eventHash=take.Metadata.eventHash};
+        var report=new Report {sourceHash=AcousticTake.SourceHash(take.Metadata),referenceCheck=referenceCheck,sceneHash=take.Metadata.sceneHash,stateHash=take.Metadata.stateHash,eventHash=take.Metadata.eventHash};
         if(low.transport==TakeRender.Transport.Raytraced)
         {report.experiment="spectral-temporal-resolution-v1";report.referenceStatus="same geometric spectral preview at two response steps; no validated training teacher";report.trainingScope="preview comparison only";}
         report.takeDirectory=Path.GetRelativePath(Path.GetFullPath(output),Path.GetFullPath(take.DirectoryPath));
@@ -64,7 +64,8 @@ public static class TakeComparison
         report.low=TakeRender.RenderDirect(take,low,Path.Combine(output,"low"),p=>progress?.Invoke(p/(referenceCheck==null ? 2:3)),shader);
         report.high=TakeRender.RenderDirect(take,high,Path.Combine(output,"high"),p=>progress?.Invoke((1+p)/(referenceCheck==null ? 2:3)),shader);
         if (report.low.outputSamples!=report.high.outputSamples || report.low.sceneHash!=report.high.sceneHash ||
-            report.low.takeStateHash!=report.high.takeStateHash || report.low.takeEventHash!=report.high.takeEventHash)
+            report.low.takeStateHash!=report.high.takeStateHash || report.low.takeEventHash!=report.high.takeEventHash ||
+            report.low.takeSourceHash!=report.high.takeSourceHash || report.low.takeSourceHash!=report.sourceHash)
             throw new InvalidDataException("Comparison inputs/output timelines do not align.");
         report.listeners=new Metrics[take.Metadata.scene.listeners.Length];
         for (int l=0; l<report.listeners.Length; l++) report.listeners[l]=CompareWave(

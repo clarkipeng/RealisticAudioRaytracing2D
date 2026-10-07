@@ -126,6 +126,7 @@ public static partial class TakeDemo
         RenderSettings.ambientSkyColor=new Color(.62f,.72f,.8f); RenderSettings.ambientEquatorColor=new Color(.44f,.46f,.44f); RenderSettings.ambientGroundColor=new Color(.27f,.28f,.25f);
         RenderSettings.fog=true; RenderSettings.fogColor=new Color(.68f,.75f,.78f); RenderSettings.fogMode=FogMode.Linear; RenderSettings.fogStartDistance=65; RenderSettings.fogEndDistance=170;
         AssetDatabase.SaveAssets();
+        ConfigureMultiplayer(session);
         EditorSceneManager.SaveScene(scene,"Assets/Scenes/TrainStation.unity");
         if(SceneView.lastActiveSceneView!=null) SceneView.lastActiveSceneView.LookAt(new Vector3(0,1,0),Quaternion.Euler(35,35,0),38);
         Selection.activeGameObject=host;

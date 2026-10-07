@@ -61,7 +61,7 @@ public static partial class TakeRender
         public string responseLayout = "frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin";
         public int channelsPerListener,hrtfTaps;
         public string hrtfDataset,hrtfHash;
-        public string sceneHash, takeStateHash, takeEventHash, responseHash;
+        public string sceneHash, takeStateHash, takeEventHash, takeSourceHash, responseHash;
         public string unityVersion = Application.unityVersion;
         public string platform = Application.platform.ToString(), processor = SystemInfo.processorType, graphicsDevice = SystemInfo.graphicsDeviceName;
         public string[] audioHashes;
@@ -182,7 +182,7 @@ public static partial class TakeRender
         long length=checked(metadata.durationSamples+1+settings.tailSamples);
         if (length > (uint.MaxValue-36)/(4L*settings.ChannelsPerListener)) throw new InvalidOperationException("Output exceeds the WAV size limit; render a shorter take.");
         Directory.CreateDirectory(outputDirectory);
-        var report=new Report { sceneHash=metadata.sceneHash, takeStateHash=metadata.stateHash, takeEventHash=metadata.eventHash,
+        var report=new Report {takeSourceHash=AcousticTake.SourceHash(metadata), sceneHash=metadata.sceneHash, takeStateHash=metadata.stateHash, takeEventHash=metadata.eventHash,
             settings=settings, provenance=AcousticTake.Provenance.Capture(shader), settingsHash=AcousticTake.HashText(JsonUtility.ToJson(settings)),
             dspLatencySamples=settings.DspLatencySamples, sampleRate=metadata.sampleRate, sourceCount=scene.sources.Length,
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
@@ -206,7 +206,7 @@ public static partial class TakeRender
         var signals=new Signal[scene.sources.Length];
         var pcm=new float[scene.clips.Length][];
         for (int c=0; c<pcm.Length; c++) { pcm[c]=take.ReadClip(c); report.preparedPcmBytes+=(long)pcm[c].Length*4; }
-        for (int s=0; s<signals.Length; s++) signals[s]=Signal.FromTake(take,s,pcm[scene.sources[s].clipIndex]);
+        for (int s=0; s<signals.Length; s++) signals[s]=Signal.FromTake(take,s,scene.sources[s].streamed?null:pcm[scene.sources[s].clipIndex]);
         using var gpuAudio=useGpuAudio?new GpuAudio(scene,metadata.sampleRate,settings,signals):null;
         var mixer=useGpuAudio?null:new Mixer(scene,metadata.sampleRate,settings,signals);
         long initialMixerBytes=gpuAudio?.NumericBytes??mixer.NumericBytes;
@@ -304,15 +304,19 @@ public static partial class TakeRender
         struct Voice { public long sample, start, offset; public bool playing, loop; public float gain; }
         readonly List<Voice> voices=new List<Voice>();
         readonly float[] pcm;
+        readonly SourceStream stream;
+        public long ReadyEnd => stream==null || stream.Finished?long.MaxValue:stream.End;
         public long EndSample=long.MaxValue;
         readonly List<long> gateSamples=new List<long>();
         readonly List<bool> gateEnabled=new List<bool>();
         readonly int maximumEvents;
         public int RetainedEvents => voices.Count+gateSamples.Count;
         public Signal(float[] clip,int maximumEvents=int.MaxValue) { pcm=clip; this.maximumEvents=maximumEvents; }
+        public Signal(SourceStream stream,int maximumEvents=int.MaxValue) {this.stream=stream??throw new ArgumentNullException(nameof(stream));this.maximumEvents=maximumEvents;}
         void ReserveEvent() { if (RetainedEvents>=maximumEvents) throw new InvalidOperationException("Source event history capacity exceeded; increase Maximum Signal Events."); }
         public void Prune(long before)
         {
+            stream?.Prune(before);
             int count=0;
             while (count+1<voices.Count && voices[count+1].sample<=before) count++;
             if (count>0) voices.RemoveRange(0,count);
@@ -321,7 +325,8 @@ public static partial class TakeRender
         }
         public static Signal FromTake(AcousticTake take,int source,float[] clip)
         {
-            var result=new Signal(clip) {EndSample=take.Metadata.durationSamples};
+            var result=take.Metadata.scene.sources[source].streamed?new Signal(take.ReadStream(source)):new Signal(clip);
+            result.EndSample=take.Metadata.durationSamples;
             var state=new AcousticTake.State[take.Metadata.scene.objects.Length];
             for (int f=0; f<take.Metadata.frameCount; f++)
             {
@@ -341,7 +346,7 @@ public static partial class TakeRender
         public void Append(AcousticTake.VoiceEvent e)
         {
             var current=voices.Count==0 ? new Voice():voices[voices.Count-1];
-            if (e.sample<current.sample || e.clipOffset<0 || e.clipOffset>pcm.Length || float.IsNaN(e.gain) || float.IsInfinity(e.gain))
+            if (e.sample<current.sample || e.clipOffset<0 || (stream==null?e.clipOffset>pcm.Length:e.clipOffset!=0 || e.loop) || float.IsNaN(e.gain) || float.IsInfinity(e.gain))
                 throw new ArgumentException("Invalid source event.");
             current.sample=e.sample;
             if (e.action==AcousticTake.VoiceAction.Play)
@@ -359,13 +364,14 @@ public static partial class TakeRender
         }
         internal float Read(long sample)
         {
-            if (sample<0 || sample>EndSample || voices.Count==0 || pcm.Length==0) return 0;
+            if (sample<0 || sample>EndSample || voices.Count==0 || (stream==null && pcm.Length==0)) return 0;
             int gate=gateSamples.BinarySearch(sample); if (gate<0) gate=~gate-1;
             if (gate<0 || !gateEnabled[gate]) return 0;
             int lo=0,hi=voices.Count;
             while (lo<hi) { int mid=lo+(hi-lo)/2; if (voices[mid].sample<=sample) lo=mid+1; else hi=mid; }
             if (lo==0) return 0;
             var v=voices[lo-1]; if (!v.playing) return 0;
+            if(stream!=null)return stream.Read(sample)*v.gain;
             long index=sample-v.start+v.offset; if (v.loop) index%=pcm.Length;
             return index<pcm.Length ? pcm[index]*v.gain:0;
         }
@@ -467,6 +473,7 @@ public static partial class TakeRender
                 int length=count*enabled.Length*channels; Array.Clear(mixed,0,length);
                 for(int s=0;s<signals.Length;s++) for(int l=0;l<enabled.Length;l++)
                 {
+                    if(scene.sources[s].mutedListenerPlusOne==l+1)continue;
                     int pair=s*enabled.Length+l;
                     if(enabled[l] && current[pair].pressureGain!=0) Mix(s,l,pair,sample,count,current[pair].pressureGain,delay,weights,false);
                     if(oldEnabled[l] && fade>0 && sample-responseSample<fade && previous[pair].pressureGain!=0)

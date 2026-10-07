@@ -77,7 +77,7 @@ internal sealed class SpectralAudio
         (current,previous)=(previous,current);current.count=0;fade=initialized && !cut?transition:0;
         for(int pair=0;pair<pairs;pair++)
         {
-            int listener=pair%listeners;if(!TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener))continue;
+            int listener=pair%listeners;if(scene.sources[pair/listeners].mutedListenerPlusOne==listener+1 || !TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener))continue;
             var rotation=Quaternion.Inverse(states[scene.listeners[listener]].rotation);
             int basePath=offset+pair*slots,count=0;groups.Clear();
             for(int slot=0;slot<slots;slot++)

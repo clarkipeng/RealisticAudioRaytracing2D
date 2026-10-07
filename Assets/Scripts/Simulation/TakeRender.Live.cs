@@ -35,6 +35,7 @@ public static partial class TakeRender
         public double SolveSeconds,AudioSeconds,ResponsePreparationSeconds,MaximumSolveSeconds;
         public int ResponseCount,MaximumPendingObservations;
         public int PendingObservations => pending;
+        public bool CanObserve => pending<observations.Length;
         public int RetainedEvents { get { int count=cuts.Count; foreach (var signal in signals) count+=signal.RetainedEvents; return count; } }
         public double CompletionSeconds => solver.CompletionSeconds;
         public double MaximumCompletionSeconds => solver.MaximumCompletionSeconds;
@@ -44,14 +45,14 @@ public static partial class TakeRender
         public Action<long,long,DirectPath[]> ResponseApplied;
         public string Backend => solver.Backend;
         public Live(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,float[][] pcm,int rate,Settings settings,
-            AudioManager.PcmQueue queue,int lead,int listener,ComputeShader shader=null)
+            AudioManager.PcmQueue queue,int lead,int listener,ComputeShader shader=null,SourceStream[] streams=null)
         {
             Validate(settings); historySamples=settings.HistorySamples(rate);
             if (listener<0 || listener>=scene.listeners.Length) throw new ArgumentOutOfRangeException(nameof(listener));
             this.scene=scene; sampleRate=rate; this.settings=settings; this.queue=queue; this.lead=lead; this.listener=listener;
             if(queue!=null && queue.Channels!=settings.ChannelsPerListener) throw new ArgumentException("Queue/output channel mismatch.");
             signals=new Signal[scene.sources.Length];
-            for (int i=0;i<signals.Length;i++) signals[i]=new Signal(pcm[scene.sources[i].clipIndex],settings.maximumSignalEvents);
+            for (int i=0;i<signals.Length;i++) signals[i]=scene.sources[i].streamed?new Signal(streams[i],settings.maximumSignalEvents):new Signal(pcm[scene.sources[i].clipIndex],settings.maximumSignalEvents);
             evaluated=new AcousticTake.State[scene.objects.Length]; paths=new DirectPath[scene.sources.Length*scene.listeners.Length];
             batchStates=new AcousticTake.State[checked(evaluated.Length*settings.maximumResponsesPerBatch)];
             batchPaths=new DirectPath[checked(paths.Length*settings.maximumResponsesPerBatch)];
@@ -83,24 +84,35 @@ public static partial class TakeRender
         }
         void Enqueue(long from,long to,AcousticTake.State[] left,AcousticTake.State[] right,long end,Action<long,float[],int> output)
         {
-            if (pending==observations.Length) throw new InvalidOperationException("Live observation queue is full; reduce compute cost or increase Maximum Pending Observations.");
+            if (pending==observations.Length) throw new InvalidOperationException($"Live observation queue is full: rendered={Cursor}, observed={to}, sourceReady={ReadyEnd}, outputRead={queue?.ReadSample}, outputWritten={queue?.WrittenSample}, batchEnd={batchEnd}, GPU pending={audioQueued && !audioReady}. Reduce live compute cost.");
             if (from>to || to>end || left.Length!=evaluated.Length || right.Length!=evaluated.Length) throw new ArgumentException("Invalid observation.");
             var frame=observations[(head+pending)%observations.Length];
             frame.from=from; frame.to=to; frame.end=end; frame.output=output;
             Array.Copy(left,frame.left,left.Length); Array.Copy(right,frame.right,right.Length);
             pending++; MaximumPendingObservations=Math.Max(MaximumPendingObservations,pending);
         }
-        public void Finish(long sample,AcousticTake.State[] final,Action<long,float[],int> output=null)
+        AcousticTake.State[] finalState;
+        long finalSample;
+        Action<long,float[],int> finalOutput;
+        public bool Finishing {get;private set;}
+        public bool Completed=>Finishing && finalState==null && pending==0;
+        public void Finish(long sample,AcousticTake.State[] final,Action<long,float[],int> output=null,bool wait=true)
         {
-            foreach (var signal in signals) signal.EndSample=sample;
-            Pump(true);
-            Enqueue(sample,sample,final,final,checked(sample+1+settings.tailSamples),output); Pump(true);
-            if (pending!=0) throw new InvalidOperationException("GPU response did not complete during shutdown.");
+            if(Finishing)throw new InvalidOperationException("The renderer is already finishing.");
+            foreach(var signal in signals)signal.EndSample=sample;
+            finalSample=sample;finalState=(AcousticTake.State[])final.Clone();finalOutput=output;Finishing=true;
+            Pump(wait);
+            if(wait && queue==null && !Completed)throw new InvalidOperationException("Renderer did not complete during shutdown.");
         }
         public void Pump(bool wait=false)
         {
-            while (pending>0)
+            while(pending>0 || finalState!=null)
             {
+                if(pending==0)
+                {
+                    Enqueue(finalSample,finalSample,finalState,finalState,checked(finalSample+1+settings.tailSamples),finalOutput);
+                    finalState=null;finalOutput=null;
+                }
                 var frame=observations[head];
                 if (!RenderTo(frame,wait)) return;
                 frame.output=null; head=(head+1)%observations.Length; pending--;
@@ -109,9 +121,11 @@ public static partial class TakeRender
                 if (last>0) cuts.RemoveRange(0,last);
             }
         }
+        long ReadyEnd {get {long end=long.MaxValue;for(int s=0;s<signals.Length;s++)if(scene.listeners.Length>1 || scene.sources[s].mutedListenerPlusOne!=1)end=Math.Min(end,signals[s].ReadyEnd);return end;}}
+        long WritableEnd=>queue==null?ReadyEnd:Math.Min(ReadyEnd,queue.ReadSample+queue.Capacity-lead);
         void PrepareBatch()
         {
-            long knownEnd=observations[(head+pending-1)%observations.Length].end;
+            long knownEnd=Math.Min(WritableEnd,observations[(head+pending-1)%observations.Length].end);
             batchFirst=Cursor%settings.responseStepSamples==0?Cursor:Cursor+settings.responseStepSamples-Cursor%settings.responseStepSamples;
             batchEnd=Math.Min(knownEnd,checked((Cursor/settings.responseStepSamples+settings.maximumResponsesPerBatch)*settings.responseStepSamples));
             batchCount=batchEnd<=batchFirst?0:(int)(1+(batchEnd-1-batchFirst)/settings.responseStepSamples);
@@ -164,13 +178,13 @@ public static partial class TakeRender
         {
             while(Cursor<frame.end)
             {
-                if(!batchActive)PrepareBatch();
+                if(!batchActive) {if(WritableEnd<=Cursor)return false;PrepareBatch();}
                 if(gpuAudio==null && !CompleteBatch(wait))return false;
                 if(gpuAudio!=null && !audioReady)
                 {
                     if(!audioQueued)
                     {
-                        audioFirst=Cursor;
+                        audioFirst=Cursor;gpuAudio.PrepareInput(batchEnd);
                         // Transport and DSP stay ordered on the GPU; diagnostic
                         // readback is not a prerequisite for submitting audio.
                         // Submit every known interval together. A readback per observation

@@ -15,10 +15,10 @@ internal sealed class GpuAudio : IDisposable
     readonly int[] kernels;
     readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
     readonly ComputeBuffer meta,args,headsPose,source,work,transform,output;
-    readonly float[] upload,download;
+    readonly float[] download;
     readonly Vector4[] poses;
     readonly Quaternion[] lastHeads;
-    readonly bool[] lastEnabled;
+    readonly bool[] lastEnabled,audibleSources;
     readonly Action<AsyncGPUReadbackRequest> completion;
     AsyncGPUReadbackRequest request;
     bool initialized,pending,completed,failed,disposed;
@@ -33,12 +33,14 @@ internal sealed class GpuAudio : IDisposable
         transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu;
     public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1)
     {
+        audibleSources=new bool[signals.Length];
+        for(int s=0;s<signals.Length;s++)audibleSources[s]=scene.listeners.Length>1 || scene.sources[s].mutedListenerPlusOne!=1;
         this.settings=settings;this.signals=signals;listeners=scene.listeners.Length;channels=settings.ChannelsPerListener;pairs=signals.Length*listeners;
         capacity=checked(pairs*settings.SpectralSlotsPerPair);maximumBlock=checked(settings.responseStepSamples*maximumResponses);
         var hrtf=channels==2?Hrtf.Load(rate):null;int taps=hrtf?.Taps??1;
         fft=1;while(fft<settings.fftSize+taps+settings.spectralHop-2)fft=checked(fft*2);bins=fft/2+1;
         history=checked((int)settings.HistorySamples(rate)+fft+maximumBlock);
-        upload=new float[maximumBlock];download=new float[checked(maximumBlock*listeners*channels+4)];
+        download=new float[checked(maximumBlock*listeners*channels+4)];
         poses=new Vector4[listeners*2];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];completion=Complete;
         var asset=Resources.Load<ComputeShader>("Acoustics/GpuAudio");
         if(asset==null)throw new InvalidOperationException("Missing GPU audio compute shader.");
@@ -55,26 +57,28 @@ internal sealed class GpuAudio : IDisposable
             args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
             Buffer("AudioTable",checked(pairs*hash),8);Buffer("AudioHeads",capacity,4);Buffer("AudioNext",capacity,4);Buffer("AudioBlends",capacity,32);
             headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);
-            source=Buffer("AudioSource",checked(signals.Length*history),4);
+            source=Buffer("AudioSource",checked(signals.Length*history),4,mode:ComputeBufferMode.SubUpdates);
             Buffer("AudioFilters",checked(2*capacity*channels*bins),8);
             work=Buffer("AudioWork",checked(capacity*fft),8);
             transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(capacity,listeners*channels)*fft),8):work;
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
+            var pairMask=new float[pairs];for(int p=0;p<pairs;p++)pairMask[p]=scene.sources[p/listeners].mutedListenerPlusOne==p%listeners+1?0:1;
+            Buffer("AudioPairEnabled",pairs,4).SetData(pairMask);
             PrepareEars(hrtf);
             Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioSlots",settings.SpectralSlotsPerPair);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
             Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
             Set("AudioTransition",settings.transitionSamples);Set("AudioSpectral",settings.synthesis==TakeRender.Synthesis.Spectral?1:0);
             Set("AudioRadius",settings.sincRadius);Set("AudioSinc",settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?1:0);
             Set("AudioLatency",settings.fftSize/2+(settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0));shader.SetFloat("AudioMaximumDelay",settings.maximumDelaySeconds);
-            NumericBytes+=(long)(upload.Length+download.Length)*4+poses.Length*16L+lastHeads.Length*16L+lastEnabled.Length;
+            NumericBytes+=(long)download.Length*4+poses.Length*16L+lastHeads.Length*16L+lastEnabled.Length+audibleSources.Length;
         }
         catch {Dispose();throw;}
     }
     int Kernel(string name) {int k=shader.FindKernel(name);if(!shader.IsSupported(k))throw new NotSupportedException("GPU audio kernel unavailable: "+name);return k;}
-    ComputeBuffer Buffer(string name,int count,int stride,ComputeBufferType type=ComputeBufferType.Default)
+    ComputeBuffer Buffer(string name,int count,int stride,ComputeBufferType type=ComputeBufferType.Default,ComputeBufferMode mode=ComputeBufferMode.Immutable)
     {
-        var buffer=new ComputeBuffer(count,stride,type);owned.Add(buffer);NumericBytes+=(long)count*stride;
+        var buffer=new ComputeBuffer(count,stride,type,mode);owned.Add(buffer);NumericBytes+=(long)count*stride;
         foreach(int k in kernels)shader.SetBuffer(k,name,buffer);return buffer;
     }
     void Set(string name,int value)=>shader.SetInt(name,value);
@@ -140,13 +144,26 @@ internal sealed class GpuAudio : IDisposable
         for(int stage=2;;stage=checked(stage*2))
         {Set("AudioStage",stage);if(count==0)Dispatch(butterfly,pair,which);else shader.Dispatch(butterfly,count,1,1);if(stage==size)break;}
     }
+    public void PrepareInput(long end)
+    {
+        if(disposed || pending || queued!=0 || end<cursor || end-cursor>maximumBlock)throw new InvalidOperationException("Source uploads require a completed previous batch and a bounded input range.");
+        for(int s=0;s<signals.Length;s++)if(audibleSources[s] && signals[s].ReadyEnd<end)throw new InvalidOperationException("GPU source input is not finalized.");
+        UploadUntil(end);
+    }
     void UploadUntil(long end)
     {
         while(uploaded<end)
         {
-            int ring=(int)(uploaded%history),count=(int)Math.Min(Math.Min(end-uploaded,history-ring),upload.Length);
+            int ring=(int)(uploaded%history),count=(int)Math.Min(Math.Min(end-uploaded,history-ring),maximumBlock);
             for(int s=0;s<signals.Length;s++)
-            {for(int n=0;n<count;n++)upload[n]=signals[s].Read(uploaded+n);source.SetData(upload,0,s*history+ring,count);UploadedBytes+=count*4L;}
+            {
+                // The previous PCM readback fences all source readers. Write this batch
+                // before dispatch, retaining history + the entire pending batch in the ring.
+                var mapped=source.BeginWrite<float>(s*history+ring,count);
+                try {for(int n=0;n<count;n++)mapped[n]=audibleSources[s]?signals[s].Read(uploaded+n):0;}
+                finally {source.EndWrite<float>(count);}
+                UploadedBytes+=count*4L;
+            }
             uploaded+=count;
         }
     }
@@ -154,14 +171,15 @@ internal sealed class GpuAudio : IDisposable
     {
         if(disposed || pending || sample!=cursor || count<1 || count>maximumBlock-queued)throw new InvalidOperationException("Invalid GPU audio submission.");
         if(!initialized)throw new InvalidOperationException("GPU audio needs a response before rendering.");
-        UploadUntil(checked(sample+count));
+        for(int s=0;s<signals.Length;s++)if(audibleSources[s] && signals[s].ReadyEnd<sample+count)throw new InvalidOperationException("GPU source input is not finalized.");
+        if(uploaded<checked(sample+count))PrepareInput(sample+count);
         for(int at=0;at<count;)
         {
             long now=sample+at,block=now-now%settings.spectralHop;Clock("AudioBlockSample",block);
             if(now%settings.spectralHop==0)
             {
                 Set("AudioRingAt",(int)(block%history));Set("AudioBlockNegative",block<=int.MaxValue?1:0);
-                Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(uploaded-block)));
+                Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(sample+count-block)));
                 for(int which=0;which<2;which++)
                 {
                     Set("AudioWhich",which);

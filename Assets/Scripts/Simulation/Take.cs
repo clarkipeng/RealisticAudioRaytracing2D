@@ -7,7 +7,7 @@ using UnityEngine;
 // Portable inputs for replay. These types contain no Unity object references.
 public sealed class AcousticTake : IDisposable
 {
-    public const int Version = 2;
+    public const int Version = 3;
     const int StateBytes = 80; // position, quaternion, four motion vectors, flags
     public enum Dimension { Planar2D, Spatial3D }
     public enum VoiceAction { Play, Stop, Gain }
@@ -22,6 +22,28 @@ public sealed class AcousticTake : IDisposable
     [Serializable] public sealed class SourceDefinition
     {
         public int objectIndex, clipIndex;
+        public bool streamed;
+        public int mutedListenerPlusOne;
+    }
+
+    [Serializable] public sealed class StreamDefinition
+    {
+        public int sourceIndex;
+        public string file,sha256;
+        public long samples;
+    }
+    [Serializable] public sealed class SessionDefinition
+    {
+        public string scene,sessionId,clientId,mode,build;
+        public int slots,localSlot;
+        public double serverTimeOrigin;
+    }
+    [Serializable] public sealed class StreamEpoch
+    {
+        public int sourceIndex,rate,channels;
+        public long sample;
+        public string participant,epoch,processing;
+        public double remoteTime,uncertaintySeconds,presentationSeconds; // -1 uncertainty means physical timing is not measured.
     }
 
     [Serializable] public sealed class ClipDefinition
@@ -74,6 +96,7 @@ public sealed class AcousticTake : IDisposable
     {
         public int version = Version;
         public Provenance captureProvenance;
+        public TakeRender.Settings captureSettings;
         public int sampleRate, frameCount, eventCount;
         public int coalescedObservations;
         public string observationPolicy;
@@ -84,6 +107,10 @@ public sealed class AcousticTake : IDisposable
         public string motion = "backward-pose-difference-v1";
         public bool complete;
         public Scene scene;
+        public StreamDefinition[] streams;
+        public StreamEpoch[] streamEpochs;
+        public string sourceBlocksHash;
+        public SessionDefinition session;
     }
 
     public struct Primitive
@@ -167,13 +194,15 @@ public sealed class AcousticTake : IDisposable
     public static Manifest ReadManifest(string directory)
     {
         var manifest = JsonUtility.FromJson<Manifest>(File.ReadAllText(Path.Combine(directory, "take.json")));
-        if (manifest == null || (manifest.version != 1 && manifest.version != Version) || !manifest.complete ||
+        if (manifest == null || (manifest.version < 1 || manifest.version > Version) || !manifest.complete ||
             manifest.sampleRate <= 0 || manifest.frameCount <= 0 || manifest.durationSamples < 0 ||
             manifest.scene == null || manifest.scene.objects == null || manifest.eventCount < 0 ||
             manifest.interpolation != "linear-position-shortest-quaternion-v1" ||
             manifest.motion != "backward-pose-difference-v1")
             throw new InvalidDataException("Unsupported or incomplete acoustic take.");
         ValidateScene(manifest.scene);
+        if(manifest.version<3 && Array.Exists(manifest.scene.sources,v=>v.streamed || v.mutedListenerPlusOne!=0))
+            throw new InvalidDataException("Legacy takes cannot contain stream or monitoring extensions.");
         if (SceneHash(manifest.scene,manifest.version) != manifest.sceneHash)
             throw new InvalidDataException("Scene metadata checksum mismatch.");
         if(manifest.version==1)foreach(var material in manifest.scene.materials)
@@ -181,6 +210,17 @@ public sealed class AcousticTake : IDisposable
         return manifest;
     }
 
+    [Serializable] sealed class LegacySource { public int objectIndex,clipIndex; }
+    [Serializable] sealed class VersionTwoScene
+    {
+        public Dimension dimension;
+        public ObjectDefinition[] objects;
+        public LegacySource[] sources;
+        public int[] listeners;
+        public ClipDefinition[] clips;
+        public MaterialDefinition[] materials;
+        public string geometryHash;
+    }
     [Serializable] sealed class VersionOneMaterial
     {
         public string name,interpolation;
@@ -190,7 +230,7 @@ public sealed class AcousticTake : IDisposable
     {
         public Dimension dimension;
         public ObjectDefinition[] objects;
-        public SourceDefinition[] sources;
+        public LegacySource[] sources;
         public int[] listeners;
         public ClipDefinition[] clips;
         public VersionOneMaterial[] materials;
@@ -199,17 +239,21 @@ public sealed class AcousticTake : IDisposable
     public static string SceneHash(Scene scene,int version)
     {
         if(version==Version)return HashText(JsonUtility.ToJson(scene));
+        var sources=Array.ConvertAll(scene.sources,v=>new LegacySource {objectIndex=v.objectIndex,clipIndex=v.clipIndex});
+        if(version==2)return HashText(JsonUtility.ToJson(new VersionTwoScene {dimension=scene.dimension,objects=scene.objects,sources=sources,
+            listeners=scene.listeners,clips=scene.clips,materials=scene.materials,geometryHash=scene.geometryHash}));
         if(version!=1)throw new InvalidDataException("Unsupported take version.");
         var materials=new VersionOneMaterial[scene.materials.Length];
         for(int i=0;i<materials.Length;i++)
         {var m=scene.materials[i];materials[i]=new VersionOneMaterial {name=m.name,interpolation=m.interpolation,frequencies=m.frequencies,absorption=m.absorption,scattering=m.scattering};}
-        return HashText(JsonUtility.ToJson(new VersionOneScene {dimension=scene.dimension,objects=scene.objects,sources=scene.sources,listeners=scene.listeners,
+        return HashText(JsonUtility.ToJson(new VersionOneScene {dimension=scene.dimension,objects=scene.objects,sources=sources,listeners=scene.listeners,
             clips=scene.clips,materials=materials,geometryHash=scene.geometryHash}));
     }
 
     public static AcousticTake Open(string directory)
     {
         var manifest=ReadManifest(directory);
+        ValidateStreams(directory,manifest);
         Verify(directory, "geometry.bin", manifest.scene.geometryHash);
         Verify(directory, "states.bin", manifest.stateHash);
         foreach (var clip in manifest.scene.clips)
@@ -343,7 +387,68 @@ public sealed class AcousticTake : IDisposable
         return result;
     }
 
-    public void Dispose() { states.Dispose(); }
+    readonly Dictionary<int,SourceStream> streamReaders=new Dictionary<int,SourceStream>();
+    public SourceStream ReadStream(int source)
+    {
+        if(!streamReaders.TryGetValue(source,out var reader))
+        {
+            var d=Metadata.streams[source];reader=new SourceStream(Path.Combine(DirectoryPath,d.file),d.samples);streamReaders.Add(source,reader);
+        }
+        return reader;
+    }
+    public void Dispose() { states.Dispose();foreach(var stream in streamReaders.Values)stream.Dispose(); }
+    internal static SourceStream[] OpenStreams(string directory,Manifest manifest)
+    {
+        ValidateStreams(directory,manifest);var result=new SourceStream[manifest.scene.sources.Length];
+        try
+        {
+            for(int i=0;i<result.Length;i++)if(manifest.scene.sources[i].streamed)
+                result[i]=new SourceStream(Path.Combine(directory,manifest.streams[i].file),manifest.streams[i].samples);
+            return result;
+        }
+        catch {foreach(var stream in result)stream?.Dispose();throw;}
+    }
+    public static void CopyStreams(string from,string to,Manifest manifest)
+    {
+        var original=ReadManifest(from);ValidateStreams(from,original);
+        manifest.session=original.session;manifest.streamEpochs=original.streamEpochs;
+        if(!Array.Exists(original.scene.sources,s=>s.streamed))return;
+        manifest.streams=original.streams;manifest.sourceBlocksHash=original.sourceBlocksHash;
+        File.Copy(Path.Combine(from,"source-blocks.bin"),Path.Combine(to,"source-blocks.bin"));
+        foreach(var stream in original.streams)if(stream!=null && !string.IsNullOrEmpty(stream.file))File.Copy(Path.Combine(from,stream.file),Path.Combine(to,stream.file));
+    }
+    [Serializable] sealed class SourceIdentity { public StreamDefinition[] streams;public StreamEpoch[] epochs;public string blocks; }
+    public static string SourceHash(Manifest manifest) => Array.Exists(manifest.scene.sources,s=>s.streamed)
+        ? HashText(JsonUtility.ToJson(new SourceIdentity {streams=manifest.streams,epochs=manifest.streamEpochs,blocks=manifest.sourceBlocksHash})):null;
+    internal static void ValidateStreams(string directory,Manifest manifest)
+    {
+        bool hasStreams=Array.Exists(manifest.scene.sources,s=>s.streamed);
+        if(!hasStreams)return;
+        if(manifest.version<3 || manifest.streams==null || manifest.streams.Length!=manifest.scene.sources.Length)
+            throw new InvalidDataException("Missing source stream table.");
+        Verify(directory,"source-blocks.bin",manifest.sourceBlocksHash);
+        var lengths=new long[manifest.streams.Length];
+        for(int i=0;i<lengths.Length;i++)if(manifest.scene.sources[i].streamed)
+        {
+            var d=manifest.streams[i];
+            if(d==null || d.sourceIndex!=i || d.samples<0)throw new InvalidDataException("Invalid stream descriptor.");
+            Verify(directory,d.file,d.sha256);
+            if(new FileInfo(Path.Combine(directory,d.file)).Length!=checked(d.samples*4))throw new InvalidDataException("Stream length mismatch.");
+        }
+        using(var r=new BinaryReader(File.OpenRead(Path.Combine(directory,"source-blocks.bin"))))
+        {
+            if(r.BaseStream.Length%28!=0)throw new InvalidDataException("Invalid source block log.");
+            while(r.BaseStream.Position<r.BaseStream.Length)
+            {
+                int source=r.ReadInt32();long first=r.ReadInt64();int count=r.ReadInt32();long available=r.ReadInt64();uint status=r.ReadUInt32();
+                if(source<0 || source>=lengths.Length || !manifest.scene.sources[source].streamed || count<0 ||
+                    first!=lengths[source] || available<0 || status>7)throw new InvalidDataException("Invalid source block span.");
+                lengths[source]=checked(first+count);
+            }
+        }
+        for(int i=0;i<lengths.Length;i++)if(manifest.scene.sources[i].streamed && lengths[i]!=manifest.streams[i].samples)
+            throw new InvalidDataException("Unaccounted source samples.");
+    }
 
     public sealed class Writer : IDisposable
     {
@@ -356,8 +461,9 @@ public sealed class AcousticTake : IDisposable
         public Writer(string directory, int sampleRate, Scene scene, Primitive[] geometry, float[][] pcm, bool retainPayloads = true,int version=Version)
         {
             if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
-            if(version!=1 && version!=Version)throw new InvalidDataException("Unsupported take version.");
+            if(version<1 || version>Version)throw new InvalidDataException("Unsupported take version.");
             ValidateScene(scene);
+            if(version<3 && Array.Exists(scene.sources,s=>s.streamed || s.mutedListenerPlusOne!=0))throw new InvalidDataException("Source streams and monitor masks require take version 3.");
             if (pcm.Length != scene.clips.Length) throw new ArgumentException("Clip count mismatch.");
             if (Directory.Exists(directory)) throw new IOException("Take output directory already exists.");
             DirectoryPath = directory;
@@ -474,7 +580,7 @@ public sealed class AcousticTake : IDisposable
         foreach (var obj in scene.objects)
             if (obj == null || string.IsNullOrEmpty(obj.id) || !ids.Add(obj.id)) throw new InvalidDataException("Missing/duplicate object ID.");
         foreach (var source in scene.sources)
-            if (source.objectIndex < 0 || source.objectIndex >= scene.objects.Length || source.clipIndex < 0 || source.clipIndex >= scene.clips.Length)
+            if (source.objectIndex < 0 || source.objectIndex >= scene.objects.Length || (!source.streamed && (source.clipIndex < 0 || source.clipIndex >= scene.clips.Length)) || source.mutedListenerPlusOne<0 || source.mutedListenerPlusOne>scene.listeners.Length)
                 throw new InvalidDataException("Invalid source binding.");
         foreach (int listener in scene.listeners)
             if (listener < 0 || listener >= scene.objects.Length) throw new InvalidDataException("Invalid listener binding.");
@@ -484,7 +590,9 @@ public sealed class AcousticTake : IDisposable
     {
         if (e.sample < 0 || e.clipOffset < 0 || e.sourceIndex < 0 || e.sourceIndex >= scene.sources.Length ||
             !Enum.IsDefined(typeof(VoiceAction), e.action)) throw new InvalidDataException("Invalid audio event.");
-        if (e.action == VoiceAction.Play && e.clipOffset > scene.clips[scene.sources[e.sourceIndex].clipIndex].samples)
+        var source=scene.sources[e.sourceIndex];
+        if(source.streamed && (e.clipOffset!=0 || e.loop))throw new InvalidDataException("Streams use absolute samples and cannot loop or restart an offset.");
+        if (e.action == VoiceAction.Play && !source.streamed && e.clipOffset > scene.clips[source.clipIndex].samples)
             throw new InvalidDataException("Clip offset exceeds recorded PCM.");
         RequireFinite(e.gain);
     }

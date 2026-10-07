@@ -43,11 +43,12 @@ public static class SceneReplay
                 if(take!=null) { geometry=take.Geometry; for(int i=0;i<pcm.Length;i++)pcm[i]=take.ReadClip(i); }
                 else
                 {
-                    var m=authored.manager;var clips=m.takeSources.Select(s=>s.clip).ToArray();m.sampleRate=playback.TakeMetadata.sampleRate;
+                    var m=authored.manager;var clips=m.takeSources.Select(s=>s.streamed?null:s.clip).ToArray();m.sampleRate=playback.TakeMetadata.sampleRate;
                     description=SceneToTake.Compile(rig.bindings,m.takeDimension,m.takeCurveTolerance,m.takeDefaultMaterial,
                         m.takeSources.Select(s=>rig.copies[s.transform]).ToArray(),clips,m.takeListeners.Select(l=>rig.copies[l]).ToArray(),out geometry);
-                    for(int s=0;s<clips.Length;s++)pcm[description.sources[s].clipIndex]=RayTraceManager.LoadSample(clips[s],playback.TakeMetadata.sampleRate);
+                    for(int s=0;s<clips.Length;s++)if(clips[s]!=null)pcm[description.sources[s].clipIndex]=RayTraceManager.LoadSample(clips[s],playback.TakeMetadata.sampleRate);
                 }
+                for(int i=0;i<description.sources.Length;i++)description.sources[i].mutedListenerPlusOne=playback.TakeMetadata.scene.sources[i].mutedListenerPlusOne;
                 using var writer=new AcousticTake.Writer(output,playback.TakeMetadata.sampleRate,
                     JsonUtility.FromJson<AcousticTake.Scene>(JsonUtility.ToJson(description)),geometry,pcm,version:playback.TakeMetadata.version);
                 if(writer.Metadata.sceneHash!=playback.TakeMetadata.sceneHash)throw new InvalidDataException("Authored geometry/source audio differs from the recording.");
@@ -84,6 +85,7 @@ public static class SceneReplay
                     previous=state; previousSample=sample;
                 }
                 if(simulated!=meta.ticks)throw new InvalidDataException("Unconsumed input ticks.");
+                AcousticTake.CopyStreams(path,output,writer.Metadata);
                 writer.Complete(); result.stateHash=writer.Metadata.stateHash; result.eventHash=writer.Metadata.eventHash;
                 result.byteIdentical=take!=null && result.stateHash==take.Metadata.stateHash && result.eventHash==take.Metadata.eventHash;
             }

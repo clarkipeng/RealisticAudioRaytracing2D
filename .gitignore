@@ -84,3 +84,8 @@ crashlytics-build.properties
 
 # Large blender files
 *.blend
+
+# Generated build/test metadata, not project inputs.
+/Assets/Resources/NetworkBuildStamp.txt*
+/Assets/Resources/PerformanceTestRunInfo.json*
+/Assets/Resources/PerformanceTestRunSettings.json*
