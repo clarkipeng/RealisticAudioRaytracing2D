@@ -80,7 +80,7 @@ public sealed class AcousticTake : IDisposable
             var value=new Provenance {csharpModule=typeof(AcousticTake).Assembly.ManifestModule.ModuleVersionId.ToString(),
                 unityVersion=Application.unityVersion,buildGuid=Application.buildGUID,shaderName=shader==null ? null:shader.name};
             if(settings!=null && settings.transport==TakeRender.Transport.Raytraced)
-            {value.solverContract="geometric-spectral-preview-v4";value.dspContract=settings.synthesis==TakeRender.Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-overlap-save-v1";}
+            {value.solverContract="integrated-edge-preview-v6";value.dspContract=settings.synthesis==TakeRender.Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-overlap-save-v1";}
 #if UNITY_EDITOR
             if (shader!=null)
             {

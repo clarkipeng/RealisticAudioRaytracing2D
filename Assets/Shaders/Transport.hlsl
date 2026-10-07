@@ -1,5 +1,4 @@
-// Shared geometric preview model. Reflection/transmission/scattering and a
-// dominant knife-edge path extend the original 2D shader to triangles.
+// Shared geometric preview: surface and signed edge events share a path loop.
 // This is not a validated wave/diffraction reference.
 struct RayMaterial
 {
@@ -9,7 +8,7 @@ struct RayMaterial
 };
 struct Edge
 {
-    float4 a, b;
+    float4 a, b, face, normal;
     uint4 ids;
 };
 struct RayPath
@@ -21,14 +20,8 @@ struct RayPath
 };
 StructuredBuffer<RayMaterial> RayMaterials;
 StructuredBuffer<Edge> Edges;
-// corner.xyz diffraction position, corner.w Doppler frequencyRatio; distances: first/last/direct/excess.
-// ids: edge, blocked direct segment, crossing face, reserved.
-struct EdgeRoute
-{
-    float4 corner, distances;
-    uint4 ids;
-};
-RWStructuredBuffer<EdgeRoute> EdgeRoutes;
+StructuredBuffer<uint2> EdgeRanges;
+StructuredBuffer<uint> EdgeIndices;
 struct Volume
 {
     float4 minimum, maximum;
@@ -150,134 +143,138 @@ float InteractionFrequencyRatio(float speed, float3 incoming, float3 outgoing, f
     return (speed - dot(listenerVelocity, outgoing)) / (speed - dot(sourceVelocity, incoming)) *
            (speed - dot(interactionVelocity, incoming)) / (speed - dot(interactionVelocity, outgoing));
 }
-// Geometry is independent of the frequency grid and random ray budget.
-// Select one visible finite-edge route, at the constrained minimum of |s-e|+|e-r|.
-bool AcrossEdgeFace(uint face, State pose, float3 corner, float3 source, float3 listener, bool is2D)
+// Rigid-wedge secondary edge sources (Svensson/Calamia/Nakanishi 2009,
+// equations 1-6). Each signed sample and its travel delay represents one
+// quadrature contribution; the existing DSP retains its phase without a new ABI.
+void EdgeFrame(uint id, uint stateOffset, bool is2D, out float3 a, out float3 axis, out float3 face,
+               out float3 normal, out float extent, out float angle)
 {
-    Primitive p = Primitives[face];
-    float3 e = p.b.xyz - p.a.xyz;
-    float3 normal = Rotate(pose.rotation, is2D ? float3(-e.y, e.x, 0) : cross(e, p.c.xyz - p.a.xyz));
-    return dot(normal, source - corner) * dot(normal, listener - corner) <= 0;
+    Edge edge = Edges[id];
+    State pose = States[stateOffset + edge.ids.x];
+    a = pose.position.xyz + Rotate(pose.rotation, edge.a.xyz);
+    float3 span = Rotate(pose.rotation, edge.b.xyz - edge.a.xyz);
+    extent = length(span);
+    axis = is2D ? float3(0, 0, 1) : span / extent;
+    face = Rotate(pose.rotation, edge.face.xyz);
+    normal = Rotate(pose.rotation, edge.normal.xyz);
+    angle = edge.face.w;
 }
-void FindEdgeRoute(uint query, bool is2D)
+float EdgeAngle(float3 direction, float3 face, float3 normal)
 {
-    if (query >= FrameCount * PairCount)
-        return;
-    EdgeRoute route = (EdgeRoute)0;
-    route.ids.x = 0xffffffff;
-    EdgeRoutes[query] = route;
-    if (RayPairEnabled[query] == 0)
-        return;
-    uint stateOffset = (query / PairCount) * ObjectCount, pair = query % PairCount;
-    uint source = Sources[pair / ListenerCount], listener = Listeners[pair % ListenerCount];
-    float3 start = States[stateOffset + source].position.xyz,
-           end = States[stateOffset + listener].position.xyz;
-    if (is2D)
+    float angle = atan2(dot(direction, normal), dot(direction, face));
+    return angle < 0 ? angle + 2 * RayPi : angle;
+}
+float4 EdgeAngles(float source, float receiver)
+{
+    return RayPi + float4(source + receiver, source - receiver, -source + receiver, -source - receiver);
+}
+float EdgeKernel(uint id, uint stateOffset, float3 source, float3 edgePoint, float3 receiver, bool is2D)
+{
+    float3 a, axis, face, normal;
+    float extent, angle;
+    EdgeFrame(id, stateOffset, is2D, a, axis, face, normal, extent, angle);
+    float3 incoming = source - edgePoint, outgoing = receiver - edgePoint;
+    float m = length(incoming), l = length(outgoing), zs = dot(incoming, axis), zr = dot(outgoing, axis);
+    float rs = length(incoming - zs * axis), rr = length(outgoing - zr * axis);
+    if (rs <= RayEpsilon || rr <= RayEpsilon)
+        return 0;
+    float ts = EdgeAngle(incoming, face, normal), tr = EdgeAngle(outgoing, face, normal);
+    if (ts > angle || tr > angle)
+        return 0; // Inside the solid wedge.
+    float nu = RayPi / angle;
+    // Rationalize cosh(eta)-1; subtracting nearly equal products loses the
+    // narrow peak next to a shadow boundary in single precision.
+    float axial = rs * zr + rr * zs;
+    float x = abs(axial) / sqrt(2 * rs * rr * (m * l + rs * rr - zs * zr));
+    float sinhHalf = x < .01 ? nu * x * (1 + (nu * nu - 1) * x * x / 6) : sinh(nu * log(x + sqrt(1 + x * x)));
+    float4 phi = nu * EdgeAngles(ts, tr), halfSine = sin(phi * .5);
+    float beta = 0;
+    for (uint i = 0; i < 4; i++)
     {
-        start.z = 0;
-        end.z = 0;
+        float denominator = 2 * (sinhHalf * sinhHalf + halfSine[i] * halfSine[i]);
+        // Principal value at the exact zone boundary; geometrical components
+        // use half weight there. Avoid subtracting nearly equal cosh/cos values.
+        if (abs(halfSine[i]) > 1e-6)
+            beta += sin(phi[i]) / denominator;
     }
-    float direct = length(end - start);
-    if (direct <= 2 * RayEpsilon)
-        return;
-    if (MediumAt(stateOffset, start, is2D) != AirMedium || MediumAt(stateOffset, end, is2D) != AirMedium)
-        return;
-    uint hit;
-    float distance;
-    float3 normal;
-    bool blocked = NearestHit(stateOffset, start, (end - start) / direct, direct - RayEpsilon, is2D, hit,
-                              distance, normal);
-    float best = MaximumPathDelay * SpeedOfSound;
-    for (uint i = 0; i < EdgeCount; i++)
-    {
-        Edge edge = Edges[i];
-        State pose = States[stateOffset + edge.ids.x];
-        if ((pose.flags.x & 3) != 3)
-            continue;
-        float3 a = pose.position.xyz + Rotate(pose.rotation, edge.a.xyz),
-               b = pose.position.xyz + Rotate(pose.rotation, edge.b.xyz);
-        if (is2D)
-        {
-            a.z = 0;
-            b.z = 0;
-        }
-        float3 axis = b - a, corner = a;
-        float size = length(axis);
-        if (size > RayEpsilon)
-        {
-            axis /= size;
-            float sa = dot(start - a, axis), ra = dot(end - a, axis);
-            float s = length(start - a - axis * sa), r = length(end - a - axis * ra);
-            if (s + r <= RayEpsilon)
-                continue;
-            corner += axis * clamp((sa * r + ra * s) / (s + r), 0, size);
-        }
-        uint face = edge.ids.y;
-        if (!AcrossEdgeFace(face, pose, corner, start, end, is2D))
-        {
-            face = edge.ids.z;
-            if (!AcrossEdgeFace(face, pose, corner, start, end, is2D))
-                continue;
-        }
-        float first = length(corner - start), last = length(end - corner), total = first + last;
-        if (first <= RayEpsilon || last <= RayEpsilon || total >= best)
-            continue;
-        if (!Visible(stateOffset, start, corner, is2D) || !Visible(stateOffset, corner, end, is2D))
-            continue;
-        float3 incoming = (corner - start) / first, outgoing = (end - corner) / last;
-        float3 sourceVelocity = Velocity(stateOffset + source),
-               listenerVelocity = Velocity(stateOffset + listener),
-               edgeVelocity = PointVelocity(stateOffset + edge.ids.x, corner);
-        if (is2D)
-        {
-            sourceVelocity.z = 0;
-            listenerVelocity.z = 0;
-            edgeVelocity.z = 0;
-        }
-        float frequencyRatio = InteractionFrequencyRatio(SpeedOfSound, incoming, outgoing, sourceVelocity,
-                                                         listenerVelocity, edgeVelocity);
-        route.corner = float4(corner, frequencyRatio);
-        route.distances = float4(first, last, direct, max(0, total - direct));
-        route.ids = uint4(i, blocked ? 1 : 0, face, 0);
-        best = total;
-    }
-    EdgeRoutes[query] = route;
+    return -nu * beta / (4 * RayPi);
 }
-// ITU-R P.526-16 (31): pressure magnitude approximation to the scalar Fresnel
-// knife-edge field. nu^2 = 4 * path excess / wavelength (paraxial equivalent).
-float KnifeEdgePressure(float nu)
+float EdgeOpacity(uint id, uint frequencyBin)
 {
-    if (nu <= -.78)
-        return 1;
-    float x = nu - .1;
-    return min(1, pow(10, -6.9 / 20) / (sqrt(1 + x * x) + x));
+    Edge edge = Edges[id];
+    float4 m = RayMaterials[Primitives[edge.ids.y].indices.y * FrequencyBins + frequencyBin].surface;
+    return 1 - sqrt(saturate((1 - m.x) * m.z));
 }
-void ApplyEdgeRoute(uint query, uint stateOffset, uint listener, uint frequencyBin, inout RayPath direct)
+float BoundaryWeight(uint hit, uint stateOffset, float3 position, bool is2D)
 {
     if (DiffractionFactor <= 0)
-        return;
-    uint slot = query * SlotsPerPair + SlotsPerPair - FrequencyBins + frequencyBin;
-    EdgeRoute route = EdgeRoutes[query];
-    if (route.ids.x == 0xffffffff)
-        return;
-    float frequencyHz = frequencyBin * FrequencyStep,
-          nu = sqrt(4 * route.distances.w * frequencyHz / SpeedOfSound);
-    RayMaterial material = RayMaterials[Primitives[route.ids.z].indices.y * FrequencyBins + frequencyBin];
-    float opaque = 1 - sqrt(saturate((1 - material.surface.x) * material.surface.z));
-    if (route.ids.y == 0)
+        return 1;
+    uint2 range = EdgeRanges[hit];
+    for (uint i = 0; i < range.y; i++)
     {
-        // Replace the lit-side field near its shadow boundary; do not add a
-        // second copy of free-field sound. Unity's existing fades handle motion.
-        direct.pressureGain *= 1 - saturate(DiffractionFactor) * opaque * (1 - KnifeEdgePressure(-nu));
-        return;
+        float3 a, axis, face, normal;
+        float extent, angle;
+        EdgeFrame(EdgeIndices[range.x + i], stateOffset, is2D, a, axis, face, normal, extent, angle);
+        float z = dot(position - a, axis);
+        if (is2D || (z >= 0 && z <= extent))
+            if (length(position - a - z * axis) <= RayEpsilon)
+                return .5;
     }
-    float total = route.distances.x + route.distances.y;
-    float gain = DiffractionFactor * opaque * KnifeEdgePressure(nu) *
-                 exp(-AirCoefficient(frequencyHz) * total) * ReferenceDistance / max(MinimumDistance, total);
-    RayPaths[slot] =
-        Arrival(route.corner.xyz, States[stateOffset + listener].position.xyz, total / SpeedOfSound, gain,
-                frequencyBin, route.corner.w, HashRay(0x20000000u ^ route.ids.x));
+    return 1;
 }
+// A mixture of the current listener-blocking face's edges and all scene edges.
+// The global component keeps every edge reachable, including multi-edge routes.
+// Sampling probability includes both components even when they select the same edge.
+bool SampleEdge(uint stateOffset, float3 source, float3 receiver, bool is2D, inout uint rng, out uint id,
+                out float3 edgePoint, out float inversePdf)
+{
+    id = 0;
+    edgePoint = 0;
+    inversePdf = 0;
+    float distance = length(receiver - source);
+    uint hit;
+    float t;
+    float3 n;
+    uint2 local = 0;
+    if (distance > RayEpsilon && NearestHit(stateOffset, source, (receiver - source) / distance,
+                                            distance - RayEpsilon, is2D, hit, t, n))
+        local = EdgeRanges[hit];
+    bool localSample = local.y > 0 && RandomRay(rng) < .5;
+    id = localSample ? EdgeIndices[local.x + min(local.y - 1, (uint)(RandomRay(rng) * local.y))]
+                     : min(EdgeCount - 1, (uint)(RandomRay(rng) * EdgeCount));
+    float probability = (local.y > 0 ? .5 : 1) / EdgeCount;
+    for (uint i = 0; i < local.y; i++)
+        if (EdgeIndices[local.x + i] == id)
+            probability += .5 / local.y;
+    if ((States[stateOffset + Edges[id].ids.x].flags.x & 3) != 3)
+        return false;
+    float3 a, axis, face, normal;
+    float extent, angle;
+    EdgeFrame(id, stateOffset, is2D, a, axis, face, normal, extent, angle);
+    float3 s = source - a, r = receiver - a;
+    float zs = dot(s, axis), zr = dot(r, axis);
+    float rs = length(s - zs * axis), rr = length(r - zr * axis);
+    if (rs <= RayEpsilon || rr <= RayEpsilon)
+        return false;
+    float apex = (zs * rr + zr * rs) / (rs + rr);
+    float m = length(s - apex * axis), l = length(r - apex * axis), nu = RayPi / angle;
+    float4 phi = nu * EdgeAngles(EdgeAngle(s, face, normal), EdgeAngle(r, face, normal));
+    // Cauchy importance sampling resolves narrow zone-boundary contributions.
+    // Planar scenes model point sources around infinitely extruded XY geometry.
+    float4 scale = max(RayEpsilon, 2 * abs(sin(phi * .5)) * (m * l / (m + l)) / nu);
+    float4 lower = is2D ? -RayPi * .5 : atan(-apex / scale);
+    float4 upper = is2D ? RayPi * .5 : atan((extent - apex) / scale);
+    uint component = min(3u, (uint)(RandomRay(rng) * 4));
+    float u = clamp(RandomRay(rng), 1e-7, 1 - 1e-7);
+    float z = apex + scale[component] * tan(lerp(lower[component], upper[component], u));
+    float4 delta = z - apex;
+    float4 density = scale / ((scale * scale + delta * delta) * (upper - lower));
+    float pdf = probability * dot(density, float4(.25, .25, .25, .25));
+    edgePoint = a + axis * z;
+    inversePdf = 1 / pdf;
+    return isfinite(inversePdf) && inversePdf > 0;
+}
+
 // Retarded source position; interfaces retain the scene pose of this solve.
 // Iteration follows piecewise material travel time, not distance / air speed.
 void EvaluateDirect(uint index, bool is2D)
@@ -287,8 +284,6 @@ void EvaluateDirect(uint index, bool is2D)
     uint frequencyBin = index % FrequencyBins, query = index / FrequencyBins, frame = query / PairCount,
          pair = query % PairCount;
     RayPaths[query * SlotsPerPair + frequencyBin] = (RayPath)0;
-    if (DiffractionFactor > 0)
-        RayPaths[query * SlotsPerPair + SlotsPerPair - FrequencyBins + frequencyBin] = (RayPath)0;
     if (RayPairEnabled[query] == 0)
         return;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
@@ -313,7 +308,7 @@ void EvaluateDirect(uint index, bool is2D)
     uint identity = 1;
     bool converged = false;
     estimate = min(estimate, upper);
-    // Alternate fixed-point proposals with bisection. A bracket prevents slow
+    // Alternate fixed-edgePoint proposals with bisection. A bracket prevents slow
     // material transitions or float-level cycles from defeating convergence.
     for (uint iteration = 0; iteration < 64; iteration++)
     {
@@ -336,7 +331,9 @@ void EvaluateDirect(uint index, bool is2D)
                 break;
             Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
             RayMaterial material = RayMaterials[Primitives[hit].indices.y * FrequencyBins + frequencyBin];
-            gain *= sqrt(saturate((1 - material.surface.x) * material.surface.z));
+            float transmitted = sqrt(saturate((1 - material.surface.x) * material.surface.z));
+            gain *=
+                lerp(1, transmitted, BoundaryWeight(hit, stateOffset, position + direction * distance, is2D));
             position += direction * distance;
             remaining -= distance;
             uint next = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
@@ -372,7 +369,6 @@ void EvaluateDirect(uint index, bool is2D)
     }
     RayPath direct =
         Arrival(a, b, time, gain, frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), identity);
-    ApplyEdgeRoute(query, stateOffset, listener, frequencyBin, direct);
     RayPaths[query * SlotsPerPair + frequencyBin] = direct;
 }
 // First-order mirror path from a sampled primitive's image source. Sampling
@@ -462,6 +458,7 @@ RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequ
     RayMaterial material = RayMaterials[p.indices.y * FrequencyBins + frequencyBin];
     float gain =
         sqrt(saturate((1 - material.surface.x) * (1 - material.surface.z) * (1 - material.surface.y)));
+    gain *= BoundaryWeight(id, stateOffset, reflectionPoint, is2D);
     float time = 0, lengthTo = total * speed;
     Travel(lengthTo, medium, frequencyBin, max(1, frequencyBin * FrequencyStep), time, gain);
     return Arrival(reflectionPoint, end, time,
@@ -469,7 +466,7 @@ RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequ
                        max(MinimumDistance, lengthTo),
                    frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), HashRay(0x40000000u ^ id));
 }
-void TraceReflections(uint index, bool is2D)
+void TracePaths(uint index, bool is2D)
 {
     if (index >= FrameCount * PairCount * RaysPerPair)
         return;
@@ -494,7 +491,7 @@ void TraceReflections(uint index, bool is2D)
         end.z = 0;
     }
     float3 direction = UnitDirection(rng, is2D);
-    float gain = 1, time = 0, pathLength = 0;
+    float gain = 1, time = 0;
     uint medium = MediumAt(stateOffset, position, is2D);
     float3 sourceVelocity = Velocity(stateOffset + source),
            listenerVelocity = Velocity(stateOffset + listener);
@@ -503,25 +500,92 @@ void TraceReflections(uint index, bool is2D)
         sourceVelocity.z = 0;
         listenerVelocity.z = 0;
     }
-    float frequencyRatio =
-        1 / (1 - dot(sourceVelocity, direction) / (SpeedOfSound / MediumIor(medium, frequencyBin)));
+    float frequencyRatio = 1;
     uint identity = HashRay(0x80000000u ^ (ray % RaysPerBin));
     float weight = 1.0 / RaysPerBin;
+    uint previousEdge = 0xffffffff;
+    float3 edgeSource = position, vertexVelocity = sourceVelocity;
+    float edgeDistance = 0, spreadingDistance = 0;
+    bool canSampleEdge = true;
+    float3 surfaceNormal = 0;
+    float surfaceScatter = 1;
     for (uint bounce = 0; bounce < MaxBounces; bounce++)
     {
         float currentIor = MediumIor(medium, frequencyBin), speed = SpeedOfSound / currentIor,
               limit = (MaximumPathDelay - time) * speed;
         if (limit <= 0 || gain == 0)
             break;
+        // Edge and surface choices share the same path state, bounce budget,
+        // BVH and arrival slots. No route graph or separate diffraction dispatch.
+        float edgeProbability =
+            DiffractionFactor > 0 && EdgeCount > 0 && medium == AirMedium && canSampleEdge ? .5 : 0;
+        if (edgeProbability > 0 && RandomRay(rng) < edgeProbability)
+        {
+            uint edge;
+            float3 edgePoint;
+            float inversePdf;
+            if (!SampleEdge(stateOffset, position, end, is2D, rng, edge, edgePoint, inversePdf) ||
+                edge == previousEdge)
+                break;
+            float distance = length(edgePoint - position);
+            if (distance <= RayEpsilon || distance > limit ||
+                !Visible(stateOffset, position, edgePoint, is2D))
+                break;
+            float3 incoming = (edgePoint - position) / distance;
+            frequencyRatio /= 1 - dot(vertexVelocity, incoming) / speed;
+            if (previousEdge != 0xffffffff)
+            {
+                gain *= EdgeKernel(previousEdge, stateOffset, edgeSource, position, edgePoint, is2D) /
+                        edgeDistance;
+                spreadingDistance = 0;
+            }
+            else if (bounce > 0)
+                gain *= surfaceScatter * max(0, dot(surfaceNormal, incoming));
+            Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
+            spreadingDistance += distance;
+            gain *= inversePdf * DiffractionFactor * EdgeOpacity(edge, frequencyBin) / edgeProbability;
+            edgeSource = edgePoint - incoming * spreadingDistance;
+            edgeDistance = spreadingDistance;
+            vertexVelocity = PointVelocity(stateOffset + Edges[edge].ids.x, edgePoint);
+            frequencyRatio *= 1 - dot(vertexVelocity, incoming) / speed;
+            position = edgePoint;
+            identity = HashRay(identity ^ (edge + 1) ^ 0x20000000u);
+            float last = length(end - position);
+            if (last > RayEpsilon && Visible(stateOffset, position, end, is2D))
+            {
+                float3 outgoing = (end - position) / last;
+                float ratio = frequencyRatio * (1 - dot(listenerVelocity, outgoing) / speed) /
+                              (1 - dot(vertexVelocity, outgoing) / speed);
+                float pressure = gain * EdgeKernel(edge, stateOffset, edgeSource, position, end, is2D) /
+                                 (edgeDistance * last) * ReferenceDistance * weight *
+                                 exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last);
+                RayPaths[first + bounce] =
+                    Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity);
+            }
+            previousEdge = edge;
+            canSampleEdge = true;
+            direction = UnitDirection(rng, is2D);
+            continue;
+        }
+        gain /= 1 - edgeProbability;
         uint hit;
         float distance;
         float3 normal;
         bool intersects = NearestHit(stateOffset, position, direction, limit, is2D, hit, distance, normal);
         if (!intersects)
             break;
+        frequencyRatio /= 1 - dot(vertexVelocity, direction) / speed;
+        if (previousEdge != 0xffffffff)
+        {
+            gain *= EdgeKernel(previousEdge, stateOffset, edgeSource, position,
+                               position + direction * distance, is2D) /
+                    edgeDistance;
+            spreadingDistance = 0;
+            previousEdge = 0xffffffff;
+        }
         position += direction * distance;
         Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
-        pathLength += distance;
+        spreadingDistance += distance;
         RayMaterial material = RayMaterials[Primitives[hit].indices.y * FrequencyBins + frequencyBin];
         gain *= sqrt(saturate(1 - material.surface.x));
         bool entering = dot(direction, normal) < 0;
@@ -531,8 +595,9 @@ void TraceReflections(uint index, bool is2D)
             velocity.z = 0;
         identity = HashRay(identity ^ (hit + 1));
         float3 toListener = normalize(end - position);
-        float arrivalRatio = frequencyRatio * (1 - dot(velocity, direction) / speed) /
-                             (1 - dot(velocity, toListener) / speed) *
+        vertexVelocity = velocity;
+        frequencyRatio *= 1 - dot(velocity, direction) / speed;
+        float arrivalRatio = frequencyRatio / (1 - dot(velocity, toListener) / speed) *
                              (1 - dot(listenerVelocity, toListener) / speed);
         float last = length(end - position), cosine = last > 0 ? max(0, dot(n, (end - position) / last)) : 0;
         if (cosine > 0 && Visible(stateOffset, position + n * RayEpsilon, end, is2D))
@@ -540,8 +605,11 @@ void TraceReflections(uint index, bool is2D)
                 Arrival(position, end, time + last / speed,
                         gain * sqrt(saturate((1 - material.surface.z) * material.surface.y)) * weight *
                             cosine * .5 * exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last) *
-                            ReferenceDistance / max(MinimumDistance, pathLength + last),
+                            ReferenceDistance / max(MinimumDistance, spreadingDistance + last),
                         frequencyBin, arrivalRatio, identity);
+        surfaceNormal = n;
+        surfaceScatter = sqrt(saturate((1 - material.surface.z) * material.surface.y));
+        canSampleEdge = surfaceScatter > 0;
         uint nextMedium = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
         float nextIor = MediumIor(nextMedium, frequencyBin);
         float reflectance = 1 - saturate(material.surface.z), cosTheta = abs(dot(direction, n));
@@ -552,11 +620,10 @@ void TraceReflections(uint index, bool is2D)
             if (dot(transmitted, transmitted) > 0)
             {
                 transmitted = normalize(transmitted);
-                frequencyRatio *= (1 - dot(velocity, direction) / speed) /
-                                  (1 - dot(velocity, transmitted) / (SpeedOfSound / nextIor));
                 identity = HashRay(identity ^ 0x10000000u);
                 direction = transmitted;
                 medium = nextMedium;
+                canSampleEdge = false;
                 continue;
             }
         }
@@ -565,7 +632,6 @@ void TraceReflections(uint index, bool is2D)
             diffuse = -diffuse;
         float3 nextDirection =
             RandomRay(rng) < saturate(material.surface.y) ? diffuse : reflect(direction, n);
-        frequencyRatio *= (1 - dot(velocity, direction) / speed) / (1 - dot(velocity, nextDirection) / speed);
         direction = nextDirection;
     }
 }

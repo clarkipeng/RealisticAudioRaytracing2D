@@ -4,8 +4,7 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-// Shared 2D/3D geometric transport. Diffraction routes stay on the GPU;
-// frequency evaluation and sampled reflection paths consume the same scene.
+// Shared 2D/3D GPU transport: direct arrivals and sampled surface/edge paths.
 internal sealed class RayTransport : IDisposable
 {
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
@@ -24,19 +23,19 @@ internal sealed class RayTransport : IDisposable
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Edge
     {
-        public Vector4 a, b;
+        public Vector4 a, b, face, normal; // face.w: exterior wedge angle; normal points into air.
         public uint owner, firstFace, secondFace, pad;
     }
     readonly ComputeShader shader;
-    readonly int directKernel, traceKernel, edgeKernel, pairs, rayCount, frequencyBins;
+    readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Volume
     {
         public Vector4 minimum, maximum; // w: winding correction, enclosed volume/area (relative units)
         public uint start, count, owner, material;
     }
-    readonly ComputeBuffer materialBuffer, edgeBuffer, volumeBuffer, pathBuffer, enabledBuffer, routeBuffer;
-    readonly bool diffraction;
+    readonly ComputeBuffer materialBuffer, edgeBuffer, volumeBuffer, pathBuffer, enabledBuffer,
+        edgeRangeBuffer, edgeIndexBuffer;
     readonly bool[] everActive;
     readonly uint[] enabledPairs;
     readonly Action<AsyncGPUReadbackRequest> completion;
@@ -56,10 +55,9 @@ internal sealed class RayTransport : IDisposable
                         bool readback = true)
     {
         if (Marshal.SizeOf<Path>() != 32 || Marshal.SizeOf<Material>() != 32 ||
-            Marshal.SizeOf<Edge>() != 48 || Marshal.SizeOf<Volume>() != 48)
+            Marshal.SizeOf<Edge>() != 80 || Marshal.SizeOf<Volume>() != 48)
             throw new InvalidOperationException("Spectral GPU ABI mismatch.");
         this.shader = shader;
-        diffraction = settings.diffractionFactor > 0;
         rayCount = settings.RaysPerPair;
         frequencyBins = settings.fftSize / 2 + 1;
         pairs = checked(scene.sources.Length * scene.listeners.Length);
@@ -75,11 +73,9 @@ internal sealed class RayTransport : IDisposable
         {
             directKernel = shader.FindKernel((planar ? "EvaluateDirect2D" : "EvaluateDirect3D") +
                                              (settings.useBvh ? "Bvh" : ""));
-            edgeKernel = shader.FindKernel((planar ? "Edge2D" : "Edge3D") + (settings.useBvh ? "Bvh" : ""));
             traceKernel =
                 shader.FindKernel((planar ? "Trace2D" : "Trace3D") + (settings.useBvh ? "Bvh" : ""));
-            if (!shader.IsSupported(directKernel) || !shader.IsSupported(traceKernel) ||
-                (diffraction && !shader.IsSupported(edgeKernel)))
+            if (!shader.IsSupported(directKernel) || !shader.IsSupported(traceKernel))
                 throw new NotSupportedException("Raytraced kernels are unavailable on this GPU.");
             var materials = new Material[Math.Max(1, scene.materials.Length * bins)];
             for (int m = 0; m < scene.materials.Length; m++)
@@ -97,18 +93,38 @@ internal sealed class RayTransport : IDisposable
                 }
             materialBuffer = new ComputeBuffer(materials.Length, 32);
             materialBuffer.SetData(materials);
-            var edges = Edges(geometry, planar, materials, bins);
-            edgeBuffer = new ComputeBuffer(Math.Max(1, edges.Length), 48);
+            var volumes = Volumes(scene, geometry, materials, bins, planar);
+            var edges = Edges(geometry, planar, materials, bins, volumes);
+            edgeBuffer = new ComputeBuffer(Math.Max(1, edges.Length), 80);
             if (edges.Length > 0)
                 edgeBuffer.SetData(edges);
-            var volumes = Volumes(scene, geometry, materials, bins, planar);
             volumeBuffer = new ComputeBuffer(Math.Max(1, volumes.Length), 48);
             if (volumes.Length > 0)
                 volumeBuffer.SetData(volumes);
             pathBuffer = new ComputeBuffer(checked(PathsPerFrame * maximumFrames), 32);
             enabledBuffer = new ComputeBuffer(enabledPairs.Length, 4);
-            routeBuffer = new ComputeBuffer(diffraction ? checked(pairs * maximumFrames) : 1, 48);
-            foreach (int kernel in new[] { directKernel, traceKernel, edgeKernel })
+            var adjacency = new List<int>[geometry.Length];
+            for (int i = 0; i < adjacency.Length; i++)
+                adjacency[i] = new List<int>();
+            for (int i = 0; i < edges.Length; i++)
+            {
+                adjacency[edges[i].firstFace].Add(i);
+                if (edges[i].secondFace != edges[i].firstFace)
+                    adjacency[edges[i].secondFace].Add(i);
+            }
+            var edgeIndices = new List<int>();
+            var edgeRanges = new Vector2Int[Math.Max(1, geometry.Length)];
+            for (int i = 0; i < adjacency.Length; i++)
+            {
+                edgeRanges[i] = new Vector2Int(edgeIndices.Count, adjacency[i].Count);
+                edgeIndices.AddRange(adjacency[i]);
+            }
+            edgeRangeBuffer = new ComputeBuffer(edgeRanges.Length, 8);
+            edgeRangeBuffer.SetData(edgeRanges);
+            edgeIndexBuffer = new ComputeBuffer(Math.Max(1, edgeIndices.Count), 4);
+            if (edgeIndices.Count > 0)
+                edgeIndexBuffer.SetData(edgeIndices);
+            foreach (int kernel in new[] { directKernel, traceKernel })
             {
                 shader.SetBuffer(kernel, "Primitives", primitives);
                 shader.SetBuffer(kernel, "States", states);
@@ -116,7 +132,8 @@ internal sealed class RayTransport : IDisposable
                 shader.SetBuffer(kernel, "Listeners", listeners);
                 shader.SetBuffer(kernel, "RayMaterials", materialBuffer);
                 shader.SetBuffer(kernel, "Edges", edgeBuffer);
-                shader.SetBuffer(kernel, "EdgeRoutes", routeBuffer);
+                shader.SetBuffer(kernel, "EdgeRanges", edgeRangeBuffer);
+                shader.SetBuffer(kernel, "EdgeIndices", edgeIndexBuffer);
                 shader.SetBuffer(kernel, "Volumes", volumeBuffer);
                 shader.SetBuffer(kernel, "RayPaths", pathBuffer);
                 shader.SetBuffer(kernel, "RayPairEnabled", enabledBuffer);
@@ -138,9 +155,10 @@ internal sealed class RayTransport : IDisposable
             shader.SetFloat("DiffractionFactor", settings.diffractionFactor);
             shader.SetFloat("MaximumPathDelay", settings.maximumDelaySeconds);
             shader.SetInt("UseAirAbsorption", settings.airAbsorption ? 1 : 0);
-            GpuBytes = (long)routeBuffer.count * 48 + (long)materials.Length * 32 +
-                       (long)Math.Max(1, edges.Length) * 48 + Math.Max(1, volumes.Length) * 48L +
-                       (long)PathsPerFrame * maximumFrames * 32 + enabledPairs.Length * 4L;
+            GpuBytes = (long)edgeRangeBuffer.count * 8 + (long)edgeIndexBuffer.count * 4 +
+                       (long)materials.Length * 32 + (long)Math.Max(1, edges.Length) * 80 +
+                       Math.Max(1, volumes.Length) * 48L + (long)PathsPerFrame * maximumFrames * 32 +
+                       enabledPairs.Length * 4L;
         }
         catch
         {
@@ -281,8 +299,12 @@ internal sealed class RayTransport : IDisposable
         return Mathf.Lerp(values[lower], values[upper],
                           lower == upper ? 0 : Mathf.InverseLerp(knots[lower], knots[upper], frequency));
     }
-    static Edge[] Edges(AcousticTake.Primitive[] geometry, bool planar, Material[] materials, int bins)
+    static Edge[] Edges(AcousticTake.Primitive[] geometry, bool planar, Material[] materials, int bins,
+                        Volume[] volumes)
     {
+        var winding = new Dictionary<uint, float>();
+        foreach (var volume in volumes)
+            winding[volume.owner] = volume.minimum.w;
         var candidates = new Dictionary<(int, Vector3, Vector3),
                                         (Vector3 normal, int first, int second, bool keep, int count)>();
         int Compare(Vector3 a, Vector3 b)
@@ -336,12 +358,39 @@ internal sealed class RayTransport : IDisposable
             }
             return false;
         }
+        Vector3 Side(int face, Vector3 a, Vector3 b)
+        {
+            var p = geometry[face];
+            if (planar)
+                return ((p.a - a).sqrMagnitude > 1e-12f ? p.a - a : p.b - a).normalized;
+            var axis = (b - a).normalized;
+            var side = p.a + p.b + p.c - 3 * a;
+            return (side - axis * Vector3.Dot(side, axis)).normalized;
+        }
         var result = new List<Edge>();
         foreach (var item in candidates)
-            if (item.Value.keep && (Opaque(item.Value.first) || Opaque(item.Value.second)))
-                result.Add(new Edge { owner = (uint)item.Key.Item1, a = item.Key.Item2, b = item.Key.Item3,
-                                      firstFace = (uint)item.Value.first,
-                                      secondFace = (uint)item.Value.second });
+        {
+            var value = item.Value;
+            if (!value.keep || (!Opaque(value.first) && !Opaque(value.second)))
+                continue;
+            var a = item.Key.Item2;
+            var b = item.Key.Item3;
+            var side = Side(value.first, a, b);
+            var normal = value.normal;
+            if (winding.TryGetValue((uint)item.Key.Item1, out float sign))
+                normal *= sign;
+            float angle = 2 * Mathf.PI;
+            if (value.first != value.second)
+            {
+                var other = Side(value.second, a, b);
+                angle = Mathf.Atan2(Vector3.Dot(other, normal), Vector3.Dot(other, side));
+                if (angle <= 0)
+                    angle += 2 * Mathf.PI;
+            }
+            result.Add(new Edge { owner = (uint)item.Key.Item1, a = a, b = b,
+                                  face = new Vector4(side.x, side.y, side.z, angle), normal = normal,
+                                  firstFace = (uint)value.first, secondFace = (uint)value.second });
+        }
         result.Sort((a, b) =>
                     {
                         int r = a.owner.CompareTo(b.owner);
@@ -355,8 +404,6 @@ internal sealed class RayTransport : IDisposable
     {
         if (pending)
             throw new InvalidOperationException("Ray responses are still in flight.");
-        if (diffraction)
-            shader.Dispatch(edgeKernel, (frames * pairs + 63) / 64, 1, 1);
         shader.Dispatch(directKernel, (frames * pairs * frequencyBins + 63) / 64, 1, 1);
         shader.Dispatch(traceKernel, (frames * pairs * rayCount + 63) / 64, 1, 1);
         if (Paths.Length == 0)
@@ -411,6 +458,7 @@ internal sealed class RayTransport : IDisposable
         volumeBuffer?.Dispose();
         pathBuffer?.Dispose();
         enabledBuffer?.Dispose();
-        routeBuffer?.Dispose();
+        edgeRangeBuffer?.Dispose();
+        edgeIndexBuffer?.Dispose();
     }
 }

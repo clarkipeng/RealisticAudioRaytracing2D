@@ -3,10 +3,6 @@
 #pragma kernel Direct2DBvh USE_BVH
 #pragma kernel Direct3D
 #pragma kernel Direct3DBvh USE_BVH
-#pragma kernel Edge2D
-#pragma kernel Edge2DBvh USE_BVH
-#pragma kernel Edge3D
-#pragma kernel Edge3DBvh USE_BVH
 #pragma kernel EvaluateDirect2D
 #pragma kernel EvaluateDirect2DBvh USE_BVH
 #pragma kernel EvaluateDirect3D
@@ -56,17 +52,12 @@ void EvaluateDirectProbe(uint pair, bool is2D)
 [numthreads(64, 1, 1)] void Direct3D(uint3 id : SV_DispatchThreadID) { EvaluateDirectProbe(id.x, false); }
 [numthreads(64, 1, 1)] void Direct3DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirectProbe(id.x, false); }
 
-[numthreads(64, 1, 1)] void Edge2D(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, true); }
-[numthreads(64, 1, 1)] void Edge2DBvh(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, true); }
-[numthreads(64, 1, 1)] void Edge3D(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, false); }
-[numthreads(64, 1, 1)] void Edge3DBvh(uint3 id : SV_DispatchThreadID) { FindEdgeRoute(id.x, false); }
-
 [numthreads(64, 1, 1)] void EvaluateDirect2D(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, true); }
 [numthreads(64, 1, 1)] void EvaluateDirect2DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, true); }
 [numthreads(64, 1, 1)] void EvaluateDirect3D(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, false); }
 [numthreads(64, 1, 1)] void EvaluateDirect3DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, false); }
 
-[numthreads(64, 1, 1)] void Trace2D(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, true); }
-[numthreads(64, 1, 1)] void Trace2DBvh(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, true); }
-[numthreads(64, 1, 1)] void Trace3D(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, false); }
-[numthreads(64, 1, 1)] void Trace3DBvh(uint3 id : SV_DispatchThreadID) { TraceReflections(id.x, false); }
+[numthreads(64, 1, 1)] void Trace2D(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, true); }
+[numthreads(64, 1, 1)] void Trace2DBvh(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, true); }
+[numthreads(64, 1, 1)] void Trace3D(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, false); }
+[numthreads(64, 1, 1)] void Trace3DBvh(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, false); }

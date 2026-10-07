@@ -1,0 +1,694 @@
+{
+  "checkpoint": {
+    "tag": "checkpoint/pre-integrated-diffraction-2026-10-07",
+    "revision": "5c67ddafa83dbb37a30de602030e28132643f64d"
+  },
+  "hardware": "Apple M5 / Metal / Unity 6000.4.1f1",
+  "scope": "Experimental integrated rigid-edge sampling. Numerical model checks, not approval as a full-wave or realtime training reference.",
+  "runs": [
+    {
+      "name": "cleanup-after",
+      "report": {
+        "method": "geometric-spectral-preview-v5",
+        "motion": "local-constant-velocity-retarded-direct-and-first-mirror; other-boundaries-frozen-at-solve",
+        "formatVersion": 3,
+        "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin",
+        "channelsPerListener": 2,
+        "hrtfTaps": 128,
+        "hrtfDataset": "MIT-KEMAR-compact-v1",
+        "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+        "sceneHash": "d512698d34afd35b2477e79cdbf7cc35c17a7650d63c90eb98ca244fc08fbb83",
+        "takeStateHash": "fb40c9023cf9284c25e6633f97fc197c3df0430215804c67bae779dceedc9144",
+        "takeEventHash": "7c74d40ce15911adf59e9f1dbd5a7d42a7599b07942257f19dfa79b1a955a726",
+        "takeSourceHash": "314046d4975dad340e7b0c86da9c82d6995b01130033773ff788f8a483668352",
+        "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+        "unityVersion": "6000.4.1f1",
+        "platform": "OSXEditor",
+        "processor": "Apple M5",
+        "graphicsDevice": "Apple M5",
+        "audioHashes": [
+          "fa72d1e3211936fe80b3287a5dee25f2af28f1b8cc40398d4f3fd692ec889404"
+        ],
+        "provenance": {
+          "solverContract": "geometric-spectral-preview-v5",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "8a73f440-05a3-4e13-bed2-6078a49b453a",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "deb79c96bc0d114a5010662eb2237ec8",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settingsHash": "74209393e9f6ea03da7ee921c01fec322954b6883a6c68ad3062574cc482f74b",
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "dspLatencySamples": 1024,
+        "responseSupportSamples": 10252,
+        "tailCoversResponseSupport": true,
+        "audioUploadBytes": 12748632,
+        "audioReadbackBytes": 4252312,
+        "backendScope": "GPU transport and audio synthesis; CPU source timeline and PCM output",
+        "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+        "pairPrimitiveTestUpperBound": 1756296,
+        "settings": {
+          "responseStepSamples": 1024,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 8,
+          "useBvh": true,
+          "transport": 1,
+          "synthesis": 0,
+          "audioBackend": 0,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 1.0,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        },
+        "sampleRate": 44100,
+        "sourceCount": 6,
+        "listenerCount": 1,
+        "responseCount": 519,
+        "objectCount": 60,
+        "primitiveCount": 564,
+        "responseBatchCapacity": 8,
+        "outputSamples": 530501,
+        "preparedPcmBytes": 1433780,
+        "workingNumericBytes": 1245290965,
+        "preparationSeconds": 0.3864063,
+        "wallSeconds": 5.8064046,
+        "solveSeconds": 0.8771230999999997,
+        "evaluationSeconds": 0.023417399999999994,
+        "audioSeconds": 3.8770764000000026,
+        "responsePreparationSeconds": 0.04298919999999999,
+        "writeSeconds": 0.6301985000000009,
+        "maximumSolveSeconds": 0.1128774,
+        "backend": "GPU-Metal",
+        "uploadSeconds": 0.0169413,
+        "dispatchReadbackSeconds": 0.0026289999999999994,
+        "bvhBuildSeconds": 0.0013849,
+        "bvhUpdateSeconds": 0.0024764999999999974,
+        "bvhUpdates": 3,
+        "bvhStaticPrimitives": 396,
+        "transportDescription": "Synthesis=ImpulseResponse. Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and dominant visible knife-edge path with a Fresnel pressure-magnitude approximation; not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.",
+        "complete": true
+      },
+      "audio": {
+        "finite": true,
+        "peak": 0.10501392185688019,
+        "rms": 0.020081331087982924
+      }
+    },
+    {
+      "name": "integrated-after",
+      "report": {
+        "method": "integrated-edge-preview-v6",
+        "motion": "local-constant-velocity-retarded-direct-and-first-mirror; other-boundaries-frozen-at-solve",
+        "formatVersion": 3,
+        "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin",
+        "channelsPerListener": 2,
+        "hrtfTaps": 128,
+        "hrtfDataset": "MIT-KEMAR-compact-v1",
+        "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+        "sceneHash": "d512698d34afd35b2477e79cdbf7cc35c17a7650d63c90eb98ca244fc08fbb83",
+        "takeStateHash": "fb40c9023cf9284c25e6633f97fc197c3df0430215804c67bae779dceedc9144",
+        "takeEventHash": "7c74d40ce15911adf59e9f1dbd5a7d42a7599b07942257f19dfa79b1a955a726",
+        "takeSourceHash": "314046d4975dad340e7b0c86da9c82d6995b01130033773ff788f8a483668352",
+        "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+        "unityVersion": "6000.4.1f1",
+        "platform": "OSXEditor",
+        "processor": "Apple M5",
+        "graphicsDevice": "Apple M5",
+        "audioHashes": [
+          "dd9927555fea021ff32417770c75853216b957f19c459c02e625d476941cec62"
+        ],
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "706c33d0-549c-4925-acae-e424ee61a28e",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "9bd178d8e9bc8c3acbdfbac6b4c35e67",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settingsHash": "74209393e9f6ea03da7ee921c01fec322954b6883a6c68ad3062574cc482f74b",
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "dspLatencySamples": 1024,
+        "responseSupportSamples": 6019,
+        "tailCoversResponseSupport": true,
+        "audioUploadBytes": 12748632,
+        "audioReadbackBytes": 4252312,
+        "backendScope": "GPU transport and audio synthesis; CPU source timeline and PCM output",
+        "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+        "pairPrimitiveTestUpperBound": 1756296,
+        "settings": {
+          "responseStepSamples": 1024,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 8,
+          "useBvh": true,
+          "transport": 1,
+          "synthesis": 0,
+          "audioBackend": 0,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 1.0,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        },
+        "sampleRate": 44100,
+        "sourceCount": 6,
+        "listenerCount": 1,
+        "responseCount": 519,
+        "objectCount": 60,
+        "primitiveCount": 564,
+        "responseBatchCapacity": 8,
+        "outputSamples": 530501,
+        "preparedPcmBytes": 1433780,
+        "workingNumericBytes": 1092671557,
+        "preparationSeconds": 0.8138831999999999,
+        "wallSeconds": 21.1009362,
+        "solveSeconds": 1.9182118,
+        "evaluationSeconds": 0.7930650999999999,
+        "audioSeconds": 15.8067808,
+        "responsePreparationSeconds": 2.0769050999999994,
+        "writeSeconds": 1.7563634999999997,
+        "maximumSolveSeconds": 1.2875708,
+        "backend": "GPU-Metal",
+        "uploadSeconds": 0.5249005,
+        "dispatchReadbackSeconds": 0.04237600000000001,
+        "bvhBuildSeconds": 0.0011136,
+        "bvhUpdateSeconds": 0.008616800000000036,
+        "bvhUpdates": 3,
+        "bvhStaticPrimitives": 396,
+        "transportDescription": "Synthesis=ImpulseResponse. Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.",
+        "complete": true
+      },
+      "audio": {
+        "finite": true,
+        "peak": 0.1058647483587265,
+        "rms": 0.020301283571873278
+      }
+    },
+    {
+      "name": "integrated-warm-1",
+      "report": {
+        "method": "integrated-edge-preview-v6",
+        "motion": "local-constant-velocity-retarded-direct-and-first-mirror; other-boundaries-frozen-at-solve",
+        "formatVersion": 3,
+        "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin",
+        "channelsPerListener": 2,
+        "hrtfTaps": 128,
+        "hrtfDataset": "MIT-KEMAR-compact-v1",
+        "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+        "sceneHash": "d512698d34afd35b2477e79cdbf7cc35c17a7650d63c90eb98ca244fc08fbb83",
+        "takeStateHash": "fb40c9023cf9284c25e6633f97fc197c3df0430215804c67bae779dceedc9144",
+        "takeEventHash": "7c74d40ce15911adf59e9f1dbd5a7d42a7599b07942257f19dfa79b1a955a726",
+        "takeSourceHash": "314046d4975dad340e7b0c86da9c82d6995b01130033773ff788f8a483668352",
+        "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+        "unityVersion": "6000.4.1f1",
+        "platform": "OSXEditor",
+        "processor": "Apple M5",
+        "graphicsDevice": "Apple M5",
+        "audioHashes": [
+          "80890655a006dc70072e4117e2b77309231c311b97975495b234338d5e60c7e0"
+        ],
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "5c5875ad-0233-413c-a86b-9b0671b29372",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "021c3cd4a7da06fcedba89ec2c16066a",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settingsHash": "74209393e9f6ea03da7ee921c01fec322954b6883a6c68ad3062574cc482f74b",
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "dspLatencySamples": 1024,
+        "responseSupportSamples": 6019,
+        "tailCoversResponseSupport": true,
+        "audioUploadBytes": 12748632,
+        "audioReadbackBytes": 4252312,
+        "backendScope": "GPU transport and audio synthesis; CPU source timeline and PCM output",
+        "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+        "pairPrimitiveTestUpperBound": 1756296,
+        "settings": {
+          "responseStepSamples": 1024,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 8,
+          "useBvh": true,
+          "transport": 1,
+          "synthesis": 0,
+          "audioBackend": 0,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 1.0,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        },
+        "sampleRate": 44100,
+        "sourceCount": 6,
+        "listenerCount": 1,
+        "responseCount": 519,
+        "objectCount": 60,
+        "primitiveCount": 564,
+        "responseBatchCapacity": 8,
+        "outputSamples": 530501,
+        "preparedPcmBytes": 1433780,
+        "workingNumericBytes": 1092671557,
+        "preparationSeconds": 0.4845501,
+        "wallSeconds": 11.9159545,
+        "solveSeconds": 0.5642268,
+        "evaluationSeconds": 0.024898600000000003,
+        "audioSeconds": 10.709892700000013,
+        "responsePreparationSeconds": 0.042575100000000025,
+        "writeSeconds": 0.12017279999999997,
+        "maximumSolveSeconds": 0.0302616,
+        "backend": "GPU-Metal",
+        "uploadSeconds": 0.007372799999999999,
+        "dispatchReadbackSeconds": 0.0010888,
+        "bvhBuildSeconds": 0.0013873,
+        "bvhUpdateSeconds": 0.001889099999999995,
+        "bvhUpdates": 3,
+        "bvhStaticPrimitives": 396,
+        "transportDescription": "Synthesis=ImpulseResponse. Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.",
+        "complete": true
+      },
+      "audio": {
+        "finite": true,
+        "peak": 0.1058647483587265,
+        "rms": 0.02030128356885717
+      }
+    },
+    {
+      "name": "integrated-warm-2",
+      "report": {
+        "method": "integrated-edge-preview-v6",
+        "motion": "local-constant-velocity-retarded-direct-and-first-mirror; other-boundaries-frozen-at-solve",
+        "formatVersion": 3,
+        "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin",
+        "channelsPerListener": 2,
+        "hrtfTaps": 128,
+        "hrtfDataset": "MIT-KEMAR-compact-v1",
+        "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+        "sceneHash": "d512698d34afd35b2477e79cdbf7cc35c17a7650d63c90eb98ca244fc08fbb83",
+        "takeStateHash": "fb40c9023cf9284c25e6633f97fc197c3df0430215804c67bae779dceedc9144",
+        "takeEventHash": "7c74d40ce15911adf59e9f1dbd5a7d42a7599b07942257f19dfa79b1a955a726",
+        "takeSourceHash": "314046d4975dad340e7b0c86da9c82d6995b01130033773ff788f8a483668352",
+        "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+        "unityVersion": "6000.4.1f1",
+        "platform": "OSXEditor",
+        "processor": "Apple M5",
+        "graphicsDevice": "Apple M5",
+        "audioHashes": [
+          "80890655a006dc70072e4117e2b77309231c311b97975495b234338d5e60c7e0"
+        ],
+        "provenance": {
+          "solverContract": "integrated-edge-preview-v6",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "5c5875ad-0233-413c-a86b-9b0671b29372",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "021c3cd4a7da06fcedba89ec2c16066a",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settingsHash": "74209393e9f6ea03da7ee921c01fec322954b6883a6c68ad3062574cc482f74b",
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "dspLatencySamples": 1024,
+        "responseSupportSamples": 6019,
+        "tailCoversResponseSupport": true,
+        "audioUploadBytes": 12748632,
+        "audioReadbackBytes": 4252312,
+        "backendScope": "GPU transport and audio synthesis; CPU source timeline and PCM output",
+        "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+        "pairPrimitiveTestUpperBound": 1756296,
+        "settings": {
+          "responseStepSamples": 1024,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 8,
+          "useBvh": true,
+          "transport": 1,
+          "synthesis": 0,
+          "audioBackend": 0,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 1.0,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        },
+        "sampleRate": 44100,
+        "sourceCount": 6,
+        "listenerCount": 1,
+        "responseCount": 519,
+        "objectCount": 60,
+        "primitiveCount": 564,
+        "responseBatchCapacity": 8,
+        "outputSamples": 530501,
+        "preparedPcmBytes": 1433780,
+        "workingNumericBytes": 1092671557,
+        "preparationSeconds": 2.5105117999999997,
+        "wallSeconds": 24.0131324,
+        "solveSeconds": 1.1285849000000001,
+        "evaluationSeconds": 0.26930230000000005,
+        "audioSeconds": 18.076457899999987,
+        "responsePreparationSeconds": 0.5779939999999999,
+        "writeSeconds": 2.0037950000000007,
+        "maximumSolveSeconds": 0.0746751,
+        "backend": "GPU-Metal",
+        "uploadSeconds": 0.09831150000000004,
+        "dispatchReadbackSeconds": 0.0098162,
+        "bvhBuildSeconds": 0.0011812,
+        "bvhUpdateSeconds": 0.03218410000000013,
+        "bvhUpdates": 3,
+        "bvhStaticPrimitives": 396,
+        "transportDescription": "Synthesis=ImpulseResponse. Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.",
+        "complete": true
+      },
+      "audio": {
+        "finite": true,
+        "peak": 0.1058647483587265,
+        "rms": 0.02030128356885717
+      }
+    },
+    {
+      "name": "integrated-control",
+      "report": {
+        "method": "geometric-spectral-preview-v5",
+        "motion": "local-constant-velocity-retarded-direct-and-first-mirror; other-boundaries-frozen-at-solve",
+        "formatVersion": 3,
+        "responseLayout": "Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. frames: int64 sample, then source-major/listener-minor float32(delaySeconds,pressureGain,directionX,directionY,directionZ,delayRate); direction is world listener-to-arrival-origin",
+        "channelsPerListener": 2,
+        "hrtfTaps": 128,
+        "hrtfDataset": "MIT-KEMAR-compact-v1",
+        "hrtfHash": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f",
+        "sceneHash": "d512698d34afd35b2477e79cdbf7cc35c17a7650d63c90eb98ca244fc08fbb83",
+        "takeStateHash": "fb40c9023cf9284c25e6633f97fc197c3df0430215804c67bae779dceedc9144",
+        "takeEventHash": "7c74d40ce15911adf59e9f1dbd5a7d42a7599b07942257f19dfa79b1a955a726",
+        "takeSourceHash": "314046d4975dad340e7b0c86da9c82d6995b01130033773ff788f8a483668352",
+        "responseHash": "961b03d700272daca5773e4954d02585150d8af90303474e0bda7543b7125251",
+        "unityVersion": "6000.4.1f1",
+        "platform": "OSXEditor",
+        "processor": "Apple M5",
+        "graphicsDevice": "Apple M5",
+        "audioHashes": [
+          "fa72d1e3211936fe80b3287a5dee25f2af28f1b8cc40398d4f3fd692ec889404"
+        ],
+        "provenance": {
+          "solverContract": "geometric-spectral-preview-v5",
+          "dspContract": "gpu-path-filter-overlap-save-v1",
+          "csharpModule": "30f6f991-684a-49fb-b16b-8bc00ff56c27",
+          "shaderName": "Transport",
+          "shaderDependencyHash": "12ca4fe9a21423cf202c255496070817",
+          "unityVersion": "6000.4.1f1",
+          "buildGuid": "00000000000000000000000000000000"
+        },
+        "settingsHash": "74209393e9f6ea03da7ee921c01fec322954b6883a6c68ad3062574cc482f74b",
+        "audioShaderDependencyHash": "798f3f49188beb221fb10c38174ca326",
+        "dspLatencySamples": 1024,
+        "responseSupportSamples": 10252,
+        "tailCoversResponseSupport": true,
+        "audioUploadBytes": 12748632,
+        "audioReadbackBytes": 4252312,
+        "backendScope": "GPU transport and audio synthesis; CPU source timeline and PCM output",
+        "traversalCounterScope": "Direct opaque diagnostic pair/primitive bound only; excludes spectral rays, bounces, edges and medium queries",
+        "pairPrimitiveTestUpperBound": 1756296,
+        "settings": {
+          "responseStepSamples": 1024,
+          "speedOfSound": 343.0,
+          "referenceDistance": 1.0,
+          "minimumDistance": 0.10000000149011612,
+          "tailSamples": 44100,
+          "transitionSamples": 512,
+          "delayFilter": 0,
+          "listenerOutput": 1,
+          "sincRadius": 16,
+          "maximumDelaySeconds": 10.0,
+          "maximumSignalEvents": 4096,
+          "maximumPendingObservations": 16,
+          "maximumResponsesPerBatch": 8,
+          "useBvh": true,
+          "transport": 1,
+          "synthesis": 0,
+          "audioBackend": 0,
+          "raysPerBin": 1,
+          "maxBounces": 5,
+          "seed": 0,
+          "raysPerPair": 0,
+          "diffractionFactor": 1.0,
+          "airAbsorption": true,
+          "fftSize": 1024,
+          "spectralHop": 256
+        },
+        "sampleRate": 44100,
+        "sourceCount": 6,
+        "listenerCount": 1,
+        "responseCount": 519,
+        "objectCount": 60,
+        "primitiveCount": 564,
+        "responseBatchCapacity": 8,
+        "outputSamples": 530501,
+        "preparedPcmBytes": 1433780,
+        "workingNumericBytes": 1245290965,
+        "preparationSeconds": 5.747898,
+        "wallSeconds": 19.620057799999998,
+        "solveSeconds": 1.4315337000000001,
+        "evaluationSeconds": 0.028981700000000006,
+        "audioSeconds": 12.200014900000006,
+        "responsePreparationSeconds": 0.07437999999999997,
+        "writeSeconds": 0.1956765999999999,
+        "maximumSolveSeconds": 0.0641822,
+        "backend": "GPU-Metal",
+        "uploadSeconds": 0.007351699999999999,
+        "dispatchReadbackSeconds": 0.0016333,
+        "bvhBuildSeconds": 0.0015111,
+        "bvhUpdateSeconds": 0.0017877999999999998,
+        "bvhUpdates": 3,
+        "bvhStaticPrimitives": 396,
+        "transportDescription": "Synthesis=ImpulseResponse. Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and dominant visible knife-edge path with a Fresnel pressure-magnitude approximation; not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.",
+        "complete": true
+      },
+      "audio": {
+        "finite": true,
+        "peak": 0.10501392185688019,
+        "rms": 0.020081331087982924
+      }
+    }
+  ],
+  "tests": {
+    "focused": {
+      "result": "Passed",
+      "total": 12,
+      "passed": 12,
+      "failed": 0,
+      "seconds": 19.3875572,
+      "failures": []
+    },
+    "core": {
+      "result": "Failed(Child)",
+      "total": 139,
+      "passed": 138,
+      "failed": 1,
+      "seconds": 326.9924663,
+      "failures": [
+        {
+          "name": "TakeChecks.EdgeChainsNeedTwoBendsAroundSolid(True)",
+          "message": "Timeout value of 180000 ms was exceeded. If this is intended, increase the timeout value using a TimeoutAttribute."
+        }
+      ]
+    },
+    "core-final": {
+      "result": "Failed(Child)",
+      "total": 141,
+      "passed": 139,
+      "failed": 2,
+      "seconds": 113.8507313,
+      "failures": [
+        {
+          "name": "TakeChecks.SignedArrivalsPreserveDelayedCancellation(ImpulseResponse)",
+          "message": "System.ArgumentException : Invalid mix block."
+        },
+        {
+          "name": "TakeChecks.SignedArrivalsPreserveDelayedCancellation(Spectral)",
+          "message": "System.ArgumentException : Invalid mix block."
+        }
+      ]
+    },
+    "signed-final": {
+      "result": "Passed",
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "seconds": 0.5370902,
+      "failures": []
+    }
+  },
+  "reference": {
+    "method": "Independent double-precision Simpson quadrature, 65536 panels on each half of the edge, truncated at 0.1 s.",
+    "source": "https://doi.org/10.3813/AAA.918181",
+    "values": [
+      {
+        "y": -2,
+        "response": [
+          [
+            0,
+            0.1564291016885346,
+            0.0
+          ],
+          [
+            1,
+            0.11243157352344421,
+            0.02094402078723674
+          ],
+          [
+            4,
+            0.0044422679950567225,
+            0.08345125143137617
+          ],
+          [
+            8,
+            -0.06663943081492962,
+            -0.016598353630327804
+          ]
+        ]
+      },
+      {
+        "y": -1.005,
+        "response": [
+          [
+            0,
+            0.18489784366102024,
+            0.0
+          ],
+          [
+            1,
+            0.07849880438489718,
+            0.12503084404930662
+          ],
+          [
+            4,
+            -0.02365862213863574,
+            -0.12654225443048153
+          ],
+          [
+            8,
+            -0.11993450310736284,
+            0.028136532266828017
+          ]
+        ]
+      },
+      {
+        "y": -1,
+        "response": [
+          [
+            0,
+            0.18505084309961056,
+            0.0
+          ],
+          [
+            1,
+            0.07815037596015267,
+            0.1254818451000058
+          ],
+          [
+            4,
+            -0.022105770832795756,
+            -0.12714446346495833
+          ],
+          [
+            8,
+            -0.12099609159267911,
+            0.025333862715971767
+          ]
+        ]
+      },
+      {
+        "y": -0.995,
+        "response": [
+          [
+            0,
+            0.1852038879513174,
+            0.0
+          ],
+          [
+            1,
+            0.07780068753582607,
+            0.12593169798916565
+          ],
+          [
+            4,
+            -0.02054533279472156,
+            -0.12772804093330575
+          ],
+          [
+            8,
+            -0.12199260303675763,
+            0.022504132238499043
+          ]
+        ]
+      }
+    ]
+  },
+  "caveats": [
+    "Historical baseline, experimental runs and a fresh checkpoint control use identical take/settings hashes. They are a small timing sample under concurrent workstation load, not a statistical speed comparison.",
+    "integrated-after predates the final per-leg Doppler bookkeeping cleanup; integrated-warm runs use final code.",
+    "The first broad run had one cold Metal compilation timeout; the warm run passed all 139 transport/core checks. Two newly added signed-impulse fixtures initially exceeded the mixer block size; corrected fixture results are recorded separately.",
+    "Finite-wedge and multi-edge paths still require independent physical convergence studies. Specular-edge connections, impedance wedges and vertex corrections remain incomplete.",
+    "Large ray budgets increase per-arrival DSP storage. Numerical half-plane fixtures do not establish realtime feasibility.",
+    "No Windows/DirectX or live microphone/multiplayer deadline validation is claimed."
+  ],
+  "build": {
+    "result": "Succeeded",
+    "platform": "StandaloneOSX",
+    "totalWarnings": 1090,
+    "totalErrors": 0,
+    "buildTimeMs": 26388
+  }
+}

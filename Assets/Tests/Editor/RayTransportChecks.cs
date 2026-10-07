@@ -523,98 +523,123 @@ public partial class TakeChecks
     {
         var settings=SpectralSettings();settings.diffractionFactor=1;settings.speedOfSound=343;settings.raysPerBin=1;settings.maxBounces=1;return settings;
     }
-    // Independent numerical Fresnel integrals, not the shader's dB fit.
-    static double FresnelPressure(double nu)
+    static System.Numerics.Complex EdgeResponse(RayTransport.Path[] paths,int bin,float frequency)
     {
-        const int steps=1024;double c=0,s=0,h=nu/steps;
-        for(int i=0;i<=steps;i++)
-        {
-            double phase=Math.PI/2*Math.Pow(i*h,2),weight=i==0 || i==steps?1:i%2==0?2:4;
-            c+=weight*Math.Cos(phase);s+=weight*Math.Sin(phase);
-        }
-        c*=h/3;s*=h/3;return .5*Math.Sqrt(Math.Pow(1-c-s,2)+Math.Pow(c-s,2));
+        var value=System.Numerics.Complex.Zero;
+        foreach(var p in paths)if(p.frequencyBin==bin)
+            value+=p.pressureGain*System.Numerics.Complex.Exp(new System.Numerics.Complex(0,-2*Math.PI*frequency*p.delaySeconds));
+        return value;
     }
+    // Deterministic double-precision quadrature of Svensson et al. (2009),
+    // equations 1-6, truncated at the same 0.1-second horizon. These constants
+    // include complex phase, not just pressure magnitude or the old ITU fit.
     [TestCase(false,false),TestCase(false,true),TestCase(true,false),TestCase(true,true),Category("GPU"),Category("Diffraction")]
-    public void KnifeEdgeMatchesFresnelField(bool planar,bool bvh)
-    {
-        KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);var settings=EdgeSettings();settings.useBvh=bvh;
-        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
-        double distance=state[0].position.magnitude+state[1].position.magnitude,excess=distance-Vector3.Distance(state[0].position,state[1].position);
-        int first=settings.SpectralSlotsPerPair-settings.FrequencyBins;float previous=1;
-        foreach(int bin in new[]{0,1,4,16,32})
-        {
-            var p=solver.RayPaths[first+bin];double reference=FresnelPressure(Math.Sqrt(4*excess*bin*8000/settings.fftSize/343))/distance;
-            Assert.That(Math.Abs(20*Math.Log10(p.pressureGain/reference)),Is.LessThan(.4),"Pressure agrees with the scalar knife-edge reference in dB.");
-            Assert.That(p.pressureGain,Is.LessThan(previous));previous=p.pressureGain;
-            Assert.That(p.delaySeconds,Is.EqualTo(distance/343).Within(1e-6));
-            Assert.That(Vector3.Distance((Vector3)p.direction,-state[1].position.normalized),Is.LessThan(1e-5));
-        }
-    }
-    [Test,Category("GPU"),Category("Diffraction")]
-    public void KnifeEdgeIgnoresRandomRayBudget()
-    {
-        KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();RayTransport.Path baseline=default;
-        foreach(int rays in new[]{1,7})
-        {
-            settings.raysPerBin=rays;settings.seed=rays*31;
-            using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
-            var p=solver.RayPaths[settings.SpectralSlotsPerPair-settings.FrequencyBins+4];
-            if(rays==1)baseline=p;
-            else {Assert.That(p.pressureGain,Is.EqualTo(baseline.pressureGain));Assert.That(p.delaySeconds,Is.EqualTo(baseline.delaySeconds));Assert.That(p.identity,Is.EqualTo(baseline.identity));}
-        }
-    }
-    [TestCase(false),TestCase(true),Category("GPU"),Category("Diffraction")]
-    public void KnifeEdgeShadowBoundaryIsContinuous(bool planar)
+    public void EdgeIntegralMatchesRigidHalfPlane(bool planar,bool bvh)
     {
         KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);float previous=0;
-        foreach(float dy in new[]{-.005f,0,.005f})
+        settings.useBvh=bvh;settings.fftSize=16;settings.spectralHop=4;settings.raysPerBin=65536;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);solver.Solve(state,new TakeRender.DirectPath[1]);
+        int[] bins={0,1,4,8};double[] real={.156429101689,.112431573523,.004442267995,-.066639430815};
+        double[] imaginary={0,.020944020787,.083451251431,-.016598353630};
+        for(int i=0;i<bins.Length;i++)
         {
-            state[1].position=new Vector3(2,-1+dy,0);solver.Solve(state,new TakeRender.DirectPath[1]);
-            float pressure=solver.RayPaths[4].pressureGain+solver.RayPaths[settings.SpectralSlotsPerPair-settings.FrequencyBins+4].pressureGain;
-            Assert.That(pressure,Is.EqualTo(.5f/Vector3.Distance(state[0].position,state[1].position)).Within(.002f));
-            if(previous>0)Assert.That(Math.Abs(pressure-previous),Is.LessThan(.002f));previous=pressure;
+            var actual=EdgeResponse(solver.RayPaths,bins[i],bins[i]*62.5f);
+            Assert.That((actual-new System.Numerics.Complex(real[i],imaginary[i])).Magnitude,Is.LessThan(.004),"Complex rigid half-plane response, bin "+bins[i]);
         }
     }
     [TestCase(false),TestCase(true),Category("GPU"),Category("Diffraction")]
-    public void KnifeEdgeRequiresTwoVisibleLegs(bool planar)
+    public void EdgeShadowBoundaryRetainsPhaseAndContinuity(bool planar)
+    {
+        KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);var settings=EdgeSettings();
+        settings.fftSize=4;settings.spectralHop=1;settings.raysPerBin=65536;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
+        var expected=new System.Numerics.Complex(-.022105881,-.127143985);
+        foreach(float dy in new[]{-.005f,0,.005f})
+        {
+            state[1].position.y=-1+dy;solver.Solve(state,new TakeRender.DirectPath[1]);
+            Assert.That((EdgeResponse(solver.RayPaths,1,250)-expected).Magnitude,Is.LessThan(.006),"The complex total field stays continuous across the geometrical shadow.");
+        }
+    }
+    [TestCase(false),TestCase(true),Category("GPU"),Category("Diffraction")]
+    public void EdgeChainsNeedTwoBendsAroundSolid(bool planar)
     {
         KnifeEdgeFixture(planar,out var scene,out _,out var state);var settings=EdgeSettings();
+        settings.fftSize=2;settings.spectralHop=1;settings.raysPerBin=16384;settings.useBvh=true;
         var geometry=TransportBox(scene.dimension,2,0,1);scene.objects[2].primitiveCount=geometry.Length;
         state[0].position=Vector3.left*3;state[1].position=Vector3.right*3;
-        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
-        for(int bin=0;bin<settings.FrequencyBins;bin++)Assert.That(solver.RayPaths[settings.SpectralSlotsPerPair-settings.FrequencyBins+bin].pressureGain,Is.Zero,"A single edge must not shortcut through a thick solid.");
+        foreach(int order in new[]{1,2})
+        {
+            settings.maxBounces=order;
+            using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);solver.Solve(state,new TakeRender.DirectPath[1]);
+            int arrivals=0;
+            foreach(var p in solver.RayPaths)if(p.pressureGain!=0)
+            {
+                arrivals++;Assert.That(float.IsFinite(p.pressureGain),Is.True);
+                Assert.That(p.delaySeconds,Is.GreaterThanOrEqualTo((2*Mathf.Sqrt(5)+2)/343-1e-6f),"No path can shortcut the solid.");
+            }
+            if(order==1)Assert.That(arrivals,Is.Zero);else Assert.That(arrivals,Is.GreaterThan(0),"Two edge events share the ordinary bounce loop.");
+        }
     }
     [Test,Category("GPU"),Category("Diffraction")]
-    public void KnifeEdgeMotionUpdatesRouteAndDoppler()
-    {
-        KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();settings.useBvh=true;
-        state[2].flags|=AcousticTake.StateFlags.VelocityValid;state[2].velocity=Vector3.up;
-        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);int slot=settings.SpectralSlotsPerPair-settings.FrequencyBins+4;
-        solver.Solve(state,new TakeRender.DirectPath[1]);var first=solver.RayPaths[slot];
-        state[2].position+=state[2].velocity*.01f;solver.Solve(state,new TakeRender.DirectPath[1]);var next=solver.RayPaths[slot];
-        Assert.That(solver.StaticPrimitiveCount,Is.Zero);
-        Assert.That(first.direction.w,Is.EqualTo((next.delaySeconds-first.delaySeconds)/.01f).Within(5e-5f));
-        Assert.That(next.delaySeconds,Is.GreaterThan(first.delaySeconds));Assert.That(next.identity,Is.EqualTo(first.identity));
-    }
-    [Test,Category("GPU"),Category("Diffraction")]
-    public void KnifeEdgeDoesNotAttenuateSameSideOrTransparentSound()
+    public void MovingEdgeUsesLocalVelocityAndCurrentPose()
     {
         KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        foreach(bool transparent in new[]{false,true})
+        settings.raysPerBin=64;settings.useBvh=true;
+        state[2].flags|=AcousticTake.StateFlags.VelocityValid;state[2].velocity=Vector3.up;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);
+        foreach(float y in new[]{0f,.01f})
         {
-            scene.materials[0].transmission[0]=transparent?1:0;
-            state[1].position=transparent?new Vector3(2,-2,0):new Vector3(-2,-2,0);
-            using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
-            Assert.That(solver.RayPaths[4].pressureGain,Is.EqualTo(1/Vector3.Distance(state[0].position,state[1].position)).Within(1e-6));
-            Assert.That(solver.RayPaths[settings.SpectralSlotsPerPair-settings.FrequencyBins+4].pressureGain,Is.Zero);
+            state[2].position.y=y;solver.Solve(state,new TakeRender.DirectPath[1]);int count=0;
+            foreach(var p in solver.RayPaths)if(p.frequencyBin==4 && p.pressureGain!=0)
+            {
+                var outward=(Vector3)p.direction;var edge=state[1].position-outward*(state[1].position.x/outward.x);
+                Assert.That(edge.y,Is.EqualTo(y).Within(1e-4));
+                var incoming=(edge-state[0].position).normalized;var outgoing=-outward;
+                float ratio=(343-Vector3.Dot(state[2].velocity,incoming))/(343-Vector3.Dot(state[2].velocity,outgoing));
+                Assert.That(p.direction.w,Is.EqualTo(1-ratio).Within(2e-6));
+                Assert.That(p.delaySeconds,Is.EqualTo((Vector3.Distance(edge,state[0].position)+Vector3.Distance(edge,state[1].position))/343).Within(1e-6));count++;
+            }
+            Assert.That(count,Is.GreaterThan(0));
+        }
+        Assert.That(solver.StaticPrimitiveCount,Is.Zero);
+    }
+    [Test,Category("GPU"),Category("Diffraction")]
+    public void TransparentGeometryDoesNotGenerateEdgeSound()
+    {
+        KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();
+        scene.materials[0].transmission[0]=1;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
+        Assert.That(solver.RayPaths[4].pressureGain,Is.EqualTo(1/Vector3.Distance(state[0].position,state[1].position)).Within(1e-6));
+        for(int i=settings.FrequencyBins;i<solver.RayPaths.Length;i++)Assert.That(solver.RayPaths[i].pressureGain,Is.Zero);
+    }
+    [TestCase(TakeRender.Synthesis.ImpulseResponse),TestCase(TakeRender.Synthesis.Spectral),Category("GPU"),Category("Diffraction")]
+    public void SignedArrivalsPreserveDelayedCancellation(TakeRender.Synthesis method)
+    {
+        RequireGpu();var scene=Scene();var state=States();var settings=SpectralSettings();
+        settings.synthesis=method;settings.fftSize=64;settings.spectralHop=16;settings.raysPerBin=1;settings.maxBounces=1;
+        var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);
+        signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
+        var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
+        for(int bin=0;bin<settings.FrequencyBins;bin++)
+        {
+            paths[bin]=new RayTransport.Path{frequencyBin=(uint)bin,pressureGain=.25f,delaySeconds=5f/8192};
+            paths[settings.FrequencyBins+bin]=new RayTransport.Path{frequencyBin=(uint)bin,pressureGain=-.75f,delaySeconds=9f/8192,identity=1};
+        }
+        using var buffer=new ComputeBuffer(paths.Length,32);buffer.SetData(paths);
+        using var gpu=new GpuAudio(scene,8192,settings,new[]{signal});var cpu=new TakeRender.Mixer(scene,8192,settings,new[]{signal});
+        cpu.SetResponse(0,new TakeRender.DirectPath[1],state,false,paths,0);gpu.SetResponse(0,false,buffer,0,scene,state);
+        var a=new float[128];var b=new float[128];cpu.Render(0,a.Length,a);gpu.Render(0,b.Length,b);
+        for(int n=0;n<a.Length;n++)
+        {
+            float expected=n==settings.DspLatencySamples+5?.25f:n==settings.DspLatencySamples+9?-.75f:0;
+            Assert.That(a[n],Is.EqualTo(expected).Within(2e-5));Assert.That(b[n],Is.EqualTo(expected).Within(2e-5));
         }
     }
     [TestCase(TakeRender.Synthesis.ImpulseResponse),TestCase(TakeRender.Synthesis.Spectral),Category("GPU"),Category("Diffraction")]
     public void DiffractedAudioMatchesCpuReference(TakeRender.Synthesis method)
     {
         KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        settings.synthesis=method;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=32;
+        settings.raysPerBin=16;settings.synthesis=method;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=32;
         var clip=new float[257];for(int i=0;i<clip.Length;i++)clip[i]=.2f*Mathf.Sin(i*.17f);
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
         var signals=new[]{signal};var cpu=new TakeRender.Mixer(scene,8000,settings,signals);
