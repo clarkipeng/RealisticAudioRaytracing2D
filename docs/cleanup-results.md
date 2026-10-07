@@ -1,5 +1,25 @@
 # Cleanup validation and measured bottlenecks
 
+## Audio continuity and multiplayer verification — 2026-10-07
+
+**155/155 TakeChecks passed** in 36.38 seconds on Unity 6000.4.1f1 / Apple M5 / Metal. Four new cases compare changing gain, delay and head orientation against a sample-wise crossfade between independently rendered static responses. CPU/GPU and IR/spectral outputs agree within 2e-5, including partial-hop delivery and an unchanged second listener. These detect DSP discontinuities; they do not validate the physical transport model.
+
+The previously benchmarked 530,501-frame station WAV peaks at 0.105865, with no samples above full scale. Both source clips start/end at zero. Its largest adjacent-sample change (0.082844) occurs at sample **90,112**, exactly at a recorded listener teleport. Cuts currently bypass response fades; this is a known hard discontinuity, not evidence that ordinary motion smoothing failed. Cut windows require explicit treatment in training data.
+
+The explicit station device test passed for 885,760 frames after warmup: **zero underrun, late, overflow, channel-mismatch or over-budget callback samples**, with the existing 16,384-frame lead. The earlier failed deadline run remains recorded below; one passing run does not resolve intermittent stalls. The explicit microphone capture/open-close check also passed (7.22 s); it saved and transmitted no device audio.
+
+Standalone tests ran one host plus clients on this same Mac, using distinct synthetic tones, native scene settings, and a separate recording per player. `MultiplayerSmoke` now accepts `--acoustics-players=N` and requires all participants' streams. Its pass status covers networking, recording and offline replay; audio deadline counters are reported separately.
+
+| Local processes | Response step | Networking / recording / replay | Audio delivery |
+|---|---:|---|---|
+| Host + one client | 1,024 | Both passed; both saved two voices; no concealed/late voice packets | Host missed 1,024 frames (~23 ms); client missed zero |
+| Host + three clients | 1,024 | All connected/exchanged voice; two clients failed with full live-observation queues | 33,793–52,317 underrun frames per process; this run failed |
+| Host + three clients | 4,096 | All four passed and saved four voices; all 16 participant/stream tone identities matched | Host missed zero output frames; clients missed 362,280–398,382 (~8.2–9.0 s); each process concealed 124–332 voice frames |
+
+Successful replays ran offline with the microphone closed; maximum final position error was below 1e-5 m and angular error below 0.05°. The coarse-response run proves four-player routing/capture/replay, **not clean realtime speech**. Increasing the response step did not cure contention. Four independent computers, actual conversational voice quality and internet connectivity were not tested. Physical reference acceptance remains blocked by the transport failures below.
+
+The Mac player rebuilt with zero errors and 1,869 existing warnings. No runtime renderer or scene defaults changed. Local evidence is under `.context/audio-quality/`: test XML/status files, waveform/cut/clip checks, per-process results and `multiplayer-summary.json`. Synthetic takes were moved into that directory's `takes/` folder, outside the ordinary recordings list.
+
 ## GPU response storage and diagnostics — 2026-10-07
 
 The baseline is preserved at `83a62da`. GPU filter construction now skips the staged large FFTs when responses are unchanged, and audio transforms skip the unused previous bank. Dispatches still occur, but those shader stages return before touching FFT scratch. Persistent material spectra are shared by both ears; each response bank keeps its own head blend so crossfades retain the previous orientation. No paths, precision, FFT sizes or configured budgets are dropped.

@@ -44,6 +44,8 @@ The demo live preset uses a 1,024-sample acoustic response step (~23 ms at 44.1 
 
 The existing offline Low/High render/comparison tools consume these same source files and poses. Keep all client views of one session in the same training split, preserve concealment/gap flags, and select recordings explicitly for training. Physical microphone audio can already contain real-room reverb and device processing; it is not automatically clean speech or a physics reference.
 
+[Current audio/multiplayer checks](docs/cleanup-results.md#audio-continuity-and-multiplayer-verification--2026-10-07) verify four-player voice routing and replay, but also reproduce output gaps and GPU overload when several clients share one Mac. Functional connectivity does not yet establish artifact-free realtime voice.
+
 ## Compact recording and replay
 
 TrainStation and Church record automatically from scene initialization, before movement or sound. **R / Save run** finishes the recording; stopping Play also finalizes the inputs. Re-enter Play to begin another run. There is no duration cap, seek, checkpoint or playback cache.

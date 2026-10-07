@@ -7,19 +7,20 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
-// Opt-in two-process integration probe. No device capture; the voice stimulus is explicitly synthetic.
+// Opt-in multi-process integration probe. No device capture; the voice stimulus is explicitly synthetic.
 [DefaultExecutionOrder(-35)]
 public sealed class MultiplayerSmoke : MonoBehaviour
 {
     [Serializable] sealed class Result
     {
         public string role,take,sourceHash,sceneHash,stateHash,eventHash,status="running",error;
-        public int receivedPackets,concealedFrames,latePackets,frames,nonzeroStreams,responseStepSamples;
+        public int receivedPackets,concealedFrames,latePackets,frames,nonzeroStreams,responseStepSamples,players,slot;
         public float remoteMetres,sharedMetres,replayPositionError,replayAngleError;
         public long underrunSamples,lateSamples,callbacks;
         public bool replayOffline,microphoneClosed;
     }
     static string role,output;
+    static int expectedPlayers;
     Result result;
     SceneSession session;
     MultiplayerSession network;
@@ -41,6 +42,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         role=Arg("--acoustics-smoke");output=Arg("--acoustics-result");
         if(role==null)return;
         if((role!="host" && role!="client") || string.IsNullOrEmpty(output))throw new ArgumentException("Smoke test needs host/client and result path.");
+        expectedPlayers=int.Parse(Arg("--acoustics-players")??"2");
         MultiplayerSession.PendingMode=role;MultiplayerSession.PendingAddress="127.0.0.1";
         string step=Arg("--acoustics-smoke-step");
         if(step!=null)UnityEngine.SceneManagement.SceneManager.sceneLoaded+=(scene,mode)=>FindAnyObjectByType<RayTraceManager>().directSettings.responseStepSamples=int.Parse(step);
@@ -52,7 +54,11 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         Application.logMessageReceived+=Log;
         yield return Wait(()=> (session=FindAnyObjectByType<SceneSession>())!=null && session.manager.IsRecordingTake,"network capture startup",25);
         if(errors.Count>0) {Finish();yield break;}
-        network=session.multiplayer;network.microphone.enabled=false;session.ReadPlayerInput=false;session.SetWalking(false);
+        network=session.multiplayer;session.ReadPlayerInput=false;session.SetWalking(false);
+        if(expectedPlayers<2 || expectedPlayers>network.Capacity){errors.Add("Requested player count exceeds the authored scene slots.");Finish();yield break;}
+        yield return Wait(()=>network.ConnectedPlayers==expectedPlayers,"complete player roster",30);
+        if(errors.Count>0){Finish();yield break;}
+        result.players=network.ConnectedPlayers;result.slot=network.LocalSlot;network.microphone.enabled=false;
         voiceState=typeof(MultiplayerSession).GetMethod("LocalVoiceState",BindingFlags.NonPublic|BindingFlags.Instance);
         voiceSamples=typeof(MultiplayerSession).GetMethod("LocalVoiceSamples",BindingFlags.NonPublic|BindingFlags.Instance);
         shared=network.sharedObjects.First();sharedInitial=shared.position;
@@ -73,7 +79,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
                 var source=take.ReadStream(s);double energy=0;for(long n=0;n<source.End;n++)energy+=source.Read(n)*source.Read(n);
                 if(energy>1)result.nonzeroStreams++;
             }
-            if(result.receivedPackets<20 || result.nonzeroStreams<2)throw new Exception("Both peers must receive and save audible voice.");
+            if(result.receivedPackets<20*(expectedPlayers-1) || result.nonzeroStreams!=expectedPlayers)throw new Exception("Every player must receive and save every participant's voice.");
             if(result.remoteMetres<.1f || result.sharedMetres<.1f)throw new Exception("Peer movement and the shared actor must both replicate.");
             session.ReplayInputs(result.take);
         }
@@ -111,7 +117,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
             int count=(int)Math.Min(pcm.Length,end-stream.End);
             if(speaking)
             {
-                for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(role=="host"?440:660)*(stream.End-voiceSourceStart+i)/manager.sampleRate));
+                for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(440+220*network.LocalSlot)*(stream.End-voiceSourceStart+i)/manager.sampleRate));
                 stream.Append(pcm,0,count,end);
             }
             else stream.SilenceUntil(end,end);
@@ -122,7 +128,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
             while(encodedSamples<count48)
             {
                 int count=(int)Math.Min(pcm.Length,count48-encodedSamples);
-                for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(role=="host"?440:660)*(encodedSamples+i)/48000));
+                for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(440+220*network.LocalSlot)*(encodedSamples+i)/48000));
                 voiceSamples.Invoke(network,new object[]{pcm,count});encodedSamples+=count;
             }
         }
