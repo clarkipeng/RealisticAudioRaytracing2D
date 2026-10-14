@@ -283,9 +283,9 @@ float4 AudioSum(uint channel,uint bin,bool moving)
     for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)if(AudioPairEnabled[pair]>0)for(uint p=0;p<AudioCounts[bank*AudioPairs+pair];p++)
     {
         uint g=pair*AudioSlots+p,filter=bank*AudioCapacity+g;
-        float2 material=AudioFilters[filter*AudioBins+bin],input=AudioWork[g*AudioWorkStride+bin];
-        value.xy+=AudioMultiply(input,AudioMultiply(material,AudioEar(AudioBlends[g],ear,bin)));
-        if(moving)value.zw+=AudioMultiply(input,AudioMultiply(material,AudioEar(AudioBlends[AudioCapacity+g],ear,bin)));
+        float2 filtered=AudioMultiply(AudioWork[g*AudioWorkStride+bin],AudioFilters[filter*AudioBins+bin]);
+        value.xy+=AudioMultiply(filtered,AudioEar(AudioBlends[g],ear,bin));
+        if(moving)value.zw+=AudioMultiply(filtered,AudioEar(AudioBlends[AudioCapacity+g],ear,bin));
     }
     return value;
 }

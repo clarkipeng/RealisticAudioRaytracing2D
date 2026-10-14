@@ -591,6 +591,7 @@ public partial class TakeChecks
             for(int i=0;i<expected.Length;i++)error=Mathf.Max(error,Mathf.Abs(expected[i]-samples[l][i]));Near(error,0,"Spectral live/offline agreement",1e-5f);
         }
         settings.maximumResponsesPerBatch=1;TakeRender.RenderDirect(take,settings,path+"-single",shader:shader);
+        Check(AcousticTake.HashFile(Path.Combine(path+"-single","responses.bin"))==report.responseHash,"GPU batch size preserves diagnostic paths and timestamps");
         for(int l=0;l<2;l++)Check(AcousticTake.HashFile(Path.Combine(path+"-single","listener-"+l+".wav"))==report.audioHashes[l],"GPU batch size preserves spectral PCM");
     }
     void KnifeEdgeFixture(bool planar,out AcousticTake.Scene scene,out AcousticTake.Primitive[] geometry,out AcousticTake.State[] state)

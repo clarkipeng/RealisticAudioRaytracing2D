@@ -230,7 +230,7 @@ internal sealed class GpuAudio : IDisposable
     }
     void Complete(AsyncGPUReadbackRequest value)
     {
-        failed=value.hasError;if(!failed){var data=value.GetData<float>();for(int i=0;i<data.Length;i++)download[i]=data[i];}
+        failed=value.hasError;if(!failed){var data=value.GetData<float>();Unity.Collections.NativeArray<float>.Copy(data,download,data.Length);}
         readbackCompleted=System.Diagnostics.Stopwatch.GetTimestamp();completed=true;
     }
     public bool TryComplete(float[] pcm,bool wait=false)

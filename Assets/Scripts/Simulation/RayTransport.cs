@@ -437,8 +437,7 @@ internal sealed class RayTransport : IDisposable
         if (!failed)
         {
             var data = value.GetData<Path>();
-            for (int i = 0; i < data.Length; i++)
-                Paths[i] = data[i];
+            Unity.Collections.NativeArray<Path>.Copy(data, Paths, data.Length);
         }
         completed = true;
     }

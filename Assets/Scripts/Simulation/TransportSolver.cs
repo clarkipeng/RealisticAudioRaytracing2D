@@ -340,8 +340,7 @@ public sealed class TransportSolver : IDisposable
         if (!failed)
         {
             var data = value.GetData<TakeRender.DirectPath>();
-            for (int i = 0; i < data.Length; i++)
-                completedPaths[i] = data[i];
+            Unity.Collections.NativeArray<TakeRender.DirectPath>.Copy(data, completedPaths, data.Length);
         }
         completed = true; // Publish only after copying; request-owned memory expires after completion.
     }
