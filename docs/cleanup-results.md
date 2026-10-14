@@ -1,8 +1,20 @@
 # Cleanup validation and measured bottlenecks
 
+## Lean implementation — 2026-10-14
+
+Checkpoint **`a56a728`** implements offline PCM batching, acoustic/head bank separation, exact old/current input FFT reuse for zero-rate spectral paths (and IR), one-pass source timeline loading, single-encoding host broadcasts, and CPU backend selection without unused direct buffers. Removed the unused playback overload and unreachable cut condition. Runtime change: **21 net lines / 1,433 net characters across seven existing files**; tests add 12 net lines in existing fixtures. No new files, packages, settings, filter cache or spectrum allocation. Two work counters use spare PCM-header words. General per-pair invalidation, extra per-listener prediction/reduction passes, compact filter storage and BLAS/TLAS remain deferred until their measured savings justify the code.
+
+**177/177 TakeChecks passed**, including five focused shared/global-FFT cases proving head-only updates leave filter scratch untouched, zero-rate paths use four input FFTs for four hops, and nonzero Doppler anchors correctly require six during a two-hop fade. CPU waveform agreement remains within the existing tolerance. The station deadline test passed for **886,784 device frames**, with zero underrun, late, overflow, channel-mismatch or over-budget callback counts and the unchanged 16,384-frame lead.
+
+The same 22.18-second station take remains byte-identical: SHA-256 `e5b98b2a87aad25ce9d205fc91f40b57f317fca4822919b291eca5f93e0affcd`. With eight responses per batch, PCM readbacks drop **956 → 120**, material-filter storage stays 117,784,800 bytes, and total reported numeric storage increases by 229,612 bytes for batching and counters. Before wall times were **7.190 / 6.281 / 6.021 s**; after were **6.249 / 6.650 / 6.475 s**. These do not establish an overall station speedup. A follow-up interleaved batch-size sweep on the new code measured **10.782 / 10.675 s at capacity one** versus **7.730 / 7.579 s at capacity eight**; that supports batching within this run, not an old/new renderer speedup. All outputs match. The sweep RPC timed out at 30 seconds, but the script completed all four renders and independently saved complete reports.
+
+The rebuilt Mac player succeeded in 12.85 s with zero errors and 1,881 warnings. Two standalone players connected, exchanged 249 packets each, saved/replayed two nonzero source streams, and reported zero concealed/late packets, underrun/late output frames, or final pose errors. A three-process same-Mac stress run **failed overall**: both clients saved/replayed all three voices, but the host filled its live observation queue; host/client missed-frame counts were 21,506 / 8,192 / 5,120. Host late frames were 9,217 and clients' late counts matched their underruns; these overlap and must not be added. This change does not resolve multi-process scheduling stalls or establish multi-machine voice latency.
+
+Evidence: `.context/pipeline-cleanup/` (compile, atomic/end-to-end checks and benchmark reports); `.context/voice-sync/lan-pipeline-cleanup-*` and `lan-3-pipeline-cleanup-*` (synthetic multiplayer reports and archived takes). The detailed approved proposal below remains the reference for deferred work.
+
 ## Pipeline audit — 2026-10-14
 
-Scope: source audit of `6fca941`, plus its saved measurements below, in the actual Unity project. No runtime, shader, scene, or package changes; no new benchmark or test run. Prior test results establish the baseline, not the correctness or speed of these proposed optimizations.
+Historical audit and approved proposal against `6fca941`, before the implementation reported above. It used saved measurements without changing runtime code or running new tests. Its baseline results do not establish the correctness or speed of unimplemented proposals.
 
 ### Current execution and evidence
 
@@ -29,7 +41,7 @@ The saved two-process physical microphone probe allocated **353,354,400 filter b
 
 ### Before/after pseudocode report
 
-The `-` lines describe today's implementation; `+` lines describe the proposal. These are algorithm sketches, not compilable patches or changes already made. A **response** is one acoustic update, a **hop** is one emitted audio block, and a **group** combines compatible frequency-bin arrivals into one path filter. Reuse must follow these actual dependencies:
+The `-` lines describe the audited `6fca941` implementation; `+` lines describe the approved proposal. These are algorithm sketches, not compilable patches. The implementation status above identifies the completed subset. A **response** is one acoustic update, a **hop** is one emitted audio block, and a **group** combines compatible frequency-bin arrivals into one path filter. Reuse must follow these actual dependencies:
 
 | Data | Depends on | Reuse scope |
 |---|---|---|
@@ -454,7 +466,7 @@ This is dataflow pseudocode, not permission to fuse every step into one kernel. 
 
 Use the existing atomic test files: head-only filter reuse; batch-size equivalence with cuts/final partial output; equal versus unequal Doppler windows; and two-pair isolation. Retain the time-domain head oracle, CPU/GPU parity, large-FFT checks, source-record/replay tests and a live station deadline test. No new test framework is needed.
 
-Benchmark the same saved take at unchanged quality with warm repetitions. Report wall time, GPU timing when available, readback count, material rebuilds, unique input FFTs, peak memory, bytes transferred and numerical error. Measure one live client before same-Mac contention and include head/voice latency and missed deadlines. These designs contain no measured speedup yet. Runtime code and scene settings remain unchanged.
+Benchmark the same saved take at unchanged quality with warm repetitions. Report wall time, GPU timing when available, readback count, material rebuilds, unique input FFTs, peak memory, bytes transferred and numerical error. Measure one live client before same-Mac contention and include head/voice latency and missed deadlines. Unimplemented designs contain no measured speedup claim. See the implementation status above for completed work and its actual measurements.
 
 ## Head motion and local voice follow-up — 2026-10-13
 
