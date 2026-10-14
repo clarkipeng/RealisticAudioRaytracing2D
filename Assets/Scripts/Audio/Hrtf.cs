@@ -92,6 +92,19 @@ public sealed class Hrtf
     }
     public float Coefficient(Blend blend,int ear,int tap)=>blend.weights.x*Coefficient(blend.a,ear,tap)+
         blend.weights.y*Coefficient(blend.b,ear,tap)+blend.weights.z*Coefficient(blend.c,ear,tap)+blend.weights.w*Coefficient(blend.d,ear,tap);
+    internal static Vector3 HeadVelocity(AcousticTake.State state) =>
+        (state.flags&(AcousticTake.StateFlags.VelocityValid|AcousticTake.StateFlags.Cut))==AcousticTake.StateFlags.VelocityValid?state.angularVelocity:Vector3.zero;
+    internal static Vector2[] Spectra(Hrtf hrtf,int fft)
+    {
+        int directions=hrtf?.DirectionCount??1,channels=hrtf==null?1:2,bins=fft/2+1;
+        var spectra=new Vector2[checked(directions*channels*bins)];var data=new Vector2[fft];
+        for(int direction=0;direction<directions;direction++)for(int ear=0;ear<channels;ear++)
+        {
+            Array.Clear(data,0,fft);for(int t=0;t<(hrtf?.Taps??1);t++)data[t].x=hrtf==null?1:hrtf.Coefficient(direction,ear,t);
+            ImpulseResponseAudio.Fft(data,false);Array.Copy(data,0,spectra,(direction*channels+ear)*bins,bins);
+        }
+        return spectra;
+    }
     // Symmetric windowed-sinc coefficient conversion; retain filter time origin and DC scale.
     static float Resample(float[] input,double at,double ratio)
     {

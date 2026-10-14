@@ -7,7 +7,8 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
-// Opt-in multi-process integration probe. No device capture; the voice stimulus is explicitly synthetic.
+// Opt-in integration probe. Synthetic by default; --acoustics-microphone=host
+// explicitly captures/saves the host device while peers retain known tones.
 [DefaultExecutionOrder(-35)]
 public sealed class MultiplayerSmoke : MonoBehaviour
 {
@@ -20,10 +21,14 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         public long underrunSamples,lateSamples,callbacks;
         public bool replayOffline,microphoneClosed;
         public double maximumFrameSeconds;
+        public long microphoneSamples;
+        public double microphoneRms;
+        public bool physicalMicrophone;
         public RayTraceManager.LiveDiagnostics producer;
     }
     static string role,output;
     static int expectedPlayers;
+    static bool deviceHost;
     Result result;
     SceneSession session;
     MultiplayerSession network;
@@ -34,6 +39,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     double speakingTime;
     readonly Dictionary<Transform,Vector3> remoteInitial=new Dictionary<Transform,Vector3>();
     double start,lastFrame;
+    float outputVolume;
     Transform shared;
     Vector3 sharedInitial;
     readonly List<string> errors=new List<string>();
@@ -46,6 +52,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         if(role==null)return;
         if((role!="host" && role!="client") || string.IsNullOrEmpty(output))throw new ArgumentException("Smoke test needs host/client and result path.");
         expectedPlayers=int.Parse(Arg("--acoustics-players")??"2");
+        deviceHost=Arg("--acoustics-microphone")=="host";
         MultiplayerSession.PendingMode=Arg("--acoustics-network")=="relay"?"relay-"+role:role;
         MultiplayerSession.PendingAddress=Arg("--acoustics-join")??"127.0.0.1";
         string step=Arg("--acoustics-smoke-step");
@@ -56,7 +63,8 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     }
     IEnumerator Start()
     {
-        result=new Result {role=role};Application.runInBackground=true;Application.targetFrameRate=60;
+        result=new Result {role=role,physicalMicrophone=deviceHost && role=="host"};Application.runInBackground=true;Application.targetFrameRate=60;
+        outputVolume=AudioListener.volume;if(deviceHost)AudioListener.volume=0; // Avoid same-Mac speaker feedback; keep rendering/consuming PCM.
         Application.logMessageReceived+=Log;
         yield return Wait(()=> (session=FindAnyObjectByType<SceneSession>())!=null && session.manager.IsRecordingTake,"network capture startup",25);
         if(errors.Count>0) {Finish();yield break;}
@@ -65,7 +73,8 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         if(expectedPlayers<2 || expectedPlayers>network.Capacity){errors.Add("Requested player count exceeds the authored scene slots.");Finish();yield break;}
         yield return Wait(()=>network.ConnectedPlayers==expectedPlayers,"complete player roster",30);
         if(errors.Count>0){Finish();yield break;}
-        result.players=network.ConnectedPlayers;result.slot=network.LocalSlot;network.microphone.enabled=false;
+        result.players=network.ConnectedPlayers;result.slot=network.LocalSlot;network.microphone.enabled=result.physicalMicrophone;
+        if(result.physicalMicrophone)network.microphone.VoiceSamples+=MeasureMicrophone;
         voiceState=typeof(MultiplayerSession).GetMethod("LocalVoiceState",BindingFlags.NonPublic|BindingFlags.Instance);
         voiceSamples=typeof(MultiplayerSession).GetMethod("LocalVoiceSamples",BindingFlags.NonPublic|BindingFlags.Instance);
         shared=network.sharedObjects.First();sharedInitial=shared.position;
@@ -73,6 +82,12 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         double seconds=role=="host"?18:11;
         while(AudioSettings.dspTime-start<seconds && errors.Count==0)yield return null;
         StopVoice();feeding=false;
+        if(result.physicalMicrophone)
+        {
+            network.microphone.VoiceSamples-=MeasureMicrophone;
+            result.microphoneRms=Math.Sqrt(result.microphoneRms/Math.Max(1,result.microphoneSamples));
+            if(result.microphoneSamples<48000)errors.Add("Physical microphone did not provide one second of canonical samples: "+network.microphone.Status);
+        }
         result.receivedPackets=network.ReceivedPackets;result.concealedFrames=network.ConcealedFrames;result.latePackets=network.LatePackets;
         ReadCounters();
         result.producer=JsonUtility.FromJson<RayTraceManager.LiveDiagnostics>(JsonUtility.ToJson(result.producer));
@@ -87,7 +102,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
                 var source=take.ReadStream(s);double energy=0;for(long n=0;n<source.End;n++)energy+=source.Read(n)*source.Read(n);
                 if(energy>1)result.nonzeroStreams++;
             }
-            if(result.receivedPackets<20*(expectedPlayers-1) || result.nonzeroStreams!=expectedPlayers)throw new Exception("Every player must receive and save every participant's voice.");
+            if(result.receivedPackets<20*(expectedPlayers-1) || result.nonzeroStreams<(deviceHost?expectedPlayers-1:expectedPlayers))throw new Exception("Every player must receive and save the expected voices (device input may be silent).");
             if(result.remoteMetres<.1f || result.sharedMetres<.1f)throw new Exception("Peer movement and the shared actor must both replicate.");
             session.ReplayInputs(result.take);
         }
@@ -120,27 +135,35 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         if(!session.manager.IsLiveSimulation)return;
         double elapsed=AudioSettings.dspTime-start;var manager=session.manager;var stream=network.microphone.source.Stream;
         bool speak=elapsed>=1 && elapsed<6;
-        if(speak && !speaking) {voiceState.Invoke(network,new object[]{true,network.microphone.Clock()});speaking=true;encodedSamples=0;speakingTime=AudioSettings.dspTime;voiceSourceStart=stream.End;}
-        if(!speak)StopVoice();
-        long end=manager.LiveSample;
-        while(stream.End<end)
+        if(result.physicalMicrophone)
         {
-            int count=(int)Math.Min(pcm.Length,end-stream.End);
+            if(speak && !speaking){network.microphone.Toggle();speaking=true;}
+            if(!speak)StopVoice();
+        }
+        else
+        {
+            if(speak && !speaking) {voiceState.Invoke(network,new object[]{true,network.microphone.Clock()});speaking=true;encodedSamples=0;speakingTime=AudioSettings.dspTime;voiceSourceStart=stream.End;}
+            if(!speak)StopVoice();
+            long end=manager.LiveSample;
+            while(stream.End<end)
+            {
+                int count=(int)Math.Min(pcm.Length,end-stream.End);
+                if(speaking)
+                {
+                    for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(440+220*network.LocalSlot)*(stream.End-voiceSourceStart+i)/manager.sampleRate));
+                    stream.Append(pcm,0,count,end);
+                }
+                else stream.SilenceUntil(end,end);
+            }
             if(speaking)
             {
-                for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(440+220*network.LocalSlot)*(stream.End-voiceSourceStart+i)/manager.sampleRate));
-                stream.Append(pcm,0,count,end);
-            }
-            else stream.SilenceUntil(end,end);
-        }
-        if(speaking)
-        {
-            long count48=(long)((AudioSettings.dspTime-speakingTime)*48000);
-            while(encodedSamples<count48)
-            {
-                int count=(int)Math.Min(pcm.Length,count48-encodedSamples);
-                for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(440+220*network.LocalSlot)*(encodedSamples+i)/48000));
-                voiceSamples.Invoke(network,new object[]{pcm,count});encodedSamples+=count;
+                long count48=(long)((AudioSettings.dspTime-speakingTime)*48000);
+                while(encodedSamples<count48)
+                {
+                    int count=(int)Math.Min(pcm.Length,count48-encodedSamples);
+                    for(int i=0;i<count;i++)pcm[i]=.15f*Mathf.Sin((float)(2*Math.PI*(440+220*network.LocalSlot)*(encodedSamples+i)/48000));
+                    voiceSamples.Invoke(network,new object[]{pcm,count});encodedSamples+=count;
+                }
             }
         }
         if(role=="client" && elapsed>2 && !interacted)
@@ -166,7 +189,9 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         result.underrunSamples=Math.Max(result.underrunSamples,queue.UnderrunSamples);result.lateSamples=Math.Max(result.lateSamples,queue.LateSamples);
         result.callbacks=Math.Max(result.callbacks,queue.CallbackCount);
     }
-    void StopVoice() {if(speaking) {voiceState.Invoke(network,new object[]{false,network.microphone.Clock()});speaking=false;}}
+    void MeasureMicrophone(float[] data,int count)
+    {result.microphoneSamples+=count;for(int i=0;i<count;i++)result.microphoneRms+=(double)data[i]*data[i];}
+    void StopVoice() {if(speaking) {if(result.physicalMicrophone)network.microphone.StopCapture();else voiceState.Invoke(network,new object[]{false,network.microphone.Clock()});speaking=false;}}
     IEnumerator Wait(Func<bool> ready,string operation,double timeout)
     {
         double deadline=Time.realtimeSinceStartupAsDouble+timeout;
@@ -179,7 +204,11 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         result.status=errors.Count==0?"passed":"failed";result.error=string.Join("\n",errors);
         WriteResult();
         Application.logMessageReceived-=Log;Application.Quit(errors.Count==0?0:1);
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying=false;
+#endif
     }
+    void OnDestroy() {if(result!=null && deviceHost)AudioListener.volume=outputVolume;}
     void WriteResult() {Directory.CreateDirectory(Path.GetDirectoryName(output));File.WriteAllText(output,JsonUtility.ToJson(result,true));}
 }
 #endif

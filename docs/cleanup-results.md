@@ -1,5 +1,36 @@
 # Cleanup validation and measured bottlenecks
 
+## Head motion and local voice follow-up — 2026-10-13
+
+Spectral synthesis now advances the listener's orientation from each pose timestamp using valid world-space angular velocity. It evaluates ear filters at both ends of each FFT hop and interpolates their output samplewise. Head time is explicitly **rendered output time before playback lead**; source history still carries the declared DSP/propagation delay. Missing velocity and listener cuts hold the supplied pose. New observations correct the constant-velocity prediction through the existing response fade. This does not predict arbitrary future turns or alter already queued audio.
+
+The GPU keeps pose anchors per response bank, reuses existing blend scratch, and packs two real endpoint outputs into one complex inverse FFT. One path reduction reads material/source spectra for both endpoints. FFT dispatch count and pose-upload size are unchanged; the extra persistent GPU state is 64 bytes per listener. The CPU reference uses separate inverse transforms to check the GPU packing independently. Shared ear-table initialization replaces duplicated setup. IR's existing response-frozen head behavior is retained; scene defaults remain Spectral. DSP provenance now distinguishes the changed spectral head contract.
+
+The same production-GPU tone probe runs at 44.1 kHz with FFT1024/hop256, response1024/fade512, one unit-gain path, fixed 50 ms propagation delay and amplitude 0.2. Both before and after supply angular velocity. Each two-second render is compared after startup to independent per-output-sample time-domain HRIR filtering:
+
+| Tone / yaw speed | Previous relative RMS error | Hop-interpolated head error |
+|---|---:|---:|
+| 1 kHz / 90°/s | 3.98% | 0.0091% |
+| 1 kHz / 360°/s | 14.44% | 0.0556% |
+| 6 kHz / 90°/s | 19.93% | 0.1780% |
+| 6 kHz / 360°/s | 62.85% | 1.0511% |
+
+These measure agreement with the declared output-time filter contract, not perceptual quality or physical head-to-headphone latency. The high-frequency fast-turn residual includes interpolation across measured HRTF cells. Source/scene motion, acceleration and display stalls remain separate concerns.
+
+**173/173 core checks passed** in 22.22 s. Five new cases cover the CPU reference, both GPU FFT implementations, arbitrary world-axis rotation, invalid velocity and listener cuts against direct time-domain HRIR filtering; partial-hop reads and existing response-fade/CPU-GPU tests also pass.
+
+On the same saved two-source station input used below, the final implementation rendered 977,988 stereo frames (22.18 s) in **6.102 / 7.040 / 7.044 s**, with identical WAV SHA-256 `e5b98b2a87aad25ce9d205fc91f40b57f317fca4822919b291eca5f93e0affcd`. The previous frozen-head implementation's single comparable measurement was 6.725 s; these runs do not establish a speedup. The first, two-pass endpoint reduction took 8.617 s; combining endpoint accumulation produced the same WAV. Material-filter allocation remains 117,784,800 bytes for this take.
+
+Realtime results remain workload-dependent. The initial background Editor deadline run missed **5,121 frames (~116 ms total)**, with 3,072 overlapping late frames; no overflow, channel mismatch or over-budget callbacks occurred. After the final reduction change, a foreground Editor run passed for **882,688 frames**, with all five deadline counters zero, at the unchanged 16,384-frame lead. Maximum readback completion remained ~197 ms. The implementation and foreground/background conditions both changed, so this is not an isolated scheduling A/B. Main-loop/display stalls and the existing ~372 ms playback lead remain unresolved; no buffer increase or quality reduction was made.
+
+The real-device follow-up used **Unity Editor as host plus one standalone peer on this Mac**. The host captured 218,112 canonical 48 kHz samples (4.544 s; RMS 0.01135) through `MicrophoneInput`; the peer sent the usual synthetic tone. The host received 249 peer packets and the peer received 228 microphone packets, with **zero concealed frames or late packets on both**. Both saved two nonzero source streams and replayed offline with the microphone closed, zero final position error and zero angular error. The development probe mutes hardware output during this device case to avoid speaker feedback; PCM callbacks still ran. This verifies microphone/network/render-input/recording/replay plumbing, not headphone quality or physical mouth-to-ear latency.
+
+That two-process run **failed realtime audio delivery**: the host reported 68,618 underrun/late frames (~1.56 s total), the peer 15,360 (~0.35 s). These cumulative counters include startup; they are not isolated steady-state device measurements, and underrun/late counts overlap. Maximum probe update gaps were 299 ms / 187 ms. Functional probe status is therefore reported separately from deadline quality. No second computer was available, so separate-machine/internet conversation quality remains untested.
+
+An exploratory comparison of the host dry microphone and the peer's decoded dry stream produced 0.128 normalized waveform correlation under one global alignment after eight-sample averaging; 186 ms windows with independently searched offsets gave 0.325–0.745. Opus and receiver clock conversion change that waveform, so these are not proof of corruption, clock accuracy or speech quality. Treat voice timing/quality as unvalidated and use each client's saved canonical input for its own replay/training pairs. The alignment reports remain local with the takes. The local canonical microphone contains 200,391 data samples at 44.1 kHz; the receiver contains 201,395 after its existing clock correction. Recording finalization marks 1,025 host / 1 peer samples as missing, all after the microphone epoch ends; preserve those validity flags when selecting training windows.
+
+The Mac development player rebuilt in 15.25 s with zero errors and 1,881 warnings. Its project fingerprint matches the saved, stopped TrainStation Editor scene. Before-change code is retained at `3ca5173`; local probe scripts, raw head PCM, benchmark reports, device results and private takes are under `.context/head-timing/` and `.context/audio-reliability/head-hop-*`.
+
 ## Audio scheduling and GPU work — 2026-10-13
 
 GPU DSP no longer dispatches the previous response after its crossfade has ended. The hop containing the fade end still renders both responses; subsequent hops render only the current response. This skips input FFT/mixing work without changing paths, filters, fidelity, latency or output buffering. `GpuAudio` tracks the response sample on the CPU, so no new shader or GPU readback is needed. Existing CPU/GPU crossfade tests now exercise a fade ending inside a hop, as well as partial-hop delivery. **168/168 core checks passed in 53.95 s.**

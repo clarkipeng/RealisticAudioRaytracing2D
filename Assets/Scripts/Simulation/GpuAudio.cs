@@ -18,8 +18,7 @@ internal sealed class GpuAudio : IDisposable
     readonly ComputeBuffer args,headsPose,source,work,transform,output;
     readonly float[] download;
     readonly Vector4[] poses;
-    readonly Quaternion[] lastHeads;
-    readonly bool[] lastEnabled,audibleSources;
+    readonly bool[] audibleSources;
     readonly Action<AsyncGPUReadbackRequest> completion;
     AsyncGPUReadbackRequest request;
     bool initialized,pending,completed,failed,disposed;
@@ -45,7 +44,7 @@ internal sealed class GpuAudio : IDisposable
         fft=1;while(fft<settings.fftSize+taps+settings.spectralHop-2)fft=checked(fft*2);bins=fft/2+1;
         history=checked((int)settings.HistorySamples(rate)+fft+maximumBlock);
         download=new float[checked(maximumBlock*listeners*channels+Header)];
-        poses=new Vector4[listeners*2];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];completion=Complete;
+        poses=new Vector4[listeners*2];completion=Complete;
         var asset=Resources.Load<ComputeShader>("Acoustics/GpuAudio");
         if(asset==null)throw new InvalidOperationException("Missing GPU audio compute shader.");
         try
@@ -63,8 +62,9 @@ internal sealed class GpuAudio : IDisposable
             args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
             Buffer("AudioTable",checked(pairs*hash),8);Buffer("AudioHeads",capacity,4);Buffer("AudioNext",capacity,4);Buffer("AudioBlends",checked(2*capacity),32);
             headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);
+            Buffer("AudioHeadHistory",poses.Length*2,16);
             source=Buffer("AudioSource",checked(signals.Length*history),4,mode:ComputeBufferMode.SubUpdates);
-            // Material spectra are shared by both ears; retain each bank's head blend for crossfades.
+            // Material spectra are shared by both ears. Head endpoints reuse scratch per bank's hop.
             Buffer("AudioFilters",checked(2*capacity*bins),8);
             Diagnostics.pathCapacity=capacity;Diagnostics.filterBytes=2L*capacity*bins*8;
             // Shared FFTs only write their nonredundant bins. Global filter preparation
@@ -83,7 +83,7 @@ internal sealed class GpuAudio : IDisposable
             Set("AudioTransition",settings.transitionSamples);Set("AudioSpectral",settings.synthesis==TakeRender.Synthesis.Spectral?1:0);
             Set("AudioRadius",settings.sincRadius);Set("AudioSinc",settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?1:0);
             Set("AudioLatency",settings.fftSize/2+(settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0));shader.SetFloat("AudioMaximumDelay",settings.maximumDelaySeconds);
-            NumericBytes+=(long)download.Length*4+poses.Length*16L+lastHeads.Length*16L+lastEnabled.Length+audibleSources.Length;
+            NumericBytes+=(long)download.Length*4+poses.Length*16L+audibleSources.Length;
             Submit();
         }
         catch {Dispose();throw;}
@@ -99,12 +99,7 @@ internal sealed class GpuAudio : IDisposable
     void Submit(){Graphics.ExecuteCommandBuffer(commands);commands.Clear();}
     void PrepareEars(Hrtf hrtf)
     {
-        int directions=hrtf?.DirectionCount??1;var spectra=new Vector2[checked(directions*channels*bins)];var data=new Vector2[fft];
-        for(int direction=0;direction<directions;direction++)for(int ear=0;ear<channels;ear++)
-        {
-            Array.Clear(data,0,fft);for(int t=0;t<(hrtf?.Taps??1);t++)data[t].x=hrtf==null?1:hrtf.Coefficient(direction,ear,t);
-            ImpulseResponseAudio.Fft(data,false);Array.Copy(data,0,spectra,(direction*channels+ear)*bins,bins);
-        }
+        int directions=hrtf?.DirectionCount??1;var spectra=Hrtf.Spectra(hrtf,fft);
         Buffer("AudioEars",spectra.Length,8).SetData(spectra);
         var rings=new SortedDictionary<float,List<Vector2>>();
         for(int i=0;i<directions;i++)
@@ -124,8 +119,11 @@ internal sealed class GpuAudio : IDisposable
         for(int l=0;l<listeners;l++)
         {
             var state=states[scene.listeners[l]];bool enabled=TakeRender.Enabled(state,AcousticTake.StateFlags.Listener);
-            changed|=!lastHeads[l].Equals(state.rotation) || lastEnabled[l]!=enabled;lastHeads[l]=state.rotation;lastEnabled[l]=enabled;
-            poses[l]=new Vector4(state.rotation.x,state.rotation.y,state.rotation.z,state.rotation.w);poses[listeners+l]=new Vector4(enabled?1:0,0,0,0);
+            var velocity=channels==2 && settings.synthesis==TakeRender.Synthesis.Spectral?Hrtf.HeadVelocity(state):Vector3.zero;
+            var rotation=new Vector4(state.rotation.x,state.rotation.y,state.rotation.z,state.rotation.w);
+            var motion=new Vector4(enabled?1:0,velocity.x,velocity.y,velocity.z);
+            changed|=!poses[l].Equals(rotation) || !poses[listeners+l].Equals(motion) || velocity.sqrMagnitude>0;
+            poses[l]=rotation;poses[listeners+l]=motion;
         }
         headsPose.SetData(poses,0,poseCursor*poses.Length,poses.Length);UploadedBytes+=poses.Length*16;
         Set("AudioPoseOffset",poseCursor*poses.Length);poseCursor++;

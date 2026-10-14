@@ -6,6 +6,54 @@ using UnityEngine;
 
 public partial class TakeChecks
 {
+    [TestCase(false,128,AcousticTake.StateFlags.VelocityValid),TestCase(true,128,AcousticTake.StateFlags.VelocityValid)]
+    [TestCase(true,2048,AcousticTake.StateFlags.VelocityValid)]
+    [TestCase(true,128,(AcousticTake.StateFlags)0),TestCase(true,128,AcousticTake.StateFlags.VelocityValid|AcousticTake.StateFlags.Cut),Category("GPU")]
+    public void HeadPoseMatchesSampleTimedHrir(bool accelerated,int size,AcousticTake.StateFlags motion)
+    {
+        RequireGpu();const int rate=8192,step=256,delay=31;const float speed=360;
+        var scene=Scene();var states=States();var settings=SpectralSettings();
+        settings.fftSize=size;settings.spectralHop=16;settings.responseStepSamples=step;settings.transitionSamples=64;
+        settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.raysPerBin=1;settings.maxBounces=1;
+        var initial=Quaternion.Euler(15,170,-20);var axis=new Vector3(.3f,1,.2f).normalized;var direction=Vector3.forward;
+        float turn=motion==AcousticTake.StateFlags.VelocityValid?speed:0;
+        var clip=new float[256];
+        for(int n=0;n<clip.Length;n++)clip[n]=.2f*Mathf.Sin(2*Mathf.PI*n/8);
+        var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
+        var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
+        for(int bin=0;bin<settings.FrequencyBins;bin++)paths[bin]=new RayTransport.Path{direction=direction,frequencyBin=(uint)bin,pressureGain=1,delaySeconds=delay/(float)rate};
+        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var gpu=accelerated?new GpuAudio(scene,rate,settings,new[]{signal}):null;
+        var cpu=accelerated?null:new TakeRender.Mixer(scene,rate,settings,new[]{signal});var direct=new TakeRender.DirectPath[1];
+        var hrtf=Hrtf.Load(rate);var pcm=new float[step*2];double error=0,energy=0;
+        for(int sample=0;sample<rate;sample+=step)
+        {
+            states[1].rotation=Quaternion.AngleAxis(turn*sample/rate,axis)*initial;
+            states[1].angularVelocity=axis*(speed*Mathf.Deg2Rad);states[1].flags|=motion;
+            if(accelerated)gpu.SetResponse(sample,false,arrivals,0,scene,states);else cpu.SetResponse(sample,direct,states,false,paths,0);
+            int offset=0;
+            foreach(int count in new[]{13,step-13})
+            {
+                if(accelerated)gpu.Render(sample+offset,count,pcm);else cpu.Render(sample+offset,count,pcm);
+                for(int n=0;n<count;n++)
+                {
+                    int at=sample+offset+n;if(at<size+delay+hrtf.Taps)continue;
+                    var rotation=Quaternion.AngleAxis(turn*at/rate,axis)*initial;
+                    var blend=hrtf.Interpolate(Quaternion.Inverse(rotation)*direction);
+                    for(int ear=0;ear<2;ear++)
+                    {
+                        double expected=0;
+                        for(int tap=0;tap<hrtf.Taps;tap++)expected+=hrtf.Coefficient(blend,ear,tap)*.2*Math.Sin(2*Math.PI*(at-settings.DspLatencySamples-delay-tap)/8);
+                        double d=pcm[n*2+ear]-expected;error+=d*d;energy+=expected*expected;
+                    }
+                }
+                offset+=count;
+            }
+        }
+        Assert.That(energy,Is.GreaterThan(1));
+        Assert.That(Math.Sqrt(error/energy),Is.LessThan(.01),"World-space rotation must follow the output sample clock, including response fades and partial hops.");
+    }
+
     [TestCase(false,TakeRender.Synthesis.ImpulseResponse),TestCase(true,TakeRender.Synthesis.ImpulseResponse)]
     [TestCase(false,TakeRender.Synthesis.Spectral),TestCase(true,TakeRender.Synthesis.Spectral),Category("GPU")]
     public void ResponseChangesMatchContinuousOutputCrossfade(bool accelerated,TakeRender.Synthesis method)

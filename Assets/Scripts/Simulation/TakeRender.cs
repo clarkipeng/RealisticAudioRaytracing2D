@@ -198,10 +198,10 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="integrated-edge-preview-v6";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-overlap-save-v1";
+            report.method="integrated-edge-preview-v6";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-head-hop-v2";
             if(useGpuAudio)
             {
-                report.provenance.dspContract="gpu-path-filter-overlap-save-v1";
+                report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-path-filter-overlap-save-v1":"gpu-path-clock-spectral-head-hop-v2";
                 report.audioShaderDependencyHash=AcousticTake.Provenance.Capture(Resources.Load<ComputeShader>("Acoustics/GpuAudio")).shaderDependencyHash;
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
