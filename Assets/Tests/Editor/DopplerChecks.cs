@@ -4,10 +4,12 @@ using UnityEngine;
 
 public partial class TakeChecks
 {
-    [Test, Category("Core")]
-    public void LegacySettingsRetainIrSynthesis()
+    [TestCase("{\"transport\":1}",TakeRender.Synthesis.Spectral)]
+    [TestCase("{\"synthesis\":0}",TakeRender.Synthesis.ImpulseResponse)]
+    [TestCase("{\"synthesis\":1}",TakeRender.Synthesis.Spectral), Category("Core")]
+    public void SynthesisSettingsUseDefaultOrExplicitSelection(string json,TakeRender.Synthesis expected)
     {
-        Check(JsonUtility.FromJson<TakeRender.Settings>("{\"transport\":1}").synthesis==TakeRender.Synthesis.ImpulseResponse,"Existing settings retain IR synthesis.");
+        Assert.That(JsonUtility.FromJson<TakeRender.Settings>(json).synthesis,Is.EqualTo(expected));
     }
 
     [Test, Category("GPU")]

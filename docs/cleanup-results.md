@@ -1,5 +1,47 @@
 # Cleanup validation and measured bottlenecks
 
+## Spectral scene default — 2026-10-13
+
+TrainStation, Church and all three 2D acoustic scenes now select Spectral synthesis. New settings and serialized settings without a synthesis field also default to Spectral. Explicitly serialized IR/Spectral selections keep their enum values. The previous IR default was retained for backward compatibility; it was unsuitable for these moving scenes because its frozen-delay crossfades do not provide continuous Doppler. The existing GPU/CPU spectral implementations are reused. The production change is six settings lines; ray budgets, buffering and shaders are unchanged. The existing default-selection test now covers the new default and both explicit selections.
+
+Validation: **168/168 TakeChecks passed** (41.99 s), including CPU/GPU agreement and Doppler. The station's explicit device-deadline test passed for **886,784 frames** after warmup with movement/head turns: **zero underrun, late, overflow, channel-mismatch or over-budget callback counts**. This single approximately 20-second run does not resolve the intermittent scheduling stalls measured below, nor establish head-only artifact-free rendering. The macOS development player rebuilt successfully; the final incremental build took 2.96 s with zero errors and 1,539 warnings. Its fingerprint matches the editor, whose saved TrainStation is stopped and selects Spectral.
+
+The diagnostic findings below describe the preceding IR configuration. Evidence and build/scene verification are in `.context/artifact-audit/spectral-*`; the refreshed standalone is `.context/voice-sync/Acoustics.app`.
+
+## Windowing and live artifacts — 2026-10-13
+
+The current station uses GPU IR synthesis. Its FFT convolution uses **overlap-save**: source history is retained, the transform is sized for the pressure FIR plus HRIR and output hop, and only the final valid hop is emitted. CPU IR uses partitioned overlap-add. These are linear convolution methods, not Hann-windowed STFT reconstruction; adding a Hann window to the existing blocks would change the output. The comparison spectrogram's Hann window is display analysis only. See `GpuAudio.cs`, `GpuAudio.compute`, `ImpulseResponseAudio.cs`, and [overlap-save's valid-output rule](https://www.dsprelated.com/freebooks/sasp/Overlap_Save_Method.html).
+
+Fresh focused checks passed: **14/14 independent time-domain convolution cases** (1.02 s) and **4/4 CPU/GPU IR/spectral response-crossfade cases** (1.12 s). They exercise fractional delays, ear filters, block boundaries and changing responses. They establish agreement with those numerical contracts, not artifact-free physical rendering or realtime delivery.
+
+The explicit `StationDeliversAudioBeforeItsDeadline` test **failed twice**, including a warm repeat, on Unity 6000.4.1f1 / Apple M5 / Metal. Each measured 885,760 device frames after two seconds of warmup, with player/head motion and a moving train. The existing station preset remained unchanged: 44.1 kHz, FFT1024/hop256, response step1024, transition512, binaural GPU IR, one ray/bin, five bounces, and 16,384-frame output lead (~372 ms).
+
+| Run | Underrun frames | Total missing audio | Late frames | Overflow / channel mismatch / over-budget callbacks |
+|---|---:|---:|---:|---|
+| First | 5,123 | 116.2 ms | 5,123 | 0 / 0 / 0 |
+| Warm repeat | 14,343 | 325.2 ms | 14,343 | 0 / 0 / 0 |
+
+Underrun and late counters describe overlapping failures and must not be added. Durations are totals across each approximately 20-second measurement, not single continuous gaps. `AudioManager.PcmQueue.Consume` emits zeros for unavailable frames and advances the device clock; late PCM is then discarded. Those transitions can cause clicks and gaps. The callback itself stayed within budget (maximum ~69–71 microseconds); producer scheduling, GPU completion and publication timing need profiling to isolate the upstream stall. These Editor runs do not establish standalone-player performance.
+
+Both current source clips have zero-valued loop endpoints, so a simple endpoint step is less likely. Current summed output clipping was not measured. Moving-delay phase interference remains a separate question: IR holds each path delay fixed between responses and crossfades old/new output over 512 samples (~11.6 ms), with responses spaced 1024 samples (~23.2 ms). A numerically correct fade can still combine differently phased signals; this audit has not isolated that as the audible cause.
+
+No runtime code or scene settings changed. Next work should isolate the missed producer deadlines, then evaluate moving-delay continuity with deadlines satisfied. Evidence: `.context/artifact-audit/` contains the two deadline results and producer reports, clip measurements, scene preset and focused test results.
+
+The user subsequently localized the artifacts to movement/head turns. An offline probe now isolates motion through the production **GPU audio backend**, supplying a single synthetic unit-gain path rather than tracing the station. It renders a 1 kHz tone for 88,064 frames at 44.1 kHz, using the station's FFT/hop/response/fade sizes above. Delay starts at 50 ms and increases linearly with receiver speed / 343; gain stays constant to isolate delay behavior. GPU readback is awaited, so device underruns cannot explain these results.
+
+| Synthetic motion | Synthesis | RMS error relative to continuous-delay tone |
+|---|---|---:|
+| Stationary | IR | 0.00048% |
+| Receding at 1.7 m/s | IR | 20.93% |
+| Receding at 12 m/s | IR | 133.98% |
+| Receding at 12 m/s | Spectral | 0.185% |
+
+The oracle is `0.2 * sin(2*pi*1000*((sample-DspLatencySamples)*(1-speed/343)/44100-0.05))`, excluding the first 250 ms. Errors can exceed 100% when phases differ; they are not a perceptual rating. A phase-independent sine/cosine fit over the interior 1.5 seconds confirms the fast IR case has the wrong dominant tone: the expected Doppler frequency is **965.015 Hz**, but **1008.081 Hz** accounts for about **96.3%** of output energy. These frequencies differ by the 43.066 Hz response-update rate. The spectral case's residual after fitting the expected tone is 0.076% RMS. Thus stepped IR delay causes temporal aliasing/sidebands in this controlled case; a crossfade that passes its numerical contract does not make it continuous-delay propagation.
+
+A separate binaural probe holds the path fixed and turns the head at 90 degrees/second. IR output differs by 3.42% RMS from convolution with the same HRTF interpolated at every output sample. This measures the existing filter-update approximation; it does not isolate a perceptible click or establish a physically exact moving-ear reference. Head-only audible artifacts still need separate reproduction under live load.
+
+Motion distortion is therefore a second demonstrated problem alongside underruns. The existing spectral backend already has continuous path-delay evolution and is the implementation to reuse/evaluate for moving audio; changing the scene default alone is not established as a complete fix. IR remains useful for fixed-response convolution. No runtime or scene changes were made during this follow-up. `Motion.cs`, `motion.json`, `motion-analysis.json` and raw rendered/oracle floats are saved in `.context/artifact-audit/`.
+
 ## Station and session UI polish — 2026-10-13
 
 TrainStation keeps its editable Unity geometry and now has consistent station materials, carriage/roof/door trim, boarding wayfinding, and a ground surface extending beyond the fog horizon. The ground collider and acoustic surface expand together. Decorative trim adds no acoustic surfaces; the station still has 47. Church and TrainStation share simple player visuals; heads inherit the existing voice transform, so received and replayed head orientation needs no additional runtime updater. Avatar collision now matches the walking controller's narrower body.

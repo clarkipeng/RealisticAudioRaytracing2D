@@ -32,7 +32,7 @@ public static partial class TakeRender
         [Tooltip("Use a BVH for fixed geometry. Objects that move use direct intersection tests for the rest of the session.")]
         public bool useBvh;
         public Transport transport;
-        public Synthesis synthesis;
+        public Synthesis synthesis=Synthesis.Spectral;
         public AudioBackend audioBackend;
         [Min(1)] public int raysPerBin=1,maxBounces=5;
         public int seed;

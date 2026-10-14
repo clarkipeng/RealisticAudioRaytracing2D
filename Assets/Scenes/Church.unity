@@ -3770,7 +3770,7 @@ MonoBehaviour:
     maximumResponsesPerBatch: 64
     useBvh: 1
     transport: 1
-    synthesis: 0
+    synthesis: 1
     audioBackend: 0
     raysPerBin: 1
     maxBounces: 5
