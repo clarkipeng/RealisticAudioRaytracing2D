@@ -83,7 +83,7 @@ public sealed class SceneSession : MonoBehaviour
             }
             else
             {
-                string path=Path.Combine(RecordingsDirectory,gameObject.scene.name.ToLowerInvariant()+"-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff"));
+                string path=Path.Combine(RecordingsDirectory,gameObject.scene.name.ToLowerInvariant()+"-"+DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff")+"-"+Guid.NewGuid().ToString("N"));
                 manager.SessionInfo=multiplayer?.Description();
                 manager.BeginTakeRecording(path,retainFullReference || (multiplayer!=null && multiplayer.Connected),retainFullReference); multiplayer?.CaptureStarted();StartSceneSounds();
             }

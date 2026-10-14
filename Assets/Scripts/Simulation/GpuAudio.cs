@@ -23,7 +23,7 @@ internal sealed class GpuAudio : IDisposable
     readonly Action<AsyncGPUReadbackRequest> completion;
     AsyncGPUReadbackRequest request;
     bool initialized,pending,completed,failed,disposed;
-    long cursor,uploaded;
+    long cursor,uploaded,responseSample,readbackStarted,readbackCompleted;
     int requested,queued,poseCursor;
     uint previousResponses,previousReused;
     const int Header=8;
@@ -148,7 +148,7 @@ internal sealed class GpuAudio : IDisposable
                 FftGlobal(work,fft,false,pair,0);Dispatch(filterGlobal,pair,0);
             }
         }
-        commands.EndSample("Acoustics.GPU.Filters");Submit();initialized=true;
+        commands.EndSample("Acoustics.GPU.Filters");Submit();initialized=true;responseSample=sample;
     }
     void Dispatch(int kernel,int pair,int which)=>commands.DispatchCompute(shader,kernel,args,(uint)((which*pairs+pair)*3*4));
     void BindTransform(ComputeBuffer buffer)
@@ -198,6 +198,8 @@ internal sealed class GpuAudio : IDisposable
                 Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(sample+count-block)));
                 for(int which=0;which<2;which++)
                 {
+                    // No sample in this hop can use the previous response after its fade ends.
+                    if(which!=0 && block-responseSample>=settings.transitionSamples)continue;
                     Set("AudioWhich",which);
                     commands.BeginSample("Acoustics.GPU.InputFFT");
                     for(int pair=0;pair<pairs;pair++)
@@ -222,19 +224,24 @@ internal sealed class GpuAudio : IDisposable
         if(disposed || pending || queued==0)throw new InvalidOperationException("No queued GPU audio to read back.");
         requested=queued;queued=0;poseCursor=0;
         completed=false;failed=false;int bytes=checked((requested*listeners*channels+Header)*4);ReadbackBytes+=bytes;
+        readbackStarted=System.Diagnostics.Stopwatch.GetTimestamp();
         if(SystemInfo.supportsAsyncGPUReadback)request=AsyncGPUReadback.Request(output,bytes,0,completion);
-        else {output.GetData(download,0,0,bytes/4);completed=true;}
+        else {output.GetData(download,0,0,bytes/4);readbackCompleted=System.Diagnostics.Stopwatch.GetTimestamp();completed=true;}
         pending=true;
     }
     void Complete(AsyncGPUReadbackRequest value)
     {
-        failed=value.hasError;if(!failed){var data=value.GetData<float>();for(int i=0;i<data.Length;i++)download[i]=data[i];}completed=true;
+        failed=value.hasError;if(!failed){var data=value.GetData<float>();for(int i=0;i<data.Length;i++)download[i]=data[i];}
+        readbackCompleted=System.Diagnostics.Stopwatch.GetTimestamp();completed=true;
     }
     public bool TryComplete(float[] pcm,bool wait=false)
     {
         if(!pending)throw new InvalidOperationException("No GPU audio submission is owned.");
         if(!completed){if(wait)request.WaitForCompletion();else request.Update();}if(!completed)return false;
         pending=false;if(failed)throw new InvalidOperationException("GPU audio readback failed.");
+        double latency=(double)(readbackCompleted-readbackStarted)/System.Diagnostics.Stopwatch.Frequency;
+        Diagnostics.readbacks++;Diagnostics.readbackSeconds+=latency;Diagnostics.maximumReadbackSeconds=Math.Max(Diagnostics.maximumReadbackSeconds,latency);
+        Diagnostics.maximumConsumeDelaySeconds=Math.Max(Diagnostics.maximumConsumeDelaySeconds,TakeRender.Elapsed(readbackCompleted));
         if(download[0]!=0)throw new InvalidOperationException("GPU audio validation failed ("+download[0]+"): 1 invalid path, 2 missing source history, 3 non-finite audio, 4 invalid path grouping.");
         ResponseSupportSamples=(int)download[1];int length=requested*listeners*channels;
         uint responses=unchecked((uint)BitConverter.SingleToInt32Bits(download[2])),reused=unchecked((uint)BitConverter.SingleToInt32Bits(download[3]));

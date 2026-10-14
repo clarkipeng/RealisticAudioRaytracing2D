@@ -58,6 +58,9 @@ public static partial class TakeRender
     {
         public long responseUpdates,reusedResponses,filterBytes;
         public int pathCapacity,activeGroups,peakGroups;
+        // Request-to-callback includes GPU/readback and player-loop scheduling, not just GPU execution.
+        public int readbacks;
+        public double readbackSeconds,maximumReadbackSeconds,maximumConsumeDelaySeconds;
     }
     [Serializable] public sealed class Report
     {

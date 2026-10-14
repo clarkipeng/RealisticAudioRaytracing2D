@@ -1,5 +1,32 @@
 # Cleanup validation and measured bottlenecks
 
+## Audio scheduling and GPU work — 2026-10-13
+
+GPU DSP no longer dispatches the previous response after its crossfade has ended. The hop containing the fade end still renders both responses; subsequent hops render only the current response. This skips input FFT/mixing work without changing paths, filters, fidelity, latency or output buffering. `GpuAudio` tracks the response sample on the CPU, so no new shader or GPU readback is needed. Existing CPU/GPU crossfade tests now exercise a fade ending inside a hop, as well as partial-hop delivery. **168/168 core checks passed in 53.95 s.**
+
+On the same saved station input (`.context/spectral-renderer/comparison-223907-inputs`), total offline render time was **10.057 s before / 6.725 s after**. Both produced 977,988 stereo frames with the exact same WAV SHA-256, `b0b709a9d02cb9b3e477504c61f6d1a8e5c61705f2b91688ae828dc577d9621a`. This is one before/after pair, not a statistically established 33% gain. A shader-only intermediate measured 7.016 s; the final implementation also avoids dispatch overhead. The prior implementation remains in Git at `98a7ce4`.
+
+Reports now include GPU PCM request-to-callback time and callback-to-consumption delay. The former includes GPU execution, transfer, PCM copy and Unity's callback scheduling; it is **not a GPU kernel timer**. Multiplayer probes also save producer diagnostics and maximum update gaps. The final moving-station deadline run passed (24.75 s) for 886,784 frames with zero underrun/late/overflow or over-budget callbacks. Maximum readback completion latency was 186.2 ms; callback-to-consumption delay was 5.2 microseconds. These figures localize the delay upstream of final publication, without assigning it all to GPU arithmetic.
+
+A full runtime profile identified **1.028 s and 1.047 s `GfxDeviceMetal.WaitForLastPresent` waits** in two standalone clients. Their longest acoustic `LateUpdate` calls were 12.9–13.1 ms. Thus at least these long stalls are display-presentation waits blocking Unity's main loop, where the acoustic producer and readback callbacks run. The captures retain only the last 2,000 frames; they do not account for every earlier miss. Disabling VSync in an experimental build did not make the four-process workload reliable: three producers still filled their observation queues. That experiment was reverted. No queue/buffer sizes or ray budgets were increased to hide missed deadlines.
+
+Same-Mac synthetic multiplayer runs are recorded separately from device tests:
+
+| Run | Connection, capture and replay | Audio delivery |
+|---|---|---|
+| Two players, first shader-guard build | Both passed | Host missed 48,128 frames; client 101,377 |
+| Two players, warm repeat | Both passed; no late/concealed voice packets | Zero missed output frames |
+| Two players, final delivery build | Both saved/replayed two voices; 249 received packets each, no late/concealed packets | Zero underrun or late output frames |
+| Four players, final dispatch optimization | Host saved/replayed all four voices; three clients overflowed observation queues | 159,643–257,262 missed frames per process |
+| Four players, runtime profiling enabled | All saved/replayed four voices; no late/concealed voice packets | Host 0; clients 2,048 / 37,888 / 54,273 missed frames |
+
+The four-player test also exposed timestamp-only recording-folder collisions when clients initialized in the same millisecond. New scene recordings keep the readable timestamp and append a GUID. The original colliding run is excluded from performance comparisons. Functional replay success does not imply clean audio; four players sharing this GPU remain an unsuccessful realtime stress case. Separate-computer internet quality is unmeasured.
+
+Head-only GPU probes hold source, listener position, gain and propagation delay fixed, using 1 kHz / 6 kHz tones and 90°/s / 360°/s yaw. After startup, none produced silence runs; residual sample steps at FFT-hop boundaries were no larger than interior maxima. Relative RMS differences from a per-output-sample HRIR interpolation oracle were 3.98% / 14.44% at 1 kHz and 19.93% / 62.85% at 6 kHz. These quantify a filter-update/timing approximation, not a perceptual score or an independently validated physical oracle: the reference schedules head orientation on the output clock, while the source includes DSP latency. Moving the reference head schedule back by the declared 1,024-sample DSP latency reduces those differences to 1.51% / 5.49% and 7.74% / 25.70%, with identical rendered PCM. Head-pose/audio clock alignment and faster directional interpolation need a consistent physical timing contract before changing the renderer.
+
+The physical microphone open/close test was skipped because Unity lacked macOS microphone permission. Synthetic voice transport was exercised; actual microphone capture and mouth-to-ear latency were not verified in this pass. The final Mac development player rebuilt in 13.30 s with zero errors and 1,869 warnings; its fingerprint matches the saved, stopped TrainStation editor scene. Evidence is in `.context/audio-reliability/` and `.context/voice-sync/lan-*`; takes and raw profiler captures remain local.
+
+
 ## Spectral scene default — 2026-10-13
 
 TrainStation, Church and all three 2D acoustic scenes now select Spectral synthesis. New settings and serialized settings without a synthesis field also default to Spectral. Explicitly serialized IR/Spectral selections keep their enum values. The previous IR default was retained for backward compatibility; it was unsuitable for these moving scenes because its frozen-delay crossfades do not provide continuous Doppler. The existing GPU/CPU spectral implementations are reused. The production change is six settings lines; ray budgets, buffering and shaders are unchanged. The existing default-selection test now covers the new default and both explicit selections.

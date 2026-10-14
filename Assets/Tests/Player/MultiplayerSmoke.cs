@@ -19,6 +19,8 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         public float remoteMetres,sharedMetres,replayPositionError,replayAngleError;
         public long underrunSamples,lateSamples,callbacks;
         public bool replayOffline,microphoneClosed;
+        public double maximumFrameSeconds;
+        public RayTraceManager.LiveDiagnostics producer;
     }
     static string role,output;
     static int expectedPlayers;
@@ -31,7 +33,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     long encodedSamples,voiceSourceStart;
     double speakingTime;
     readonly Dictionary<Transform,Vector3> remoteInitial=new Dictionary<Transform,Vector3>();
-    double start;
+    double start,lastFrame;
     Transform shared;
     Vector3 sharedInitial;
     readonly List<string> errors=new List<string>();
@@ -73,6 +75,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         StopVoice();feeding=false;
         result.receivedPackets=network.ReceivedPackets;result.concealedFrames=network.ConcealedFrames;result.latePackets=network.LatePackets;
         ReadCounters();
+        result.producer=JsonUtility.FromJson<RayTraceManager.LiveDiagnostics>(JsonUtility.ToJson(result.producer));
         session.SaveRecording();yield return Wait(()=>!session.Busy,"capture finalization",15);
         if(errors.Count>0) {Finish();yield break;}
         try
@@ -110,6 +113,9 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     void Update()
     {
         if(!feeding || session==null)return;
+        double now=Time.realtimeSinceStartupAsDouble;
+        if(lastFrame!=0)result.maximumFrameSeconds=Math.Max(result.maximumFrameSeconds,now-lastFrame);
+        lastFrame=now;
         ReadCounters();
         if(!session.manager.IsLiveSimulation)return;
         double elapsed=AudioSettings.dspTime-start;var manager=session.manager;var stream=network.microphone.source.Stream;
@@ -156,6 +162,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     void ReadCounters()
     {
         var queue=session.manager.audioManager.OutputQueue;if(queue==null)return;
+        if(session.manager.IsLiveSimulation)result.producer=session.manager.liveDiagnostics;
         result.underrunSamples=Math.Max(result.underrunSamples,queue.UnderrunSamples);result.lateSamples=Math.Max(result.lateSamples,queue.LateSamples);
         result.callbacks=Math.Max(result.callbacks,queue.CallbackCount);
     }

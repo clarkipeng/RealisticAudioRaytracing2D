@@ -14,7 +14,7 @@ public partial class TakeChecks
         var scene=Scene(2);var before=States(2);var after=States(2);
         after[1].rotation=Quaternion.Euler(0,90,0);
         var settings=SpectralSettings();settings.synthesis=method;settings.raysPerBin=1;settings.maxBounces=1;
-        settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=64;
+        settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=45; // Ends inside an FFT hop.
         var clip=new float[256];for(int i=0;i<clip.Length;i++)clip[i]=.2f*Mathf.Sin(2*Mathf.PI*i/32+.37f);
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);
         signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});var signals=new[]{signal};
