@@ -36,18 +36,16 @@ internal sealed class SpectralAudio
     readonly RayTransport.Path[] lastPaths;
     readonly bool[] lastEnabled;
     readonly Dictionary<(float,Vector4,uint),int> groups;
-    readonly ImpulseResponseAudio ir;
     Response current,previous;
     long cursor,responseSample;
     int fade;
     bool initialized;
     public int ResponseSupportSamples {get;private set;}
-    public long NumericBytes => ir?.NumericBytes ?? (native.LongLength+pressure.Length+ears.Length+input.Length+sum.Length)*8+
+    public long NumericBytes => (native.LongLength+pressure.Length+ears.Length+input.Length+sum.Length)*8+
         (heads.LongLength+next.Length+current.block.Length+previous.block.Length)*4+lastPaths.LongLength*32+listeners*56L+lastEnabled.Length+
         (current.paths.Count+previous.paths.Count)*((long)bins*8+12);
     public SpectralAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals)
     {
-        if(settings.synthesis==TakeRender.Synthesis.ImpulseResponse){ir=new ImpulseResponseAudio(scene,rate,settings,signals);return;}
         this.rate=rate;this.signals=signals;maximumDelay=settings.maximumDelaySeconds*(double)rate;size=settings.fftSize;hop=settings.spectralHop;channels=settings.ChannelsPerListener;
         listeners=scene.listeners.Length;pairs=signals.Length*listeners;slots=settings.SpectralSlotsPerPair;transition=settings.transitionSamples;
         hrtf=channels==2?Hrtf.Load(rate):null;delayFilter=settings.delayFilter;radius=settings.sincRadius;
@@ -60,7 +58,6 @@ internal sealed class SpectralAudio
     }
     public void SetResponse(long sample,bool cut,RayTransport.Path[] paths,int offset,AcousticTake.Scene scene,AcousticTake.State[] states)
     {
-        if(ir!=null){ir.SetResponse(sample,cut,paths,offset,scene,states);ResponseSupportSamples=ir.ResponseSupportSamples;return;}
         if(paths==null || offset<0 || paths.Length-offset<checked(pairs*slots))throw new ArgumentException("Missing directional ray response.");
         foreach(var state in states)cut|=(state.flags&AcousticTake.StateFlags.Cut)!=0;
         bool unchanged=initialized && !cut;
@@ -118,7 +115,6 @@ internal sealed class SpectralAudio
     }
     public void Render(long sample,int count,float[] pcm)
     {
-        if(ir!=null){ir.Render(sample,count,pcm);return;}
         if(sample!=cursor)throw new InvalidOperationException("Spectral output must be consumed in order from initialization.");
         for(int n=0;n<count;n++,cursor++)
         {

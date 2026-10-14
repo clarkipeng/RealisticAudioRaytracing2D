@@ -575,6 +575,7 @@ public partial class TakeChecks
         }
         using var take=AcousticTake.Open(path);var settings=SpectralSettings();settings.audioBackend=backend;settings.synthesis=method;settings.airAbsorption=true;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=64;
         var report=TakeRender.RenderDirect(take,settings,path+"-render",shader:shader);
+        if(backend==TakeRender.AudioBackend.Gpu)Assert.That(report.gpuAudio.readbacks,Is.EqualTo((report.responseCount+report.responseBatchCapacity-1)/report.responseBatchCapacity));
         var samples=new[]{new List<float>(),new List<float>()};Action<long,float[],int> collect=(at,block,count)=>{for(int n=0;n<count;n++)for(int l=0;l<2;l++)for(int ear=0;ear<2;ear++)samples[l].Add(block[n*4+l*2+ear]);};
         var left=new AcousticTake.State[4];var right=new AcousticTake.State[4];take.ReadStoredFrame(0,left);
         using(var live=new TakeRender.Live(scene,take.Geometry,new[]{pcm},8000,settings,null,0,0,shader))

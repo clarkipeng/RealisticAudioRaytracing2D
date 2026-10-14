@@ -220,16 +220,22 @@ public partial class TakeChecks
         Assert.That(energy,Is.GreaterThan(.01));
     }
 
-    [Test,Category("GPU")]
-    public void UnchangedLargeResponseDoesNotRunFilterFfts()
+    [TestCase(128,true,0),TestCase(2048,true,0),TestCase(128,true,.125f),TestCase(2048,true,.125f),TestCase(2048,false,0),Category("GPU")]
+    public void HeadUpdatesReuseMaterialsAndOnlyIdenticalInputClocks(int size,bool turn,float delayRate)
     {
         RequireGpu();var scene=Scene();var state=States();var settings=SpectralSettings();
-        settings.fftSize=2048;settings.spectralHop=512;settings.responseStepSamples=2048;settings.raysPerBin=1;settings.maxBounces=1;
+        settings.fftSize=size;settings.spectralHop=size/4;settings.responseStepSamples=size;settings.transitionSamples=size/2;settings.raysPerBin=1;settings.maxBounces=1;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
-        paths[0]=new RayTransport.Path{pressureGain=1};
+        paths[0]=new RayTransport.Path{pressureGain=1,direction=new Vector4(1,0,0,delayRate)};
         using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
-        using var gpu=new GpuAudio(scene,8192,settings,new[]{new TakeRender.Signal(new[]{0f})});
-        gpu.SetResponse(0,false,arrivals,0,scene,state);gpu.Render(0,2048,new float[2048]);
+        var clip=new float[256];for(int i=0;i<clip.Length;i++)clip[i]=Mathf.Sin(i*.3f);
+        var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
+        var signals=new[]{signal};using var gpu=new GpuAudio(scene,8192,settings,signals);var cpu=new TakeRender.Mixer(scene,8192,settings,signals);
+        var actualPcm=new float[size*2];var expectedPcm=new float[size*2];var direct=new TakeRender.DirectPath[1];
+        gpu.SetResponse(0,false,arrivals,0,scene,state);gpu.Render(0,size,actualPcm);
+        cpu.SetResponse(0,direct,state,false,paths,0);cpu.Render(0,size,expectedPcm);
+        long filters=gpu.Diagnostics.materialFilters,ffts=gpu.Diagnostics.inputFfts;
+        if(turn){state[1].rotation=Quaternion.Euler(0,90,0);state[1].angularVelocity=Vector3.up;state[1].flags|=AcousticTake.StateFlags.VelocityValid;}
         var fields=new[]{"work","transform"};var buffers=new ComputeBuffer[fields.Length];
         var sentinel=new Vector2[8];for(int i=0;i<sentinel.Length;i++)sentinel[i]=new Vector2(i+1,-i-1);
         for(int i=0;i<fields.Length;i++)
@@ -237,9 +243,14 @@ public partial class TakeChecks
             buffers[i]=(ComputeBuffer)typeof(GpuAudio).GetField(fields[i],System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(gpu);
             buffers[i].SetData(sentinel,0,0,sentinel.Length);
         }
-        gpu.SetResponse(2048,false,arrivals,0,scene,state);
+        gpu.SetResponse(size,false,arrivals,0,scene,state);
         foreach(var buffer in buffers)
-        {var actual=new Vector2[sentinel.Length];buffer.GetData(actual,0,0,actual.Length);Assert.That(actual,Is.EqualTo(sentinel),"Neither inverse nor forward filter FFT may touch scratch for an unchanged response.");}
+        {var actual=new Vector2[sentinel.Length];buffer.GetData(actual,0,0,actual.Length);Assert.That(actual,Is.EqualTo(sentinel),"Head updates must not rebuild acoustic filters.");}
+        gpu.Render(size,size,actualPcm);cpu.SetResponse(size,direct,state,false,paths,0);cpu.Render(size,size,expectedPcm);
+        Assert.That(gpu.Diagnostics.materialFilters,Is.EqualTo(filters));
+        Assert.That(gpu.Diagnostics.inputFfts-ffts,Is.EqualTo(turn && delayRate!=0?6:4),"Different Doppler anchors need separate old/current input FFTs.");
+        double error=0;for(int i=0;i<actualPcm.Length;i++)error=Math.Max(error,Math.Abs(actualPcm[i]-expectedPcm[i]));
+        Assert.That(error,Is.LessThan(2e-5));
     }
 
 }

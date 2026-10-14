@@ -414,7 +414,7 @@ public class RayTraceManager : MonoBehaviour
                 (binding.transform.lossyScale - scene.objects[i].scale).sqrMagnitude > 1e-10f)
                 throw new InvalidOperationException("A recorded object was removed, reordered or resized; start a new take.");
             takeState[i] = SceneToTake.Observe(scene, i, binding.transform);
-            if (takeCuts.Contains(i) || (sample == previousTakeSample && (previousTakeState[i].flags & AcousticTake.StateFlags.Cut) != 0))
+            if (takeCuts.Contains(i))
                 takeState[i].flags |= AcousticTake.StateFlags.Cut;
             if (previousTakeSample >= 0 && sample > previousTakeSample)
                 takeState[i].MeasureMotion(previousTakeState[i], (double)(sample-previousTakeSample)/sampleRate);

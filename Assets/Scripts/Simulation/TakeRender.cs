@@ -56,7 +56,7 @@ public static partial class TakeRender
 
     [Serializable] public sealed class AudioDiagnostics
     {
-        public long responseUpdates,reusedResponses,filterBytes;
+        public long responseUpdates,reusedResponses,filterBytes,materialFilters,inputFfts;
         public int pathCapacity,activeGroups,peakGroups;
         // Request-to-callback includes GPU/readback and player-loop scheduling, not just GPU execution.
         public int readbacks;
@@ -213,16 +213,15 @@ public static partial class TakeRender
         File.WriteAllText(reportPath,JsonUtility.ToJson(report,true));
         var state=new AcousticTake.State[scene.objects.Length];
         var response=new DirectPath[scene.sources.Length*scene.listeners.Length];
-        var signals=new Signal[scene.sources.Length];
         var pcm=new float[scene.clips.Length][];
         for (int c=0; c<pcm.Length; c++) { pcm[c]=take.ReadClip(c); report.preparedPcmBytes+=(long)pcm[c].Length*4; }
-        for (int s=0; s<signals.Length; s++) signals[s]=Signal.FromTake(take,s,scene.sources[s].streamed?null:pcm[scene.sources[s].clipIndex]);
-        using var gpuAudio=useGpuAudio?new GpuAudio(scene,metadata.sampleRate,settings,signals):null;
+        var signals=Signal.FromTake(take,pcm);
+        int batchCapacity=shader==null || !SystemInfo.supportsAsyncGPUReadback ? 1:(int)Math.Min(settings.maximumResponsesPerBatch,(length-1)/settings.responseStepSamples+1);
+        using var gpuAudio=useGpuAudio?new GpuAudio(scene,metadata.sampleRate,settings,signals,batchCapacity):null;
         var mixer=useGpuAudio?null:new Mixer(scene,metadata.sampleRate,settings,signals);
         long initialMixerBytes=gpuAudio?.NumericBytes??mixer.NumericBytes;
         report.backendScope=useGpuAudio?"GPU transport and audio synthesis; CPU source timeline and PCM output":"Transport backend; CPU reference audio synthesis";
-        var block=new float[checked(settings.responseStepSamples*scene.listeners.Length*settings.ChannelsPerListener)];
-        int batchCapacity=shader==null || !SystemInfo.supportsAsyncGPUReadback ? 1:(int)Math.Min(settings.maximumResponsesPerBatch,(length-1)/settings.responseStepSamples+1);
+        var block=new float[checked(settings.responseStepSamples*scene.listeners.Length*settings.ChannelsPerListener*(useGpuAudio?batchCapacity:1))];
         var batchStates=batchCapacity==1 ? state:new AcousticTake.State[checked(state.Length*batchCapacity)];
         var batchPaths=batchCapacity==1 ? response:new DirectPath[checked(response.Length*batchCapacity)];
         report.responseBatchCapacity=batchCapacity;
@@ -233,6 +232,13 @@ public static partial class TakeRender
             report.backend=solver.Backend;
             report.preparationSeconds=watch.Elapsed.TotalSeconds;
             var outputs=new List<BinaryWriter>();
+            void WriteAudio(int count)
+            {
+                long start=Stopwatch.GetTimestamp();
+                for(int n=0;n<count;n++)for(int l=0;l<outputs.Count;l++)for(int ear=0;ear<settings.ChannelsPerListener;ear++)
+                    outputs[l].Write(block[(n*outputs.Count+l)*settings.ChannelsPerListener+ear]);
+                report.writeSeconds+=Elapsed(start);
+            }
             try
             {
                 for (int l=0; l<scene.listeners.Length; l++)
@@ -262,6 +268,8 @@ public static partial class TakeRender
                         }
                         double solveTime=Elapsed(start);
                         report.solveSeconds+=solveTime; report.maximumSolveSeconds=Math.Max(report.maximumSolveSeconds,solveTime);
+                        int batchSamples=(int)Math.Min(length-first,(long)frames*settings.responseStepSamples);
+                        start=Stopwatch.GetTimestamp();gpuAudio?.PrepareInput(first+batchSamples);report.audioSeconds+=Elapsed(start);
                         for(int f=0;f<frames;f++)
                         {
                             long sample=first+(long)f*settings.responseStepSamples;
@@ -277,14 +285,16 @@ public static partial class TakeRender
                             report.responseCount++;
                             int count=(int)Math.Min(settings.responseStepSamples,length-sample);
                             report.writeSeconds+=Elapsed(start);
-                            start=Stopwatch.GetTimestamp(); if(useGpuAudio)gpuAudio.Render(sample,count,block);else mixer.Render(sample,count,block);
+                            start=Stopwatch.GetTimestamp(); if(useGpuAudio)gpuAudio.QueueRender(sample,count);else mixer.Render(sample,count,block);
                             report.audioSeconds+=Elapsed(start);
-                            start=Stopwatch.GetTimestamp();
-                            for (int n=0; n<count; n++) for (int l=0; l<outputs.Count; l++) for(int ear=0;ear<settings.ChannelsPerListener;ear++)
-                                outputs[l].Write(block[(n*outputs.Count+l)*settings.ChannelsPerListener+ear]);
-                            report.writeSeconds+=Elapsed(start);
-                            progress?.Invoke((float)((double)(sample+count)/length));
+                            if(!useGpuAudio)WriteAudio(count);
                         }
+                        if(useGpuAudio)
+                        {
+                            start=Stopwatch.GetTimestamp();gpuAudio.BeginReadback();gpuAudio.TryComplete(block,true);report.audioSeconds+=Elapsed(start);
+                            WriteAudio(batchSamples);
+                        }
+                        progress?.Invoke((float)((double)(first+batchSamples)/length));
                     }
                 }
             }
@@ -334,17 +344,18 @@ public static partial class TakeRender
             count=gateSamples.BinarySearch(before); if (count<0) count=~count-1;
             if (count>0) { gateSamples.RemoveRange(0,count); gateEnabled.RemoveRange(0,count); }
         }
-        public static Signal FromTake(AcousticTake take,int source,float[] clip)
+        public static Signal[] FromTake(AcousticTake take,float[][] clips)
         {
-            var result=take.Metadata.scene.sources[source].streamed?new Signal(take.ReadStream(source)):new Signal(clip);
-            result.EndSample=take.Metadata.durationSamples;
+            var sources=take.Metadata.scene.sources;var result=new Signal[sources.Length];
+            for(int i=0;i<result.Length;i++)
+            {result[i]=sources[i].streamed?new Signal(take.ReadStream(i)):new Signal(clips[sources[i].clipIndex]);result[i].EndSample=take.Metadata.durationSamples;}
             var state=new AcousticTake.State[take.Metadata.scene.objects.Length];
-            for (int f=0; f<take.Metadata.frameCount; f++)
+            for(int f=0;f<take.Metadata.frameCount;f++)
             {
                 take.ReadStoredFrame(f,state);
-                result.SetActive(take.FrameSample(f),Enabled(state[take.Metadata.scene.sources[source].objectIndex],AcousticTake.StateFlags.Source));
+                for(int i=0;i<result.Length;i++)result[i].SetActive(take.FrameSample(f),Enabled(state[sources[i].objectIndex],AcousticTake.StateFlags.Source));
             }
-            foreach (var e in take.Events) if (e.sourceIndex==source) result.Append(e);
+            foreach(var e in take.Events)result[e.sourceIndex].Append(e);
             return result;
         }
         public void SetActive(long sample,bool active)
@@ -401,6 +412,7 @@ public static partial class TakeRender
         readonly bool[] enabled,oldEnabled;
         readonly Hrtf hrtf;
         readonly SpectralAudio spectral;
+        readonly ImpulseResponseAudio ir;
         readonly TakeRender.DelayFilter delayFilter;
         readonly int sincRadius;
         readonly Hrtf.Blend[] earBlend,oldEarBlend;
@@ -408,14 +420,20 @@ public static partial class TakeRender
         bool initialized;
         int fade;
         long directSupport;
-        public long ResponseSupportSamples => spectral!=null?spectral.ResponseSupportSamples:directSupport;
-        public long NumericBytes => (long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
-            (long)(earBlend.Length+oldEarBlend.Length)*32+(long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0)+(spectral?.NumericBytes??0);
+        public long ResponseSupportSamples => spectral?.ResponseSupportSamples??ir?.ResponseSupportSamples??directSupport;
+        public long NumericBytes => spectral?.NumericBytes??ir?.NumericBytes??(long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
+            (long)(earBlend.Length+oldEarBlend.Length)*32+(long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0);
         public Mixer(AcousticTake.Scene scene,int sampleRate,Settings settings,Signal[] signals)
         {
             Validate(settings); this.scene=scene; this.sampleRate=sampleRate; this.signals=signals; transition=settings.transitionSamples;
             channels=settings.ChannelsPerListener; maximumBlock=settings.responseStepSamples;
             delayFilter=settings.delayFilter;sincRadius=settings.sincRadius;
+            if(settings.transport==Transport.Raytraced)
+            {
+                if(settings.synthesis==Synthesis.ImpulseResponse)ir=new ImpulseResponseAudio(scene,sampleRate,settings,signals);
+                else spectral=new SpectralAudio(scene,sampleRate,settings,signals);
+                return;
+            }
             earBlend=new Hrtf.Blend[scene.sources.Length*scene.listeners.Length];oldEarBlend=new Hrtf.Blend[earBlend.Length];
             if(channels==2) hrtf=Hrtf.Load(sampleRate);
             current=new DirectPath[scene.sources.Length*scene.listeners.Length]; previous=new DirectPath[current.Length];
@@ -429,13 +447,16 @@ public static partial class TakeRender
             delayWeights=new float[delayTaps]; input=new float[checked(maximumBlock+taps-1)];
             mixed=new double[checked(maximumBlock*channels*enabled.Length)];
             delay=new long[current.Length]; oldDelay=new long[delay.Length];
-            if(settings.transport==Transport.Raytraced)spectral=new SpectralAudio(scene,sampleRate,settings,signals);
         }
         public void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut=false) => SetResponse(sample,paths,state,cut,null,0);
         internal void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut,RayTransport.Path[] arrivals,int offset)
         {
-            if(paths.Length!=current.Length || state.Length!=scene.objects.Length || (initialized && sample<responseSample)) throw new ArgumentException("Invalid response order/shape.");
-            if(spectral!=null){spectral.SetResponse(sample,cut,arrivals,offset,scene,state);responseSample=sample;initialized=true;return;}
+            if(paths.Length!=signals.Length*scene.listeners.Length || state.Length!=scene.objects.Length || (initialized && sample<responseSample)) throw new ArgumentException("Invalid response order/shape.");
+            if(spectral!=null || ir!=null)
+            {
+                if(spectral!=null)spectral.SetResponse(sample,cut,arrivals,offset,scene,state);else ir.SetResponse(sample,cut,arrivals,offset,scene,state);
+                responseSample=sample;initialized=true;return;
+            }
             ValidatePaths(paths);
             foreach(var path in paths) if(path.delaySeconds<0 || path.delaySeconds>maximumDelay)
                 throw new InvalidOperationException("Response exceeds Maximum Delay Seconds; increase the declared history horizon.");
@@ -479,8 +500,9 @@ public static partial class TakeRender
         {
             using(mixMarker.Auto())
             {
-                if(!initialized || sample<responseSample || count<0 || count>maximumBlock || interleaved.Length<(long)count*enabled.Length*channels) throw new ArgumentException("Invalid mix block.");
+                if(!initialized || sample<responseSample || count<0 || count>maximumBlock || interleaved.Length<(long)count*scene.listeners.Length*channels) throw new ArgumentException("Invalid mix block.");
                 if(spectral!=null){spectral.Render(sample,count,interleaved);return;}
+                if(ir!=null){ir.Render(sample,count,interleaved);return;}
                 int length=count*enabled.Length*channels; Array.Clear(mixed,0,length);
                 for(int s=0;s<signals.Length;s++) for(int l=0;l<enabled.Length;l++)
                 {

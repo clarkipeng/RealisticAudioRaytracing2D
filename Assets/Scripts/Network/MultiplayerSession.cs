@@ -282,10 +282,11 @@ public sealed class MultiplayerSession : MonoBehaviour
         return new Pose(position,Quaternion.Normalize(q));
     }
     static void WritePose(BinaryWriter w,Pose p) {w.Write(p.position.x);w.Write(p.position.y);w.Write(p.position.z);w.Write(p.rotation.x);w.Write(p.rotation.y);w.Write(p.rotation.z);w.Write(p.rotation.w);}
-    void Send(ulong client,Kind kind,Action<BinaryWriter> payload,bool reliable=false)
+    static byte[] Encode(Kind kind,Action<BinaryWriter> payload)
     {
-        using var bytes=new MemoryStream();using var writer=new BinaryWriter(bytes);writer.Write((byte)kind);payload?.Invoke(writer);SendBytes(client,bytes.ToArray(),reliable);
+        using var bytes=new MemoryStream();using var writer=new BinaryWriter(bytes);writer.Write((byte)kind);payload?.Invoke(writer);return bytes.ToArray();
     }
+    void Send(ulong client,Kind kind,Action<BinaryWriter> payload,bool reliable=false)=>SendBytes(client,Encode(kind,payload),reliable);
     void SendBytes(ulong client,byte[] bytes,bool reliable)
     {
         using var writer=new FastBufferWriter(bytes.Length,Allocator.Temp);writer.WriteBytesSafe(bytes);
@@ -293,7 +294,8 @@ public sealed class MultiplayerSession : MonoBehaviour
     }
     void Broadcast(Kind kind,Action<BinaryWriter> payload,bool reliable)
     {
-        if(IsHost) {foreach(ulong client in clients.Keys)if(client!=net.LocalClientId)Send(client,kind,payload,reliable);}
+        byte[] bytes=null;
+        if(IsHost) {foreach(ulong client in clients.Keys)if(client!=net.LocalClientId)SendBytes(client,bytes??=Encode(kind,payload),reliable);}
         else if(Connected)Send(0,kind,payload,reliable);
     }
     void LocalVoiceState(bool active,double time)

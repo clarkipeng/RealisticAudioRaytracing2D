@@ -176,15 +176,6 @@ public class AudioManager : MonoBehaviour
     AudioClip driverClip;
     AudioSource driverSource;
     public PcmQueue OutputQueue => Volatile.Read(ref pcmQueue);
-    public PcmQueue StartPcmStream(int rate,int capacity,int leadSamples,PlaybackCapture capture=null)
-    {
-        if (OutputCapture!=null) throw new InvalidOperationException("The previous output capture is still draining.");
-        if (rate!=AudioSettings.outputSampleRate) throw new InvalidOperationException("Live monitoring requires the audio device sample rate; offline takes can use other rates.");
-        if (leadSamples<0 || leadSamples>capacity) throw new ArgumentOutOfRangeException(nameof(leadSamples));
-        var queue=new PcmQueue(capacity,rate,capture,capture?.Metadata.channelsPerListener ?? 1); queue.Publish(0,null,leadSamples);
-        StartPcmStream(queue); return queue;
-    }
-    // Activate only after solver and recorder preparation; callbacks must not consume lead time during setup.
     public void StartPcmStream(PcmQueue queue)
     {
         if (queue==null || queue.rate!=AudioSettings.outputSampleRate) throw new ArgumentException("Prepared queue must use the output device sample rate.");
