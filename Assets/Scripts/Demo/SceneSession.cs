@@ -100,7 +100,7 @@ public sealed class SceneSession : MonoBehaviour
             SubmitInput(accept ? new Vector2(Input.GetAxis("Horizontal"),Input.GetAxis("Vertical")):Vector2.zero,
                 accept ? look.ReadDelta():Vector2.zero,accept && Input.GetButtonDown("Jump"),accept && Input.GetKeyDown(KeyCode.E));
         }
-        if(Input.GetKeyDown(KeyCode.R)) SaveRecording();
+        if(Cursor.lockState==CursorLockMode.Locked && Input.GetKeyDown(KeyCode.R)) SaveRecording();
     }
     public void SubmitInput(Vector2 movement,Vector2 lookDegrees,bool jump=false,bool interact=false)
     {

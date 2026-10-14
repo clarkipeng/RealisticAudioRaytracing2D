@@ -72,7 +72,7 @@ public static partial class TakeDemo
         var session=host.AddComponent<SceneSession>(); session.manager=manager; session.player=player;
         session.actors=new SceneActor[]{door}; session.startSounds=new[]{speaker};
         var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager;
-        panel.session=session; panel.buttonSize=new Vector2(260,30); panel.spacing=3; panel.anchoredPosition=new Vector2(24,-24);
+        panel.session=session; panel.buttonSize=new Vector2(280,32); panel.spacing=6; panel.anchoredPosition=new Vector2(24,-24);
         var sun=new GameObject("Daylight").AddComponent<Light>(); sun.type=LightType.Directional;
         sun.transform.rotation=Quaternion.Euler(55,-25,0); sun.intensity=.35f; sun.shadows=LightShadows.Soft;
         foreach(float z in new[]{-9f,1f,11f})
@@ -145,6 +145,7 @@ public static partial class TakeDemo
                 network.spawnPoints[i]=point;
             }
         }
+        FinishPlayers(session);
         PlayerSettings.macOS.microphoneUsageDescription="Use your microphone as an acoustic source and save it with recorded runs.";
     }
 }

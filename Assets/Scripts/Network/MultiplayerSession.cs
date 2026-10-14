@@ -32,6 +32,7 @@ public sealed class MultiplayerSession : MonoBehaviour
     public int LocalSlot {get;private set;}
     public string Status {get;private set;}="Solo";
     public bool Ready {get;private set;}
+    public bool Connecting => !Ready && !closing;
     public int ReceivedPackets {get;private set;}
     public long ConcealedFrames {get;private set;}
     public long LatePackets {get;private set;}
@@ -39,6 +40,7 @@ public sealed class MultiplayerSession : MonoBehaviour
     public int Capacity=>remoteVoices.Length+1;
     public static string PendingMode,PendingAddress;
     public string JoinCode {get;private set;}
+    public bool UsesRelay {get;private set;}=true;
     public double SessionTime=>Connected?(IsHost?net.NetworkTimeSystem.LocalTime:net.NetworkTimeSystem.LocalTime-net.NetworkTimeSystem.LocalBufferSec):Time.realtimeSinceStartupAsDouble;
     NetworkManager net;
     readonly Dictionary<ulong,int> clients=new Dictionary<ulong,int>();
@@ -87,6 +89,7 @@ public sealed class MultiplayerSession : MonoBehaviour
     public IEnumerator Connect()
     {
         string mode=PendingMode;PendingMode=null;
+        UsesRelay=string.IsNullOrEmpty(mode) || mode.StartsWith("relay-",StringComparison.Ordinal);
         if(string.IsNullOrEmpty(mode)) {Ready=true;yield break;}
         if(PendingAddress!=null)address=PendingAddress;PendingAddress=null;
         Status="Connecting";

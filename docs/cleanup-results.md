@@ -1,5 +1,15 @@
 # Cleanup validation and measured bottlenecks
 
+## Station and session UI polish — 2026-10-13
+
+TrainStation keeps its editable Unity geometry and now has consistent station materials, carriage/roof/door trim, boarding wayfinding, and a ground surface extending beyond the fog horizon. The ground collider and acoustic surface expand together. Decorative trim adds no acoustic surfaces; the station still has 47. Church and TrainStation share simple player visuals; heads inherit the existing voice transform, so received and replayed head orientation needs no additional runtime updater. Avatar collision now matches the walking controller's narrower body.
+
+The existing uGUI panel groups capture, replay, microphone/network and mouse settings. It hides while walking, displays session/player state, hides connection setup while connected, gives saved runs readable local timestamps, and explains why replay is disabled until saving. Empty join codes cannot be submitted. The R shortcut only runs with the cursor locked, preventing join-code typing from saving a recording. No runtime files or packages were added; two visual materials were added.
+
+Validation: **166/166 TakeChecks passed** (21.02 s); **StationEndToEndTests.RecordingReconstructsAndReplays passed** on the final ground (33.06 s), including boarding/departure and input reconstruction; **ChurchEndToEndTests.ChurchWalksThroughDoorAndReplays passed** (25.37 s). Live UI checks covered initial action availability, online/LAN field switching, join-code editing, duplicate-build prevention, and saving into the live/replay-ready state. Three avatar head-inheritance checks passed after the final hierarchy changes. The macOS development app rebuilt successfully (12.86 s, zero errors, 1,874 shader/deprecation/Pipeline warnings); its build fingerprint matches the editor. Cosmetic changes do not establish improved acoustic fidelity or a performance gain. Scene/build identity changes require new recordings or the matching historical checkout for old input-only takes.
+
+Evidence and previews are in `.context/polish/`. The synthetic/manual preview take was archived there rather than left in the normal saved-run chooser.
+
 ## Timestamped voice and Relay — 2026-10-13
 
 The existing microphone, codec and network components now send separate dry Opus streams with source sample indices and estimated session capture timestamps. The host preserves those timestamps; each receiver renders its own acoustics. Pose snapshots retain their original sample time. The wire protocol advances to 4; peers still require matching scene/build inputs. Internet hosting uses Multiplayer Services 2.2.4's Relay API with DTLS and anonymous authentication. LAN remains available. No new runtime source files or second acoustic engine were added.

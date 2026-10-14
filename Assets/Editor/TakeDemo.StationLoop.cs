@@ -52,7 +52,7 @@ public static partial class TakeDemo
         PrefabUtility.SaveAsPrefabAssetAndConnect(demo.train.gameObject,"Assets/Prefabs/Station/Train.prefab",InteractionMode.AutomatedAction);
         foreach(var source in demo.train.GetComponentsInChildren<RaytracedAudioSource>()) {source.rayTraceManager=session.manager; PrefabUtility.RecordPrefabInstancePropertyModifications(source);}
         RebuildStationTrack(demo.route);
-        var panel=demo.GetComponent<RaytraceControlPanel>(); if(panel!=null) {panel.buttonSize=new Vector2(260,30); panel.spacing=3;}
+        var panel=demo.GetComponent<RaytraceControlPanel>(); if(panel!=null) {panel.buttonSize=new Vector2(280,32); panel.spacing=6;}
         EditorUtility.SetDirty(demo); EditorUtility.SetDirty(session.manager);
     }
 

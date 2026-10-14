@@ -117,7 +117,7 @@ public static partial class TakeDemo
         session.actors=new SceneActor[]{demo,sliding};
         ConfigureStationLoop(demo,session); manager.RegisterTakeObjects();
         // SceneSession checks replay mode before writing motion and keeps UI/escape available.
-        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.session=session; panel.buttonSize=new Vector2(260,30); panel.spacing=3; panel.anchoredPosition=new Vector2(24,-24);
+        var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.session=session; panel.buttonSize=new Vector2(280,32); panel.spacing=6; panel.anchoredPosition=new Vector2(24,-24);
         var sun=new GameObject("Sun").AddComponent<Light>(); sun.type=LightType.Directional; sun.transform.rotation=Quaternion.Euler(42,-32,0); sun.intensity=1.2f; sun.color=new Color(1,.94f,.83f); sun.shadows=LightShadows.Soft;
         var sky=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Sky.mat");
         if(sky==null) {sky=new Material(Shader.Find("Skybox/Procedural")); AssetDatabase.CreateAsset(sky,StationAssets+"/Sky.mat");}
@@ -127,16 +127,114 @@ public static partial class TakeDemo
         RenderSettings.fog=true; RenderSettings.fogColor=new Color(.68f,.75f,.78f); RenderSettings.fogMode=FogMode.Linear; RenderSettings.fogStartDistance=65; RenderSettings.fogEndDistance=170;
         AssetDatabase.SaveAssets();
         ConfigureMultiplayer(session);
+        FinishStation(session,demo);
+        AssetDatabase.SaveAssets();
         EditorSceneManager.SaveScene(scene,"Assets/Scenes/TrainStation.unity");
         if(SceneView.lastActiveSceneView!=null) SceneView.lastActiveSceneView.LookAt(new Vector3(0,1,0),Quaternion.Euler(35,35,0),38);
         Selection.activeGameObject=host;
         Debug.Log("TrainStation ready: two sources, one binaural listener, editable acoustic boxes, sliding door and looping train. Play, then right click to walk; Esc returns to the controls.");
     }
 
+    [MenuItem("Tools/Acoustics/Polish train station")]
+    public static void PolishStation()
+    {
+        if(EditorApplication.isPlaying) throw new InvalidOperationException("Stop Play mode before editing the station.");
+        var demo=UnityEngine.Object.FindAnyObjectByType<StationDemo>();
+        if(demo==null) throw new InvalidOperationException("Open TrainStation first.");
+        var session=demo.GetComponent<SceneSession>();
+        Undo.RegisterFullObjectHierarchyUndo(session.manager.takeRoot.gameObject,"Polish station");
+        FinishStation(session,demo);
+        EditorSceneManager.MarkSceneDirty(demo.gameObject.scene);
+        // Leave saving to the editor, as with other scene edits.
+        AssetDatabase.SaveAssets();
+    }
+    static void FinishStation(SceneSession session,StationDemo demo)
+    {
+        var concrete=StationMaterial("Concrete",new Color(.59f,.62f,.60f));
+        var pale=StationMaterial("Masonry",new Color(.82f,.8f,.7f));
+        var steel=StationMaterial("Steel",new Color(.085f,.15f,.18f),.35f);
+        var teal=StationMaterial("Wayfinding",new Color(.08f,.37f,.37f),.1f);
+        var wood=StationMaterial("Timber",new Color(.46f,.27f,.15f));
+        var yellow=StationMaterial("Safety yellow",new Color(.95f,.72f,.24f));
+        StationMaterial("Ground",new Color(.31f,.38f,.29f));
+        StationMaterial("Ballast",new Color(.26f,.28f,.27f));
+        var sky=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Sky.mat");
+        Undo.RecordObject(sky,"Edit station sky");sky.SetColor("_GroundColor",new Color(.68f,.75f,.78f));EditorUtility.SetDirty(sky);
+        var architecture=session.manager.takeRoot.Find("Station architecture");
+        architecture.Find("Terrain").localScale=new Vector3(400,.5f,400); // Ground reaches past the fog horizon, with matching collision/acoustics.
+        var details=FinishRoot(architecture);
+        // Surface trim is visual only: it does not add simulation geometry or colliders.
+        StationBox(details,"Platform edge trim",new Vector3(-2.215f,-.13f,0),new Vector3(.05f,.2f,44),steel,false);
+        StationBox(details,"Platform edge trim",new Vector3(9.815f,-.13f,0),new Vector3(.05f,.2f,44),steel,false);
+        StationBox(details,"Platform coping",new Vector3(3.8f,.008f,-21.6f),new Vector3(11.8f,.016f,.3f),pale,false);
+        StationBox(details,"Canopy lower trim",new Vector3(3.8f,3.64f,-12.02f),new Vector3(8.7f,.12f,.08f),teal,false);
+        StationBox(details,"Canopy lower trim",new Vector3(3.8f,3.64f,-.98f),new Vector3(8.7f,.12f,.08f),teal,false);
+        foreach(float x in new[]{1.75f,9.85f})
+        {
+            StationBox(details,"Waiting room plinth",new Vector3(x,.16f,10),new Vector3(.34f,.32f,9.2f),steel,false);
+            StationBox(details,"Waiting room cornice",new Vector3(x,3.35f,10),new Vector3(.34f,.12f,9.2f),teal,false);
+        }
+        foreach(float x in new[]{4.54f,6.66f}) StationBox(details,"Door jamb",new Vector3(x,1.3f,5.17f),new Vector3(.08f,2.6f,.1f),steel,false);
+        StationBox(details,"Door threshold",new Vector3(5.6f,.016f,5.3f),new Vector3(2.1f,.032f,.65f),steel,false);
+        for(int i=0;i<5;i++) StationBox(details,"Speaker grille",new Vector3(5.6f,1.86f+i*.12f,14.012f),new Vector3(.42f,.026f,.025f),pale,false);
+        var door=architecture.parent.Find("Sliding door");
+        var doorDetails=FinishRoot(door);
+        StationBox(doorDetails,"Door inset",new Vector3(0,.12f,-.515f),new Vector3(.84f,.55f,.03f),steel,false);
+        StationSign(details,"TRAIN  >",new Vector3(7.4f,2.65f,-11.85f),new Vector2(1.8f,.45f),teal,Color.white);
+
+        var boarding=FinishRoot(demo.boardingPlatform);
+        StationBox(boarding,"Approach paving",new Vector3(-7.9f,-.01f,0),new Vector3(2,.02f,2.4f),concrete,false);
+        StationBox(boarding,"Landing trim",new Vector3(-3.89f,.6f,-2.6f),new Vector3(.04f,1.2f,2.8f),steel,false);
+        StationBox(boarding,"Landing trim",new Vector3(-3.89f,.6f,2.6f),new Vector3(.04f,1.2f,2.8f),steel,false);
+        StationSign(boarding,"NORTHLINE",new Vector3(-2.72f,1.8f,-3.87f),new Vector2(1.95f,.4f),teal,Color.white);
+        var carriage=FinishRoot(demo.carriage);
+        foreach(float x in new[]{-1.5f,1.5f})
+            StationBox(carriage,"Roof fascia",new Vector3(x,3.65f,0),new Vector3(.1f,.25f,6.94f),steel,false);
+        foreach(float z in new[]{-3.42f,3.42f})
+            StationBox(carriage,"Roof fascia",new Vector3(0,3.65f,z),new Vector3(3.1f,.25f,.1f),steel,false);
+        StationBox(carriage,"Outer waist trim",new Vector3(1.468f,2.15f,0),new Vector3(.022f,.08f,6.4f),pale,false);
+        foreach(float z in new[]{-2f,2f})
+            StationBox(carriage,"Boarding waist trim",new Vector3(-1.468f,2.15f,z),new Vector3(.022f,.08f,2.4f),pale,false);
+        StationBox(carriage,"Entry threshold",new Vector3(-1.32f,1.215f,0),new Vector3(.2f,.026f,1.52f),yellow,false);
+        // Reuse the existing avatar collider; the body and face make heading legible.
+        FinishPlayers(session);
+        var panel=session.GetComponent<RaytraceControlPanel>(); panel.buttonSize=new Vector2(280,32);panel.spacing=6;
+        EditorUtility.SetDirty(panel);
+    }
+    static Transform FinishRoot(Transform parent)
+    {
+        var existing=parent.Find("Visual details");
+        if(existing!=null) UnityEngine.Object.DestroyImmediate(existing.gameObject);
+        var root=new GameObject("Visual details").transform; root.SetParent(parent,false); return root;
+    }
+    static void FinishPlayers(SceneSession session)
+    {
+        if(session.multiplayer==null)return;
+        var cloth=StationMaterial("Player jacket",new Color(.1f,.43f,.46f));
+        var face=StationMaterial("Player face",new Color(.85f,.72f,.55f));
+        var dark=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Steel.mat");
+        foreach(var voice in session.multiplayer.remoteVoices)
+        {
+            var avatar=voice.transform.parent;
+            var body=avatar.Find("Body");body.GetComponent<Renderer>().enabled=false;
+            var collider=body.GetComponent<CapsuleCollider>();collider.radius=.3f;collider.height=1.8f;collider.center=Vector3.down*.1f;
+            var details=FinishRoot(avatar);
+            StationBox(details,"Jacket",new Vector3(0,1.12f,0),new Vector3(.48f,.76f,.3f),cloth,false);
+            foreach(float x in new[]{-.15f,.15f})
+                StationBox(details,"Leg",new Vector3(x,.37f,0),new Vector3(.21f,.74f,.26f),dark,false);
+            var head=FinishRoot(voice.transform); // Voice already follows the received/replayed head orientation.
+            StationBox(head,"Head",Vector3.zero,new Vector3(.32f,.38f,.32f),face,false);
+            StationBox(head,"Face",new Vector3(0,.02f,.167f),new Vector3(.23f,.065f,.025f),dark,false);
+            foreach(float x in new[]{-.32f,.32f})
+                StationBox(details,"Sleeve",new Vector3(x,1.13f,0),new Vector3(.14f,.52f,.27f),cloth,false);
+        }
+    }
+
     static Material StationMaterial(string name,Color color,float metal=0)
     {
         string path=StationAssets+"/"+name+".mat"; var material=AssetDatabase.LoadAssetAtPath<Material>(path);
         if(material==null) {material=new Material(Shader.Find("Standard")); AssetDatabase.CreateAsset(material,path);}
+        Undo.RecordObject(material,"Edit station material");
         material.color=color; material.SetFloat("_Metallic",metal); material.SetFloat("_Glossiness",.25f); EditorUtility.SetDirty(material); return material;
     }
     static GameObject StationBox(Transform parent,string name,Vector3 position,Vector3 size,Material material,bool acoustic=true)
