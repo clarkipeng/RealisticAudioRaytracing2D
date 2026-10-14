@@ -1,5 +1,461 @@
 # Cleanup validation and measured bottlenecks
 
+## Pipeline audit — 2026-10-14
+
+Scope: source audit of `6fca941`, plus its saved measurements below, in the actual Unity project. No runtime, shader, scene, or package changes; no new benchmark or test run. Prior test results establish the baseline, not the correctness or speed of these proposed optimizations.
+
+### Current execution and evidence
+
+Live: Unity observations and source audio → interpolated response batch → GPU transport → GPU path grouping/filter preparation → delayed/Doppler-adjusted source FFTs → material and ear filtering → per-listener summed output → PCM readback → device queue. Source audio uploads once per source; transport/path spectra stay on the GPU. Live already queues multiple responses before one PCM readback. The callback consumes prepared PCM and does not trace rays.
+
+Offline: reconstruct compact scene inputs once when necessary → load numeric take → batch transport → **wait for direct diagnostic responses → prepare/render/read back audio separately for each response** → write listener WAVs and reports. `TakeRender.RenderDirect` creates `GpuAudio` with its default one-response capacity even when transport uses a larger batch. Reuse the existing `PrepareInput` / `QueueRender` / `BeginReadback` API; a second offline DSP implementation is unnecessary.
+
+Multiplayer clients normally render their local listener and multiple dry sources. Offline supports multiple entries in the take's listener list, but collecting several clients does not automatically produce one canonical multi-listener timeline: each client records its actual presented state and decoded source streams. Preserve each client's low/high pairing. Additional offline listener trajectories must be explicit dataset inputs.
+
+Existing station runs (`.context/audio-reliability/head-hop-{reduction,repeat1,repeat2}.json`) contain 977,988 stereo frames at 44.1 kHz: 22.18 seconds, two sources, one listener, 53 objects, 564 primitives, identical output hashes.
+
+| Measurement | Recorded result | Interpretation |
+|---|---|---|
+| Total wall time | 6.102 / 7.040 / 7.044 s | Repetition matters; do not claim a speedup from the fastest run alone. |
+| Audio scope | 5.119 / 5.927 / 5.929 s | Includes submission, computation and waiting; not isolated GPU kernel time. |
+| PCM request-to-completion | 5.017 / 5.819 / 5.829 s over 956 readbacks | 120 transport batches still lead to 956 audio waits. Batching audio by eight would require 120 readbacks; speedup remains unmeasured. |
+| Transport solve scope | 0.555 / 0.628 / 0.609 s | Includes completion/diagnostics, not just traversal. |
+| Filter allocation | 117,784,800 bytes; capacity 7,182 groups; peak 743 | Dense worst-case storage, about 10.3% peak occupancy in this take. Not permission to cap future workloads at 743. |
+| Transfers | 7,854,496 bytes upload and the same readback | Small compared with filter storage; frequent synchronization matters more than nominal byte totals here. |
+| Static BVH | 408 of 564 primitives; two builds/classification updates | 156 primitives end up outside the static hierarchy. |
+| Reused responses | 484 of 956 | Reuse exists, but is decided after transport and uses one global change flag. |
+
+The saved two-process physical microphone probe allocated **353,354,400 filter bytes per renderer** (21,546 reserved groups), with peaks of 746/743 groups. Authored source slots reserve memory even when unused. Host/client missed 68,618/15,360 output frames; these cumulative counts include startup. Earlier four-player profiles show approximately one-second `GfxDeviceMetal.WaitForLastPresent` stalls. The final foreground single-editor deadline probe passed, so failures are intermittent and workload-dependent. DSP optimizations alone do not establish reliable low-latency voice. The station's 16,384-sample output lead is about 372 ms before other latency.
+
+### Before/after pseudocode report
+
+The `-` lines describe today's implementation; `+` lines describe the proposal. These are algorithm sketches, not compilable patches or changes already made. A **response** is one acoustic update, a **hop** is one emitted audio block, and a **group** combines compatible frequency-bin arrivals into one path filter. Reuse must follow these actual dependencies:
+
+| Data | Depends on | Reuse scope |
+|---|---|---|
+| Compiled geometry/material tables | Authored scene and material configuration | Session/job |
+| Source samples | Source timeline, gain/activity and sample interval | All paths/listeners consuming that source |
+| Acoustic path response | Geometry, source/listener transport state, solver settings and sampling | Affected source–listener pairs |
+| Material filter | Group membership and frequency gains | Unchanged acoustic response |
+| Source FFT | Exact delayed/resampled source window | Matching paths and response states within a hop |
+| Predicted head orientation | Listener pose/time anchor, angular velocity and output time | All paths arriving at that listener |
+| Ear filter | Head orientation, arrival direction and measured ear dataset | Matching direction/ear state |
+| Output mix | All audible source/path contributions | One listener/ear |
+
+#### 1. Batch offline audio instead of waiting after every response
+
+Files: `TakeRender.cs:220,260,280`, `GpuAudio.cs:183,252`; live already uses the batching API in `TakeRender.Live.cs:200`.
+
+```diff
+ for each transport batch:
+     evaluate recorded states
+     submit ray tracing for all responses in this batch
+-    wait for direct diagnostic results
+-    for each response:
+-        upload its new source samples
+-        apply response
+-        render its audio
+-        read back PCM and wait
+-        write its WAV samples
++    upload the batch's finalized source interval once
++    for each response:
++        apply response at its original sample timestamp
++        queue its audio into the batch output
++    request one PCM readback after the queued audio
++    wait for the batch, then write its WAV samples
++    if direct diagnostics were requested:
++        collect and write those diagnostics before releasing the batch
+```
+
+**Why better:** the saved station job has 956 responses and transport capacity eight. This changes 956 PCM readbacks into `ceil(956 / 8) = 120`. It removes waits and headers, not the required audio samples or FFTs. Transport and DSP can stay ordered on the same GPU queue without a CPU wait between them. It uses the existing `PrepareInput`, `QueueRender`, `BeginReadback` and completion operations.
+
+**Cost and invariant:** give `GpuAudio` the batch capacity and retain its pose/source/output buffers until completion. For one stereo listener, eight 1,024-frame responses require 65,536 PCM bytes instead of 8,192; total memory also includes staging buffers and other data. Preserve partial final responses, source availability, cuts, diagnostics and sample ordering. Live must continue submitting whatever is ready; it must not wait for eight responses to accumulate.
+
+**Check:** identical output across batch sizes, including the final partial block. Count 120 readbacks for this saved workload and measure repeated wall times; an eightfold reduction in readbacks is not an eightfold speedup claim.
+
+#### 2. Separate acoustic data from head updates
+
+Files: `GpuAudio.cs:114–145`, `GpuAudio.compute:72,144,205`, `SpectralAudio.cs:61`.
+
+Today, a rotating head sets the same global flag used for changed path gains. That causes new material-filter FFTs even when the source, paths and materials are identical.
+
+```diff
+ arrivals = trace(sceneState)
+- changed = arrivalsDiffer || headChanged || headHasAngularVelocity || cut
+- if changed:
+-     switch the entire response bank
+-     for every pair:
+-         regroup arrivals
+-         rebuild material filters
+-     save head poses and the shared response time anchor
+-     start the response fade, unless this is initialization or a cut
++ acousticChanged = uninitialized || arrivalsDiffer || pairActivityChanged
++ headUpdate = headChanged || headHasAngularVelocity
++ if acousticChanged:
++     acousticData = regroupAndBuildFilters(arrivals)
++ else:
++     acousticData = retainExistingAcousticData()
++ if acousticChanged || headUpdate || cut || uninitialized:
++     next.acousticData = acousticData
++     next.pathClockAnchor = thisResponseSample
++     next.head = poseAndAngularVelocityAnchoredAtThisSample()
++     previous = current
++     current = next
++     fadeLength = initialized && !cut ? configuredTransition : 0
++     initialized = true
+```
+
+**Why better:** a head-only update becomes a small pose/clock update. Old and new head states can refer to the same acoustic rows and material spectra. We retain the old/new response transition, but avoid rebuilding its identical acoustic ingredients.
+
+**What must stay correct:** within-hop head interpolation and between-response crossfading are two separate operations. Keep both. Replacing them with one interpolated quaternion changes the result. Also preserve the existing path-time anchoring: unchanged delay/rate numbers can produce different input samples when their anchor changes. Sharing a material filter does not automatically authorize sharing its FFT input.
+
+This first change still traces each response; it removes downstream rebuilds. Skipping tracing itself requires proving its full inputs unchanged. Listener rotation can affect transport if that object also rotates geometry or source directivity, so there is no universal “ignore rotation” rule.
+
+**Later refinement:** localize acoustic invalidation once the above is correct:
+
+```text
+source-only change       → its listener pairs
+listener-only change     → its source pairs
+geometry/material change → conservatively all potentially affected pairs
+head-filter-only change  → that listener's head state
+```
+
+Keep clock/cut/fade rules separate from this acoustic dependency map. An unchanged pair's filters can survive another pair's change without prematurely discarding its active output transition.
+
+**Cost/check:** separate lifetimes and references add some state but remove expensive rebuilds. Test that pure head updates leave material spectra untouched, while the independent head oracle, cuts and response fades still pass. Per-pair invalidation needs a separate two-pair isolation test.
+
+#### 3. Share work within each audio hop
+
+Files: `GpuAudio.compute:107,266,275`, `GpuAudio.cs:193–211`.
+
+**A. Predict orientation once per listener and active head history.**
+
+```diff
++ for each listener and active head history:
++     rotationStart = predictOrientation(hopStart)
++     rotationEnd   = predictOrientation(hopEnd)
+ for each path:
+-    rotationStart = predictOrientation(itsListener, hopStart)
+-    rotationEnd   = predictOrientation(itsListener, hopEnd)
+     localDirectionStart = inverse(rotationStart) * path.arrivalDirection
+     localDirectionEnd   = inverse(rotationEnd) * path.arrivalDirection
+     earBlend = lookupDirectionalEarFilters(localDirectionStart, localDirectionEnd)
+```
+
+Prediction currently repeats for each path. The direction transform and ear lookup remain path-dependent. During a correction fade, old and new pose histories need their own predictions. A separate dispatch can cost more than the saved arithmetic for small workloads; benchmark the placement.
+
+**B. Multiply source and material once before applying the ear filters.**
+
+```diff
+ for each path, frequency bin and active response:
++    filteredSource = sourceSpectrum * materialSpectrum
+     for each ear and head endpoint:
+-        sum += sourceSpectrum * (materialSpectrum * earSpectrum)
++        sum += filteredSource * earSpectrum
+```
+
+This reuses common multiplication across two ears and, during motion, two head endpoints. The source FFT and material spectra are already shared by the ears; the repeated multiplication is the opportunity. Fuse into an existing pass where possible. If multiple material filters share one raw source FFT, do not overwrite that shared input. Extra intermediate writes can erase the arithmetic saving; floating-point reassociation also changes last bits.
+
+**C. Reuse exactly identical source windows during response transitions.**
+
+```diff
+ for each hop:
+     for current response and previous response while its fade is active:
+         for each path group:
+-            samples = readDelayedDopplerWindow(source, pathClock, hop)
+-            inputSpectrum = FFT(samples)
++            window = describeExactSamplingOperation(source, pathClock, hop)
++            if a matching window was already transformed in this hop:
++                inputSpectrum = useThatSpectrum()
++            else:
++                inputSpectrum = FFT(readWindow(window))
+             apply material and ear filters
+```
+
+The descriptor includes source identity, FFT window position/length, delay, delay rate and time anchor, sampling/interpolation rules, and input-availability semantics. Equality must imply the same source positions, tap weights and boundary behavior—not merely similar delay values. Start by aliasing matching old/current rows when their acoustic groups are unchanged; this does not require a global cache or a hash table over every source.
+
+For a stationary path, a head correction can require two different ear responses but the same source FFT. Two paths at different delays, or with different Doppler clocks, generally need different source FFTs. Two different recordings also cannot share just because their sources occupy the same position.
+
+**Cost/check:** keep shared rows alive through both consumers; the existing scratch is overwritten when switching responses. Any retained scratch/indexing must earn its memory and dispatch cost. Count unique FFTs, compare to the independent CPU output, and test both identical and deliberately different source clocks. Expired old-response work is already skipped; retain that optimization.
+
+#### 4. Diagnose live stalls without adding another scheduler
+
+Files: `TakeRender.Live.cs`, `GpuAudio.cs:230`, `RayTraceManager.cs`, `AudioManager.cs`.
+
+The live pipeline already works asynchronously. It does not wait for GPU completion in the audio callback. The unresolved issue is timely progress through Unity's producer/callback loop under load.
+
+```diff
+ submit ready transport/audio work
+- measure request-to-readback-callback elapsed time
++ record CPU submission time
++ measure GPU start/end when the profiler/backend exposes them
++ record readback callback time
++ record completed PCM publication time
++ correlate with the device sample interval that consumed or missed it
+ continue observing and pumping without blocking
+```
+
+**Why better:** the current readback duration bundles computation, transfer and callback scheduling. Separating those measurements distinguishes a slow kernel from finished GPU work whose callback/publication was delayed. Use existing markers and counters where they suffice. Unavailable GPU timing stays unavailable rather than being inferred from wall time.
+
+**There is no proven scheduling fix in this diff.** Prior profiles found roughly one-second Metal presentation waits. Adding a second queue or making the callback wait would not resolve that. Retain immediate publication when owned PCM completes, small ready batches, and the fast device ring consumer. Do not wait for a full batch in live mode.
+
+**Tradeoff/check:** profile one standalone client with normal graphics and a minimal-presentation workload, then contention separately. A dedicated native producer could decouple more work but adds significant code and synchronization; a normal C# task cannot simply own Unity graphics/scene operations. Evaluate that only after measurement. Do not increase the existing ~372 ms output lead to call a deadline failure fixed.
+
+#### 5. Store filters for useful groups instead of every possible arrival slot
+
+Files: `GpuAudio.cs:42–67`, `GpuAudio.compute:144`; this is a later memory change.
+
+```diff
+- capacity = sources * listeners * worstCaseArrivalSlotsPerPair
+- filters = allocate(2 * capacity * spectrumBins)
+- filterAddress = responseBank * capacity + pair * slots + group
++ count and compact active groups for the response
++ reserve filter rows for those groups in a checked storage pool
++ group.filterRow = its assigned storage row
++ filters[group.filterRow] = material spectrum
++ retain rows referenced by current or fading responses
++ release rows only after their last GPU reader completes
+```
+
+**Why better:** raw arrival storage has a conservative upper bound; actual grouped material filters are much fewer in the measured scenes. The station reserves 7,182 filter rows per bank but reached 743 active groups. Multiplayer reserves 21,546 and reached about 746. These figures show an opportunity, not a safe universal capacity.
+
+**Important implementation cost:** the GPU cannot resize a Unity `ComputeBuffer` by itself. Exact allocation from GPU counts introduces a CPU readback; a preallocated pool needs overflow handling and lifetime tracking. Offline can grow and retry before accepting output. Live cannot silently drop paths or publish a partially rendered block; it needs sufficient provisioned storage or an explicit failure. This is why compaction should follow simpler DSP changes.
+
+A smaller initial option is storage mapping for permanently excluded pairs, while retaining stable source/listener IDs. Initially inactive multiplayer slots can activate later, and ended sources can still have audible tails; neither can be discarded without accounting for that lifetime.
+
+**Check:** compare output at the same quality, stress capacity changes and overlapping response lifetimes, and report actual memory. Do not set a new cap from the measured 743-group peak. Increasing FFT resolution currently grows both traced frequency bins and spectrum width, so worst-case filter storage grows roughly quadratically when both sizes scale together.
+
+#### 6. Keep moving objects accelerated with BLAS/TLAS
+
+Files: `DirectBvh.cs:52`, `Geometry.hlsl:65,179`, `Transport.hlsl:122`; defer until traversal measurements warrant it.
+
+```diff
+ scene setup:
+-    build one world-space BVH for currently fixed triangles
++    build a local triangle BVH for each acoustic mesh       # BLAS
++    build a BVH over the objects' world-space bounds        # TLAS
+
+ when an object first moves:
+-    remove its triangles from the static BVH
+-    keep them in the linear-test list for the session
++    update/refit its world bound in the TLAS
++    keep its local triangles and BLAS unchanged
+
+ intersect(ray):
+-    visit static BVH candidates
+-    test every dynamic triangle until the query can finish
+-    transform candidate triangle vertices into world space
++    visit candidate objects through the TLAS
++    transform the ray into each candidate object's local frame
++    traverse that object's BLAS and test candidate triangles
++    transform the accepted hit/normal back as required
+```
+
+**Why better:** rigid movement changes an object's placement, not its mesh. A train can retain its triangle hierarchy while moving. Local traversal also avoids rotating/translating every candidate triangle for each ray. The same object-local structure could accelerate closed-volume containment queries that currently scan triangles.
+
+**Tradeoff:** two traversal levels, refit work and additional buffers/code can lose to the simpler scheme on small scenes. Preserve 2D/3D intersection conventions, baked scale, activity flags, and consistent distance/normal handling. Bounds must match the pose/time used by each query, including any supported retarded query; changing acceleration does not justify changing the motion model.
+
+**Check:** compare hits and rendered output to brute-force traversal for moving/rotating/nested geometry. The measured station solve scope is only 0.56–0.63 s, while DSP/completion is 5.12–5.93 s, so this is not the first speed optimization.
+
+#### 7. Consolidate source setup and network serialization
+
+**A. Build every source's activity history in one pass.** `TakeRender.cs:337`.
+
+```diff
+- for each source:
+-    for every stored frame:
+-        read the entire scene frame
+-        extract this source's active flag
+-    scan all events and keep this source's events
++ create all source signal objects
++ for every stored frame:
++    read the entire scene frame once
++    for each source:
++        append its active flag at that frame's sample
++ for each recorded event:
++    append it to signals[event.sourceIndex]
+```
+
+**Why better:** for S sources and F frames, full-frame reads fall from `S * F` to `F`; the necessary `S * F` source-flag checks remain. Event scanning falls from S scans to one. Preserve event order, sample timestamps, end-of-take handling and the distinction between clips and streams. This is setup savings, not a change to acoustic quality or steady-state ray cost.
+
+**B. Serialize a host broadcast once.** `MultiplayerSession.cs:284–298`.
+
+```diff
+- for each recipient:
+-    bytes = serialize(kind, payload)
+-    send(recipient, bytes, deliveryMode)
++ if there are recipients:
++    bytes = serialize(kind, payload)
++    for each recipient:
++        send(recipient, bytes, deliveryMode)
+```
+
+**Why better:** one encoding/allocation for a payload shared by peers. The host's own microphone packets and world snapshots currently pass through the repeated serialization path. Network transmission still scales with recipient count; this does not reduce the necessary per-peer bytes. Forwarding already-encoded remote packets is a separate path and should remain so. Keep the payload immutable until the send API has consumed it, preserve reliability, and serialize a timestamp once for the shared event.
+
+**Check:** compare signal timelines and serialized packet bytes. Only shared broadcasts use this change; individualized welcome/state messages remain individual.
+
+**C. Optional shared immutable setup for offline comparisons.** `Hrtf.cs:97`, `GpuAudio.cs:100`.
+
+```diff
+ for each low/high render:
+-    compute all ear spectra and construct angular lookup tables
++    use job-owned ear tables keyed by dataset, sample rate and FFT size
+```
+
+Resampled HRTF taps are already cached; spectra and GPU angular layout rebuild per renderer. Reuse can reduce startup work, but sharing GPU buffers adds ownership complexity. The recorded preparation cost is about 0.25–0.27 s per run; start with batching and source setup, and add this only if repeated short jobs make setup significant. Avoid a permanent unbounded cache.
+
+#### 8. Reduce validation and recording overhead only with safe ownership
+
+Files: `SceneToTake.cs:144,277`, `SourceStream.cs:94`.
+
+**A. Deep validation versus explicit revisions.** Conditional design, not a safe deletion today:
+
+```diff
+ at every accepted observation:
+-    scan hierarchy, components, mesh vertices/indices and material values
+-    reject changes to the captured scene contract
++    check a captured scene revision
++    reject a changed revision
++    perform deep validation at compilation or an explicit structural edit
+```
+
+This works only if **every relevant mutation advances the revision**. Unity meshes/materials can change in place while keeping the same object identity; the project does not yet enforce that revision invariant. Keep the current checks until a controlled edit path covers those mutations. Saved mic probes measured total validation of 88/42 ms, with maxima of 2.76/1.23 ms, so this was not the measured long stall. Do not build a large editing framework to save that small cost.
+
+**B. Reuse capture buffers only if allocation is significant.**
+
+```diff
+ on recorded PCM block:
+-    ownedCopy = new float[count]
++    ownedCopy = tryRentBuffer(count)
++    if unavailable: mark recording incomplete; do not block the producer
+     copy input into ownedCopy
+     enqueue ownedCopy to the disk writer
+
+ disk writer:
+     write samples and their availability/gap metadata
++    return ownedCopy after the write, including failure cleanup
+```
+
+The copy is still necessary while producer and writer run independently. Buffer reuse can reduce garbage collection, but introduces return/exception/queue ownership rules. The existing bounded queue correctly refuses an incomplete capture; retain that behavior. Do this only if allocation profiles justify the extra code. Canonical source PCM is required for microphone replay and training; input events cannot recreate it.
+
+#### 9. Make small code deletions and flatten backend selection
+
+**A. Allocate only the selected CPU implementation.** `TakeRender.cs:414–432`, `SpectralAudio.cs:48–50`.
+
+```diff
+ construct CPU mixer:
+-    allocate direct-render buffers
+-    if raytraced transport:
+-        construct SpectralAudio
+-        inside SpectralAudio, if synthesis is IR:
+-            construct ImpulseResponseAudio and forward calls to it
++    if direct transport:
++        initialize existing direct implementation and its buffers
++    else if synthesis is IR:
++        construct ImpulseResponseAudio
++    else:
++        construct SpectralAudio
+```
+
+Keep one selection point in the current owner and allocate only the chosen state's arrays. Remove IR forwarding from `SpectralAudio`; keep simple dispatch in the owner. No new interface hierarchy, backend plugin system or file split is required. Update memory accounting and shape checks so they do not rely on direct-only arrays being allocated in every mode.
+
+**B. Remove a provably unreachable condition.** `RayTraceManager.cs:401,417`.
+
+```diff
+ if sample == previousSample:
+     pumpPendingAudio()
+     return
+
+ for each object:
+-    if explicitlyCut || (sample == previousSample && previousStateWasCut):
++    if explicitlyCut:
+         markCut()
+```
+
+**C. Remove the repository-unused playback overload.** `AudioManager.cs:179`.
+
+```diff
+- StartPcmStream(rate, capacity, lead, optionalCapture)
+  StartPcmStream(preparedQueue)
+```
+
+All current repository callers use the prepared queue. Confirm callers/serialized bindings when implementing, then remove the wrapper rather than maintaining two setup routes.
+
+**Why better:** fewer allocations, fewer forwarding branches, and one obvious setup route. These are small cleanups; there is no evidence here of hundreds of safely deletable legacy lines.
+
+Keep the independent CPU synthesis reference and direct transport oracle. Full raytraced transport still requires the GPU. Keep IR as an explicit comparison method, with Spectral remaining the live default; keep the large-FFT fallback, overlap-save padding/history, Doppler, tails, cuts, availability and failure checks. Retain small migrations while old takes need them. Previous implementations belong in Git rather than alternate runtime copies. Renaming serialized `directSettings` or the public `RenderDirect` entry point needs a deliberate migration and does not improve performance itself.
+
+#### 10. Shared rays across listeners: an offline algorithm experiment
+
+File: `Transport.hlsl:538–603`. This is not needed for the normal one-listener multiplayer client.
+
+```diff
+- for each source–listener pair:
+-    trace a separately seeded population of paths
+-    sample diffraction with that listener's proposal
+-    evaluate arrivals for that listener
++ for each source:
++    trace shared path prefixes under a defined sampling distribution
++    at useful vertices:
++        evaluate listener-specific connections and visibility
++        apply the correct sampling weights
++        accumulate each listener's delay, direction and frequency response
+```
+
+**Why it could help:** shared prefixes avoid repeating early scene intersections for multiple listeners. Listener connection rays and per-listener DSP remain, and the number of connection tests may become the dominant cost.
+
+**Why defer:** current RNG seeds, diffraction proposals and first reflections depend on the pair. Reusing those samples unchanged would change the estimator. This needs a new sampling/weighting contract and equal-error/equal-time evaluation, not just moving a loop. Frequency sharing is similarly conditional because material interactions/refraction/scattering can vary with frequency. Do not replace configurable frequency resolution with arbitrary bands to claim a speedup.
+
+Training can already process one listener trajectory at a time. Multiple client takes retain their own actual decoded audio and presented state; do not merge them as if those timelines were identical. The current comparison runner varies response step only, and its raytraced teacher remains unvalidated. General ray-budget pairs and additional listener trajectories require explicit dataset contracts.
+
+### Proposed execution after the small, behavior-preserving changes
+
+```text
+once per session or offline job:
+    compile scene and prepare immutable tables
+    construct only the chosen CPU/GPU backend
+    prepare all source timelines in one pass
+
+for each ready batch:
+    retain its observations and source interval until completion
+    submit transport for the batch
+    upload finalized source samples once per source
+
+    for each response at its recorded sample:
+        rebuild changed acoustic groups/material filters
+        update head and path clocks without rebuilding identical materials
+
+        for each hop:
+            predict each active listener head history once
+            transform each distinct source sampling window once
+            for each still-active response state:
+                apply its material and directional ear filters
+                sum paths/sources before the listener/ear inverse transform
+            keep valid overlap-save samples
+            apply existing head-endpoint interpolation and response fades
+
+    read completed PCM once for the batch
+    offline: write samples and requested diagnostics
+    live: publish to the existing device queue as soon as complete
+```
+
+This is dataflow pseudocode, not permission to fuse every step into one kernel. Global synchronization and scratch ownership still determine actual dispatch boundaries. The existing GPU already packs two moving-head endpoint outputs into one complex inverse FFT per ear; retain that rather than adding an inverse FFT per path. CPU/GPU transfer of intermediate paths is not introduced.
+
+### Order, expected code impact and acceptance
+
+| Order | Work | Expected code impact | Acceptance |
+|---|---|---|---|
+| 1 | Offline batching; single-pass source setup; small deletions | Reorganize existing calls, fewer redundant paths | Same audio across batch sizes; correct partial blocks; fewer readbacks |
+| 2 | Acoustic/head separation | Some state separation; fewer filter rebuilds | Head-only changes do not touch material spectra; same head/fade contract |
+| 3 | Per-hop factoring and exact source-window reuse | Small factoring first; retain scratch only if justified | Fewer FFTs with independent CPU/oracle agreement; distinct clocks stay distinct |
+| 4 | Per-pair invalidation and network fan-out | Local ownership changes; small serialization simplification | Unaffected pair remains correct; identical shared packet bytes |
+| 5 | Reprofile deadlines and memory | Extend existing measurements | Repeated standalone deadlines and wall/memory results |
+| Later | Compact filter storage; BLAS/TLAS; shared listener rays | Substantial new indexing/traversal/estimator code | Same quality or a declared, measured algorithm change |
+
+Use the existing atomic test files: head-only filter reuse; batch-size equivalence with cuts/final partial output; equal versus unequal Doppler windows; and two-pair isolation. Retain the time-domain head oracle, CPU/GPU parity, large-FFT checks, source-record/replay tests and a live station deadline test. No new test framework is needed.
+
+Benchmark the same saved take at unchanged quality with warm repetitions. Report wall time, GPU timing when available, readback count, material rebuilds, unique input FFTs, peak memory, bytes transferred and numerical error. Measure one live client before same-Mac contention and include head/voice latency and missed deadlines. These designs contain no measured speedup yet. Runtime code and scene settings remain unchanged.
+
 ## Head motion and local voice follow-up — 2026-10-13
 
 Spectral synthesis now advances the listener's orientation from each pose timestamp using valid world-space angular velocity. It evaluates ear filters at both ends of each FFT hop and interpolates their output samplewise. Head time is explicitly **rendered output time before playback lead**; source history still carries the declared DSP/propagation delay. Missing velocity and listener cuts hold the supplied pose. New observations correct the constant-velocity prediction through the existing response fade. This does not predict arbitrary future turns or alter already queued audio.
