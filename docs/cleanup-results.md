@@ -1,5 +1,26 @@
 # Cleanup validation and measured bottlenecks
 
+## Timestamped voice and Relay — 2026-10-13
+
+The existing microphone, codec and network components now send separate dry Opus streams with source sample indices and estimated session capture timestamps. The host preserves those timestamps; each receiver renders its own acoustics. Pose snapshots retain their original sample time. The wire protocol advances to 4; peers still require matching scene/build inputs. Internet hosting uses Multiplayer Services 2.2.4's Relay API with DTLS and anonymous authentication. LAN remains available. No new runtime source files or second acoustic engine were added.
+
+**166/166 TakeChecks passed** (40.77 s), including codec impulse alignment, exact final sample counts, packet reordering/loss, payload-before-start, buffered speech across microphone restarts, cursor startup/drift and changing resampler ratios. The explicit real-device microphone test passed (8.29 s), without saving or transmitting device audio. The Mac Development Player built with zero errors and 1,869 existing warnings.
+
+The initial player run exposed a Concentus phase-integer overflow when changing fractional resampling rates. The adapter now bounds reduced phase denominators so their product fits signed int, retaining common exact ratios. The regression exercises repeated rate changes at both 44.1 and 48 kHz. SDK 2.2.0 also had an unguarded Editor-only callback in its Player assembly; the 2.2.4 patch fixes it while retaining UTP 2.6.0. Package-cache/vendor code was not patched.
+
+| Standalone run on this Mac | Routing / capture / replay | Voice concealment / late packets | Output underrun frames |
+|---|---|---|---|
+| Two players, LAN, normal scene settings | Both passed; both distinct voices saved and replayed offline | Host 1 / 1; client 0 / 0 | Host 39,936; client 1,024 |
+| Two players, actual internet Relay, normal scene settings | Both passed; 249 packets received per process, both voices saved and replayed offline | Both 0 / 0 | Host 0; client 3,072 |
+| Four players, Relay, 1,024-sample response step | All connected; run failed after GPU observation-queue and source-writer overflow | Timing degraded under contention | 30,721–130,048 |
+| Four players, Relay, 4,096-sample response step | Host saved/replayed all four voices; three clients failed with full GPU observation queues | Timing degraded under contention | 141,313–276,480 |
+
+The two-player replay position errors were below 1e-5 m, with zero measured final angular error. All eight saved two-player speaker identities matched their distinct synthetic tones. The coarse four-player host recording contained all four expected tones. A functional pass does not mean clean realtime audio: the four-process stress tests failed overall, and four independent computers remain untested. Relay connectivity is verified, but physical microphone/network/DAC synchronization accuracy and conversational latency are not established.
+
+Reducing the station output lead failed the explicit device deadline gate: 4,096 samples missed 10,264 frames after warmup; 8,192 samples missed 130,109 frames (late-output counts overlap and must not be added). These were separate runs with variable machine load, not evidence that a larger buffer causes worse performance. The existing **16,384-sample scene lead is unchanged**, about 372 ms at 44.1 kHz, plus the 100 ms network presentation buffer and other device latency. Renderer scheduling and shared-GPU contention remain performance work; no buffering increase or fidelity reduction is hidden in this change.
+
+Evidence: `.context/voice-sync/` contains core/device/deadline results, the build summary, per-process LAN/Relay results and logs, and `source-tones.json`. Synthetic takes were moved into its `takes/` folder so ordinary recording selection does not treat test tones as user sessions.
+
 ## Audio continuity and multiplayer verification — 2026-10-07
 
 **155/155 TakeChecks passed** in 36.38 seconds on Unity 6000.4.1f1 / Apple M5 / Metal. Four new cases compare changing gain, delay and head orientation against a sample-wise crossfade between independently rendered static responses. CPU/GPU and IR/spectral outputs agree within 2e-5, including partial-hop delivery and an unchanged second listener. These detect DSP discontinuities; they do not validate the physical transport model.

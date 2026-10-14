@@ -1018,11 +1018,11 @@ Multiplayer is a mode for the same Church, LakeForest and TrainStation assets, n
 
 Use **Netcode for GameObjects 2.7.0 + Unity Transport 2.6.0** for connections, clocks and message delivery. The implementation reuses the authored acoustic/player transforms through numeric world snapshots rather than creating a second NetworkObject prefab hierarchy. Host owns shared actors and accepted interaction/sound events; clients own local input/camera and receive authoritative state. World snapshots run at 30 Hz with a bounded interpolation history; measure control latency. Competitive rollback, host migration and public matchmaking remain deferred. Physics is simulated by the authoritative owner; peers do not infer identical outcomes from input alone ([Unity network physics](https://docs.unity3d.com/Packages/com.unity.netcode.gameobjects@2.7/manual/advanced-topics/physics.html)).
 
-### Internet hosting decision — proposed, not implemented
+### Internet hosting
 
 Use the Muck-style **Host → share code → Join** flow. Muck players describe hosting, lobby IDs and Steam invitations; that is evidence for the interaction, not documentation of Dani's transport or audio synchronization internals ([firsthand Muck lobby report](https://steamcommunity.com/app/1625450/discussions/0/4514381702616987718/)).
 
-For this repository, add Unity Multiplayer Services Sessions with Relay around the existing NGO/UTP connection setup. This supports an internet join code without asking friends to configure router ports; it requires a linked Unity Services project and player authentication. Keep direct LAN connections for development. Let either the Sessions integration or our existing connection code start NGO, never both ([create a Relay session](https://docs.unity.com/en-us/mps-sdk/create-session), [join by code](https://docs.unity.com/en-us/mps-sdk/join-session)).
+The implementation pins Unity Multiplayer Services 2.2.4 and uses its Relay allocation/join-code API around the existing NGO/UTP connection setup. A separate Lobby/Sessions lifecycle is not needed for this flow. This supports an internet join code without asking friends to configure router ports; it requires a linked Unity Services project and player authentication. Keep direct LAN connections for development. Our connection code starts NGO once after configuring Relay ([create a Relay session](https://docs.unity.com/en-us/mps-sdk/create-session), [join by code](https://docs.unity.com/en-us/mps-sdk/join-session)).
 
 The hosting player runs the shared world and forwards voice. Relay carries network traffic; it does not run Unity, physics or acoustic shaders. Every player, including the host, renders one local head. Host departure ends the session and finalizes takes. A future dedicated server can own that same world/forwarding role without a microphone, listener or DSP clock; current initialization still depends on those and is not a dedicated-server implementation.
 
@@ -1051,10 +1051,10 @@ local canonical mic → encoder → timestamped packets → remote jitter buffer
 
 Keep each speaker's dry mono voice separate. The host forwards the original compressed frames and capture timestamps after checking source ownership; it does not decode/re-encode for forwarding or mix listeners together. Existing scene clips use timestamped source/clip/start/stop/phase events, not continuous audio uploads. A genuinely live external source uses the same streaming contract as a microphone.
 
-Proposed wire contract, replacing the current sequence-only payload:
+Wire contract (NGO protocol version 4):
 
 ```text
-VoiceStart  reliable: sourceId, epoch, codec settings, codecDelaySamples
+VoiceStart  reliable: sourceId, epoch, epochSessionTime, firstSample48, codecDelaySamples
 VoiceFrame  unreliable, unordered:
     sourceId, epoch
     firstSample48: int64          // first encoder-input sample in this epoch
@@ -1071,7 +1071,7 @@ The jitter buffer orders frames and finalizes each playout range once. Duplicate
 
 Each receiving client can hear a different acoustic result because its head and occlusion differ. It can also receive different packets; do not hide those differences behind a shared host recording. Local self-monitoring uses the pre-encode source only when enabled, avoiding a second looped-back copy. Muting/disconnect stops new emission and drains retained paths; a disappearing source's data slot remains valid until no pending renderer work references it.
 
-### Sample clocks and presentation — proposed correction
+### Sample clocks and presentation
 
 There are three different clocks: the host's session clock, each microphone's sample counter, and each listener's output sample counter. A nominal 48 kHz rate does not make different devices run in lockstep. Maintain measured sample/time anchors and a slowly updated rate:
 
@@ -1094,9 +1094,9 @@ The audio deadline must include codec availability, jitter buffering, GPU prepar
 
 At the existing 32 kbit/s target, one active voice averages about 4 kB/s of codec payload. With four simultaneous speakers, each client receives three streams, about 12 kB/s before headers. The host's payload egress is approximately `(players - 1)^2 * 4 kB/s` (36 kB/s for four), including its own voice and forwarding the others. Relay overhead is additional. This is a small-party design; larger rooms require measured routing/bandwidth decisions, not server-side rendering of every listener.
 
-### Small implementation boundary and acceptance
+### Implementation boundary and acceptance
 
-| Existing file | Required change |
+| Existing file | Responsibility |
 |---|---|
 | `Network/MultiplayerSession.cs` | Session/Relay connection setup, common clock conversion, original pose timestamps, voice forwarding and unordered delivery. |
 | `Audio/MicrophoneInput.cs` | Cursor/sample-based capture anchors and explicit timing uncertainty. |
@@ -1120,11 +1120,13 @@ The implementation keeps one fixed, authored roster for the entire take. Joining
 
 `MicrophoneInput` handles permission, the looping Unity device ring, mono conversion and stateful Speex rate conversion. Whole-ring cursor ambiguity interrupts the capture epoch instead of guessing. `SourceStream` is bounded live history or a paged file reader. Unfinalized input is distinct from zero: live CPU/GPU scheduling waits for finalized audible source samples. A source excluded from every rendered listener does not stall the other sources. A bounded worker writes per-source float32 PCM and the 28-byte block records; incomplete captures cannot be used as completed takes. Streamed sources cannot loop or seek their emission clock.
 
-`MultiplayerSession` owns LAN connection approval (matching project inputs/scene/roster), owner-controlled player poses, host-controlled shared actor poses and validated nearby door requests. One local head renders all voices; remote avatars do not create AudioListeners. `VoiceCodec` uses managed Concentus Opus, 48 kHz mono, 960-sample packets, 32 kbit/s, complexity 5. Reliable epoch/start/stop messages are separate from unreliable sequenced voice payloads. Late join supplies the speaking epoch and current frame index; missing decoder history is not represented as pristine source audio. No competitive anti-cheat or arbitrary replicated gameplay scripts are implied.
+`MultiplayerSession` owns Relay/direct connection setup and approval (matching project inputs/scene/roster), owner-controlled player poses, host-controlled shared actor poses and validated nearby door requests. One local head renders all voices; remote avatars do not create AudioListeners. `VoiceCodec` uses managed Concentus Opus, 48 kHz mono, 960-sample packets, 32 kbit/s, complexity 5. Reliable epoch/start/stop messages are separate from unordered unreliable voice payloads; per-speaker buffers handle ordering, payload-before-start, final padding and consecutive capture epochs. Late join supplies the speaking epoch and current frame index; missing decoder history is not represented as pristine source audio. No competitive anti-cheat or arbitrary replicated gameplay scripts are implied.
 
-Outgoing voice epochs currently use NGO LocalTime sampled before `Microphone.Start`; remote presentation uses NGO ServerTime and the configurable presentation delay (100 ms default). Remote poses also use that delay, but client poses lack their original sample timestamp and audio has additional queued latency: audiovisual alignment has not been established. A late epoch start gets at least the configured prebuffer instead of immediately concealing its not-yet-arrived packets. Source epochs save that chosen mapping and its adjusted presentation delay into the client's absolute sample timeline. `uncertaintySeconds=-1` explicitly means physical ADC/network timing uncertainty was not measured. This makes replay exact with respect to committed source PCM/presented observations; it does not establish sample-accurate physical ADC timestamps or eliminate independent device clock drift. The proposed corrections above, internet hosting, adaptive jitter/drift correction, AEC and physical device latency measurement are still open.
+Outgoing microphone timestamps come from paired device-cursor and normalized NGO session-clock observations. Each frame carries its first source sample and estimated capture time; the host forwards those unchanged. Player snapshots preserve the original pose sample time. The receiver removes encoder-reported delay and corrects source/output clock drift with a stateful resampler, limited to 0.5% rate correction and updated at most once per second. The presentation buffer remains fixed (100 ms default); a late epoch can get an explicitly recorded additional prebuffer. Local-head and queued-output latency still require measurement; shared timestamps do not establish audiovisual alignment by themselves.
 
-A LAN take uses the existing portable numeric take payloads, including static geometry/clip snapshots and full State[] observations. This deliberate initial storage tradeoff avoids implementing an additional network physics reconstruction path. Solo input takes keep their existing compact format, plus required source audio. Network gameplay input and every wire packet are not required for this acoustic replay and are not archived. Monitored WAV/callback capture is independent and opt-in. Acoustic tails drain across frames against available output capacity, rather than synchronously overflowing the recorder/device queue at save.
+Source epochs save the chosen initial mapping into the client's absolute sample timeline. `uncertaintySeconds=-1` explicitly means physical ADC/network timing uncertainty was not measured. Replay uses the actual committed, resampled PCM and presented observations, without rerunning network clocks. Adaptive jitter sizing, AEC and physical device latency measurement remain open. The station keeps its 16,384-sample output lead because the 4,096- and 8,192-sample deadline probes both missed audio; low-latency conversation is not an established result.
+
+A network take uses the existing portable numeric take payloads, including static geometry/clip snapshots and full State[] observations. This deliberate initial storage tradeoff avoids implementing an additional network physics reconstruction path. Solo input takes keep their existing compact format, plus required source audio. Network gameplay input and every wire packet are not required for this acoustic replay and are not archived. Monitored WAV/callback capture is independent and opt-in. Acoustic tails drain across frames against available output capacity, rather than synchronously overflowing the recorder/device queue at save.
 
 ### Turning multiplayer captures into training examples
 

@@ -13,8 +13,9 @@ public sealed class MultiplayerSmoke : MonoBehaviour
 {
     [Serializable] sealed class Result
     {
-        public string role,take,sourceHash,sceneHash,stateHash,eventHash,status="running",error;
-        public int receivedPackets,concealedFrames,latePackets,frames,nonzeroStreams,responseStepSamples,players,slot;
+        public string role,take,sourceHash,sceneHash,stateHash,eventHash,status="running",error,joinCode;
+        public int receivedPackets,frames,nonzeroStreams,responseStepSamples,players,slot;
+        public long concealedFrames,latePackets;
         public float remoteMetres,sharedMetres,replayPositionError,replayAngleError;
         public long underrunSamples,lateSamples,callbacks;
         public bool replayOffline,microphoneClosed;
@@ -43,9 +44,12 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         if(role==null)return;
         if((role!="host" && role!="client") || string.IsNullOrEmpty(output))throw new ArgumentException("Smoke test needs host/client and result path.");
         expectedPlayers=int.Parse(Arg("--acoustics-players")??"2");
-        MultiplayerSession.PendingMode=role;MultiplayerSession.PendingAddress="127.0.0.1";
+        MultiplayerSession.PendingMode=Arg("--acoustics-network")=="relay"?"relay-"+role:role;
+        MultiplayerSession.PendingAddress=Arg("--acoustics-join")??"127.0.0.1";
         string step=Arg("--acoustics-smoke-step");
         if(step!=null)UnityEngine.SceneManagement.SceneManager.sceneLoaded+=(scene,mode)=>FindAnyObjectByType<RayTraceManager>().directSettings.responseStepSamples=int.Parse(step);
+        string lead=Arg("--acoustics-smoke-lead");
+        if(lead!=null)UnityEngine.SceneManagement.SceneManager.sceneLoaded+=(scene,mode)=>FindAnyObjectByType<RayTraceManager>().monitorLeadSamples=int.Parse(lead);
         var go=new GameObject("Multiplayer integration probe");DontDestroyOnLoad(go);go.AddComponent<MultiplayerSmoke>();
     }
     IEnumerator Start()
@@ -55,6 +59,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         yield return Wait(()=> (session=FindAnyObjectByType<SceneSession>())!=null && session.manager.IsRecordingTake,"network capture startup",25);
         if(errors.Count>0) {Finish();yield break;}
         network=session.multiplayer;session.ReadPlayerInput=false;session.SetWalking(false);
+        result.joinCode=network.JoinCode;WriteResult();
         if(expectedPlayers<2 || expectedPlayers>network.Capacity){errors.Add("Requested player count exceeds the authored scene slots.");Finish();yield break;}
         yield return Wait(()=>network.ConnectedPlayers==expectedPlayers,"complete player roster",30);
         if(errors.Count>0){Finish();yield break;}
@@ -165,8 +170,9 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     void Finish()
     {
         result.status=errors.Count==0?"passed":"failed";result.error=string.Join("\n",errors);
-        Directory.CreateDirectory(Path.GetDirectoryName(output));File.WriteAllText(output,JsonUtility.ToJson(result,true));
+        WriteResult();
         Application.logMessageReceived-=Log;Application.Quit(errors.Count==0?0:1);
     }
+    void WriteResult() {Directory.CreateDirectory(Path.GetDirectoryName(output));File.WriteAllText(output,JsonUtility.ToJson(result,true));}
 }
 #endif

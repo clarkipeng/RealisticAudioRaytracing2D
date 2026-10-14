@@ -17,15 +17,17 @@ public sealed class MicrophoneInput : MonoBehaviour
     public Func<double> Clock;
     public int CaptureRate {get;private set;}
     public double EpochTime {get;private set;}
+    public double CaptureTime(long sample48)=>captureClock?.At((double)sample48*CaptureRate/48000)??EpochTime+(double)sample48/48000;
     AudioClip clip;
     string openedDevice;
     SourceStream bound;
     PcmRateConverter deviceRate,outputRate;
     float[] raw,mono;
     int read,cursor;
-    long available;
+    long available,capturedSamples;
     double lastPoll;
-    bool requesting;
+    bool requesting,started;
+    SampleClock captureClock;
     public void Toggle() {if(Active)StopCapture();else if(!requesting)StartCoroutine(StartCapture());}
     IEnumerator StartCapture()
     {
@@ -43,18 +45,14 @@ public sealed class MicrophoneInput : MonoBehaviour
             if(bound==null || bound.Finished)throw new InvalidOperationException("Start an acoustic session before enabling the microphone.");
             var manager=source.rayTraceManager;long now=manager.LiveSample;
             bound.SilenceUntil(now,now);
-            EpochTime=Clock?.Invoke()??AudioSettings.dspTime;
             openedDevice=string.IsNullOrEmpty(device)?null:device;
             clip=Microphone.Start(openedDevice,true,2,48000);
             if(clip==null)throw new InvalidOperationException("Microphone did not start.");
-            CaptureRate=clip.frequency;read=cursor=0;available=0;lastPoll=Time.realtimeSinceStartupAsDouble;
+            CaptureRate=clip.frequency;read=cursor=0;available=capturedSamples=0;started=false;captureClock=new SampleClock(CaptureRate);lastPoll=Time.realtimeSinceStartupAsDouble;
             raw=new float[Math.Max(1,CaptureRate/50)*clip.channels];mono=new float[raw.Length/clip.channels];
             deviceRate=new PcmRateConverter(CaptureRate,48000,SendVoice);
             outputRate=new PcmRateConverter(48000,manager.sampleRate,WriteSource);
-            manager.RecordStreamEpoch(source,new AcousticTake.StreamEpoch {sample=bound.End,rate=CaptureRate,channels=clip.channels,
-                participant=manager.SessionInfo?.localSlot.ToString()??"local",epoch=Guid.NewGuid().ToString("N"),remoteTime=EpochTime,uncertaintySeconds=-1,
-                processing="Unity Microphone; device/OS processing unknown; Speex quality 8; canonical sample clock, ADC timing unmeasured"});
-            VoiceState?.Invoke(true,EpochTime);Status="Microphone on";
+            Status="Microphone starting";
         }
         catch(Exception e) {Status=e.Message;StopDevice();Debug.LogWarning(Status,this);}
     }
@@ -90,7 +88,19 @@ public sealed class MicrophoneInput : MonoBehaviour
     {
         int next=Microphone.GetPosition(openedDevice);
         if(next<0)throw new InvalidOperationException("Microphone cursor unavailable.");
-        available+=(next-cursor+clip.samples)%clip.samples;cursor=next;
+        int added=(next-cursor+clip.samples)%clip.samples;available+=added;capturedSamples+=added;cursor=next;
+        if(capturedSamples==0)return;
+        captureClock.Observe(capturedSamples,Clock?.Invoke()??AudioSettings.dspTime);
+        if(!started)
+        {
+            started=true;EpochTime=captureClock.At(0);
+            var manager=source.rayTraceManager;long now=manager.LiveSample;
+            bound.SilenceUntil(Math.Max(bound.End,now-(long)Math.Round((double)capturedSamples*manager.sampleRate/CaptureRate)),now);
+            manager.RecordStreamEpoch(source,new AcousticTake.StreamEpoch {sample=bound.End,rate=CaptureRate,channels=clip.channels,
+                participant=manager.SessionInfo?.localSlot.ToString()??"local",epoch=Guid.NewGuid().ToString("N"),remoteTime=EpochTime,uncertaintySeconds=-1,
+                processing="Unity cursor/sample clock; ADC latency unknown; Speex quality 8"});
+            VoiceState?.Invoke(true,EpochTime);Status="Microphone on";
+        }
         while(available>=mono.Length || (final && available>0))
         {
             int frames=(int)Math.Min(available,mono.Length);
@@ -108,9 +118,10 @@ public sealed class MicrophoneInput : MonoBehaviour
     void StopDevice()
     {
         var captured=clip;clip=null;
-        try {if(captured!=null)VoiceState?.Invoke(false,Clock?.Invoke()??AudioSettings.dspTime);}
+        try {if(started)VoiceState?.Invoke(false,Clock?.Invoke()??AudioSettings.dspTime);}
         finally
         {
+            started=false;
             if(captured!=null) {Microphone.End(openedDevice);Destroy(captured);}
             deviceRate?.Dispose();outputRate?.Dispose();deviceRate=outputRate=null;
         }
@@ -126,17 +137,43 @@ internal sealed class PcmRateConverter : IDisposable
     readonly Action<float[],int> consume;
     readonly int from,to;
     long inputSamples,outputSamples;
+    readonly bool variableRate;
+    double inputRate,targetOutput;
     bool finished;
-    public PcmRateConverter(int from,int to,Action<float[],int> consume)
+    public double PendingSamples=>targetOutput-outputSamples;
+    public PcmRateConverter(int from,int to,Action<float[],int> consume,bool variableRate=false)
     {
         if(from<=0 || to<=0)throw new ArgumentOutOfRangeException();
-        this.consume=consume;this.from=from;this.to=to;
-        if(from!=to) {converter=new SpeexResampler(1,from,to,8);converter.SkipZeroes();}
+        this.consume=consume;this.from=from;this.to=to;this.variableRate=variableRate;inputRate=from;
+        if(from!=to || variableRate)
+        {
+            var ratio=Ratio(from,to);
+            converter=variableRate?new SpeexResampler(1,ratio.n,ratio.d,from,to,8):new SpeexResampler(1,from,to,8);
+            if(variableRate)inputRate=(double)ratio.n*to/ratio.d;
+            converter.SkipZeroes();
+        }
+    }
+    public void SetInputRate(double rate)
+    {
+        if(converter==null || !double.IsFinite(rate) || rate<=0)throw new ArgumentException("Invalid variable resampler rate.");
+        var ratio=Ratio(rate,to);double actual=(double)ratio.n*to/ratio.d;
+        if(actual==inputRate)return;inputRate=actual;
+        converter.SetRateFraction(ratio.n,ratio.d,from,to);
+    }
+    static (int n,int d) Ratio(double rate,int outputRate)
+    {
+        int n=checked((int)Math.Round(rate*1000)),d=checked(outputRate*1000),a=n,b=d;
+        while(b!=0) {int remainder=a%b;a=b;b=remainder;}n/=a;d/=a;
+        // Concentus multiplies old and new phase denominators as signed int.
+        // Keep their product in range; common exact ratios remain exact.
+        if(d>32768) {d=32768;n=checked((int)Math.Round(rate/outputRate*d));}
+        return (n,d);
     }
     public void Process(float[] input,int count)
     {
         if(finished || count<0 || count>input.Length)throw new ArgumentException("Invalid resampler input.");
         inputSamples+=count;
+        targetOutput=variableRate?targetOutput+(double)count*to/inputRate:(double)inputSamples*to/from;
         if(converter==null) {consume(input,count);outputSamples+=count;return;}
         Convert(input,count,long.MaxValue);
     }
@@ -156,9 +193,32 @@ internal sealed class PcmRateConverter : IDisposable
     {
         if(finished)return;finished=true;
         if(converter==null)return;
-        long end=checked((inputSamples*to+from-1)/from);
+        long end=checked((long)Math.Ceiling(targetOutput-1e-7));
         var silence=new float[Math.Max(1,converter.InputLatency+1)];
         while(outputSamples<end)Convert(silence,silence.Length,end);
     }
     public void Dispose()=>converter?.Dispose();
+}
+
+// Paired cursor/time observations separate device startup and drift from packet/update timing.
+internal sealed class SampleClock
+{
+    readonly double nominal;
+    double origin,rate,lastSample,lastTime;
+    bool initialized;
+    public SampleClock(double rate) {if(!double.IsFinite(rate) || rate<=0)throw new ArgumentOutOfRangeException(nameof(rate));nominal=this.rate=rate;}
+    public double At(double sample)=>origin+sample/rate;
+    public void Observe(double sample,double time)
+    {
+        if(!double.IsFinite(sample) || !double.IsFinite(time) || sample<0)throw new ArgumentException("Invalid capture clock.");
+        if(!initialized) {initialized=true;origin=time-sample/rate;lastSample=sample;lastTime=time;return;}
+        if(sample<lastSample)throw new InvalidOperationException("Capture clock reset; start a new epoch.");
+        if(sample==lastSample)return;
+        if(time<lastTime)throw new InvalidOperationException("Capture clock reset; start a new epoch.");
+        double elapsed=time-lastTime;if(elapsed<1 || sample==lastSample)return;
+        double predicted=At(sample),observed=(sample-lastSample)/elapsed;
+        rate+=.1*(Math.Clamp(observed,nominal*.995,nominal*1.005)-rate);
+        origin=predicted-sample/rate+Math.Clamp((time-predicted)*.1,-.001*elapsed,.001*elapsed);
+        lastSample=sample;lastTime=time;
+    }
 }

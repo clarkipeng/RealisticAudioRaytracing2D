@@ -4,6 +4,9 @@
     "Unity.ugui",
     "Unity.Netcode.Runtime",
     "Unity.Networking.Transport",
-    "Unity.Collections"
+    "Unity.Collections",
+    "Unity.Services.Core",
+    "Unity.Services.Authentication",
+    "Unity.Services.Multiplayer"
   ]
 }

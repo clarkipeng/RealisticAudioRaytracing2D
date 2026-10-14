@@ -23,6 +23,7 @@ public class RaytraceControlPanel : MonoBehaviour
     Text microphoneLabel,networkLabel;
     Dropdown takes;
     Button replayButton;
+    Button copyJoinCode;
     readonly List<string> takePaths=new List<string>();
     bool wasRecording;
     void RefreshTakes()
@@ -80,9 +81,15 @@ public class RaytraceControlPanel : MonoBehaviour
                 networkLabel=AddLabel(sensitivityControls.transform,"Solo",12,32);
                 var addressObject=DefaultControls.CreateInputField(new DefaultControls.Resources());addressObject.transform.SetParent(sensitivityControls.transform,false);
                 addressObject.GetComponent<RectTransform>().sizeDelta=buttonSize;
-                var address=addressObject.GetComponent<InputField>();address.text=network.address;address.onEndEdit.AddListener(value=>network.address=value.Trim());
-                AddButton(sensitivityControls.transform,"Host LAN",()=>network.Restart("host"));
-                AddButton(sensitivityControls.transform,"Join LAN",()=>network.Restart("client"));
+                var address=addressObject.GetComponent<InputField>();address.text="";address.placeholder.GetComponent<Text>().text="Join code";
+                var modeObject=DefaultControls.CreateDropdown(new DefaultControls.Resources());modeObject.transform.SetParent(sensitivityControls.transform,false);
+                modeObject.GetComponent<RectTransform>().sizeDelta=buttonSize;
+                var mode=modeObject.GetComponent<Dropdown>();mode.ClearOptions();mode.AddOptions(new System.Collections.Generic.List<string>{"Online / join code","LAN / address"});
+                mode.onValueChanged.AddListener(value=> {address.text=value==0?network.JoinCode??"":network.address;address.placeholder.GetComponent<Text>().text=value==0?"Join code":"IP address";});
+                AddButton(sensitivityControls.transform,"Host",()=>network.Restart(mode.value==0?"relay-host":"host"));
+                AddButton(sensitivityControls.transform,"Join",()=> {network.address=address.text.Trim();network.Restart(mode.value==0?"relay-client":"client");});
+                copyJoinCode=AddButton(sensitivityControls.transform,"Copy join code",()=> {GUIUtility.systemCopyBuffer=network.JoinCode;address.text=network.JoinCode;}).GetComponentInParent<Button>();
+                copyJoinCode.gameObject.SetActive(false);
                 AddButton(sensitivityControls.transform,"Solo / restart",()=>network.Restart(null));
             }
             var chooser=DefaultControls.CreateDropdown(new DefaultControls.Resources());chooser.transform.SetParent(sensitivityControls.transform,false);
@@ -117,6 +124,7 @@ public class RaytraceControlPanel : MonoBehaviour
         if(wasRecording && !recording)RefreshTakes();wasRecording=recording;
         if(microphoneLabel!=null)
         {
+            copyJoinCode.gameObject.SetActive(session.multiplayer.Connected && session.multiplayer.JoinCode!=null);
             microphoneLabel.text=session.multiplayer.microphone.Status;
             microphoneLabel.GetComponentInParent<Button>(true).interactable=!session.IsInputReplay && !waiting;
             networkLabel.text=session.multiplayer.Status+(session.multiplayer.Connected?" ("+session.multiplayer.ConnectedPlayers+"/"+session.multiplayer.Capacity+")":"");
