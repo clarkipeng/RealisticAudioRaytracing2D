@@ -1,5 +1,26 @@
 # Cleanup validation and measured bottlenecks
 
+## Imported church and authored audio — 2026-10-15
+
+Replaced the generated church blockout with the CC0 medieval church by Daniel Andersson / AnyRPG. Added textured architecture, pews, altar, organ pipes, courtyard and warm pendant lighting. The existing scene builder now imports editable FBX parts and attaches the existing acoustic surfaces and door actors. Visual geometry is about 48k triangles; repaired, simplified architectural collision meshes plus furniture compile to **47 objects / 11,569 acoustic triangles / six source slots / one listener**. Four multiplayer slots, microphone/remote voices and input recording use the existing session. No new runtime scripts or packages; editor/test code shrinks by 37 lines.
+
+BigSoundBank's CC0 bell recording and an original passage made from FreePats' CC0 Aeolus organ samples replace the automatic diagnostic clap. Both use preloaded mono PCM and 30-second loops. Texture import explicitly uses repeat wrapping and ordinary 3D textures; the project's 2D sprite defaults otherwise stretched the tiled UVs. Model imports stay readable for acoustic export/replay. [Licenses, download hashes and modifications](../Assets/External/Church/README.md).
+
+An initial bell placed at the internal bell geometry was effectively inaudible at ground level because tower masonry screened it. The final emitter represents radiation at the front belfry opening `(0, 52, -4)`, with an audible path to the east courtyard. The unmodeled internal bell-to-aperture field is an approximation; the closed nave still receives effectively no bell at this ray budget. No occlusion bypass, extra reverb or renderer change was added. The bell recording contains original outdoor ambience, so it must not serve as a dry/calibrated training source.
+
+Four silent, static, one-pair GPU renders use the authored gains, scene preset and final geometry. Each reads two seconds of source audio, stops the source, then drains a three-second tail (44.1 kHz mono):
+
+| Probe | Peak | Sampled response support | Render wall time |
+|---|---:|---:|---:|
+| Organ, entrance | 0.01512 | 1.540 s | 1.130 s |
+| Organ, near sanctuary | 0.22920 | 1.650 s | 0.941 s |
+| Bell, east courtyard | 0.03190 | 0.228 s | 0.423 s |
+| Bell, closed nave | 5.85e-14 | 0.195 s | 0.623 s |
+
+All outputs are finite and below full scale, and the output tail covers sampled response support. Support is not RT60; these single renders are not a convergence, motion-artifact, combined-mix or realtime deadline benchmark. The diagnostic stop at two seconds deliberately truncates the source; its release transient is not part of the authored loop. Existing network code is unchanged; the larger scene's four-player deadlines and second-computer/internet behavior remain unverified.
+
+The saved scene reloads with both clips/gains and manager bindings intact. Isolated physics walks pass through the nave (320 ticks, final `(0, 1.08, 8.40)`) and stop at the closed entrance before opening both doors and exiting (200 ticks, final `(0, 1.08, -41.47)`). The existing explicit Church recording/replay test follows this new route and compiles; its full live recording/replay run was not repeated. Validation used one silent headless Metal worker at nice 15 with two job workers; no user Editor interaction, mouse capture or speaker output. Evidence: `.context/church-assets/` contains screenshots, waveform/spectrogram analysis, takes, WAVs and worker logs. New compact-input recordings require this new scene/build; the previous church remains in Git at `626a737`.
+
 ## Atomic optimization pass — 2026-10-14
 
 Baseline `0704a56`. Each change is measured and committed separately; rejected candidates remain documented rather than enabled. Evidence is under `.context/optimization-pass/`.

@@ -473,20 +473,16 @@ public sealed class ChurchEndToEndTests : SceneEndToEndTests
     {
         yield return StartSession(true);
         Assert.That(session.GetComponent<StationDemo>(),Is.Null,"The shared session must work without a train.");
-        var door=(SlidingDoor)session.actors.Single();
         long start=session.Tick;
-        // 171 ticks down the clear central aisle, then approach the east doorway.
-        session.SampleInput=tick=>session.SubmitInput(tick-start<171?Vector2.up:tick-start<207?Vector2.right:Vector2.zero,Vector2.zero);
-        yield return Until(()=>session.Tick>=start+211,"door approach");
-        Assert.That(session.player.position.z,Is.InRange(7.8f,8.2f));
-        Assert.That(session.Walker.Ground,Is.Not.Null,"The player must stay on the floor.");
-        start=session.Tick;
-        session.SampleInput=tick=>session.SubmitInput(tick-start>=85 && tick-start<129?Vector2.right:Vector2.zero,
-            tick==start+150?new Vector2(25,10):Vector2.zero,interact:tick==start);
-        yield return Until(()=>session.Tick>=start+155,"door opening and side-room entry");
-        Assert.That(door.IsOpen,Is.True);
-        Assert.That(session.player.position.x,Is.GreaterThan(8),"The player must pass the collider opening into the room.");
-        Assert.That(session.player.position.y,Is.InRange(-.1f,.1f),"The player must not fall through the floor.");
+        session.SampleInput=tick=>session.SubmitInput(tick-start<60 || tick-start>=140?Vector2.down:Vector2.zero,
+            Vector2.zero,interact:tick==start+60);
+        yield return Until(()=>session.Tick>=start+60,"closed entrance doors");
+        Assert.That(session.player.position.z,Is.GreaterThan(-34.6f),"Closed doors must block walking.");
+        yield return Until(()=>session.Tick>=start+200,"entrance doors opening and courtyard exit");
+        Assert.That(session.actors.Cast<SlidingDoor>().All(door=>door.IsOpen),Is.True);
+        Assert.That(session.player.position.z,Is.LessThan(-39),"The player must pass both doors into the courtyard.");
+        Assert.That(session.player.position.y,Is.InRange(.9f,1.2f),"The player must stay on the floor.");
+        Assert.That(session.Walker.Ground,Is.Not.Null);
         session.SampleInput=null;
         yield return VerifyReplay();
     }
