@@ -108,7 +108,7 @@ struct BvhNode
 };
 StructuredBuffer<BvhNode> BvhNodes;
 StructuredBuffer<uint> BvhIndices;
-uint BvhNodeCount, StaticPrimitiveCount;
+uint BvhNodeCount;
 bool BoundsHit(BvhNode node, float3 o, float3 d, bool is2D)
 {
     float near = 0, far = 1;
@@ -129,74 +129,82 @@ bool BoundsHit(BvhNode node, float3 o, float3 d, bool is2D)
     return true;
 }
 #endif
-// Both opaque probes and acoustic paths use this traversal. Any-hit queries exit
-// as soon as an obstruction is found; closest-hit queries keep the nearest surface.
+// Resolve exact ties by primitive ID, independently of hierarchy visitation order.
+bool ConsiderPrimitive(uint id, uint stateOffset, float3 origin, float3 direction, float minimum,
+                       bool is2D, inout uint hit, inout float distance, inout float3 normal)
+{
+    float3 candidateNormal;
+    float candidate = IntersectPrimitive(id, stateOffset, origin, direction, is2D, 0, minimum, candidateNormal);
+    if (candidate < distance || (hit != 0xffffffff && candidate == distance && id < hit))
+    {
+        hit = id; distance = candidate; normal = candidateNormal; return true;
+    }
+    return false;
+}
+#ifdef USE_BVH
+BvhNode WorldBounds(BvhNode node, State pose)
+{
+    float3 low = node.boundsMin.xyz, high = node.boundsMax.xyz;
+    float3 center = (low + high) * .5, halfSize = (high - low) * .5;
+    float3 extent = abs(Rotate(pose.rotation, float3(1,0,0))) * halfSize.x +
+                    abs(Rotate(pose.rotation, float3(0,1,0))) * halfSize.y +
+                    abs(Rotate(pose.rotation, float3(0,0,1))) * halfSize.z;
+    float3 magnitude = abs(pose.position.xyz) + 4 * max(abs(low), abs(high));
+    extent += 8 * 1.1920929e-7 * (1 + max(magnitude.x, max(magnitude.y, magnitude.z)));
+    center = pose.position.xyz + Rotate(pose.rotation, center);
+    node.boundsMin.xyz = center - extent; node.boundsMax.xyz = center + extent; return node;
+}
+bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 direction, float minimum,
+               bool is2D, bool anyHit, inout uint hit, inout float distance, inout float3 normal)
+{
+    uint stack[32], depth = 0, index = root;
+    while (true)
+    {
+        BvhNode node = BvhNodes[index];
+        if (BoundsHit(WorldBounds(node, pose), origin, direction * distance, is2D))
+        {
+            if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
+            for (uint leaf = 0; leaf < node.links.w; leaf++)
+                if (ConsiderPrimitive(BvhIndices[node.links.z + leaf], stateOffset, origin, direction,
+                                      minimum, is2D, hit, distance, normal) && anyHit) return true;
+        }
+        if (depth == 0) break;
+        index = stack[--depth];
+    }
+    return false;
+}
+#endif
+// Shared any-hit / closest-hit traversal. Each median-split level needs at most 32 stack entries.
 bool TraceScene(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
                 bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
 {
-    hit = 0xffffffff;
-    distance = maximum;
-    normal = 0;
+    hit = 0xffffffff; distance = maximum; normal = 0;
 #ifdef USE_BVH
-    uint stack[32], depth = 0, nodeIndex = 0;
-    while (nodeIndex < BvhNodeCount)
+    uint stack[32], depth = 0, index = 0;
+    while (index < BvhNodeCount)
     {
-        BvhNode node = BvhNodes[nodeIndex];
+        BvhNode node = BvhNodes[index];
         if (BoundsHit(node, origin, direction * distance, is2D))
         {
-            if (node.links.w == 0)
+            if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
+            State pose = States[stateOffset + node.links.z];
+            if (node.links.z != ignoredOwner && (pose.flags.x & 3) == 3)
             {
-                stack[depth++] = node.links.y;
-                nodeIndex = node.links.x;
-                continue;
-            }
-            for (uint leaf = 0; leaf < node.links.w; leaf++)
-            {
-                uint id = BvhIndices[node.links.z + leaf];
-                if (Primitives[id].indices.x == ignoredOwner)
-                    continue;
-                float3 candidateNormal;
-                float candidate =
-                    IntersectPrimitive(id, stateOffset, origin, direction, is2D, 0, minimum, candidateNormal);
-                if (candidate < distance)
-                {
-                    hit = id;
-                    distance = candidate;
-                    normal = candidateNormal;
-                    if (anyHit)
-                        return true;
-                }
+                if (TraceMesh(node.links.x, pose, stateOffset, origin, direction, minimum, is2D, anyHit,
+                              hit, distance, normal)) return true;
             }
         }
-        if (depth == 0)
-            break;
-        nodeIndex = stack[--depth];
+        if (depth == 0) break;
+        index = stack[--depth];
     }
-    uint first = StaticPrimitiveCount;
 #else
-    uint first = 0;
-#endif
-    for (uint index = first; index < PrimitiveCount; index++)
+    for (uint id = 0; id < PrimitiveCount; id++)
     {
-#ifdef USE_BVH
-        uint id = BvhIndices[index];
-#else
-        uint id = index;
-#endif
-        if (Primitives[id].indices.x == ignoredOwner)
-            continue;
-        float3 candidateNormal;
-        float candidate =
-            IntersectPrimitive(id, stateOffset, origin, direction, is2D, 0, minimum, candidateNormal);
-        if (candidate < distance)
-        {
-            hit = id;
-            distance = candidate;
-            normal = candidateNormal;
-            if (anyHit)
-                return true;
-        }
+        if (Primitives[id].indices.x == ignoredOwner) continue;
+        if (ConsiderPrimitive(id, stateOffset, origin, direction, minimum, is2D, hit, distance, normal) && anyHit)
+            return true;
     }
+#endif
     return hit != 0xffffffff;
 }
 bool NearestHit(uint stateOffset, float3 origin, float3 direction, float limit, bool is2D, out uint hit,

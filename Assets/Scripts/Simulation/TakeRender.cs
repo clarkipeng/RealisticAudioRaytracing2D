@@ -30,7 +30,7 @@ public static partial class TakeRender
         public int maximumSignalEvents=4096;
         public int maximumPendingObservations=16;
         public int maximumResponsesPerBatch=64;
-        [Tooltip("Use a BVH for fixed geometry. Objects that move use direct intersection tests for the rest of the session.")]
+        [Tooltip("Use local mesh hierarchies with refitted instance bounds for static and moving geometry.")]
         public bool useBvh;
         public Transport transport;
         public Synthesis synthesis=Synthesis.Spectral;
@@ -93,7 +93,7 @@ public static partial class TakeRender
         public string backend = "CPU";
         public double uploadSeconds, dispatchReadbackSeconds;
         public double bvhBuildSeconds,bvhUpdateSeconds;
-        public int bvhUpdates,bvhStaticPrimitives;
+        public int bvhUpdates,bvhPrimitives;
         public string transportDescription;
         public bool complete;
     }
@@ -302,7 +302,7 @@ public static partial class TakeRender
             finally { foreach (var output in outputs) output.Dispose(); }
             report.pairPrimitiveTestUpperBound=solver.PairPrimitiveUpperBound;
             report.uploadSeconds=solver.UploadSeconds; report.dispatchReadbackSeconds=solver.DispatchReadbackSeconds;
-            report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;report.bvhStaticPrimitives=solver.StaticPrimitiveCount;
+            report.bvhBuildSeconds=solver.BvhBuildSeconds;report.bvhUpdateSeconds=solver.BvhUpdateSeconds;report.bvhUpdates=solver.BvhUpdates;report.bvhPrimitives=solver.BvhPrimitiveCount;
         }
         report.workingNumericBytes+=(gpuAudio?.NumericBytes??mixer.NumericBytes)-initialMixerBytes;
         report.responseSupportSamples=gpuAudio?.ResponseSupportSamples??mixer.ResponseSupportSamples;

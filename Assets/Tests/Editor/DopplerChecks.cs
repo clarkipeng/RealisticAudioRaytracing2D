@@ -52,8 +52,9 @@ public partial class TakeChecks
         }
     }
 
-    [Test, Category("GPU")]
-    public void MovingMirrorDoppler()
+    [TestCase(false, Category="GPU")]
+    [TestCase(true, Category="GPU")]
+    public void MovingMirrorDoppler(bool bvh)
     {
         var shader=RequireGpu();
         const int rate=8192;const float speed=343;
@@ -64,7 +65,7 @@ public partial class TakeChecks
             var state=States(2);state[0].position=state[1].position=new Vector3(-100,0,0);state[2].position=Vector3.zero;
             state[2].velocity=new Vector3(wallSpeed,0,0);state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry|AcousticTake.StateFlags.VelocityValid;
             var geometry=new[]{new AcousticTake.Primitive{objectIndex=2,a=new Vector3(0,-100,-100),b=new Vector3(0,100,-100),c=new Vector3(0,0,100)}};
-            var settings=SpectralSettings();settings.speedOfSound=speed;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
+            var settings=SpectralSettings();settings.useBvh=bvh;settings.speedOfSound=speed;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
             using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate);solver.Solve(state,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
             double ratio=(speed-wallSpeed)/(speed+wallSpeed),delay=200/(speed+wallSpeed);int mirror=settings.FrequencyBins;
             Near(rays[mirror].delaySeconds,(float)delay,"Moving mirror retarded round trip",1e-6f);

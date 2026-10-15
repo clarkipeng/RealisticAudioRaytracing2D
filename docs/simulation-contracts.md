@@ -502,7 +502,7 @@ The current CPU/HLSL direct ABI is:
 | State | float4 position/rotation/velocity/angularVelocity at 0/16/32/48; uint flags/padding at 64; 80 bytes. |
 | Source/listener bindings | int32 object indices, 4 bytes each. |
 | Response | float4 direction at 0 (xyz world listener-to-arrival-origin, w=delay rate in seconds/second); float32 delay/gain at 16/20; reserved zero at 24/28; 32 bytes. v3 disk rows are separately packed to six floats. Spectral paths use the final two uint lanes for frequency bin and topology hash. |
-| Optional BVH node | float4 boundsMin/boundsMax at 0/16; uint left/right/first/count at 32/36/40/44; 48 bytes. World-space bounds; a separate int32 array maps leaves to original primitive IDs. |
+| Optional BVH node | float4 boundsMin/boundsMax at 0/16; uint left/right/first/count at 32/36/40/44; 48 bytes. World TLAS / local BLAS bounds; a separate int32 array maps leaves to original primitive IDs. |
 
 The future indirect world-space ABI uses full 16-byte record lanes. It is separate from direct's local-geometry/state layout:
 
@@ -519,7 +519,7 @@ C# mirrors use sequential Pack=4, Vector4 and an explicit four-uint struct; asse
 
 Primitive ids are object/material/stablePrimitive/flags (active bit 0); unused vertex lanes zero. 2D coordinates are XY with unused lanes zero. Normals derive from geometry with the declared hit-side rule. Material table is `[material*F + band]`, coefficients absorption/scattering/0/0; band records contain lower/center/upper Hz/0.
 
-BVH links are left/right/firstPrimitive/count. Leaves have nonzero count and UINT_MAX children; internal nodes have valid children and count zero. Empty geometry has zero nodes. A separate primitive-index array preserves primitive identity and per-object ranges through BVH ordering.
+BVH links are left/right/firstPrimitive/count. BLAS leaves have a positive primitive count; TLAS instance leaves use UINT_MAX count, left=BLAS root, first=object ID. Internal nodes have valid children and count zero. Empty geometry has zero nodes. A separate primitive-index array preserves primitive identity and per-object ranges through BVH ordering.
 
 Endpoint fields are world position + receiver radius (source radius zero), quaternion xyzw, and object/flags/0/0. Radius is an estimator parameter whose normalization must converge, not an unexplained gain control.
 
@@ -527,9 +527,7 @@ Energy arrivals hold world listener-to-arrival-origin direction + delaySeconds a
 
 ### Geometry, memory and scheduling
 
-**Implemented direct BVH:** compile local geometry once, cache its first world pose and build one balanced median-split hierarchy with at most four primitives per leaf. Before each solve, any geometry object whose position or quaternion differs from its first pose permanently leaves the static set for that solver session. Rebuild only when membership changes; moving objects are tested directly at the current pose, even after stopping or returning to their initial pose. Activation/geometry flags remain per-query checks. This classification uses observed poses, independently of Unity's authoring Static flags, so old recordings need no schema migration or hand-authored mobility tags.
-
-The CPU traverses cached static world primitives; HLSL traverses uploaded world bounds and retains the original local-primitive transform/intersection math. Conservative bounds account for CPU/GPU rounding. The primitive-index array stores the static tree's sorted prefix and the moving list's suffix, preserving original primitive IDs. GPU submission classifies every frame before dispatch: if any frame moves an object, every frame in that batch tests it directly. All frames share one static tree, uploaded only after a membership change. No per-frame node snapshots or moving-bound refits remain. `bvhUpdates` counts tree builds including initialization, `bvhUpdateSeconds` includes classification and later rebuilds, and `bvhStaticPrimitives` records the final static count. Brute force remains the default and correctness oracle in 2D/3D; [station benchmarks](cleanup-results.md) measure the tradeoff. Per-instance dynamic BVHs remain deferred until measured workloads justify them.
+CPU and HLSL use local per-object mesh trees (BLAS), beneath world instance bounds (TLAS). Rigid motion refits only TLAS bounds; the primitive IDs and local trees stay immutable. Each GPU batch unions every sampled pose into its instance bounds, then intersections use the exact frame pose. Local boxes are transformed to world space during traversal, which also handles arbitrary rotations projected into 2D. Conservative padding covers CPU/GPU rounding; exact nearest-hit ties resolve by primitive ID. `bvhUpdates` counts initial build and changed bound refits; `bvhPrimitives` includes all accelerated primitives, replacing the old static-membership diagnostic. Only the TLAS prefix is uploaded on refit. Brute force remains available as the 2D/3D correctness oracle. Topology stays balanced but may become spatially inefficient after large instance rearrangements; deforming meshes and hardware ray-tracing backends are separate work.
 
 Memory estimates precede submission:
 

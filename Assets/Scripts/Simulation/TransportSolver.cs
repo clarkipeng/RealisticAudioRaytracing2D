@@ -88,7 +88,7 @@ public sealed class TransportSolver : IDisposable
     public double BvhBuildSeconds => bvh?.BuildSeconds ?? 0;
     public double BvhUpdateSeconds => bvh?.UpdateSeconds ?? 0;
     public int BvhUpdates => bvh?.UpdateCount ?? 0;
-    public int StaticPrimitiveCount => bvh?.StaticPrimitiveCount ?? 0;
+    public int BvhPrimitiveCount => bvh?.PrimitiveCount ?? 0;
     public double UploadSeconds { get; private set; }
     public double DispatchReadbackSeconds { get; private set; }
 
@@ -254,19 +254,13 @@ public sealed class TransportSolver : IDisposable
         long start = Stopwatch.GetTimestamp();
         if (bvh != null)
         {
-            bool changed = false;
-            // Classify the entire batch first: an object that moves in any frame uses
-            // direct tests in every frame, so all frames can share one static tree.
-            for (int f = 0; f < frames; f++)
-                changed |= bvh.Update(state, f * scene.objects.Length);
-            if (changed)
+            if (bvh.Update(state, frames))
             {
-                if (geometry.Length > 0)
+                if (bvh.UpdateCount == 1 && geometry.Length > 0)
                     bvhIndices.SetData(bvh.Indices);
                 if (bvh.NodeCount > 0)
-                    bvhNodes.SetData(bvh.Nodes, 0, 0, bvh.NodeCount);
+                    bvhNodes.SetData(bvh.Nodes, 0, 0, bvh.UpdateCount == 1 ? bvh.NodeCount : bvh.TopNodeCount);
                 shader.SetInt("BvhNodeCount", bvh.NodeCount);
-                shader.SetInt("StaticPrimitiveCount", bvh.StaticPrimitiveCount);
             }
         }
         for (int i = 0; i < frames * scene.objects.Length; i++)

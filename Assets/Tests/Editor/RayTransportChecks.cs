@@ -157,9 +157,9 @@ public partial class TakeChecks
                 }
                 Check(energy>0,"Reflective wall produces indirect arrivals in "+dimension);
                 if(!bvh)baseline=(RayTransport.Path[])rays.Clone();
-                // A moving wall must leave the static hierarchy and remain acoustically visible.
+                // A moving wall retains its local hierarchy and remains acoustically visible.
                 state[2].position=Vector3.right;solver.Solve(state,direct);state[2].position=Vector3.zero;
-                if(bvh)Check(solver.StaticPrimitiveCount==0,"Moving reflector leaves static tree");
+                if(bvh)Check(solver.BvhPrimitiveCount==geometry.Length,"Moving reflector retains its mesh tree");
             }
             state[1].position=Vector3.right;settings.useBvh=false;
             scene.materials[0].absorption[0]=1;
@@ -687,7 +687,7 @@ public partial class TakeChecks
             }
             Assert.That(count,Is.GreaterThan(0));
         }
-        Assert.That(solver.StaticPrimitiveCount,Is.Zero);
+        Assert.That(solver.BvhPrimitiveCount,Is.EqualTo(geometry.Length));
     }
     [Test,Category("GPU"),Category("Diffraction")]
     public void TransparentGeometryDoesNotGenerateEdgeSound()

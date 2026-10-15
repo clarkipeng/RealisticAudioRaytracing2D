@@ -72,7 +72,7 @@ public partial class TakeChecks
             for(int frame=0;frame<12;frame++)
             {
                 for(int i=0;i<state.Length;i++)state[i]=new AcousticTake.State {position=i<2?Vector3.zero:i<4?new Vector3(frame*.13f*i,0,0):Point(),
-                    rotation=i<2?Quaternion.identity:Quaternion.Euler(dimension==AcousticTake.Dimension.Planar2D?0:frame*3,0,frame*11),
+                    rotation=i<2?Quaternion.identity:Quaternion.Euler(frame*3,frame*7,frame*11),
                     flags=AcousticTake.StateFlags.Active|(i<4?AcousticTake.StateFlags.Geometry:i<6?AcousticTake.StateFlags.Source:AcousticTake.StateFlags.Listener)};
                 state[4].position=new Vector3(-2,0,0);state[6].position=frame==0?state[4].position:new Vector3(2,0,0);
                 if(frame==2)state[0].flags&=~AcousticTake.StateFlags.Active;
@@ -84,7 +84,7 @@ public partial class TakeChecks
                 {
                     oracle.BeginSolve(batch,3);accelerated.BeginSolve(batch,3);
                     oracle.TryComplete(expectedBatch,true);accelerated.TryComplete(actualBatch,true);
-                    for(int p=0;p<actualBatch.Length;p++)Check(actualBatch[p].Equals(expectedBatch[p]),"BVH batches share static bounds and test moving geometry at each frame's pose.");
+                    for(int p=0;p<actualBatch.Length;p++)Check(actualBatch[p].Equals(expectedBatch[p]),"BVH batches share conservative bounds and test geometry at each frame's pose.");
                 }
             }
             if(shader==null)
@@ -101,7 +101,7 @@ public partial class TakeChecks
     }
     [TestCase(false, Category="Core")]
     [TestCase(true, Category="GPU")]
-    public void StaticBvhChecks(bool gpu)
+    public void InstanceBvhChecks(bool gpu)
     {
         var shader=gpu?RequireGpu():null;
         foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
@@ -124,16 +124,17 @@ public partial class TakeChecks
             oracle.BeginSolve(batch,3);accelerated.BeginSolve(batch,3);oracle.TryComplete(expected,true);accelerated.TryComplete(actual,true);
             for(int f=0;f<3;f++)Check(actual[f].Equals(expected[f]),"First motion within a batch never uses stale static bounds.");
             Check(actual[0].pressureGain==0 && actual[1].pressureGain>0 && actual[2].pressureGain==0,"Moving occluder changes visibility and remains correct when it returns.");
-            Check(accelerated.StaticPrimitiveCount==1,"Only the fixed object's primitive remains in the BVH.");
+            Check(accelerated.BvhPrimitiveCount==2,"All rigid primitives remain accelerated.");
             int builds=accelerated.BvhUpdates;
             expected=new TakeRender.DirectPath[1];actual=new TakeRender.DirectPath[1];
             for(int f=0;f<6;f++)
             {
                 state[1].position=new Vector3(0,f%2==0?4:0,0);
                 oracle.Solve(state,expected);accelerated.Solve(state,actual);
-                Check(actual[0].Equals(expected[0]),"Ongoing motion uses the current pose outside the BVH.");
+                Check(actual[0].Equals(expected[0]),"Ongoing motion uses the current pose through the instance BVH.");
             }
-            Check(accelerated.BvhUpdates==builds,"Moving and stopping known dynamic geometry never rebuilds the static tree.");
+            Check(accelerated.BvhUpdates>builds,"Moving instances refit their top-level bounds.");
+            builds=accelerated.BvhUpdates;
             state[1].flags&=~AcousticTake.StateFlags.Active;
             state[2].position+=Vector3.up*10;state[3].position+=Vector3.up*10;
             oracle.Solve(state,expected);accelerated.Solve(state,actual);
@@ -143,7 +144,7 @@ public partial class TakeChecks
             Check(actual[0].Equals(expected[0]) && actual[0].pressureGain>0 && accelerated.BvhUpdates==builds,"Static visibility flags change without rebuilding bounds.");
             state[0].flags|=AcousticTake.StateFlags.Geometry;state[0].position+=Vector3.up*10;
             oracle.Solve(state,expected);accelerated.Solve(state,actual);
-            Check(actual[0].Equals(expected[0]) && accelerated.StaticPrimitiveCount==0,"Late movement of the last static object leaves a valid empty BVH.");
+            Check(actual[0].Equals(expected[0]) && accelerated.BvhPrimitiveCount==2,"All moving instances remain accelerated.");
         }
     }
 }
