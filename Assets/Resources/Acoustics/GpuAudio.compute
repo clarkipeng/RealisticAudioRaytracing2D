@@ -148,22 +148,36 @@ void AudioInsert(uint pair,uint hash,int group,int member)
     if(AudioHashSize<=8192)AudioLocalTable[hash]=(uint)group|((uint)member<<16);
     else {AudioTable[pair*AudioHashSize+hash]=int2(group,member);DeviceMemoryBarrier();}
 }
-[numthreads(1,1,1)]
-void AudioGroups(uint3 id:SV_DispatchThreadID)
+[numthreads(64,1,1)]
+void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     uint pair=id.x;if(pair>=AudioPairs)return;uint bank=AudioMeta[2],base=pair*AudioSlots;
-    if(AudioMeta[1]!=0 && AudioFilterPairs[pair]>=0)
+    bool rebuild=AudioMeta[1]!=0 && AudioFilterPairs[pair]>=0;
+    if(rebuild)
     {
-        for(uint t=0;t<AudioHashSize;t++)AudioInsert(pair,t,-1,-1);
-        uint count=0;
-        for(uint slot=0;slot<AudioSlots;slot++)
+        for(uint t=tid.x;t<AudioHashSize;t+=64)
+            if(AudioHashSize<=8192)AudioLocalTable[t]=0xffffffff;else AudioTable[pair*AudioHashSize+t]=int2(-1,-1);
+        // Reuse the future member links as temporary keys. Stable slot order is
+        // restored below before those links are written; no floating atomics.
+        for(uint slot=tid.x;slot<AudioSlots;slot+=64)
         {
-            uint i=base+slot;AudioPath path=AudioArrivals[AudioOffset+i];
+            uint i=base+slot;AudioPath path=AudioArrivals[AudioOffset+i];AudioNext[i]=-1;
             if(path.pressureGain==0 || AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x==0)continue;
             if(!isfinite(path.pressureGain) || !isfinite(path.delaySeconds) || !all(isfinite(path.direction)) || path.delaySeconds<0 || path.delaySeconds>AudioMaximumDelay || path.frequencyBin>AudioSize/2 || (AudioSpectral!=0 && path.direction.w>=1)) {AudioError(1);continue;}
             uint hash=AudioHash(AudioBits(path.delaySeconds));
             for(uint k=0;k<4;k++)hash=AudioHash(hash^AudioBits(path.direction[k]));
-            if(AudioSpectral!=0)hash=AudioHash(hash^path.identity);hash%=AudioHashSize;
+            if(AudioSpectral!=0)hash=AudioHash(hash^path.identity);
+            AudioNext[i]=(int)(hash%AudioHashSize);
+        }
+    }
+    AllMemoryBarrierWithGroupSync();if(tid.x!=0)return;
+    if(rebuild)
+    {
+        uint count=0;
+        for(uint slot=0;slot<AudioSlots;slot++)
+        {
+            uint i=base+slot;if(AudioNext[i]<0)continue;uint hash=(uint)AudioNext[i];
+            AudioPath path=AudioArrivals[AudioOffset+i];
             int2 entry=int2(-1,-1);uint probes=0;
             for(;probes<AudioHashSize;probes++)
             {
