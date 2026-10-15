@@ -6,6 +6,8 @@ Baseline `0704a56`. Each change is measured and committed separately; rejected c
 
 1. **Recorder block writes and pooled byte storage.** Three warmed runs writing 23.04 MB across three source streams: median **1.096 s → 0.0555 s** (19.7× throughput in this isolated stress workload). Queue capacity stays 128; no frames or sample metadata are dropped. PCM and block-log SHA-256 values are identical before/after. Existing saved-stream/gap/tampering regression passes. The allocation counter returned zero in both versions on this Unity runtime, so it is not used as allocation evidence. This measures buffered writes, not durable-disk flush latency or whole-scene speedup.
 
+2. **Nonblocking failed-recording cleanup.** A controlled writer stalled for 200 ms makes the old synchronous join block for median **200.33 ms**; detaching and returning its cleanup task takes **0.0355 ms**. Cleanup retains ownership until writing finishes, pools are returned on fault, and incomplete takes still cannot finalize successfully. The focused test blocks IO, fills the unchanged queue, verifies immediate detach, then releases IO and checks idempotent cleanup. Normal successful completion still waits before hashing files. This is an injected-stall benchmark, not a measured end-to-end latency improvement.
+
 ## Parallel audio summation and muted-pair storage — 2026-10-14
 
 Implemented in the existing `GpuAudio.cs` and `GpuAudio.compute`: **25 net runtime lines**, no new runtime files, dependencies or settings. Tests grow by 49 net lines. The previous implementation remains in Git at `00c1315` (runtime unchanged from `942db6a`). The estimates in the next section are historical; these measurements supersede them for this workload.

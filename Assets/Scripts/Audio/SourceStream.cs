@@ -68,8 +68,8 @@ public sealed class SourceStream : IDisposable
         readonly string directory;
         readonly AcousticTake.StreamDefinition[] descriptions;
         readonly SourceStream[] streams;
-        bool closed;
-        Exception failure;
+        Task cleanup;
+        volatile Exception failure;
         public Exception Failure=>failure??writer.Exception?.GetBaseException();
         public Capture(string directory,SourceStream[] streams,AcousticTake.Manifest manifest)
         {
@@ -125,10 +125,18 @@ public sealed class SourceStream : IDisposable
             foreach(var d in descriptions)if(d!=null)d.sha256=AcousticTake.HashFile(Path.Combine(directory,d.file));
             manifest.sourceBlocksHash=AcousticTake.HashFile(Path.Combine(directory,"source-blocks.bin"));
         }
-        public void Dispose()
+        // Stop accepting blocks immediately; failed recording must not stall live audio.
+        public Task Abort()
         {
-            if(closed)return;closed=true;foreach(var stream in streams)if(stream!=null)stream.Recorded=null;
-            queue.CompleteAdding();try {writer.GetAwaiter().GetResult();}finally {while(queue.TryTake(out var b))Return(b.data);queue.Dispose();}
+            if(cleanup!=null)return cleanup;
+            foreach(var stream in streams)if(stream!=null)stream.Recorded=null;
+            queue.CompleteAdding();return cleanup=Finish();
         }
+        async Task Finish()
+        {
+            try {await writer.ConfigureAwait(false);}catch(Exception e) {failure=failure??e;}
+            finally {while(queue.TryTake(out var b))Return(b.data);queue.Dispose();}
+        }
+        public void Dispose()=>Abort().GetAwaiter().GetResult();
     }
 }

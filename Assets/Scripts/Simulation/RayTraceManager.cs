@@ -477,7 +477,7 @@ public class RayTraceManager : MonoBehaviour
             if(takeWriter!=null && streamCapture?.Failure is Exception failure)
             {
                 RecordingFailed=true;string directory=takeWriter.DirectoryPath;takeWriter.Invalidate();takeWriter.Dispose();takeWriter=null;
-                try {streamCapture.Dispose();}catch(Exception) {} // The originating fault is reported below.
+                _=streamCapture.Abort(); // Cleanup owns its files until the writer finishes.
                 streamCapture=null;RecordingStopped?.Invoke(directory,false);
                 TakeStatus="Recording failed: "+failure.Message+" Live playback continues.";Debug.LogError(TakeStatus,this);
             }

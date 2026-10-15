@@ -6,6 +6,32 @@ using UnityEngine;
 
 public partial class TakeChecks
 {
+    sealed class GatedRecordingStream : MemoryStream
+    {
+        public readonly System.Threading.ManualResetEventSlim entered=new System.Threading.ManualResetEventSlim(),release=new System.Threading.ManualResetEventSlim();
+        public override void Write(byte[] buffer,int offset,int count) {entered.Set();release.Wait();base.Write(buffer,offset,count);}
+    }
+    [Test,Category("Voice")]
+    public void FailedRecordingDetachesWithoutWaitingForDisk()
+    {
+        string path=Path.Combine(directory,"stalled-writer");Directory.CreateDirectory(path);
+        using var source=new SourceStream(1);using var capture=new SourceStream.Capture(path,new[]{source},new AcousticTake.Manifest());
+        using var gate=new GatedRecordingStream();
+        var files=(BinaryWriter[])typeof(SourceStream.Capture).GetField("pcm",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(capture);
+        files[0].Dispose();files[0]=new BinaryWriter(gate);
+        try
+        {
+            source.Append(new[]{.25f},0,1,1);source.Prune(1);
+            Assert.That(gate.entered.Wait(5000),Is.True,"Writer must be blocked inside disk IO.");
+            for(int i=0;i<129;i++){source.Append(new[]{.25f},0,1,i+2);source.Prune(source.End);}
+            Assert.That(capture.Failure,Is.TypeOf<IOException>());
+            var pending=capture.Abort();Assert.That(source.Recorded,Is.Null);Assert.That(pending.IsCompleted,Is.False);
+            gate.release.Set();Assert.That(pending.Wait(5000),Is.True);Assert.That(capture.Abort(),Is.SameAs(pending));
+            Assert.Throws<IOException>(()=>capture.Complete(new AcousticTake.Manifest()));
+        }
+        finally {gate.release.Set();}
+    }
+
     [TestCase(false),TestCase(true),Category("Voice")]
     public void SelfMutedPendingMicrophoneDoesNotBlockOtherAudio(bool gpu)
     {
