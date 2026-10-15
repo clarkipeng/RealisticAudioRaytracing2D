@@ -373,7 +373,8 @@ void EvaluateDirect(uint index, bool is2D)
         identity = 1;
         uint medium = MediumAt(stateOffset, a, is2D);
         float speed = SpeedOfSound / MediumIor(medium, frequencyBin);
-        frequencyRatio = 1 / (1 - dot(sourceVelocity, direction) / speed);
+        float totalDistance = remaining, boundaryRate = 0;
+        float3 sourceGradient = -direction / speed, listenerGradient = direction / speed;
         for (uint crossing = 0; crossing < PrimitiveCount && remaining > 2 * RayEpsilon; crossing++)
         {
             uint hit;
@@ -397,8 +398,17 @@ void EvaluateDirect(uint index, bool is2D)
             uint next = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
             float nextSpeed = SpeedOfSound / MediumIor(next, frequencyBin);
             float3 velocity = PointVelocity(stateOffset + Primitives[hit].indices.x, position);
-            frequencyRatio *=
-                (1 - dot(velocity, direction) / speed) / (1 - dot(velocity, direction) / nextSpeed);
+            // Differentiate this straight, piecewise-speed route. Its crossings
+            // slide along even stationary interfaces as source/listener move.
+            if (nextSpeed != speed)
+            {
+                float fraction = (totalDistance - remaining) / totalDistance;
+                float slowness = 1 / nextSpeed - 1 / speed;
+                float3 crossing = normal / dot(normal, direction), bend = crossing - direction;
+                sourceGradient += (1 - fraction) * bend * slowness;
+                listenerGradient += (direction + fraction * bend) * slowness;
+                boundaryRate -= dot(velocity, crossing) * slowness;
+            }
             identity = HashRay(identity ^ (hit + 1));
             medium = next;
             speed = nextSpeed;
@@ -408,7 +418,8 @@ void EvaluateDirect(uint index, bool is2D)
         if (gain != 0)
             DebugWrite(debugSlot, 0, time <= MaximumPathDelay ? DebugListener : DebugRejected, -1, position,
                        b, segmentTime, time, gain);
-        frequencyRatio *= 1 - dot(listenerVelocity, direction) / speed;
+        frequencyRatio = (1 - dot(listenerGradient, listenerVelocity) - boundaryRate) /
+                         (1 + dot(sourceGradient, sourceVelocity));
         float tolerance = 4e-7 * max(1, time);
         if (abs(time - estimate) <= tolerance)
         {

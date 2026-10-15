@@ -102,6 +102,15 @@ delayRate = 1 - q
 
 The direct solver solves `c*delay = |listenerNow - sourceNow + sourceVelocity*delay|`, then evaluates the direction and ratio. Thus source and listener motion have distinct factors. At a moving surface, the outgoing/incoming frequency ratio is `(1-dot(surfaceVelocity,incoming)/incomingSpeed) / (1-dot(surfaceVelocity,outgoing)/outgoingSpeed)`. Surface point velocity is linear velocity plus `angularVelocity × (hit-center)`. Segment speed is `airSpeed/IOR`. These local factors assume subsonic, nondispersive propagation; moving-fluid advection and Mach shocks are not modeled. See [time-varying delay Doppler](https://www.dsprelated.com/freebooks/pasp/Doppler_Simulation.html) and [physical delay-line modeling](https://www.dafx.de/paper-archive/2002/DAFX02_Smith_Serafin_Abel_Berners_doppler_leslie.pdf).
 
+Straight transmission through materials is an approximation: it does not refract at interfaces. Its Doppler must differentiate that actual piecewise-speed travel time, including crossings sliding along stationary surfaces, rather than applying only endpoint/local boundary factors. For travel time `T(emissionPosition, listenerPosition, geometryNow)`, implicit differentiation of `delay = T(sourceNow - sourceVelocity*delay, listenerNow, geometryNow)` gives:
+
+```text
+q = (1 - dot(gradientListener(T), listenerVelocity) - geometryRate(T))
+    / (1 + dot(gradientSource(T), sourceVelocity))
+```
+
+The existing intersection loop accumulates those gradients and the rigid boundary-motion term; no extra ray traversal or history is needed. This makes the source clock consistent with the chosen route while its crossed interfaces remain unchanged. Finite-difference tests independently move/rotate the scene and compare solved travel times in 2D/3D, with acceleration off/on and faster/slower material speeds. This does not validate refracted paths, visibility changes or general moving-medium physics.
+
 The GPU receives 80-byte states: position, quaternion, linear velocity, angular velocity and flags, each in a 16-byte lane. `VelocityValid` is required; cuts invalidate velocity. CPU/GPU direct solves match. The 32-byte path keeps direction XYZ, delay-rate W, delay seconds, pressure gain, frequency-bin index and a topology/sample hash. It does not estimate velocity by differentiating unrelated slots.
 
 `SpectralAudio` continuously reads source history at the path's emission time. Each solve supplies a fresh retarded-time anchor; its local delay slope drives source reads until the next update. This avoids accumulating an approximate slope into nonphysical drift. The 32-bit topology/sample hash separates path groups; it is not a collision-free persistent geometric identity. Changing trajectories/topology can still introduce phase discontinuities between solves; crossfades smooth those response changes. This is not arbitrary-trajectory retarded reconstruction. No additional pitch shifter is applied. Linear interpolation is inexpensive but aliases pitch-up; windowed sinc widens its source support and low-passes when `q>1`.

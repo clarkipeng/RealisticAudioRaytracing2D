@@ -119,6 +119,36 @@ public partial class TakeChecks
         }
     }
 
+    [TestCase(false,false,.28f),TestCase(false,true,2f)]
+    [TestCase(true,false,2f),TestCase(true,true,.28f),Category("GPU")]
+    public void MaterialBoundaryClockRate(bool planar,bool bvh,float ior)
+    {
+        var scene=Scene(2);scene.dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D;scene.listeners=new[]{1};
+        var geometry=TransportBox(scene.dimension,2,0,1);scene.objects[2].primitiveCount=geometry.Length;
+        scene.materials=new[]{new AcousticTake.MaterialDefinition {frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{1f},ior=new[]{ior},damping=new[]{0f}}};
+        var initial=States(2);initial[0].position=new Vector3(-3,.2f,0);initial[1].position=new Vector3(3,2,0);initial[2].position=Vector3.zero;
+        initial[0].velocity=new Vector3(.5f,-.25f,0);initial[1].velocity=new Vector3(0,-2,0);
+        initial[2].velocity=new Vector3(1,.4f,0);initial[2].angularVelocity=new Vector3(0,0,.15f);
+        initial[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        for(int i=0;i<initial.Length;i++)initial[i].flags|=AcousticTake.StateFlags.VelocityValid;
+        var settings=SpectralSettings();settings.useBvh=bvh;settings.speedOfSound=100;settings.maximumDelaySeconds=2;settings.raysPerBin=1;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);
+        var output=new TakeRender.DirectPath[1];solver.Solve(initial,output);var center=solver.RayPaths[1];
+        float[] delay=new float[2];const float dt=.001f;
+        for(int side=0;side<2;side++)
+        {
+            var shifted=(AcousticTake.State[])initial.Clone();float time=side==0?-dt:dt;
+            for(int i=0;i<shifted.Length;i++)
+            {
+                shifted[i].position+=initial[i].velocity*time;var angular=initial[i].angularVelocity;
+                shifted[i].rotation=Quaternion.AngleAxis(angular.magnitude*time*Mathf.Rad2Deg,angular)*initial[i].rotation;
+            }
+            solver.Solve(shifted,output);var path=solver.RayPaths[1];
+            Check(path.identity==center.identity && path.pressureGain>0,"Derivative probe keeps the same transmitting interfaces");delay[side]=path.delaySeconds;
+        }
+        Near(center.direction.w,(delay[1]-delay[0])/(2*dt),"Doppler follows the material travel-time derivative",3e-5f);
+    }
+
     [Test, Category("Core")]
     public void DopplerRejectsAliasing()
     {
