@@ -6,6 +6,52 @@ using UnityEngine;
 
 public partial class TakeChecks
 {
+    [TestCase(128,TakeRender.ListenerOutput.Mono),TestCase(128,TakeRender.ListenerOutput.Binaural)]
+    [TestCase(2048,TakeRender.ListenerOutput.Binaural),Category("GPU")]
+    public void GpuPathReductionMatchesReference(int size,TakeRender.ListenerOutput ears)
+    {
+        RequireGpu();const int rate=8192;var scene=Scene(2);var state=States(2);
+        scene.sources=new[]{scene.sources[0],new AcousticTake.SourceDefinition{objectIndex=2,clipIndex=0}};
+        var settings=SpectralSettings();settings.fftSize=size;settings.spectralHop=size/4;settings.responseStepSamples=size;
+        settings.raysPerBin=1;settings.maxBounces=1;settings.listenerOutput=ears;
+        var clip=new float[257];for(int i=0;i<clip.Length;i++)clip[i]=.2f*Mathf.Sin(i*.37f);
+        var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
+        var signals=new[]{signal,signal};var paths=new RayTransport.Path[4*settings.SpectralSlotsPerPair];
+        using var arrivals=new ComputeBuffer(paths.Length,32);
+        using var gpu=new GpuAudio(scene,rate,settings,signals);var cpu=new TakeRender.Mixer(scene,rate,settings,signals);
+        var a=new float[size*2*settings.ChannelsPerListener];var b=new float[a.Length];double error=0,energy=0;
+        for(int frame=0;frame<6;frame++)
+        {
+            // Unequal, non-tile-sized path sets, cancellation, and a fully empty response.
+            Array.Clear(paths,0,paths.Length);
+            if(frame!=3)for(int pair=0;pair<4;pair++)for(int p=0;p<33-pair;p++)
+                paths[pair*settings.SpectralSlotsPerPair+p]=new RayTransport.Path{identity=(uint)p,frequencyBin=(uint)(p%17),
+                    pressureGain=(p%2==0?.5f:-.3f)/(pair+1),delaySeconds=(p+frame)/(float)rate,direction=new Vector4(1,0,0,.01f)};
+            state[1].rotation=Quaternion.Euler(0,frame*19,0);state[1].angularVelocity=Vector3.up;
+            state[1].flags|=AcousticTake.StateFlags.VelocityValid;
+            arrivals.SetData(paths);long sample=frame*(long)size;
+            cpu.SetResponse(sample,new TakeRender.DirectPath[4],state,false,paths,0);gpu.SetResponse(sample,false,arrivals,0,scene,state);
+            cpu.Render(sample,size,a);gpu.Render(sample,size,b);
+            for(int n=0;n<a.Length;n++){double d=a[n]-b[n];error+=d*d;energy+=a[n]*a[n];}
+        }
+        Assert.That(energy,Is.GreaterThan(1e-6));
+        Assert.That(Math.Sqrt(error/energy),Is.LessThan(5e-4));
+    }
+
+    [TestCase(128),TestCase(2048),Category("GPU")]
+    public void AllMutedPairsNeedNoMaterialFilters(int size)
+    {
+        RequireGpu();var scene=Scene();scene.sources[0].mutedListenerPlusOne=1;
+        var settings=SpectralSettings();settings.fftSize=size;settings.spectralHop=size/4;settings.responseStepSamples=size;
+        settings.raysPerBin=1;settings.maxBounces=1;
+        var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];paths[0]=new RayTransport.Path{pressureGain=1};
+        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var gpu=new GpuAudio(scene,8192,settings,new[]{new TakeRender.Signal(new[]{1f})});
+        var pcm=new float[size];gpu.SetResponse(0,false,arrivals,0,scene,States());gpu.Render(0,size,pcm);
+        Assert.That(pcm,Is.All.Zero);Assert.That(gpu.Diagnostics.activeGroups,Is.Zero);
+        Assert.That(gpu.Diagnostics.materialFilters,Is.Zero);Assert.That(gpu.Diagnostics.filterBytes,Is.EqualTo(8),"Only the required empty-buffer sentinel remains.");
+    }
+
     [Test, Category("GPU")]
     public void LiveGpuKeepsBatchingWhenPlaybackFallsBehind()
     {

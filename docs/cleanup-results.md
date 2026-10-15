@@ -1,5 +1,37 @@
 # Cleanup validation and measured bottlenecks
 
+## Parallel audio summation and muted-pair storage — 2026-10-14
+
+Implemented in the existing `GpuAudio.cs` and `GpuAudio.compute`: **25 net runtime lines**, no new runtime files, dependencies or settings. Tests grow by 49 net lines. The previous implementation remains in Git at `00c1315` (runtime unchanged from `942db6a`). The estimates in the next section are historical; these measurements supersede them for this workload.
+
+**What changed.** Summation now dispatches across frequency, path tile and listener/ear. Sixteen tiles each sum disjoint paths (`tile, tile+16, …`), then the existing inverse FFT reduces their partial spectra. Sixteen is an execution partition, not a limit on paths, bands or scene complexity. Both moving-head endpoints, response banks, sample clocks, Doppler and output fades are retained. A fixed order within and between tiles avoids floating-point atomics. The extra scratch is 262,400 bytes per mono listener at 1,025 bins.
+
+The permanent self-monitor mask now doubles as a compact pair-to-filter-storage map. The station's local microphone/listener pair receives no filter rows; other source/listener identities, voice recording and transmission remain intact. Inactive remote slots retain their capacity because they may become audible. An all-muted scene uses one required eight-byte buffer sentinel and produces silence. Both shared-memory and large global-memory FFT paths use this map.
+
+**Why summation first.** A temporary diagnostic repeated grouping or mixing/IFFT four times per submission on the same complete recording, interleaved with normal runs. Three runs per condition gave median wall times of 2.984 s normal, 4.053 s with repeated grouping and 6.676 s with repeated mixing. Dividing each increase by the three extra repetitions estimates approximately 0.356 s (12%) for grouping and 1.231 s (41%) for mixing. These are incremental workload estimates including submission overhead and cache effects, **not isolated GPU timestamps**. All diagnostic renders retained the original waveform hash. The repetition hooks were removed. Grouping remains unchanged except for skipping permanently excluded pairs.
+
+**Measured station render.** Unity 6000.4.1f1, Apple M5, Metal; same recorded scene, motion, sources, seeds, acoustic budgets and full tail: 485,101 mono frames at 44.1 kHz, six source slots, one listener, 564 primitives, 474 responses and 60 PCM readbacks. Restored the original code for the baseline, then restored the final implementation. Each reported set excludes one warmup and contains three complete offline renders:
+
+| Metric | Original | Final |
+|---|---:|---:|
+| Median wall time | 2.943 s | **1.878 s** |
+| Wall-time range | 2.898–3.067 s | 1.860–1.940 s |
+| Median audio scope, including GPU waits | 2.695 s | **1.594 s** |
+| Material-filter allocation | 353,354,400 bytes | **294,462,000 bytes** |
+| Total reported numeric working storage | 552,273,464 bytes | **493,643,464 bytes** |
+
+This is **36.2% less whole-render time / 1.57× throughput** for this take. Filters save 58.89 MB (16.7%); the added reduction scratch leaves **58.63 MB net numeric savings** (10.6%). Numeric accounting excludes Unity/driver/process overhead. These are local measurements, not a guarantee for other machines or scenes. Earlier candidate timing varied more (2.29–3.37 s), which is why the final dispatch layout and original code were rerun.
+
+**Tradeoff.** The extra reduction pass costs time for tiny workloads. A one-path mono control rendering 128 responses / 2.97 seconds of audio took median 0.0464 s before and 0.0704 s after across five warmed runs: approximately 0.19 ms extra per response. No special-case fallback was added for this already inexpensive case. Scratch grows with listener/ear count and FFT bins, not active path count. Grouping, source FFTs, dense input scratch and existing playback lead remain further costs; this does not establish lower voice latency.
+
+**Audio agreement.** Against the original full-take WAV, maximum sample difference is **8.38×10⁻⁹**, relative RMS error **3.22×10⁻⁷**. The new summation order changes float rounding; repeated final renders have identical audio hashes. Original hash: `078033a5e787f65fe5c5c651873ba63863d7b285ddd1ec5e47d237f3fd79afbb`; final: `2455437f8c6e36078e7fca537060e91cbd37273537ebe3e1c0bf086a210b1a9e`. Transport results, acoustic budgets and source/upload/readback sizes remain unchanged.
+
+**Validation.** Final code passes 186/186 atomic checks (70.75 s), both station/church capture/replay integrations (34.23 s), and the explicit solo device-deadline test (25.68 s, including warmup, 20 seconds of moving/turning and stop/drain). The added cases cover multi-source/multi-listener reductions with uneven group counts and an empty response, moving binaural endpoints, both FFT implementations, compact masked-pair storage and fully muted scenes. Existing IR/Spectral, partial-hop, cut, fade and CPU-reference checks remain passing. The Mac Development Player builds with zero errors and 1,854 warnings; existing shader/shutdown warnings remain.
+
+Two simultaneous full-scene players pass voice recording and replay: 249 received packets each, two nonzero saved voice streams each, zero final pose error, and zero underrun, late, overflow, channel-mismatch or over-budget callback counts **including final drain**. Three simultaneous players still fail the stress test: host/client2 pass with three voice streams and zero final deadline counters, but client1 reports a source-recording queue overflow, 13,066 underrun frames and 1,764 late frames. Those counters overlap and must not be added. That client's recording is incomplete. The speedup does not establish reliable three-process operation, independent-computer voice, physical microphone quality or reduced playback latency. No buffer/quality changes were used to hide the failure.
+
+Evidence: `.context/gpu-sum/` contains original/candidate snapshots, temporary profiling scripts, all repeated renders, waveform comparison, timing summaries and final test reports. `.context/voice-sync/lan-gpu-sum-*`, `lan-3-gpu-sum-*` and their saved takes contain player results and final-drain counters. These artifacts are local/ignored; measurements and runtime history are retained here and in Git. Unity is left stopped on the clean saved TrainStation scene with volume restored to 1.
+
 ## Efficiency and parallelism: estimated gains — 2026-10-14
 
 **Recommendation:** profile grouping, source resampling/FFTs and output summation separately, then replace the hottest serial stage. Treat filter compaction as a memory project. Keep BLAS/TLAS and overlapping batch ownership behind measurements that justify their larger implementation cost. All proposals use the current C#/HLSL renderer and preserve its acoustic budgets.

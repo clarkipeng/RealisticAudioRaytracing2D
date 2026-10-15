@@ -4,6 +4,7 @@
 #pragma kernel AudioGroups
 #pragma kernel AudioFilter
 #pragma kernel AudioInput
+#pragma kernel AudioSumTiles
 #pragma kernel AudioInverse
 #pragma kernel AudioWrite
 #pragma kernel AudioMaterialGlobal
@@ -27,12 +28,14 @@ RWStructuredBuffer<uint> AudioMeta,AudioCounts,AudioArgs;
 StructuredBuffer<float4> AudioHeadsPose,AudioRings;
 RWStructuredBuffer<float4> AudioHeadHistory;
 StructuredBuffer<float2> AudioAngles,AudioEars;
-StructuredBuffer<float> AudioSource,AudioPairEnabled;
+StructuredBuffer<float> AudioSource;
+StructuredBuffer<int> AudioFilterPairs;
+RWStructuredBuffer<float4> AudioSums;
 RWStructuredBuffer<float2> AudioFilters,AudioWork,AudioTransform;
 RWStructuredBuffer<float> AudioBlocks,AudioOutput;
 struct EarBlend { uint4 index; float4 weight; };
 RWStructuredBuffer<EarBlend> AudioBlends;
-uint AudioPairs,AudioListeners,AudioChannels,AudioSlots,AudioCapacity,AudioHashSize;
+uint AudioPairs,AudioListeners,AudioChannels,AudioSlots,AudioCapacity,AudioHashSize,AudioFilterCapacity,AudioTiles;
 uint AudioSize,AudioFft,AudioBins,AudioHop,AudioRate,AudioHrir,AudioRingCount,AudioHistory;
 uint AudioPoseOffset,AudioOffset,AudioChanged,AudioCut,AudioInitialized,AudioTransition,AudioSpectral;
 uint2 AudioResponseSample,AudioBlockSample;
@@ -55,6 +58,7 @@ bool AudioSame(AudioPath a,AudioPath b) {return a.delaySeconds==b.delaySeconds &
 uint AudioBank() {return AudioMeta[0] ^ AudioWhich;}
 // Head/clock responses can share acoustic storage: 2 is current, 16 is previous.
 uint AudioPathBank() {return AudioWhich==0?AudioMeta[2]:AudioMeta[16];}
+uint AudioFilterAt(uint bank,uint g) {return (bank*AudioFilterCapacity+AudioFilterPairs[g/AudioSlots]*AudioSlots+g%AudioSlots)*AudioBins;}
 bool AudioReuseInput(uint g) {return AudioWhich!=0 && AudioMeta[2]==AudioMeta[16] && (AudioSpectral==0 || AudioPaths[AudioMeta[2]*AudioCapacity+g].direction.w==0);}
 bool AudioOldOff() {return AudioWhich!=0 && AudioMeta[3]==0;}
 int AudioDifference(uint2 a,uint2 b) {return (int)(a.x-b.x);} // Local differences only; absolute sample clocks remain integers.
@@ -66,7 +70,7 @@ void AudioReset(uint3 id:SV_DispatchThreadID) {AudioMeta[1]=0;AudioMeta[14]=0;}
 [numthreads(64,1,1)]
 void AudioCompare(uint3 id:SV_DispatchThreadID)
 {
-    uint i=id.x;if(i>=AudioCapacity)return;
+    uint i=id.x;if(i>=AudioCapacity)return;if(AudioFilterPairs[i/AudioSlots]<0)return;
     AudioPath a=AudioArrivals[AudioOffset+i],b=AudioLast[i];
     if(!AudioSame(a,b) || a.pressureGain!=b.pressureGain || a.frequencyBin!=b.frequencyBin)InterlockedOr(AudioMeta[1],1);
     AudioLast[i]=a;
@@ -148,7 +152,7 @@ void AudioInsert(uint pair,uint hash,int group,int member)
 void AudioGroups(uint3 id:SV_DispatchThreadID)
 {
     uint pair=id.x;if(pair>=AudioPairs)return;uint bank=AudioMeta[2],base=pair*AudioSlots;
-    if(AudioMeta[1]!=0)
+    if(AudioMeta[1]!=0 && AudioFilterPairs[pair]>=0)
     {
         for(uint t=0;t<AudioHashSize;t++)AudioInsert(pair,t,-1,-1);
         uint count=0;
@@ -226,7 +230,7 @@ void AudioFilter(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     for(uint real=t;real<AudioSize;real+=256)AudioShared[real].y=0;
     for(uint pad=AudioSize+t;pad<AudioFft;pad+=256)AudioShared[pad]=0;GroupMemoryBarrierWithGroupSync();
     AudioFftShared(AudioFft,false,t);
-    for(uint k=t;k<AudioBins;k+=256)AudioFilters[(AudioMeta[2]*AudioCapacity+g)*AudioBins+k]=AudioShared[k];
+    for(uint k=t;k<AudioBins;k+=256)AudioFilters[AudioFilterAt(AudioMeta[2],g)+k]=AudioShared[k];
 }
 // Error-free product splitting keeps fractional delays accurate without GPU
 // float64. Only bounded offsets use floats; integer sample/ring clocks never do.
@@ -277,16 +281,31 @@ void AudioInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     AudioFftShared(AudioFft,false,t);
     for(uint k=t;k<AudioBins;k+=256)AudioWork[g*AudioWorkStride+k]=AudioShared[k];
 }
-float4 AudioSum(uint channel,uint bin,bool moving)
+float4 AudioSum(uint channel,uint bin,bool moving,uint tile)
 {
     uint bank=AudioPathBank(),listener=channel/AudioChannels,ear=channel%AudioChannels;float4 value=0;
-    for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)if(AudioPairEnabled[pair]>0)for(uint p=0;p<AudioCounts[bank*AudioPairs+pair];p++)
+    for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)if(AudioFilterPairs[pair]>=0)for(uint p=tile;p<AudioCounts[bank*AudioPairs+pair];p+=AudioTiles)
     {
-        uint g=pair*AudioSlots+p,filter=bank*AudioCapacity+g;
-        float2 filtered=AudioMultiply(AudioWork[g*AudioWorkStride+bin],AudioFilters[filter*AudioBins+bin]);
+        uint g=pair*AudioSlots+p;
+        float2 filtered=AudioMultiply(AudioWork[g*AudioWorkStride+bin],AudioFilters[AudioFilterAt(bank,g)+bin]);
         value.xy+=AudioMultiply(filtered,AudioEar(AudioBlends[g],ear,bin));
         if(moving)value.zw+=AudioMultiply(filtered,AudioEar(AudioBlends[AudioCapacity+g],ear,bin));
     }
+    return value;
+}
+// Each tile sums disjoint paths in a fixed order; the IFFT reduces the tiles.
+// Tiles distribute work only: every active path and frequency is retained.
+[numthreads(64,1,1)]
+void AudioSumTiles(uint3 id:SV_DispatchThreadID)
+{
+    if(id.x>=AudioBins || AudioOldOff())return;
+    uint channel=id.z,tile=id.y;
+    AudioSums[(channel*AudioTiles+tile)*AudioBins+id.x]=AudioSum(channel,id.x,AudioMovingHead(channel/AudioChannels),tile);
+}
+float4 AudioReducedSum(uint channel,uint bin)
+{
+    float4 value=0;
+    for(uint tile=0;tile<AudioTiles;tile++)value+=AudioSums[(channel*AudioTiles+tile)*AudioBins+bin];
     return value;
 }
 [numthreads(256,1,1)]
@@ -298,7 +317,7 @@ void AudioInverse(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     // Pack two real ear outputs into one complex IFFT: Z=A+iB.
     for(uint k=t;k<AudioBins;k+=256)
     {
-        float4 sum=AudioSum(channel,k,moving);float2 a=sum.xy,b=sum.zw;
+        float4 sum=AudioReducedSum(channel,k);float2 a=sum.xy,b=sum.zw;
         if(k==0 || k==AudioFft/2){a.y=0;b.y=0;}
         AudioShared[k]=float2(a.x-b.y,a.y+b.x);
         if(k>0 && k<AudioFft/2)AudioShared[AudioFft-k]=float2(a.x+b.y,-a.y+b.x);
@@ -342,7 +361,7 @@ void AudioPadGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 void AudioFilterGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(AudioMeta[1]==0)return;uint g=AudioPair*AudioSlots+group.x;
-    for(uint k=tid.x;k<AudioBins;k+=256)AudioFilters[(AudioMeta[2]*AudioCapacity+g)*AudioBins+k]=AudioWork[g*AudioFft+k];
+    for(uint k=tid.x;k<AudioBins;k+=256)AudioFilters[AudioFilterAt(AudioMeta[2],g)+k]=AudioWork[g*AudioFft+k];
 }
 [numthreads(256,1,1)]
 void AudioInputGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
@@ -354,10 +373,10 @@ void AudioInputGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 [numthreads(256,1,1)]
 void AudioSumGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    if(AudioOldOff())return;uint channel=group.x;bool moving=AudioMovingHead(channel/AudioChannels);
+    if(AudioOldOff())return;uint channel=group.x;
     for(uint k=tid.x;k<AudioFft;k+=256)
     {
-        uint bin=min(k,AudioFft-k);float4 sum=AudioSum(channel,bin,moving);float2 a=sum.xy,b=sum.zw;
+        uint bin=min(k,AudioFft-k);float4 sum=AudioReducedSum(channel,bin);float2 a=sum.xy,b=sum.zw;
         if(bin==0 || bin==AudioFft/2){a.y=0;b.y=0;}if(k>AudioFft/2){a.y=-a.y;b.y=-b.y;}
         AudioTransform[channel*AudioFft+k]=float2(a.x-b.y,a.y+b.x);
     }

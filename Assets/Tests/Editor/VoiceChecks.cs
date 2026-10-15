@@ -32,17 +32,20 @@ public partial class TakeChecks
     }
     [TestCase(false,TakeRender.Synthesis.ImpulseResponse),TestCase(true,TakeRender.Synthesis.ImpulseResponse)]
     [TestCase(false,TakeRender.Synthesis.Spectral),TestCase(true,TakeRender.Synthesis.Spectral),Category("Voice")]
-    public void SelfMonitorMaskPreservesTheOtherListenersVoice(bool gpu,TakeRender.Synthesis synthesis)
+    [TestCase(true,TakeRender.Synthesis.Spectral,2048)]
+    public void SelfMonitorMaskPreservesTheOtherListenersVoice(bool gpu,TakeRender.Synthesis synthesis,int size=128)
     {
         if(gpu)RequireGpu();
         var scene=Scene(2);scene.sources[0].mutedListenerPlusOne=1;var states=States(2);
         var settings=SpectralSettings();settings.synthesis=synthesis;settings.raysPerBin=1;settings.maxBounces=1;
+        settings.fftSize=size;settings.spectralHop=size/4;settings.responseStepSamples=size;
         var signal=new TakeRender.Signal(new[]{.1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent {gain=1,loop=true});
         var arrivals=new RayTransport.Path[settings.SpectralSlotsPerPair*2];
         for(int pair=0;pair<2;pair++)for(int bin=0;bin<settings.FrequencyBins;bin++)
             arrivals[pair*settings.SpectralSlotsPerPair+bin]=new RayTransport.Path {frequencyBin=(uint)bin,pressureGain=1,delaySeconds=.01f};
         using var buffer=gpu?new ComputeBuffer(arrivals.Length,32):null;buffer?.SetData(arrivals);
         using var accelerated=gpu?new GpuAudio(scene,8192,settings,new[]{signal}):null;
+        if(gpu)Assert.That(accelerated.Diagnostics.filterBytes,Is.EqualTo(2L*settings.SpectralSlotsPerPair*(size+1)*8),"Only the audible pair owns both filter banks.");
         var reference=gpu?null:new TakeRender.Mixer(scene,8192,settings,new[]{signal});
         var block=new float[settings.responseStepSamples*2];double energy=0;
         for(int frame=0;frame<8;frame++)

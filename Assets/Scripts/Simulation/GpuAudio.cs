@@ -12,7 +12,7 @@ internal sealed class GpuAudio : IDisposable
     readonly TakeRender.Settings settings;
     readonly TakeRender.Signal[] signals;
     readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock;
-    readonly int reset,compare,commit,groups,filter,input,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
+    readonly int reset,compare,commit,groups,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
     readonly int[] kernels,transformKernels;
     readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
     readonly ComputeBuffer args,headsPose,source,work,transform,output;
@@ -25,7 +25,7 @@ internal sealed class GpuAudio : IDisposable
     long cursor,uploaded,responseSample,readbackStarted,readbackCompleted;
     int requested,queued,poseCursor;
     uint previousResponses,previousReused,previousFilters,previousInputFfts;
-    const int Header=8;
+    const int Header=8,SumTiles=16;
     public TakeRender.AudioDiagnostics Diagnostics {get;}=new TakeRender.AudioDiagnostics();
     public long NumericBytes {get;private set;}
     public int ResponseSupportSamples {get;private set;}
@@ -51,9 +51,9 @@ internal sealed class GpuAudio : IDisposable
         {
             commands=new CommandBuffer {name="Acoustics GPU audio"};
             shader=UnityEngine.Object.Instantiate(asset);
-            reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");filter=Kernel("AudioFilter");input=Kernel("AudioInput");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
+            reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
-            kernels=new[]{reset,compare,commit,groups,filter,input,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
+            kernels=new[]{reset,compare,commit,groups,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(settings.SpectralSlotsPerPair*2+1);
             Buffer("AudioMeta",19,4).SetData(new uint[19]);
@@ -65,8 +65,15 @@ internal sealed class GpuAudio : IDisposable
             Buffer("AudioHeadHistory",poses.Length*2,16);
             source=Buffer("AudioSource",checked(signals.Length*history),4,mode:ComputeBufferMode.SubUpdates);
             // Material spectra are shared by both ears. Head endpoints reuse scratch per bank's hop.
-            Buffer("AudioFilters",checked(2*capacity*bins),8);
-            Diagnostics.pathCapacity=capacity;Diagnostics.filterBytes=2L*capacity*bins*8;
+            // The immutable self-monitor mask changes storage, never source/listener IDs.
+            var filterPairs=new int[pairs];int audiblePairs=0;
+            for(int p=0;p<pairs;p++)filterPairs[p]=scene.sources[p/listeners].mutedListenerPlusOne==p%listeners+1?-1:audiblePairs++;
+            int filterCapacity=checked(audiblePairs*settings.SpectralSlotsPerPair);
+            Buffer("AudioFilterPairs",pairs,4).SetData(filterPairs);Set("AudioFilterCapacity",filterCapacity);
+            int filterElements=Math.Max(1,checked(2*filterCapacity*bins));
+            Buffer("AudioFilters",filterElements,8);
+            Diagnostics.pathCapacity=capacity;Diagnostics.filterBytes=filterElements*8L;
+            Buffer("AudioSums",checked(listeners*channels*SumTiles*bins),16);Set("AudioTiles",SumTiles);
             // Shared FFTs only write their nonredundant bins. Global filter preparation
             // runs pair by pair, so its separate transform scratch can reuse the same rows.
             int workStride=fft<=2048?bins:fft;
@@ -74,8 +81,6 @@ internal sealed class GpuAudio : IDisposable
             transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(settings.SpectralSlotsPerPair,listeners*channels)*fft),8):work;
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
-            var pairMask=new float[pairs];for(int p=0;p<pairs;p++)pairMask[p]=scene.sources[p/listeners].mutedListenerPlusOne==p%listeners+1?0:1;
-            Buffer("AudioPairEnabled",pairs,4).SetData(pairMask);
             PrepareEars(hrtf);
             Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioSlots",settings.SpectralSlotsPerPair);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
             Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
@@ -207,6 +212,7 @@ internal sealed class GpuAudio : IDisposable
                         if(fft>2048)FftGlobal(work,fft,false,pair,which);
                     }
                     commands.EndSample("Acoustics.GPU.InputFFT");commands.BeginSample("Acoustics.GPU.Mix");
+                    commands.DispatchCompute(shader,sum,(bins+63)/64,SumTiles,listeners*channels);
                     if(fft<=2048)commands.DispatchCompute(shader,inverse,listeners*channels,1,1);
                     else {BindTransform(transform);commands.DispatchCompute(shader,sumGlobal,listeners*channels,1,1);FftGlobal(transform,fft,true,0,which,listeners*channels);commands.DispatchCompute(shader,saveGlobal,listeners*channels,1,1);}
                     commands.EndSample("Acoustics.GPU.Mix");
