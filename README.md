@@ -260,6 +260,17 @@ This experiment changes **temporal resolution**, not ray count. The finer run is
 
 ## Compare audio and watch the take
 
+For silent inspection without Unity, use `tools/analyze_audio.py` (Python 3.11+, NumPy, SciPy 1.12+, Matplotlib). It writes one waveform/spectrogram PNG per channel and `analysis.json`, including file hashes, exact sample ranges, peak/RMS, silence spans, largest sample steps and aligned differences. It never plays audio or opens a window. For example:
+
+```sh
+python tools/analyze_audio.py monitor/output.wav render/listener-0.wav \
+  --labels Live Offline --trim 16384 0 --start 7.3 --end 8.8 \
+  --fft 4096 --hop 128 --min-hz 300 --max-hz 2000 \
+  --ceiling-db -40 --grid-samples 1024 --output .context/audio-inspection
+```
+
+Use the capture's actual `leadSamples` for the live trim; the example's 16,384 is not inferred. Omit the second WAV for single-file inspection. Waveform scales and spectral dBFS scales are shared; channels remain separate, with no normalization, resampling or guessed alignment. The difference panel has its own labeled scale. Zoom using `--start/--end`; choose a longer FFT for narrow pitch/sideband inspection or a shorter one for transients. Spectra use [SciPy ShortTimeFFT](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.ShortTimeFFT.html), preserving full surrounding windows when zooming. Only the common selected interval is compared, with excluded leading/trailing samples recorded in JSON. Sharp steps, zeros and spectral changes are diagnostic observations, not proof of an audible defect. Use a fresh output directory for each view. The tool loads the WAVs into memory; choose exported excerpts for very large recordings.
+
 Open **Tools → Acoustics → Compare audio**, or the manager's **Open audio comparison window** button. Choose a completed `comparison.json`, or expand **Render a saved take at two response budgets**, choose a take and render Low/High. The Inspector's existing comparison button now opens this window when rendering completes. Stop Play mode for rendering and audition. Existing exports remain usable; new reports include stable listener IDs/names and a relative link to the input take.
 
 Select a listener, set the time range and click **Load range**. **Play/Pause**, **Low**, **High**, **Difference** and the shared cursor operate on the same sample-frame timeline. Clicking either waveform/spectrogram seeks both sides. A/B changes restart preview at the preserved sample; they are not guaranteed gapless. One gain applies to both ears/sides. Audition adds a 5 ms edge fade; original WAVs and metrics remain unchanged. Difference is Low minus High. Preview uses Unity's internal Editor audio API behind a signature check; WAV inspection remains available if that API changes.
