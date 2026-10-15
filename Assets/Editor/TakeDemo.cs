@@ -25,7 +25,6 @@ public static partial class TakeDemo
         StationBox(hall,"West wall",new Vector3(-6.25f,7.5f,0),new Vector3(.5f,15,30),stone);
         StationBox(hall,"Front wall",new Vector3(0,7.5f,15.25f),new Vector3(13,15,.5f),stone);
         StationBox(hall,"Rear wall",new Vector3(0,7.5f,-15.25f),new Vector3(13,15,.5f),stone);
-        StationBox(hall,"Ceiling",new Vector3(0,15.25f,0),new Vector3(13,.5f,31),stone);
         // The east opening leads to an adjoining room. No coincident acoustic wall behind the door.
         StationBox(hall,"East wall rear",new Vector3(6.25f,7.5f,-4.1f),new Vector3(.5f,15,21.8f),stone);
         StationBox(hall,"East wall front",new Vector3(6.25f,7.5f,12.1f),new Vector3(.5f,15,5.8f),stone);
@@ -57,7 +56,7 @@ public static partial class TakeDemo
         manager.takeDefaultMaterial=AssetDatabase.LoadAssetAtPath<AudioMaterial>("Assets/Materials/Border.asset");
         manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
 
-        manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Binaural;
+        manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Mono;
         manager.directSettings.transport=TakeRender.Transport.Raytraced;
         manager.directSettings.audioBackend=TakeRender.AudioBackend.Gpu; manager.directSettings.useBvh=true;
         manager.directSettings.responseStepSamples=1024; manager.directSettings.transitionSamples=512;
@@ -83,12 +82,77 @@ public static partial class TakeDemo
         var roomLight=new GameObject("Side room light").AddComponent<Light>(); roomLight.transform.position=new Vector3(9,3,8);
         roomLight.range=7; roomLight.intensity=1.1f; roomLight.color=new Color(1,.92f,.8f);
         RenderSettings.ambientMode=AmbientMode.Flat; RenderSettings.ambientLight=new Color(.22f,.24f,.28f); RenderSettings.fog=false;
+        FinishChurch(session);
         manager.RegisterTakeObjects();
         ConfigureMultiplayer(session);
         EditorSceneManager.SaveScene(scene,"Assets/Scenes/Church.unity"); AssetDatabase.SaveAssets();
         if(SceneView.lastActiveSceneView!=null) SceneView.lastActiveSceneView.LookAt(new Vector3(0,3,0),Quaternion.Euler(20,35,0),24);
         Selection.activeGameObject=host;
-        Debug.Log("Church blockout saved. Play to walk and record; E near the side-room door; R saves. Materials and decay are prototype settings, not measured church acoustics.");
+        Debug.Log("Church saved. Play to walk; Esc for microphone and multiplayer; R saves. Acoustic materials are illustrative, not measured church data.");
+    }
+
+    // Shared by the builder and scene authoring; all geometry remains ordinary editable objects.
+    public static void FinishChurch(SceneSession session)
+    {
+        var manager=session.manager; var world=manager.takeRoot; var hall=world.Find("Nave and aisles");
+        foreach(string name in new[]{"Ceiling","Vault and sanctuary"})
+        {
+            var previous=hall.Find(name); if(previous!=null) UnityEngine.Object.DestroyImmediate(previous.gameObject);
+        }
+        var stone=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Masonry.mat");
+        var wood=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Timber.mat");
+        var glass=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Diffuser.mat");
+        var details=new GameObject("Vault and sanctuary").transform; details.SetParent(hall,false);
+        foreach(float side in new[]{-1f,1f})
+        {
+            var roof=StationBox(details,"Vault",new Vector3(side*3,13.2f,0),new Vector3(6.96f,.4f,31),stone);
+            roof.transform.localRotation=Quaternion.Euler(0,0,-side*26.565f);
+            foreach(float z in new[]{-9f,-3f,3f,9f})
+            {
+                var rib=StationBox(details,"Vault rib",new Vector3(side*3,12.91f,z),new Vector3(6.96f,.2f,.28f),stone,false);
+                rib.transform.localRotation=roof.transform.localRotation;
+                // Inset luminous panels sit on the sealed walls; they are visual details, not holes.
+                StationBox(details,"Clerestory window",new Vector3(side*5.985f,8,z),new Vector3(.025f,4,1.5f),glass,false);
+                StationBox(details,"Window mullion",new Vector3(side*5.95f,8,z),new Vector3(.07f,4,.09f),wood,false);
+                StationBox(details,"Window transom",new Vector3(side*5.95f,7,z),new Vector3(.07f,.09f,1.5f),wood,false);
+            }
+        }
+        StationBox(details,"Altar",new Vector3(0,.6f,12.8f),new Vector3(3,1.2f,1),stone);
+        StationBox(details,"Altar top",new Vector3(0,1.27f,12.8f),new Vector3(3.3f,.14f,1.3f),stone,false);
+        StationBox(details,"Cross upright",new Vector3(0,6,14.95f),new Vector3(.22f,3.8f,.12f),wood,false);
+        StationBox(details,"Cross arm",new Vector3(0,6.8f,14.95f),new Vector3(2,.22f,.12f),wood,false);
+        // Thin inlays have no colliders or acoustic surfaces: the existing floor owns both.
+        foreach(float x in new[]{-.65f,.65f})
+            StationBox(details,"Aisle border",new Vector3(x,.006f,0),new Vector3(.04f,.012f,29),stone,false);
+        for(int z=-14;z<15;z+=2)
+            StationBox(details,"Floor joint",new Vector3(0,.003f,z),new Vector3(12,.006f,.025f),wood,false);
+        var masonry=ChurchAcoustics("Church stone",2400,.9f,.025f,.055f,.12f);
+        var timber=ChurchAcoustics("Church wood",700,.6f,.12f,.3f,.25f);
+        manager.takeDefaultMaterial=masonry;
+        foreach(var surface in world.GetComponentsInChildren<AcousticSurface>(true))
+            surface.material=surface.GetComponent<Renderer>()?.sharedMaterial==wood ? timber:masonry;
+        manager.directSettings.raysPerBin=2; manager.directSettings.maxBounces=32;
+        manager.directSettings.diffractionFactor=0; // Keep the experimental edge estimator out of this reflective-room preset.
+        manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Mono;
+        var speaker=session.startSounds[0]; speaker.name="Clap source";
+        speaker.transform.localPosition=new Vector3(0,1.8f,12.8f);
+        speaker.clip=AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/church_clap.wav"); speaker.gain=2;
+        if(speaker.clip==null) throw new FileNotFoundException("Missing dry church clap.");
+        speaker.rayTraceManager=manager; speaker.loop=true;
+        PrefabUtility.RecordPrefabInstancePropertyModifications(speaker);
+    }
+
+    static AudioMaterial ChurchAcoustics(string name,float density,float rigidity,float low,float high,float scatter)
+    {
+        string path="Assets/Materials/"+name+".asset";
+        var material=AssetDatabase.LoadAssetAtPath<AudioMaterial>(path);
+        if(material!=null) return material;
+        material=ScriptableObject.CreateInstance<AudioMaterial>(); material.density=density; material.rigidity=rigidity;
+        material.porosity=0; material.roughness=scatter;
+        // Illustrative energy coefficients; no measured absorption/RT60 claim.
+        material.energyCurve=new[]{new AudioMaterial.EnergyKnot {frequencyHz=125,absorption=low,scattering=scatter},
+            new AudioMaterial.EnergyKnot {frequencyHz=8000,absorption=high,scattering=scatter}};
+        AssetDatabase.CreateAsset(material,path); return material;
     }
 
     static Transform SharedPlayer(Transform parent,Vector3 position)

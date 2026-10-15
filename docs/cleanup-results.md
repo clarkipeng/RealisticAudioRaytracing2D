@@ -34,6 +34,25 @@ Applied it to the saved post-motion-fix station capture (`trainstation-20261015-
 
 A single additional silent headless control preserves every source, clip/event and recorded pose/sample, removing geometry only; GPU rendering takes 1.05 s. The notches disappear. Relative room/control RMS changes from -10.22 to -19.46 dB across 7.54–7.57 / 7.65–7.68 s. Around the later notch it changes from -9.12 dB (8.49–8.52 s) to -17.89 dB (8.545–8.565 s), recovering to -9.13 dB (8.61–8.64 s). The opaque direct diagnostic omits transmission. Follow-up arrival dumps show only the straight transmitted contribution at the relevant original frequency bins: it crosses another wall near 7.593 s and a lamp post near 8.522–8.545 s. A separate 440 Hz transport probe with 1/16/128/1,024 rays per bin adds arrivals but does not establish convergence or remove the notch. All objects still use generic material curves. The level dips are not themselves proven erroneous. Evidence: `.context/artifact-inspection/` contains the report, plots, input copies, path dumps, measurements and batch logs. The user's Editor and speakers remained untouched.
 
+## Church echo scene — 2026-10-15
+
+Extended the existing Church scene and builder, preserving the shared session, door, player spawns, four multiplayer slots and microphone/remote-voice bindings. Added a two-slope vault, ribs, inset luminous window panels, altar and floor inlays. Visual trim has no duplicate colliders/acoustic faces. The compiled scene grows from 61 objects/612 triangles to **63 objects/636 triangles**, retaining five source slots and one listener. Stone and wood use separate editable, illustrative frequency curves. No new runtime code or dependencies.
+
+The altar emits an original deterministic 25 ms dry noise clap (48 kHz PCM, seed 4827) every six seconds. Echoes come from the existing GPU spectral transport, without an added reverb effect. Source placement above the collidable altar prevents walking directly through its acoustic origin. Its prefab clip, gain and manager overrides are explicitly persisted. Mono is the speaker default; binaural remains selectable for headphones.
+
+The original one-ray/five-bounce scene produced only 71–83 ms arrivals in a static entrance probe. More bounces alone did not repair the sparse edge-sampled walk. An atomic 2/4/8/16-ray sweep with diffraction enabled exposed full-scale overshoot at eight rays (peak 1.653). The selected Church preset disables experimental diffraction and uses **two rays per frequency bin and 32 bounces**. This is a scene preset, not a change to the renderer or station defaults.
+
+Final silent probes, 44.1 kHz mono, one source and one listener, 3.25 seconds of output each:
+
+| Position | Arrival range | Peak | Full-scale samples | Offline render time |
+|---|---:|---:|---:|---:|
+| Entrance | 74–894 ms | 0.01791 | 0 | 0.789 s |
+| Near altar | 3–865 ms | 0.52875 | 0 | 1.016 s |
+
+All output is finite, and the configured output tail covers the sampled response support. These are small correctness probes with warm caches, not repeated throughput benchmarks, measured RT60, convergence evidence or a four-player realtime deadline test. The long arrivals are quieter discrete echoes; dense cathedral reverberation remains unvalidated. Earlier two-process local multiplayer tests still apply to the unchanged network code; a second-computer/internet session has not been verified.
+
+An isolated physics replay walks 366 fixed ticks through the central aisle and side-room door, ending at `(9.60, 0.08, 8.02)` without falling through the floor. Reloading the saved scene verifies its source overrides, all five source bindings and exact scene/state/event hashes against the rendered entrance probe. Inspection used one silent headless Metal worker at nice 15 with two job workers, without operating the user's Editor, mouse or speakers. Evidence: `.context/church-echo/` contains WAVs, GPU path dumps, `checks.json`, the waveform/spectrogram report, screenshot and worker logs. Scene edits require fresh compact-input recordings; the old scene is retained in Git.
+
 ## Silent realtime checks and consolidation — 2026-10-15
 
 Added `AudioManager.muteOutput`: the existing callback consumes and captures PCM normally, then clears only the outgoing device buffer. Batch workers enable it automatically; scene and multiplayer probes share this path. Unity audio stays enabled, preserving AudioClip reads, DSP configuration and real callbacks. No virtual driver, OS routing change or additional rendering mode is needed. Capture remains before Unity mixer/device processing.

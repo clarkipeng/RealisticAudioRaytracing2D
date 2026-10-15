@@ -1,0 +1,72 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
+  m_Name: Church stone
+  m_EditorClassIdentifier: Acoustics::AudioMaterial
+  energyCurve:
+  - frequencyHz: 125
+    absorption: 0.025
+    scattering: 0.12
+  - frequencyHz: 8000
+    absorption: 0.055
+    scattering: 0.12
+  roughness: 0.12
+  density: 2400
+  porosity: 0
+  rigidity: 0.9
+  overrideTrans: 0
+  overrideBands: 0
+  absorptionBands:
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  scatteringBands:
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  transmissionBands:
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  iorBands:
+  - 0.06345976
+  - 0.06345976
+  - 0.06345976
+  - 0.06345976
+  - 0.06345976
+  - 0.06345976
+  - 0.06345976
+  - 0.06345976
+  dampingBands:
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
+  - 0.05
