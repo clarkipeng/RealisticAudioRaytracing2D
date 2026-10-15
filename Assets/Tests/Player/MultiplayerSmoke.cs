@@ -39,7 +39,6 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     double speakingTime;
     readonly Dictionary<Transform,Vector3> remoteInitial=new Dictionary<Transform,Vector3>();
     double start,lastFrame;
-    float outputVolume;
     Transform shared;
     Vector3 sharedInitial;
     readonly List<string> errors=new List<string>();
@@ -51,6 +50,8 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         role=Arg("--acoustics-smoke");output=Arg("--acoustics-result");
         if(role==null)return;
         if((role!="host" && role!="client") || string.IsNullOrEmpty(output))throw new ArgumentException("Smoke test needs host/client and result path.");
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded+=(scene,mode)=>
+        {foreach(var audio in FindObjectsByType<AudioManager>())audio.muteOutput=true;};
         expectedPlayers=int.Parse(Arg("--acoustics-players")??"2");
         deviceHost=Arg("--acoustics-microphone")=="host";
         MultiplayerSession.PendingMode=Arg("--acoustics-network")=="relay"?"relay-"+role:role;
@@ -64,7 +65,6 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     IEnumerator Start()
     {
         result=new Result {role=role,physicalMicrophone=deviceHost && role=="host"};Application.runInBackground=true;Application.targetFrameRate=60;
-        outputVolume=AudioListener.volume;AudioListener.volume=0; // Keep rendering/consuming PCM without playing test signals through the speakers.
         Application.logMessageReceived+=Log;
         yield return Wait(()=> (session=FindAnyObjectByType<SceneSession>())!=null && session.manager.IsRecordingTake,"network capture startup",25);
         if(errors.Count>0) {Finish();yield break;}
@@ -208,7 +208,6 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         UnityEditor.EditorApplication.isPlaying=false;
 #endif
     }
-    void OnDestroy() {if(result!=null)AudioListener.volume=outputVolume;}
     void WriteResult() {Directory.CreateDirectory(Path.GetDirectoryName(output));File.WriteAllText(output,JsonUtility.ToJson(result,true));}
 }
 #endif

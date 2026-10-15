@@ -533,36 +533,39 @@ public partial class TakeChecks
         Check(sincError<.01 && sincError<linearError*.1,"Configurable sinc FIR improves high-frequency fractional-delay accuracy against an analytic sine.");
     }
 
-    [Test, Category("Core")]
-    public void PlayedOutput()
+    [TestCase(1),TestCase(2),Category("Core")]
+    public void OutputCapturePreservesPcmBeforeMute(int channels)
     {
-        string path=Path.Combine(directory,"played-output");
-        var capture=new AudioManager.PlaybackCapture(path,1000,64,4,0,0,new TakeRender.Settings());
-        var queue=new AudioManager.PcmQueue(64,1000,capture); var data=new float[8]; var expected=new List<float>();
-        queue.Publish(0,new[] {1f,2f,3f,4f},4);
-        long memory=GC.GetAllocatedBytesForCurrentThread(); queue.Consume(data,2);
-        Check(GC.GetAllocatedBytesForCurrentThread()==memory,"Output capture allocates no managed memory in the callback.");
-        for (int i=0;i<4;i++) expected.Add(data[i*2]); capture.Drain();
-        queue.Consume(data,2); for (int i=0;i<4;i++) expected.Add(data[i*2]); capture.Drain(); // underrun silence is part of actual output
-        queue.Publish(8,new[] {5f,6f,7f,8f},4); queue.Consume(data,2,true);
-        for (int i=0;i<4;i++) expected.Add(data[i*2]); capture.Drain(); // mute still advances the sample clock
-        for (int block=0;block<32;block++)
-        {
-            queue.Publish(queue.ReadSample,new[] {(float)block,2f,3f,4f},4); queue.Consume(data,2);
-            for (int i=0;i<4;i++) expected.Add(data[i*2]); capture.Drain();
-        }
-        capture.RecordResponse(queue.ReadSample,queue.ReadSample,new[] {new TakeRender.DirectPath {delaySeconds=.1f,pressureGain=.5f}});
-        queue.Complete(); queue.Consume(data,2); for (int i=0;i<4;i++) expected.Add(data[i*2]); capture.Drain();
-        var actual=ReadWave(Path.Combine(path,"output.wav"));
-        Check(capture.Closed && capture.Metadata.complete && actual.Length==expected.Count,"Output capture completes at a callback boundary.");
-        for (int i=0;i<actual.Length;i++) Near(actual[i],expected[i],"Captured PCM equals component output",0);
-        Check(new FileInfo(Path.Combine(path,"callbacks.bin")).Length==capture.Metadata.callbacks*40,"Callback sample/timing records align.");
+        string path=Path.Combine(directory,"output");
+        var settings=new TakeRender.Settings {listenerOutput=channels==1?TakeRender.ListenerOutput.Mono:TakeRender.ListenerOutput.Binaural};
+        using var capture=new AudioManager.PlaybackCapture(path,44100,16,4,0,0,settings);
+        var queue=new AudioManager.PcmQueue(16,44100,capture,channels);var data=new float[8];
+        var pcm=new float[12*channels];for(int i=0;i<pcm.Length;i++)pcm[i]=(i+1)*.01f;
+        queue.Publish(0,pcm,12,channels);
+        capture.RecordResponse(0,0,new[]{new TakeRender.DirectPath {delaySeconds=.1f,pressureGain=.5f}});
+        queue.Complete();queue.Consume(data,2);
+        for(int i=0;i<data.Length;i++)Near(data[i],pcm[(i/2)*channels+i%channels],"Device channel mapping",0);
+        long memory=GC.GetAllocatedBytesForCurrentThread();queue.Consume(data,2,muteOutput:true);
+        long allocated=GC.GetAllocatedBytesForCurrentThread()-memory;
+        Assert.That(allocated,Is.Zero,"Capture and speaker mute allocate no callback memory.");
+        Assert.That(data,Is.All.Zero,"Speaker mute clears the device buffer after recording.");
+        queue.Consume(data,2,silence:true);capture.Drain(); // Pausing suppresses the recorded signal too.
+        Array.Clear(pcm,8*channels,4*channels);
+        Assert.That(ReadWave(Path.Combine(path,"output.wav")),Is.EqualTo(pcm),"Mute preserves samples; pause records silence.");
+        Assert.That(queue.ReadSample,Is.EqualTo(12));Assert.That(queue.UnderrunSamples,Is.Zero);
+        Check(capture.Closed && capture.Metadata.complete && capture.Metadata.channelsPerListener==channels,"Capture drains with its channel layout intact.");
+        Check(new FileInfo(Path.Combine(path,"callbacks.bin")).Length==3*40,"Callback timing records align.");
         Check(capture.Metadata.audioHash==AcousticTake.HashFile(Path.Combine(path,"output.wav")),"Output capture has a content hash.");
-        using (var overflow=new AudioManager.PlaybackCapture(Path.Combine(directory,"capture-overflow"),1000,4,4,0,0,new TakeRender.Settings()))
-        {
-            overflow.Publish(0,data,2,0); overflow.Publish(4,data,2,0); overflow.Drain();
-            Check(!overflow.Metadata.complete && overflow.Metadata.overflowSamples==4,"Capture overflow cannot be promoted to exact playback.");
-        }
+        var metrics=TakeComparison.CompareWave(Path.Combine(path,"output.wav"),Path.Combine(path,"output.wav"));
+        Check(metrics.channels==channels && metrics.samples==12 && metrics.exactMatch,"Comparison counts frames rather than interleaved values.");
+    }
+
+    [Test,Category("Core")]
+    public void OutputCaptureOverflowInvalidatesRecording()
+    {
+        using var capture=new AudioManager.PlaybackCapture(Path.Combine(directory,"overflow"),1000,4,4,0,0,new TakeRender.Settings());
+        var data=new float[8];capture.Publish(0,data,2,0);capture.Publish(4,data,2,0);capture.Drain();
+        Check(!capture.Metadata.complete && capture.Metadata.overflowSamples==4,"Capture overflow cannot be promoted to exact playback.");
     }
 
     [Test, Category("Core")]
@@ -663,16 +666,6 @@ public partial class TakeChecks
     }
 
     [Test, Category("Core")]
-    public void QueueCallbackAllocatesNoManagedMemory()
-    {
-        var queue=new AudioManager.PcmQueue(8);var data=new float[4];queue.Consume(data,1);
-        long before=GC.GetAllocatedBytesForCurrentThread();
-        for(int n=0;n<100;n++)queue.Consume(data,1);
-        long bytes=GC.GetAllocatedBytesForCurrentThread()-before;
-        Assert.That(bytes,Is.Zero);
-    }
-
-    [Test, Category("Core")]
     public void LongSampleClock()
     {
         long first=1L<<30;
@@ -732,4 +725,53 @@ public partial class TakeChecks
         }
     }
 
+}
+
+// One short device-clock smoke test; numerical/capture contracts stay in TakeChecks.
+public sealed class AudioOutputTests
+{
+    [UnityEngine.TestTools.UnityTest,Category("Realtime"),Category("Integration")]
+    public System.Collections.IEnumerator SilentOutputRecordsRealCallbacks()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
+        yield return new UnityEngine.TestTools.EnterPlayMode();
+        string path=Path.Combine(Path.GetTempPath(),"acoustics-device-"+Guid.NewGuid().ToString("N"));
+        var host=new GameObject("Silent output fixture");bool background=Application.runInBackground;
+        try
+        {
+            Application.runInBackground=true;
+            var listener=new GameObject("Listener");listener.transform.SetParent(host.transform);listener.AddComponent<AudioListener>();
+            var manager=host.AddComponent<AudioManager>();
+            if(Application.isBatchMode)Assert.That(manager.muteOutput,Is.True,"Batch workers start with speaker output suppressed.");
+            manager.muteOutput=true;
+            int rate=AudioSettings.outputSampleRate;AudioSettings.GetDSPBufferSize(out int frames,out _);
+            using var capture=new AudioManager.PlaybackCapture(path,rate,frames*8,frames,0,0,new TakeRender.Settings());
+            var pcm=new float[frames*2];for(int i=0;i<pcm.Length;i++)pcm[i]=.1f*Mathf.Sin(i*.1f);
+            var queue=new AudioManager.PcmQueue(frames*8,rate,capture);queue.Publish(0,pcm,pcm.Length);queue.Complete();
+            manager.StartPcmStream(queue);
+            double deadline=Time.realtimeSinceStartupAsDouble+5;
+            while(!capture.Closed)
+            {
+                Assert.That(Time.realtimeSinceStartupAsDouble,Is.LessThan(deadline),"Real audio callbacks did not drain the fixture.");
+                yield return null;
+            }
+            Assert.That(capture.Metadata.complete,Is.True);Assert.That(queue.CallbackCount,Is.GreaterThanOrEqualTo(2));
+            Assert.That(queue.UnderrunSamples,Is.Zero);
+            using var wave=new BinaryReader(File.OpenRead(Path.Combine(path,"output.wav")));wave.BaseStream.Position=44;
+            for(int i=0;i<pcm.Length;i++)Assert.That(wave.ReadSingle(),Is.EqualTo(pcm[i]),"Real callback recording preserves nonzero PCM.");
+            using var clock=new BinaryReader(File.OpenRead(Path.Combine(path,"callbacks.bin")));
+            clock.BaseStream.Position=32;double first=clock.ReadDouble();clock.BaseStream.Position=72;
+            Assert.That(clock.ReadDouble(),Is.GreaterThan(first),"Unity's DSP clock advances between callbacks.");
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(host);Application.runInBackground=background;
+            if(Directory.Exists(path))Directory.Delete(path,true);
+        }
+    }
+    [UnityEngine.TestTools.UnityTearDown]
+    public System.Collections.IEnumerator ExitPlayMode()
+    {
+        if(Application.isPlaying)yield return new UnityEngine.TestTools.ExitPlayMode();
+    }
 }

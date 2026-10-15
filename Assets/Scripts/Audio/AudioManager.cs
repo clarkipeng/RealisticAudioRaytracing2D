@@ -42,7 +42,7 @@ public class AudioManager : MonoBehaviour
             Volatile.Write(ref write,end); return true;
         }
         public void Complete() { Volatile.Write(ref finalSample,WrittenSample); capture?.CompleteProducer(WrittenSample); }
-        public void Consume(float[] data,int channels,bool silence=false,double dspTime=double.NaN)
+        public void Consume(float[] data,int channels,bool silence=false,double dspTime=double.NaN,bool muteOutput=false)
         {
             long start=Stopwatch.GetTimestamp(),cursor=read,available=Volatile.Read(ref write),missed=0;
             bool mismatch=channels<Channels;
@@ -54,6 +54,7 @@ public class AudioManager : MonoBehaviour
                     data[n*channels+c]=!silence && !mismatch && cursor<available && (Channels==1 || c<Channels) ? samples[(cursor%Capacity)*Channels+(Channels==1 ? 0:c)]:0;
             }
             capture?.Publish(read,data,channels,start,dspTime);
+            if(muteOutput) Array.Clear(data,0,data.Length); // Capture and advance normally; suppress only speaker output.
             Volatile.Write(ref read,cursor);
             Interlocked.Add(ref UnderrunSamples,missed); Interlocked.Increment(ref CallbackCount);
             long elapsed=Stopwatch.GetTimestamp()-start;
@@ -189,10 +190,12 @@ public class AudioManager : MonoBehaviour
     }
 
     public bool paused;
+    public volatile bool muteOutput;
     int sampleRate;
 
     void Awake()
     {
+        muteOutput |= Application.isBatchMode;
         sampleRate = AudioSettings.outputSampleRate;
         
         var src = driverSource = gameObject.AddComponent<AudioSource>();
@@ -208,7 +211,7 @@ public class AudioManager : MonoBehaviour
     {
         var queue = Volatile.Read(ref pcmQueue);
         if (queue == null) Array.Clear(data, 0, data.Length);
-        else queue.Consume(data, channels, paused, AudioSettings.dspTime);
+        else queue.Consume(data, channels, paused, AudioSettings.dspTime, muteOutput);
     }
 
     void Update()

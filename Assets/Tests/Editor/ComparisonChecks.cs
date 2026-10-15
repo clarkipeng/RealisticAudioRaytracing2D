@@ -136,21 +136,14 @@ public partial class TakeChecks
                 int audio=0,scripts=0;
                 foreach(var visual in view.ListenerCamera.scene.GetRootGameObjects()) {audio+=visual.GetComponentsInChildren<AudioListener>(true).Length+visual.GetComponentsInChildren<AudioSource>(true).Length; scripts+=visual.GetComponentsInChildren<MonoBehaviour>(true).Length;}
                 Check(audio==0 && scripts==0,"Visual replay contains no gameplay or audio components.");
-                try
-                {
-                    var rect=new Rect(0,0,100,100);
-                    view.Input(new Event {type=EventType.MouseDown,button=1,mousePosition=new Vector2(20,20)},rect,new Rect(200,0,100,100));
-                    view.Input(new Event {type=EventType.KeyDown,keyCode=KeyCode.W},rect,new Rect(200,0,100,100)); view.Tick();
-                    view.MoveCamera(Vector3.down*20);
-                    float floorY=view.ListenerCamera.transform.position.y;
-                    Check(floorY>-.4f && floorY<-.3f,"Inspection camera sweeps against the ground even for a large movement.");
-                    view.MoveCamera(new Vector3(1,-1,0));
-                    Check(view.ListenerCamera.transform.position.x>1 && view.ListenerCamera.transform.position.y>-.4f,"Inspection camera slides along the ground instead of sticking or tunnelling.");
-                    var freePosition=view.ListenerCamera.transform.position; view.SetSample(800,0);
-                    Check(view.FreeCamera && view.ListenerCamera.transform.position==freePosition,"Free camera stays independent of recorded receiver motion.");
-                    view.FollowListener(); Near(Vector3.Distance(view.ListenerCamera.transform.position,Vector3.right*.8f),0,"Follow restores recorded camera after free inspection",1e-6f);
-                }
-                finally {view.EndDrag();}
+                view.SetFreeCamera();view.MoveCamera(Vector3.down*20);
+                float floorY=view.ListenerCamera.transform.position.y;
+                Assert.That(floorY,Is.InRange(-.4f,-.3f),"Inspection camera sweeps against the ground even for a large movement.");
+                view.MoveCamera(new Vector3(1,-1,0));
+                Check(view.ListenerCamera.transform.position.x>1 && view.ListenerCamera.transform.position.y>-.4f,"Inspection camera slides along the ground instead of sticking or tunnelling.");
+                var freePosition=view.ListenerCamera.transform.position;view.SetSample(800,0);
+                Check(view.FreeCamera && view.ListenerCamera.transform.position==freePosition,"Free camera stays independent of recorded receiver motion.");
+                view.FollowListener();Near(Vector3.Distance(view.ListenerCamera.transform.position,Vector3.right*.8f),0,"Follow restores recorded camera after free inspection",1e-6f);
                 view.SetSample(2000,0); Check(view.Sample==1000,"Visual replay holds its final pose through audio tails.");
                 Check(source.transform.position==originalSource && listener.transform.position==originalListener,"Viewing a take leaves authoring transforms untouched.");
             }

@@ -126,6 +126,7 @@ internal sealed class TakeComparisonView : IDisposable
     {
         cameraController.enabled=false; FreeCamera=false; EndDrag(); dirty=true; SetSample(Math.Max(0,lastSample),Math.Max(0,lastListener));
     }
+    public void SetFreeCamera() {FreeCamera=true; cameraController.enabled=true;}
     public void FrameTop()
     {
         var bounds=new Bounds(objects[0].position,Vector3.zero);
@@ -171,7 +172,7 @@ internal sealed class TakeComparisonView : IDisposable
     {
         if(e.type==EventType.MouseDown && e.button==1 && listenerRect.Contains(e.mousePosition))
         {
-            FreeCamera=true; cameraController.enabled=true; dragging=true; keys.Clear(); Vector3 angles=listenerCamera.transform.eulerAngles; yaw=angles.y; pitch=Mathf.DeltaAngle(0,angles.x);
+            SetFreeCamera(); dragging=true; keys.Clear(); Vector3 angles=listenerCamera.transform.eulerAngles; yaw=angles.y; pitch=Mathf.DeltaAngle(0,angles.x);
             EditorGUIUtility.SetWantsMouseJumping(1); e.Use();
         }
         if(dragging)

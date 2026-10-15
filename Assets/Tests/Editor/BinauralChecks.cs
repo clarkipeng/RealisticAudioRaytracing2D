@@ -61,25 +61,6 @@ public partial class TakeChecks
         Check(GC.GetAllocatedBytesForCurrentThread()==before,"Stereo callback remains allocation-free.");
     }
 
-    [Test, Category("Integration")]
-    public void StereoCapturePreservesEarSamples()
-    {
-        var block=new float[8];
-        var settings=new TakeRender.Settings {listenerOutput=TakeRender.ListenerOutput.Binaural};
-        string output=Path.Combine(directory,"stereo-monitor");
-        using(var capture=new AudioManager.PlaybackCapture(output,44100,8,4,0,0,settings))
-        {
-            var stream=new AudioManager.PcmQueue(8,44100,capture,2);
-            stream.Publish(0,new[]{1f,2f,3f,4f,5f,6f,7f,8f},4,2); stream.Complete(); stream.Consume(block,2); capture.Drain();
-            var pcm=ReadWave(Path.Combine(output,"output.wav"));
-            using(var reader=new BinaryReader(File.OpenRead(Path.Combine(output,"output.wav"))))
-            {reader.BaseStream.Position=22; Check(reader.ReadUInt16()==2,"Monitor WAV declares stereo.");}
-            Check(capture.Metadata.complete && capture.Metadata.channelsPerListener==2 && pcm[1]==2 && pcm[7]==8,"Recorded output preserves distinct ear samples.");
-            var metrics=TakeComparison.CompareWave(Path.Combine(output,"output.wav"),Path.Combine(output,"output.wav"));
-            Check(metrics.channels==2 && metrics.samples==4 && metrics.exactMatch,"Stereo comparison counts sample frames, not interleaved values.");
-        }
-    }
-
     [Test, Category("Core")]
     public void StereoQueueRejectsMonoDevice()
     {

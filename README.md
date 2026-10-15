@@ -396,12 +396,16 @@ Open **Window → General → Test Runner → EditMode → Acoustics.Tests**. Te
 | `Integration` | Streaming/offline agreement, response batching and audio files |
 | `Voice` | Source persistence, resampling, Opus order/loss, self-monitor masks and tail draining |
 | `EndToEnd` | Offline comparison; church/station recording/reconstruction/replay; explicit realtime delivery |
-| `Realtime` | Explicit device-deadline test under station graphics load |
+| `Realtime` | Short silent callback/recording smoke; explicit station deadline benchmark |
 | `Device` | Explicit microphone lifecycle test; no microphone PCM saved or transmitted |
+
+Keep Unity audio enabled for these checks. `AudioManager.muteOutput` clears device samples **after** copying PCM to the recorder; batch workers enable it automatically. Pausing still records silence. Scene and multiplayer probes use the same output mute, and tests no longer open the Game window. This captures our selected listener before Unity mixer/device processing; it is not an OS loopback recording.
+
+`AudioOutputTests.SilentOutputRecordsRealCallbacks` uses an empty scene and two PCM blocks to verify the real audio callback, advancing DSP timestamps and exact nonzero recorded samples. It runs silently and needs no GPU workload, microphone, network or virtual audio driver. The atomic mono/stereo capture cases separately check zero device buffers, channel mapping, finalization and zero callback allocation. Queue edge cases and concurrent publication retain their own focused checks.
 
 Categories can overlap; each selected test runs once. FIR cases use pairwise FFT/hop/channel/delay/filter/method combinations against a time-domain oracle, with separate long-HRIR, transition and larger-transform regressions. Numerical agreement does not establish physical accuracy of scattering/diffraction approximations.
 
-`RecordingReconstructsAndReplays` walks aboard, jumps and turns the head, then checks exact reconstructed state/event hashes and final replay transforms. `StationDeliversAudioBeforeItsDeadline` is **Explicit**: select it on an idle target machine with stereo output. After two seconds of warmup it measures 20 seconds of device-clock movement, failing on any new underrun, late, overflow, channel mismatch or over-budget callback. Run All excludes it; exclusion is not a pass. The configured playback lead is unchanged. Test watchdogs do not limit recording duration.
+`RecordingReconstructsAndReplays` and `ChurchWalksThroughDoorAndReplays` are **Explicit** scene checks. The station case walks aboard, jumps and turns the head, then checks exact reconstructed state/event hashes and final replay transforms. `StationDeliversAudioBeforeItsDeadline` is **Explicit**: select it on an idle target machine with stereo output. After two seconds of warmup it measures 20 seconds of device-clock movement, failing on any new underrun, late, overflow, channel mismatch or over-budget callback. Run All excludes it; exclusion is not a pass. The configured playback lead is unchanged. Test watchdogs do not limit recording duration.
 
 For the open Editor:
 
@@ -421,11 +425,11 @@ For CI with the project **closed**:
 ```sh
 "$UNITY_EDITOR" -batchmode -projectPath "$PROJECT_PATH" \
   -runTests -testPlatform EditMode -assemblyNames Acoustics.Tests \
-  -testCategory '!EndToEnd' -testResults "$RESULTS_DIR/tests.xml" \
+  -testFilter 'TakeChecks|AudioOutputTests' -testResults "$RESULTS_DIR/tests.xml" \
   -logFile "$RESULTS_DIR/unity.log"
 ```
 
-Keep graphics enabled for GPU checks. Require expected cases to execute; reject failures, unexpected skips and missing/incomplete XML. Device-clock tests need active audio and graphics; offline renders cannot replace them. An external process watchdog is still needed for native/driver hangs.
+Use a closed project or a disposable snapshot when the working Editor is open. Keep audio and graphics enabled; run one worker at reduced priority (`nice -n 15` on macOS), adding `-job-worker-count 2` to limit its CPU workers. The command selects atomic checks, a small offline comparison and the short silent callback check. Heavy scene/deadline tests and microphone tests require explicit selection. Require expected cases to execute; reject failures, unexpected skips and missing/incomplete XML. Device-clock tests need active audio and graphics; offline renders cannot replace them. An external process watchdog is still needed for native/driver hangs.
 
 No new test package: Unity Test Framework handles selection, coroutines and reports. Three assembly definitions isolate runtime, editor and tests; friend declarations expose internal DSP to tests without expanding the public API. `DirectBenchmark` remains the offline Low/High timing harness. [Measured results](docs/cleanup-results.md) exclude cold import/build costs; DirectX and standalone Player test runs remain separate validation work.
 
