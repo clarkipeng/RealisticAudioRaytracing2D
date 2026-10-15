@@ -79,7 +79,7 @@ public static partial class TakeDemo
         }
         PrefabUtility.SaveAsPrefabAssetAndConnect(architecture.gameObject,"Assets/Prefabs/Station/Platform.prefab",InteractionMode.AutomatedAction);
 
-        var door=StationBox(world,"Sliding door",new Vector3(5.6f,1.3f,5.25f),new Vector3(2,2.6f,.16f),teal);
+        var door=StationBox(world,"Sliding door",new Vector3(5.6f,1.3f,5.4f),new Vector3(2,2.6f,.16f),teal);
         StationBox(door.transform,"Handle",new Vector3(-.35f,-.06f,-.75f),new Vector3(.025f,.19f,.5f),pale,false);
         // Keep a unit root so children/proxy dimensions remain easy to edit.
         var train=new GameObject("Moving train").transform; train.SetParent(world); train.position=new Vector3(-5,.02f,-14); // Wheel bottoms meet the rail heads at y=.02.
@@ -97,7 +97,7 @@ public static partial class TakeDemo
         manager.takeDefaultMaterial=AssetDatabase.LoadAssetAtPath<AudioMaterial>("Assets/Materials/Material.asset");
         manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
 
-        manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Binaural;
+        manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Mono;
         manager.directSettings.transport=TakeRender.Transport.Raytraced; manager.directSettings.useBvh=true;
         manager.directSettings.responseStepSamples=1024; manager.directSettings.transitionSamples=512;
         manager.directSettings.tailSamples=manager.sampleRate;
@@ -132,7 +132,7 @@ public static partial class TakeDemo
         EditorSceneManager.SaveScene(scene,"Assets/Scenes/TrainStation.unity");
         if(SceneView.lastActiveSceneView!=null) SceneView.lastActiveSceneView.LookAt(new Vector3(0,1,0),Quaternion.Euler(35,35,0),38);
         Selection.activeGameObject=host;
-        Debug.Log("TrainStation ready: two sources, one binaural listener, editable acoustic boxes, sliding door and looping train. Play, then right click to walk; Esc returns to the controls.");
+        Debug.Log("TrainStation ready: two sources, one listener, editable acoustic boxes, sliding door and looping train. Play, then right click to walk; Esc returns to the controls.");
     }
 
     [MenuItem("Tools/Acoustics/Polish train station")]

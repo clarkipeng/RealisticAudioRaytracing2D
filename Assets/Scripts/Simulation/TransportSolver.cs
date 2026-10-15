@@ -4,8 +4,8 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-// One owner and at most one in-flight response batch. Live work never waits for readback;
-// offline rendering and shutdown may explicitly wait. Buffers outlive their request.
+// One owner and at most one in-flight response batch. Steady live work does not wait;
+// startup, shutdown and offline work may wait. Buffers outlive their request.
 public sealed class TransportSolver : IDisposable
 {
     // Optional capture ABI. Times are cumulative propagation seconds, not scene time.
@@ -369,7 +369,7 @@ public sealed class TransportSolver : IDisposable
         Array.Copy(completedPaths, output, activeFrames * pairs);
         return true;
     }
-    // The caller must first complete the PCM readback that follows this transport
+    // The caller must first complete a GPU readback that follows this transport
     // batch on the same GPU queue. That readback also fences these scene buffers.
     internal void CompleteAfterGpuAudio()
     {

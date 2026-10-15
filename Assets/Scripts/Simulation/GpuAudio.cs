@@ -228,6 +228,12 @@ internal sealed class GpuAudio : IDisposable
         else {output.GetData(download,0,0,bytes/4);readbackCompleted=System.Diagnostics.Stopwatch.GetTimestamp();completed=true;}
         pending=true;
     }
+    public void CompletePreparation()
+    {
+        var fence=AsyncGPUReadback.Request(output,4,0);fence.WaitForCompletion();
+        if(fence.hasError)throw new InvalidOperationException("GPU audio preparation failed.");
+        poseCursor=0;
+    }
     void Complete(AsyncGPUReadbackRequest value)
     {
         failed=value.hasError;if(!failed){var data=value.GetData<float>();Unity.Collections.NativeArray<float>.Copy(data,download,data.Length);}

@@ -363,7 +363,7 @@ public sealed class MultiplayerSession : MonoBehaviour
         if(Connected)
         {
             poses[LocalSlot]=new Pose(session.player.position,manager.takeListeners[manager.monitorListener].rotation);poseEpochs[LocalSlot]=localEpoch;
-            double now=SessionTime;poseTimes[LocalSlot]=now;
+            double now=PoseTime;poseTimes[LocalSlot]=now;
             if(now-lastSend>=1.0/30)
             {
                 lastSend=now;
@@ -461,7 +461,8 @@ public sealed class MultiplayerSession : MonoBehaviour
             if(!decoded) {if(voice.next==null)stream.SilenceUntil(sample,sample);break;}
         }
     }
-    public double SceneSoundOffset=>Connected?Math.Max(0,SessionTime-hostOrigin):0;
+    double PoseTime=>(session.manager.SessionInfo?.serverTimeOrigin??0)+(double)session.manager.PoseSample/session.manager.sampleRate;
+    public double SceneSoundOffset=>Connected?Math.Max(0,PoseTime-hostOrigin):0;
     public void Shutdown()
     {
         closing=true;

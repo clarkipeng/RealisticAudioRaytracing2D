@@ -1,5 +1,30 @@
 # Cleanup validation and measured bottlenecks
 
+## Motion-clock and playback-boundary fixes — 2026-10-14
+
+The fixes use the existing scene session, GPU producer and output ring. There are no new runtime files, dependencies, quality presets or smoothing filters; runtime scripts grow by 54 net lines. Scene fixed steps now advance from the capture's audio clock; captured poses and clip events use the last completed simulation tick's sample index. Network pose snapshots use that same pose time; microphone/voice samples retain their own measured source-clock mapping. A new capture resets the mapping at the current tick. Walking continues while a saved recording's acoustic tail drains. Deterministic test controls use the existing session directly instead of a separate FixedUpdate helper.
+
+The initial GPU response/filter preparation completes **before** starting the playback clock, without generating audio or advancing the scene. Live submissions are bounded by the configured playback lead, preserving multi-response catch-up work. At stop, pending audio fills the ring before synchronous take/stream finalization; remaining output drains normally. Final `live.json` counters now include the drain. SceneSession disables display VSync waits and targets 60 visual FPS. Playback lead, source-history/observation capacities, rays, FFT and response cadence are unchanged.
+
+TrainStation defaults to the existing **mono** speaker output; binaural ear filters remain selectable for headphones. This avoids summing two already-filtered ear channels through the Mac speakers. The closed sliding door moves 15 cm into alignment with its wall, sealing the previous 5 cm depth gap that admitted a one-response direct-path flash. The opening still works. These are two scalar scene edits, mirrored in its builder.
+
+Validation on Apple M5 / Metal, Unity 6000.4.1f1:
+
+- Final checks pass: **180/180** atomic checks, **2/2** station/church capture/replay integrations, and the explicit station device-deadline test including stop/tail and continued scene movement while saving. The Mac Development Player builds successfully (zero errors; 1,880 warnings, also present in the prior build).
+- A fresh 10-second walk/turn capture plus its full one-second tail produces **485,101 mono frames exactly equal** to the offline rerender after removing the declared playback lead: maximum error 0, zero differing frames. Final underrun, late, overflow, channel-mismatch and over-budget callback counts are all zero. Preparation takes 0.815 s in this run, outside the playback timeline.
+- Forward motion is 6 m/s instead of alternating approximately 5.17/6.46 m/s. The 880 Hz free-field control using the fresh captured motion has **0.0279 Hz** pitch standard deviation over seconds 1–3.6, versus **1.6153 Hz** for the earlier captured motion. This compares different runtime captures following the same scripted route; room geometry and ear filtering are removed only in these diagnostic rerenders.
+- The final two-window host/client test passes: each receives 249 Opus packets, saves two nonzero source streams, and replays offline with 0 m / 0° final pose error. Both report zero concealed voice frames, late packets, underrun, late-output and overflow samples. Their saved `live.json` reports also remain zero after the tail drains. This uses synthetic voices on one Mac; it does not validate independent device clocks or physical speech quality.
+- Replaying identical old states with only the door gap sealed reduces the isolated flash's peak envelope from approximately 0.01516 to 0.00538. Smaller geometry-dependent envelope dips remain; they have not been established as either bugs or physically validated interference.
+
+![Measured walking-tone pitch before and after](../.context/audio-fixes/motion-fixed.png)
+
+A later three-window same-Mac run at unchanged acoustic settings still **fails**: host/client observation queues fill, with 1,434/1,164 device underrun frames at failure. This is not a passing multiplayer realtime result. An experiment waiting for GPU work when the observation queue fills caused multi-second stalls, much worse audio loss and a source-history overrun; it was removed. A separate experiment sizing batches by current output headroom collapsed catch-up into one-response submissions and was also removed. Increasing buffers or lowering ray/FFT quality would obscure these results, so neither is shipped.
+
+The proven scope is the controlled SceneSession motion clock and the measured single-renderer startup/stop path. Arbitrary external transform writers, independent computers, physical microphone-to-peer speech quality, Windows/DirectX, calibrated indirect pressure physics and model training remain separate validation/work. The existing 16,384-frame lead (~372 ms at 44.1 kHz) still prevents calling this low-latency voice. Preparation and correct scheduling do not make an overloaded renderer realtime.
+
+Evidence: `.context/audio-fixes/warmed/` (full take path, live/offline reports, canonical WAV comparison and scripts), `pitch-result.json`, `motion-fixed.png`, `door-envelope.png`, tests under `.context/audio-fixes/`; multiplayer logs/results under `.context/voice-sync/lan-audio-fixes-final-*`, `.context/voice-sync/lan-3-audio-fixes-*` and the rejected `lan-3-backpressure-*`. These artifacts are local and ignored; source changes and this report are retained in Git.
+
+
 ## Movement artifacts: waveform and spectrogram diagnosis — 2026-10-14
 
 Measured against `0fab953`, with no renderer, scene, quality or buffer changes. The user listens on the Mac's built-in speakers. A fresh, scripted TrainStation walk/turn captured the bell and full numeric states; train audio was muted. This reproduces the actual controller/capture/render pipeline, but is not a recording of the user's exact listening session. Device volume was temporarily zero; analysis uses captured PCM before device/mixer processing. Unity is restored to the clean, stopped TrainStation with volume 1.

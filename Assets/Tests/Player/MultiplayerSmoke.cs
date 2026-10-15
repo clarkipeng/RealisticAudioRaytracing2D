@@ -64,7 +64,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
     IEnumerator Start()
     {
         result=new Result {role=role,physicalMicrophone=deviceHost && role=="host"};Application.runInBackground=true;Application.targetFrameRate=60;
-        outputVolume=AudioListener.volume;if(deviceHost)AudioListener.volume=0; // Avoid same-Mac speaker feedback; keep rendering/consuming PCM.
+        outputVolume=AudioListener.volume;AudioListener.volume=0; // Keep rendering/consuming PCM without playing test signals through the speakers.
         Application.logMessageReceived+=Log;
         yield return Wait(()=> (session=FindAnyObjectByType<SceneSession>())!=null && session.manager.IsRecordingTake,"network capture startup",25);
         if(errors.Count>0) {Finish();yield break;}
@@ -208,7 +208,7 @@ public sealed class MultiplayerSmoke : MonoBehaviour
         UnityEditor.EditorApplication.isPlaying=false;
 #endif
     }
-    void OnDestroy() {if(result!=null && deviceHost)AudioListener.volume=outputVolume;}
+    void OnDestroy() {if(result!=null)AudioListener.volume=outputVolume;}
     void WriteResult() {Directory.CreateDirectory(Path.GetDirectoryName(output));File.WriteAllText(output,JsonUtility.ToJson(result,true));}
 }
 #endif

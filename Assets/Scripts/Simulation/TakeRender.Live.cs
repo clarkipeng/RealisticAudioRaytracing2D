@@ -72,6 +72,13 @@ public static partial class TakeRender
             }
             catch {gpuAudio?.Dispose();throw;}
         }
+        public void Prepare(AcousticTake.State[] state)
+        {
+            if(gpuAudio==null)return;
+            Array.Copy(state,batchStates,state.Length);solver.BeginSolve(batchStates,1,false);
+            gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state);
+            gpuAudio.CompletePreparation();solver.CompleteAfterGpuAudio();
+        }
         public void Append(AcousticTake.VoiceEvent e) { signals[e.sourceIndex].Append(e); }
         public void Observe(long from,long to,AcousticTake.State[] left,AcousticTake.State[] right,Action<long,float[],int> output=null)
         {
@@ -129,6 +136,8 @@ public static partial class TakeRender
             long knownEnd=Math.Min(WritableEnd,observations[(head+pending-1)%observations.Length].end);
             batchFirst=Cursor%settings.responseStepSamples==0?Cursor:Cursor+settings.responseStepSamples-Cursor%settings.responseStepSamples;
             batchEnd=Math.Min(knownEnd,checked((Cursor/settings.responseStepSamples+settings.maximumResponsesPerBatch)*settings.responseStepSamples));
+            // Bound live submissions by playback lead, retaining batching when catching up.
+            if(queue!=null)batchEnd=Math.Min(batchEnd,Cursor+Math.Max(settings.responseStepSamples,lead));
             batchCount=batchEnd<=batchFirst?0:(int)(1+(batchEnd-1-batchFirst)/settings.responseStepSamples);
             int interval=0;
             for(int f=0;f<batchCount;f++)

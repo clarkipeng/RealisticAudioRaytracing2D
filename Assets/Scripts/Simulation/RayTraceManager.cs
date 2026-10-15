@@ -60,6 +60,7 @@ public class RayTraceManager : MonoBehaviour
     }
     AudioManager sessionAudio;
     AudioManager.PlaybackCapture playbackCapture;
+    string drainingDiagnostics;
 
     [Header("Shared acoustic renderer")]
     [UnityEngine.Serialization.FormerlySerializedAs("useTakeRenderer")]
@@ -73,7 +74,7 @@ public class RayTraceManager : MonoBehaviour
     public bool IsLiveSimulation => captureScene!=null && liveDirect!=null;
     [Serializable] public sealed class LiveDiagnostics
     {
-        public string backend,scope="producer stopped; callback counters sampled at stop";
+        public string backend,scope="producer/callback counters; final report includes output drain";
         public int sampleRate,responseCount,queueCapacity,deviceBufferSamples,maximumPendingObservations,retainedEvents;
         public long pairPrimitiveTestUpperBound,validationCount,coalescedObservations,responseSupportSamples;
         public bool tailCoversResponseSupport;
@@ -90,6 +91,9 @@ public class RayTraceManager : MonoBehaviour
     TakeRender.Live liveDirect;
     AudioManager.PcmQueue monitorQueue;
     int captureRate;
+    internal SceneSession simulation;
+    long simulationOrigin;
+    internal long PoseSample => simulation!=null?checked((long)Math.Round((simulation.Tick-simulationOrigin)*(double)Time.fixedDeltaTime*sampleRate)):LiveSample;
 
     [Header("Take recording / replay")]
     public AcousticTake.Dimension takeDimension = AcousticTake.Dimension.Spatial3D;
@@ -286,12 +290,13 @@ public class RayTraceManager : MonoBehaviour
                 liveDiagnostics.backend=liveDirect.Backend;
                 if (playbackCapture!=null) liveDirect.ResponseApplied=playbackCapture.RecordResponse;
             }
-            liveDiagnostics.preparationSeconds=TakeRender.Elapsed(preparationStart);
             if(takeWriter!=null) RecordingStarted?.Invoke(takePath);
+            CaptureTakeState(0);liveDirect?.Prepare(takeState);
+            liveDiagnostics.preparationSeconds=TakeRender.Elapsed(preparationStart);
             takeClockOrigin=AudioSettings.dspTime;
+            simulationOrigin=simulation!=null?simulation.Tick:0;
             if (playbackCapture!=null) playbackCapture.Metadata.inputDspOriginSeconds=takeClockOrigin;
             if (monitorQueue!=null) sessionAudio.StartPcmStream(monitorQueue);
-            CaptureTakeState(0);
             for(int i=0;i<captureStreams.Length;i++)if(captureStreams[i]!=null)
             {
                 var e=new AcousticTake.VoiceEvent {sourceIndex=i,action=AcousticTake.VoiceAction.Play,gain=captureSources[i].GetComponent<RaytracedAudioSource>().gain};
@@ -309,13 +314,15 @@ public class RayTraceManager : MonoBehaviour
         bool complete=false;
         try
         {
-            long end=finalSample??TakeSampleNow(); ValidateCapturedScene(); CaptureTakeState(end);
+            if(!finalSample.HasValue)AdvanceSimulation();
+            long end=finalSample??CaptureSampleNow(); ValidateCapturedScene(); CaptureTakeState(end);
             if(captureStreams!=null)foreach(var stream in captureStreams)if(stream!=null)
             {stream.SilenceUntil(end+1,end,SourceStream.Status.Missing);stream.Finish();}
-            liveDirect?.Finish(end,takeState,wait:false); UpdateLiveDiagnostics(end);
+            // Fill the playback queue before hashing/flushing the recording on this thread.
+            liveDirect?.Finish(end,takeState); UpdateLiveDiagnostics(end);
             if (takeWriter!=null)
             {
-                if (liveDirect!=null) File.WriteAllText(Path.Combine(takePath,"live.json"),JsonUtility.ToJson(liveDiagnostics,true));
+                if (liveDirect!=null) File.WriteAllText(drainingDiagnostics=Path.Combine(takePath,"live.json"),JsonUtility.ToJson(liveDiagnostics,true));
                 streamCapture?.Complete(takeWriter.Metadata);takeWriter.Metadata.streamEpochs=streamEpochs.ToArray();
                 takeWriter.Complete(); RecordingFinalizing?.Invoke(takePath); TakeStatus="Saved: "+takePath;
             }
@@ -337,6 +344,14 @@ public class RayTraceManager : MonoBehaviour
     void UpdateLiveDiagnostics(long sample)
     {
         liveDiagnostics.observedSamples=sample;
+        if(monitorQueue!=null)
+        {
+            liveDiagnostics.channelMismatchSamples=System.Threading.Interlocked.Read(ref monitorQueue.ChannelMismatchSamples);
+            liveDiagnostics.underrunSamples=System.Threading.Interlocked.Read(ref monitorQueue.UnderrunSamples);
+            liveDiagnostics.overBudgetCallbacks=System.Threading.Interlocked.Read(ref monitorQueue.OverBudgetCallbacks);
+            liveDiagnostics.lateSamples=monitorQueue.LateSamples;liveDiagnostics.overflowSamples=monitorQueue.OverflowSamples;
+            liveDiagnostics.maximumCallbackSeconds=(double)System.Threading.Interlocked.Read(ref monitorQueue.MaximumCallbackTicks)/System.Diagnostics.Stopwatch.Frequency;
+        }
         if (liveDirect==null) return;
         liveDiagnostics.maximumPendingObservations=liveDirect.MaximumPendingObservations; liveDiagnostics.retainedEvents=liveDirect.RetainedEvents;
         liveDiagnostics.completionSeconds=liveDirect.CompletionSeconds; liveDiagnostics.maximumCompletionSeconds=liveDirect.MaximumCompletionSeconds;
@@ -346,14 +361,10 @@ public class RayTraceManager : MonoBehaviour
         liveDiagnostics.responseCount=liveDirect.ResponseCount; liveDiagnostics.solveSeconds=liveDirect.SolveSeconds;
         liveDiagnostics.gpuAudio=liveDirect.GpuDiagnostics;
         liveDiagnostics.audioSeconds=liveDirect.AudioSeconds; liveDiagnostics.responsePreparationSeconds=liveDirect.ResponsePreparationSeconds; liveDiagnostics.maximumSolveSeconds=liveDirect.MaximumSolveSeconds;
-        liveDiagnostics.channelMismatchSamples=System.Threading.Interlocked.Read(ref monitorQueue.ChannelMismatchSamples);
-        liveDiagnostics.underrunSamples=System.Threading.Interlocked.Read(ref monitorQueue.UnderrunSamples);
-        liveDiagnostics.overBudgetCallbacks=System.Threading.Interlocked.Read(ref monitorQueue.OverBudgetCallbacks);
-        liveDiagnostics.lateSamples=monitorQueue.LateSamples; liveDiagnostics.overflowSamples=monitorQueue.OverflowSamples;
-        liveDiagnostics.maximumCallbackSeconds=(double)System.Threading.Interlocked.Read(ref monitorQueue.MaximumCallbackTicks)/System.Diagnostics.Stopwatch.Frequency;
     }
     void CloseCapture(bool drain)
     {
+        if(!drain)drainingDiagnostics=null;
         string recordedDirectory=takeWriter?.DirectoryPath;
         bool recordedComplete=takeWriter!=null && takeWriter.Metadata.complete;
         if(recordedDirectory!=null)RecordingFailed=!recordedComplete;
@@ -380,6 +391,16 @@ public class RayTraceManager : MonoBehaviour
         if (sampleRate != captureRate || AudioSettings.outputSampleRate != takeOutputRate || AudioSettings.dspTime < takeClockOrigin)
             throw new InvalidOperationException("Audio clock changed; this take is incomplete.");
         return checked((long)Math.Floor((AudioSettings.dspTime - takeClockOrigin) * sampleRate));
+    }
+
+    long CaptureSampleNow()
+    {
+        return simulation!=null && !externalCaptureClock?PoseSample:TakeSampleNow();
+    }
+    internal void AdvanceSimulation()
+    {
+        if((captureScene!=null || Mode==SessionMode.Draining) && simulation!=null && !externalCaptureClock)
+            simulation.AdvanceTo(TakeSampleNow(),simulationOrigin,sampleRate);
     }
 
     public void MarkTakeDiscontinuity(Transform target)
@@ -439,7 +460,7 @@ public class RayTraceManager : MonoBehaviour
         if (captureScene == null) return;
         int index=Array.IndexOf(captureSources,target);
         if (index < 0) throw new InvalidOperationException("Source is not registered in this take.");
-        var e=new AcousticTake.VoiceEvent { sample=TakeSampleNow(), sourceIndex=index,
+        var e=new AcousticTake.VoiceEvent { sample=CaptureSampleNow(), sourceIndex=index,
             action=action, gain=gain, loop=repeat, clipOffset=clipOffset };
         takeWriter?.Append(e); liveDirect?.Append(e);
     }
@@ -463,14 +484,18 @@ public class RayTraceManager : MonoBehaviour
             if(Mode==SessionMode.Draining && liveDirect!=null)
             {
                 liveDirect.Pump();
-                if(liveDirect.Completed) {liveDirect.Dispose();liveDirect=null;monitorQueue.Complete();}
+                if(liveDirect.Completed) {UpdateLiveDiagnostics(previousTakeSample);liveDirect.Dispose();liveDirect=null;monitorQueue.Complete();}
             }
             if (Mode==SessionMode.Draining && monitorQueue.IsDrained && (playbackCapture==null || playbackCapture.Closed))
-            { monitorQueue=null; playbackCapture=null; sessionAudio=null; }
+            {
+                UpdateLiveDiagnostics(previousTakeSample);
+                if(drainingDiagnostics!=null)File.WriteAllText(drainingDiagnostics,JsonUtility.ToJson(liveDiagnostics,true));drainingDiagnostics=null;
+                monitorQueue=null;playbackCapture=null;sessionAudio=null;
+            }
             if (captureScene != null)
             {
                 if(externalCaptureClock)liveDirect?.Pump();
-                else CaptureTakeState(TakeSampleNow());
+                else CaptureTakeState(CaptureSampleNow());
             }
             if (replayTake != null)
             {

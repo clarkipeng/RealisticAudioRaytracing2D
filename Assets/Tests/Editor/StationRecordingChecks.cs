@@ -12,6 +12,52 @@ using UnityEngine;
 public partial class TakeChecks
 {
     [Test, Category("Core")]
+    public void SceneMotionKeepsItsSimulationTimestamp()
+    {
+        var scene=EditorSceneManager.OpenPreviewScene("Assets/Scenes/TrainStation.unity");
+        try
+        {
+            var authored=scene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<SceneSession>(true)).Single();
+            using var rig=new SceneReplay.Rig(authored);var simulation=rig.demo;
+            simulation.SubmitInput(Vector2.up,Vector2.zero);var before=simulation.player.position;long previous=0;
+            foreach(long sample in new long[]{0,1024,1024,5120,9216,14336,44100,88200})
+            {
+                long stamp=simulation.AdvanceTo(sample,0,44100);
+                Assert.That(stamp,Is.InRange(Math.Max(0,sample-882),sample),"A pose must not render future, unobserved source events.");
+                if(stamp>previous)Assert.That((simulation.player.position.z-before.z)*44100/(stamp-previous),Is.EqualTo(6).Within(.0002),
+                    "Steady walking must not gain artificial Doppler from uneven/repeated audio observations.");
+                before=simulation.player.position;previous=stamp;
+            }
+            long tick=simulation.Tick;
+            Assert.That(simulation.AdvanceTo(0,tick,44100),Is.Zero,"A new capture retains the scene pose with a new sample origin.");
+            Assert.That(simulation.Tick,Is.EqualTo(tick));
+        }
+        finally {EditorSceneManager.ClosePreviewScene(scene);}
+    }
+    [Test, Category("Core")]
+    public void StationDoorSealsClosedOpening()
+    {
+        var preview=EditorSceneManager.OpenPreviewScene("Assets/Scenes/TrainStation.unity");
+        try
+        {
+            var manager=preview.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<RayTraceManager>(true)).Single();
+            var scene=SceneToTake.Compile(manager.takeObjects,manager.takeDimension,manager.takeCurveTolerance,manager.takeDefaultMaterial,
+                manager.takeSources.Select(s=>s.transform).ToArray(),manager.takeSources.Select(s=>s.clip).ToArray(),manager.takeListeners.ToArray(),out var geometry);
+            var states=manager.takeObjects.Select((b,i)=>SceneToTake.Observe(scene,i,b.transform)).ToArray();
+            int door=manager.takeObjects.FindIndex(b=>b.transform.name=="Sliding door");
+            int bell=manager.takeSources.FindIndex(s=>s.clip!=null && s.clip.name=="station_signal");
+            states[scene.listeners[0]].position=new Vector3(4,1.73f,.16f);
+            var paths=new TakeRender.DirectPath[scene.sources.Length*scene.listeners.Length];
+            TakeRender.SolveDirect(scene,geometry,states,manager.directSettings,paths);
+            Assert.That(paths[bell*scene.listeners.Length].pressureGain,Is.Zero,"An oblique ray must not slip behind the closed door.");
+            states[door].position+=manager.takeObjects[door].transform.GetComponent<SlidingDoor>().openOffset;
+            TakeRender.SolveDirect(scene,geometry,states,manager.directSettings,paths);
+            Assert.That(paths[bell*scene.listeners.Length].pressureGain,Is.GreaterThan(0),"Opening the door restores this path.");
+        }
+        finally {EditorSceneManager.ClosePreviewScene(preview);}
+    }
+
+    [Test, Category("Core")]
     public void CompactPayloads()
     {
         string compact=Path.Combine(directory,"compact-payloads");
@@ -314,18 +360,17 @@ public sealed class StationEndToEndTests : SceneEndToEndTests
         yield return StartSession(true);
         // Feed exact simulation ticks: a frame-based wait can overshoot several
         // physics ticks under GPU load and walk past the carriage entrance.
-        var input=session.gameObject.AddComponent<SceneTestInput>();
-        input.session=session;long start=session.Tick;
-        input.submit=tick=>session.SubmitInput(tick-start<57?Vector2.up:tick-start<152?Vector2.right:Vector2.zero,Vector2.zero);
+        long start=session.Tick;
+        session.SampleInput=tick=>session.SubmitInput(tick-start<57?Vector2.up:tick-start<152?Vector2.right:Vector2.zero,Vector2.zero);
         yield return Until(()=>session.Tick>=start+157,"walking aboard");
         Assert.That(session.Walker.Ground!=null && session.Walker.Ground.IsChildOf(session.GetComponent<StationDemo>().carriage),Is.True,
             "The scripted player must actually walk aboard before testing moving-platform replay.");
         yield return Until(()=>session.GetComponent<StationDemo>().CurrentTrainSpeed>2,"train departure",session.GetComponent<StationDemo>().stationDwell+15);
         start=session.Tick;
-        input.submit=tick=>session.SubmitInput(tick-start>=60 && tick-start<72?Vector2.up:Vector2.zero,
+        session.SampleInput=tick=>session.SubmitInput(tick-start>=60 && tick-start<72?Vector2.up:Vector2.zero,
             tick==start?new Vector2(20,-15):tick==start+60?new Vector2(-20,15):Vector2.zero,tick==start);
         yield return Until(()=>session.Tick>=start+107,"onboard motion");
-        UnityEngine.Object.Destroy(input);
+        session.SampleInput=null;
         yield return VerifyReplay();
     }
 
@@ -352,6 +397,9 @@ public sealed class StationEndToEndTests : SceneEndToEndTests
             session.SubmitInput(session.Tick%200<100?Vector2.up:Vector2.zero,new Vector2(.2f,0));
             yield return null;
         }
+        manager.EndTakeRecording();long stopTick=session.Tick;
+        yield return Until(()=>manager.Mode==RayTraceManager.SessionMode.Idle,"recording tail and output drain");
+        Assert.That(session.Tick,Is.GreaterThan(stopTick),"Saving must not freeze scene controls during the output tail.");
         long missed=Interlocked.Read(ref queue.UnderrunSamples)-underruns;
         long tardy=queue.LateSamples-late,overflowed=queue.OverflowSamples-overflow;
         long mismatched=Interlocked.Read(ref queue.ChannelMismatchSamples)-mismatch;
@@ -377,29 +425,20 @@ public sealed class ChurchEndToEndTests : SceneEndToEndTests
         yield return StartSession(true);
         Assert.That(session.GetComponent<StationDemo>(),Is.Null,"The shared session must work without a train.");
         var door=(SlidingDoor)session.actors.Single();
-        var input=session.gameObject.AddComponent<SceneTestInput>(); input.session=session;
         long start=session.Tick;
         // 171 ticks down the clear central aisle, then approach the east doorway.
-        input.submit=tick=>session.SubmitInput(tick-start<171?Vector2.up:tick-start<207?Vector2.right:Vector2.zero,Vector2.zero);
+        session.SampleInput=tick=>session.SubmitInput(tick-start<171?Vector2.up:tick-start<207?Vector2.right:Vector2.zero,Vector2.zero);
         yield return Until(()=>session.Tick>=start+211,"door approach");
         Assert.That(session.player.position.z,Is.InRange(7.8f,8.2f));
         Assert.That(session.Walker.Ground,Is.Not.Null,"The player must stay on the floor.");
         start=session.Tick;
-        input.submit=tick=>session.SubmitInput(tick-start>=85 && tick-start<129?Vector2.right:Vector2.zero,
+        session.SampleInput=tick=>session.SubmitInput(tick-start>=85 && tick-start<129?Vector2.right:Vector2.zero,
             tick==start+150?new Vector2(25,10):Vector2.zero,interact:tick==start);
         yield return Until(()=>session.Tick>=start+155,"door opening and side-room entry");
         Assert.That(door.IsOpen,Is.True);
         Assert.That(session.player.position.x,Is.GreaterThan(8),"The player must pass the collider opening into the room.");
         Assert.That(session.player.position.y,Is.InRange(-.1f,.1f),"The player must not fall through the floor.");
-        UnityEngine.Object.Destroy(input);
+        session.SampleInput=null;
         yield return VerifyReplay();
     }
-}
-
-[DefaultExecutionOrder(-30)]
-public sealed class SceneTestInput : MonoBehaviour
-{
-    public SceneSession session;
-    public Action<long> submit;
-    void FixedUpdate()=>submit?.Invoke(session.Tick);
 }

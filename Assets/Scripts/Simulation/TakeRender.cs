@@ -22,6 +22,7 @@ public static partial class TakeRender
         public int tailSamples;
         public int transitionSamples;
         public DelayFilter delayFilter;
+        [Tooltip("Mono is suitable for speakers. Binaural applies ear filters for headphones.")]
         public ListenerOutput listenerOutput;
         public int ChannelsPerListener => listenerOutput==ListenerOutput.Binaural ? 2:1;
         public int sincRadius=16;

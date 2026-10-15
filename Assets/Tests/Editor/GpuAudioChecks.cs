@@ -6,6 +6,20 @@ using UnityEngine;
 
 public partial class TakeChecks
 {
+    [Test, Category("GPU")]
+    public void LiveGpuKeepsBatchingWhenPlaybackFallsBehind()
+    {
+        var shader=RequireGpu();const int rate=8192,lead=1024,end=4096;
+        var settings=SpectralSettings();settings.audioBackend=TakeRender.AudioBackend.Gpu;settings.maximumResponsesPerBatch=8;
+        var queue=new AudioManager.PcmQueue(8192,rate);queue.Publish(0,null,lead);
+        queue.Consume(new float[lead+end],1); // Simulate a stalled producer without changing sample identities.
+        using var live=new TakeRender.Live(Scene(),Array.Empty<AcousticTake.Primitive>(),new[]{new[]{.1f}},rate,settings,queue,lead,0,shader);
+        var state=States();live.Prepare(state);live.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
+        live.Observe(0,end,state,state);live.Pump(true);
+        Assert.That(live.Cursor,Is.EqualTo(end));
+        Assert.That(live.GpuDiagnostics.readbacks,Is.EqualTo(end/lead),"A missed deadline must not collapse catch-up work into one-response readbacks.");
+    }
+
     [TestCase(false,128,AcousticTake.StateFlags.VelocityValid),TestCase(true,128,AcousticTake.StateFlags.VelocityValid)]
     [TestCase(true,2048,AcousticTake.StateFlags.VelocityValid)]
     [TestCase(true,128,(AcousticTake.StateFlags)0),TestCase(true,128,AcousticTake.StateFlags.VelocityValid|AcousticTake.StateFlags.Cut),Category("GPU")]

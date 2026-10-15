@@ -26,6 +26,7 @@ public sealed class SceneSession : MonoBehaviour
     bool ready;
     public long Tick {get;private set;}
     public bool ReadPlayerInput {get;set;}=true;
+    public Action<long> SampleInput;
     public PlayerController Walker => walker;
     public MouseLook Look => look;
     public bool IsInputReplay => playback!=null || manager.IsReplayingTake;
@@ -66,7 +67,10 @@ public sealed class SceneSession : MonoBehaviour
         manager.RecordingObserved+=ObserveInputRecording;
         manager.RecordingFinalizing+=FinalizeInputRecording;
         manager.RecordingStopped+=EndInputRecording;
+        manager.simulation=this;
         Application.runInBackground=true;
+        // Presentation must not hold the main thread that submits acoustic work.
+        QualitySettings.vSyncCount=0;Application.targetFrameRate=60;
         SetWalking(replay==null);
         yield return null; // Let the audio components finish Start before opening the session.
         ready=Try(()=> {
@@ -100,18 +104,25 @@ public sealed class SceneSession : MonoBehaviour
             SubmitInput(accept ? new Vector2(Input.GetAxis("Horizontal"),Input.GetAxis("Vertical")):Vector2.zero,
                 accept ? look.ReadDelta():Vector2.zero,accept && Input.GetButtonDown("Jump"),accept && Input.GetKeyDown(KeyCode.E));
         }
+        manager.AdvanceSimulation();
         if(Cursor.lockState==CursorLockMode.Locked && Input.GetKeyDown(KeyCode.R)) SaveRecording();
     }
     public void SubmitInput(Vector2 movement,Vector2 lookDegrees,bool jump=false,bool interact=false)
     {
         pending.movement=movement; pending.look+=lookDegrees; pending.jump|=jump; pending.interact|=interact;
     }
-    void FixedUpdate()
+    internal long AdvanceTo(long sample,long origin,int rate)
     {
-        if(!ready || manager.IsReplayingTake) return;
-        if(playback!=null) return; // Recorded observations drive replay on the audio clock.
-        var input=pending; pending.look=Vector2.zero; pending.jump=pending.interact=false;
-        Step(input,Time.fixedDeltaTime);
+        long At(long tick)=>checked((long)Math.Round((tick-origin)*(double)Time.fixedDeltaTime*rate));
+        // Pose knots and the simulation that produced them share the sample clock.
+        // Catch up fixed steps without attaching a frame's DSP timestamp to an older pose.
+        while(At(Tick+1)<=sample)
+        {
+            SampleInput?.Invoke(Tick);
+            var input=pending;pending.look=Vector2.zero;pending.jump=pending.interact=false;
+            Step(input,Time.fixedDeltaTime);
+        }
+        return At(Tick);
     }
     public void Step(SceneRecording.Input input,float seconds)
     {
@@ -169,6 +180,7 @@ public sealed class SceneSession : MonoBehaviour
     void StartLiveAudio()
     {
         manager.BeginLiveSimulation();
+        multiplayer?.CaptureStarted();
         StartSceneSounds();
     }
     public static string RecordingsDirectory=>Application.isEditor?Path.GetFullPath(Path.Combine(Application.dataPath,"..","Recordings")):Path.Combine(Application.persistentDataPath,"Recordings");
