@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Threading.Tasks;
@@ -59,7 +60,7 @@ public sealed class SourceStream : IDisposable
     // Bounded disk queue. No file IO or waiting in the audio callback; failures stay incomplete.
     internal sealed class Capture : IDisposable
     {
-        struct Block {public int source,count;public long sample,available;public Status status;public float[] data;}
+        struct Block {public int source,count;public long sample,available;public Status status;public byte[] data;}
         readonly BlockingCollection<Block> queue=new BlockingCollection<Block>(128);
         readonly Task writer;
         readonly BinaryWriter[] pcm;
@@ -91,21 +92,29 @@ public sealed class SourceStream : IDisposable
         void Enqueue(int source,long sample,float[] data,int offset,int count,long available,Status status)
         {
             if(Failure!=null)return;
-            var copy=data==null?null:new float[count];if(copy!=null)Array.Copy(data,offset,copy,0,count);
+            var copy=data==null?null:ArrayPool<byte>.Shared.Rent(checked(count*4));
+            if(copy!=null)
+            {
+                Buffer.BlockCopy(data,offset*4,copy,0,count*4);
+                if(!BitConverter.IsLittleEndian)for(int i=0;i<count;i++)Array.Reverse(copy,i*4,4);
+            }
             if(!queue.TryAdd(new Block {source=source,sample=sample,count=count,data=copy,available=available,status=status}))
-                failure=new IOException("Source recording queue overflow; this take is incomplete.");
+            {Return(copy);failure=new IOException("Source recording queue overflow; this take is incomplete.");}
         }
+        static void Return(byte[] data) {if(data!=null)ArrayPool<byte>.Shared.Return(data);}
         void Write()
         {
             try
             {
                 foreach(var b in queue.GetConsumingEnumerable())
                 {
+                    try {
                     if(b.sample!=descriptions[b.source].samples)throw new InvalidDataException("Non-contiguous recorded source.");
                     if(b.data==null) {var f=pcm[b.source].BaseStream;f.Position+=b.count*4L;f.SetLength(f.Position);}
-                    else for(int i=0;i<b.count;i++)pcm[b.source].Write(b.data[i]);
+                    else pcm[b.source].Write(b.data,0,b.count*4);
                     blocks.Write(b.source);blocks.Write(b.sample);blocks.Write(b.count);blocks.Write(b.available);blocks.Write((uint)b.status);
                     descriptions[b.source].samples+=b.count;
+                    } finally {Return(b.data);}
                 }
             }
             finally {foreach(var p in pcm)p?.Dispose();blocks.Dispose();}
@@ -119,7 +128,7 @@ public sealed class SourceStream : IDisposable
         public void Dispose()
         {
             if(closed)return;closed=true;foreach(var stream in streams)if(stream!=null)stream.Recorded=null;
-            queue.CompleteAdding();try {writer.GetAwaiter().GetResult();}finally {queue.Dispose();}
+            queue.CompleteAdding();try {writer.GetAwaiter().GetResult();}finally {while(queue.TryTake(out var b))Return(b.data);queue.Dispose();}
         }
     }
 }

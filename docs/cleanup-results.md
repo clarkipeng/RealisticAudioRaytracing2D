@@ -1,5 +1,11 @@
 # Cleanup validation and measured bottlenecks
 
+## Atomic optimization pass — 2026-10-14
+
+Baseline `0704a56`. Each change is measured and committed separately; rejected candidates remain documented rather than enabled. Evidence is under `.context/optimization-pass/`.
+
+1. **Recorder block writes and pooled byte storage.** Three warmed runs writing 23.04 MB across three source streams: median **1.096 s → 0.0555 s** (19.7× throughput in this isolated stress workload). Queue capacity stays 128; no frames or sample metadata are dropped. PCM and block-log SHA-256 values are identical before/after. Existing saved-stream/gap/tampering regression passes. The allocation counter returned zero in both versions on this Unity runtime, so it is not used as allocation evidence. This measures buffered writes, not durable-disk flush latency or whole-scene speedup.
+
 ## Parallel audio summation and muted-pair storage — 2026-10-14
 
 Implemented in the existing `GpuAudio.cs` and `GpuAudio.compute`: **25 net runtime lines**, no new runtime files, dependencies or settings. Tests grow by 49 net lines. The previous implementation remains in Git at `00c1315` (runtime unchanged from `942db6a`). The estimates in the next section are historical; these measurements supersede them for this workload.
