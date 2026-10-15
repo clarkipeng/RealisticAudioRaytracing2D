@@ -1,5 +1,135 @@
 # Cleanup validation and measured bottlenecks
 
+## Efficiency and parallelism: estimated gains — 2026-10-14
+
+**Recommendation:** profile grouping, source resampling/FFTs and output summation separately, then replace the hottest serial stage. Treat filter compaction as a memory project. Keep BLAS/TLAS and overlapping batch ownership behind measurements that justify their larger implementation cost. All proposals use the current C#/HLSL renderer and preserve its acoustic budgets.
+
+**Baseline and confidence.** This report audits `942db6a` on Unity 6000.4.1f1 / Apple M5 / Metal. It adds no runtime implementation and runs no new performance benchmark. Numbers marked measured come from the completed capture/replay tests below. Stage speedups and time shares are explicit planning assumptions, not measured gains or statistical confidence intervals. A candidate can produce no improvement or regress; the positive ranges describe the stated scenarios only.
+
+**What we actually know**
+
+| Measured item | Result | What it establishes |
+|---|---|---|
+| Matching station offline rerender | 485,101 mono frames, 474 responses, 5.064 s wall time in one run | A concrete reference workload, not a repeatable timing distribution. Full scene, six registered sources, one listener, 564 primitives. |
+| Numeric allocation in that offline run | 552.27 MB, including 353.35 MB of material filters | Filter storage is about 64% of reported numeric memory. This excludes Unity/driver/process overhead. MB means decimal megabytes. |
+| Filter occupancy | 743 peak groups / 21,546 reserved rows per bank | 3.45% peak occupancy in that capture. The failed three-player host reached 1,114 groups, so 743 is not a safe capacity. |
+| GPU work counters for the station rerender | 1,200,503 source FFTs; 172,985 material-filter builds; 60 PCM readbacks | Source FFT work must be profiled too. Counts are not durations and filter builds contain multiple transforms. |
+| Live request-to-PCM-callback latency | Mean 18.14 ms, maximum 99.33 ms over 429 requests in the clean solo capture | Includes queued GPU work, transfer and callback scheduling. It does not isolate transfer cost or a kernel. |
+| Completion-to-consumption delay | Maximum 1.59 ms solo; 2.24/2.27 ms in two-player snapshots | CPU consumption delay was small in these successful runs. Readback overlap cannot automatically reclaim the entire request duration. |
+| Realtime validation | Solo and two players pass; three simultaneous renderers on this Mac fail | There is a contention/scaling problem. These tests do not establish how three independent computers would perform. |
+| Unity capabilities queried in the running editor | `supportsAsyncGPUReadback=true`, `supportsAsyncCompute=false` | A separate Unity async compute queue is unavailable on this tested backend. |
+
+The capability distinction is documented by [Unity](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/SystemInfo-supportsAsyncCompute.html). Hardware ray-tracing or async-compute support through another native API would be a separate backend project.
+
+**How to interpret the gain estimates**
+
+Let `f` be the fraction of the original critical-path render time affected by a change and `s` its stage speedup:
+
+```text
+new time / old time = (1 - f) + f / s
+whole-render time saved = f * (1 - 1/s)
+whole-render speedup = 1 / ((1 - f) + f/s)
+```
+
+For example, making a stage 3× faster when it occupies 15% of total time saves 10% of total time: 1.11× whole-render throughput. A 5× kernel speedup is not a 5× renderer speedup. Fractions must describe non-overlapping critical-path work; cumulative readback timers cannot supply them.
+
+| Proposal | Explicit estimate assumptions | Conditional whole-render gain | Code/validation cost |
+|---|---|---|---|
+| Parallel grouping | Grouping occupies 10–20% of time; its replacement is 2–5× faster | **5–16% less time** / 1.05–1.19× throughput | Medium–high: grouping/order changes in the audio shader and dispatch setup. |
+| Parallel path summation | Summation occupies 10–30%; tiled reduction is 2–4× faster | **5–22.5% less time** / 1.05–1.29× throughput | Medium: partial-sum scratch, an extra pass and reduction parity checks. |
+| Per-pair filter reuse | Grouping/filter preparation occupies 10–25%; 50–90% of that work is unaffected by each update | **5–22.5% less time** in that workload; potentially near zero during widespread geometry changes | Medium–high: per-pair bank ownership and invalidation rules. |
+| Overlap PCM delivery with later submissions | 0–10% of the critical path is an avoidable submission/completion gap | **0–10% less time** if those gaps are removed; no gain when compute/graphics/unknown future input dominates | High: multiple in-flight buffer lifetimes across scheduler, transport and DSP. |
+| Compact filter storage | Use rows for observed groups rather than every possible arrival slot | **94.8–96.6% less filter-row storage in the arithmetic examples below**; total render-time gain unknown | High for a live allocator; a permanent-pair exclusion is smaller and saves less. |
+| BLAS/TLAS | Traversal is 5–15% of time in a small-scene scenario and improves 2–5× | **2.5–12% less time** before update overhead. If traversal dominates at 50%, the same stage gains imply 25–40% less time | High: hierarchy construction, local-space queries, transforms and CPU/GPU geometry parity. |
+
+These ranges must not be summed or multiplied together. They share costs and change each other's workload. As an illustrative combined model only: grouping 10%, summation 20%, filter preparation 15%, all other work 55%; 3× grouping, 3× summation and half the filter work give `0.10/3 + 0.20/3 + 0.15/2 + 0.55 = 0.725`. That is **27.5% less time / 1.38× throughput**, about 3.67 s instead of 5.06 s for a workload with exactly those shares. Those shares have not been measured in this station run.
+
+**1. Parallel grouping**
+
+Current: [`AudioGroups`](../Assets/Resources/Acoustics/GpuAudio.compute) uses one GPU thread per source/listener pair to clear its hash table and scan its raw arrival slots. `AudioFilter` also accumulates a group's frequency members on a single thread before its parallel FFT. A client with one listener and a few sources exposes little parallelism in these parts.
+
+Candidate: compact valid arrivals cooperatively, group equal keys, and construct frequency contributions with parallel work. Preserve the existing key: delay, direction, delay rate and, in Spectral mode, path identity. This changes execution, not which rays are considered equivalent. Start with a localized prototype; use its measured cost to decide between cooperative hashing and sorting.
+
+The 2–5× stage target is an engineering hypothesis for sufficiently large input lists, not a consequence of using 256 threads. Synchronization, collision handling, sorting and small dispatches can erase the gain. Stable group IDs/order and controlled summation are necessary; unordered floating-point atomics can create nondeterministic training targets. CPU/GPU checks must exercise collisions, sparse/empty groups and multiple bins contributing to one filter.
+
+**2. Parallel output summation**
+
+Current: each frequency-bin lane in `AudioSum` walks every contributing group. For the small-FFT path, one GPU workgroup owns the complete listener/ear output transform. Parallelism across bins already exists; parallelism across the path dimension is limited.
+
+Candidate: split groups into tiles, compute partial spectra in parallel, reduce those partials, then use the existing IFFT and overlap-save output. Start in the existing shader and `GpuAudio.cs`; a new runtime subsystem is unnecessary.
+
+Cost: one extra pass and scratch proportional to `listeners * ears * tiles * spectrumBins * partialValueBytes`. For illustration, 12 tiles, 1,025 bins and a 16-byte value holding both head endpoints need about **0.20 MB per ear/listener**; the tile size is a tuning parameter, not a path cap. Smaller workloads may lose to dispatch overhead. Summation order changes rounding, so require repeatability plus existing waveform tolerances, rather than claiming universal bit identity with the previous serial sum. Preserve separate head endpoints, previous/current response semantics, and all arrival phase/Doppler information.
+
+**3. Reuse filters per pair**
+
+Current: acoustic change detection uses one global flag. Any changed arrival can switch the acoustic bank and cause filter reconstruction for other pairs. Head-only filter reuse and exact old/current zero-rate source-FFT reuse already exist; do not count them as new savings.
+
+Candidate: retain material spectra for unchanged pairs and rebuild changed pairs. Initially, continue tracing and compare each pair's actual arrivals. Skipping tracing is a separate optimization requiring a complete dependency check. Source/listener motion includes velocity/activity; geometry or material changes can affect distant pairs. Head rotation is independent only when it does not also move geometry or change directivity.
+
+Example: four pairs with equally expensive filters, one changed pair, and filter preparation taking 20% of total time imply `20% * 3/4 = 15%` less total time. Four reserved slots are not four equally expensive active pairs. The moving train may change most useful paths, making savings small.
+
+Cost: the two global acoustic banks need per-pair ownership/references through response fades. A changed flag alone is insufficient. Test an unchanged pair while another changes, overlapping fades, cuts, mute/unmute and a source stopping with a still-audible tail.
+
+**4. Overlap submissions and PCM delivery**
+
+Current: [`GpuAudio`](../Assets/Scripts/Simulation/GpuAudio.cs) and [`TakeRender.Live`](../Assets/Scripts/Simulation/TakeRender.Live.cs) own one in-flight audio batch. The next source upload/submission waits until the previous readback is consumed. Offline already batches multiple responses into one PCM readback; that optimization is shipped.
+
+Candidate: retain a small number of explicitly owned batch slots so batch N+1 can be submitted while N's output awaits CPU delivery. Preserve GPU order for streaming DSP state; do not run dependent response-bank mutations concurrently. Live submits available work immediately, without waiting to fill a larger batch or increasing the configured playback lead.
+
+The output PCM storage itself is small: another 16,384-frame mono slot is 65,536 bytes before staging/metadata. The complexity is protecting source-ring ranges, pose slots, transport outputs and completion order. Existing source uploads use unsynchronized mapped writes: [Unity's SubUpdates contract](https://docs.unity3d.com/jp/current/ScriptReference/ComputeBufferMode.SubUpdates.html) requires us to prevent writes into ranges still being read by the GPU. The old single-readback lifetime rule must be replaced explicitly.
+
+Measured completed-PCM consumption delays are only about 1.6–2.3 ms maximum in the successful runs. This weakens the case for a large speedup from callback overlap alone. The three-renderer failure may involve work already queued on the GPU or graphics presentation, which output double buffering cannot remove. Reject this larger change if a trace does not show useful submission gaps.
+
+**5. Reduce filter storage**
+
+Current allocation is `2 * reservedGroups * spectrumBins * 8 bytes`. At 21,546 rows per bank and 1,025 complex bins, that is **353,354,400 bytes**. Both response banks are included.
+
+| Row-storage scenario | Filter bytes | Saving against current filter allocation |
+|---|---:|---:|
+| Current dense allocation | 353.35 MB | — |
+| Hypothetical 743-row capacity per bank | 12.19 MB | 96.55% |
+| Hypothetical 1,114-row capacity per bank | 18.27 MB | 94.83% |
+| Smaller initial change: omit the one permanently self-muted pair out of six | 294.46 MB | 16.67%, or 58.89 MB |
+
+The first two reduced capacities demonstrate waste; **they are not proposed hardcoded limits**. A real pool needs headroom, metadata, fragmentation allowance and retention of referenced old/current filters. A Unity GPU buffer cannot resize itself. Offline can count, grow and retry before accepting output; live needs provisioned capacity and an explicit overflow policy, with no silently dropped paths. Inactive remote slots may activate later, and finished sources can retain audible tails.
+
+For the matching offline run's 552.27 MB numeric allocation, replacing only the filter array with the 743-row arithmetic case would produce **211.10 MB, 61.78% less numeric memory**, before pool overhead. This is not a forecast of process RAM reduction. Removing one permanently excluded pair is a smaller first step with a directly calculable benefit; preserve stable source/listener IDs through an internal storage map. Other consumers can still require that source's audio.
+
+Smaller memory can reduce pressure and improve scalability, but currently unused rows are not all processed every hop. A 95% filter-memory reduction therefore does not imply 95% less compute or faster PCM delivery.
+
+**6. BLAS/TLAS for moving geometry**
+
+Current: [`DirectBvh`](../Assets/Scripts/Simulation/DirectBvh.cs) keeps static primitives in a world-space tree. Once an object moves, its primitives remain in a linear-test list. The GPU geometry code follows this static/dynamic split.
+
+Candidate: a BLAS stores each rigid acoustic mesh's local primitives; a TLAS stores instance bounds/transforms. Object movement updates its top-level bounds while its local hierarchy remains reusable. Refit is cheap but can degrade traversal quality after large rearrangements, so rebuilding must remain an option. Deforming geometry needs a different BLAS update path. This structure can be implemented in portable HLSL; adopting DXR/Metal hardware traversal would be a separate decision. [NVIDIA's refit example](https://developer.nvidia.com/rtx/raytracing/dxr/dx12-raytracing-tutorial/extra/dxr_tutorial_extra_refit) illustrates the two-level update distinction, not an expected speedup on this Mac.
+
+The 2–5× traversal scenario is most plausible when many detailed moving objects currently require linear primitive tests. The present 564-primitive station may gain little or regress after bounds updates and extra traversal overhead. Benchmark geometry-heavy scenes before this rewrite. Every relevant visibility, nearest-hit and medium query must retain consistent geometry/material IDs, transforms and surface velocity for Doppler; accelerating only the diagnostic direct ray does not accelerate the full renderer.
+
+**Sharing and parallel offline generation**
+
+One renderer already shares scene tables and uploads dry samples once per source. Keep those shared across all listeners; use multiple recorded listeners in a batch when memory permits. Independent takes can run on separate GPUs. Several full Unity processes competing for one GPU duplicate allocations and graphics work; their count is not a useful proxy for a single batched offline renderer's listener capacity.
+
+Extra source-FFT reuse is legal only for identical source sample windows, Doppler mappings, time anchors and interpolation rules. Nearby delays or equal positions are insufficient. Entire rays cannot automatically be shared across listeners either: current edge sampling depends on the listener, and each endpoint needs its own visibility and arrival calculation. Reusing listener-independent path prefixes would change the estimator/work layout and deserves a separate correctness study. Arbitrary time chunks need source/DSP history or declared warmup; consecutive streaming samples are not independent jobs.
+
+**Latency and the smallest next steps**
+
+| Playback lead at 44.1 kHz | Queue contribution | Reduction from current lead |
+|---|---:|---:|
+| 16,384 frames, current | 371.52 ms | — |
+| 8,192 frames, candidate | 185.76 ms | 185.76 ms |
+| 4,096 frames, candidate | 92.88 ms | 278.64 ms |
+
+These are arithmetic queue delays, not total mouth-to-ear measurements. Network presentation, source/device buffering, DSP latency and physical path travel remain separate. The smaller leads failed earlier revisions; the latest clock/startup changes need a fresh controlled sweep before changing the default. Lowering a lead has no inherent compute saving and can expose more deadline misses.
+
+1. Reuse existing GPU stage markers to separate grouping, filter construction, source resampling/FFT, summation/IFFT and transport. Correlate submission, callback, publication and device consumption; report unavailable stage timing honestly. Recheck 16K/8K/4K lead at identical quality after warmup, including the first sound and stop/tail.
+2. Prototype the larger measured serial stage: grouping or summation. Change one at a time and compare warmed repeated offline renders plus normal-graphics device deadlines. Keep only a gain larger than the observed run-to-run noise.
+3. Add per-pair filter reuse if actual unaffected-pair work is substantial. Consider permanent-pair storage exclusion as the smaller memory change.
+4. Undertake a compact allocator or multiple in-flight batch ownership only when memory pressure or exposed submission gaps justify them. Add BLAS/TLAS when moving-geometry traversal is material.
+
+For each candidate, retain ray/bounce/FFT budgets and seeds; compare waveform/phase behavior, moving-head Doppler, fades, cuts and full tails using existing independent CPU/GPU checks. Add one focused regression for the changed invariant. Measure median and tail delivery times, memory, and callback misses separately. Repeat same-Mac contention and eventually independent-computer voice; do not call a faster offline export a latency fix. No percentage in this report establishes readiness of the experimental indirect renderer as a physical training teacher.
+
+Evidence: source at `942db6a`; `.context/audio-fixes/warmed/live-result.json`, `live-mono.json`, `waveform.json`; `.context/voice-sync/lan-audio-fixes-final-*` and `lan-3-audio-fixes-*`; `.context/audio-fixes/ComputeSupport.cs`. Successful player JSON producer snapshots precede stop; the prior validation section also checked saved post-drain `live.json`. Raw artifacts are local/ignored. The measured results and estimate assumptions above remain in Git.
+
 ## Motion-clock and playback-boundary fixes — 2026-10-14
 
 The fixes use the existing scene session, GPU producer and output ring. There are no new runtime files, dependencies, quality presets or smoothing filters; runtime scripts grow by 54 net lines. Scene fixed steps now advance from the capture's audio clock; captured poses and clip events use the last completed simulation tick's sample index. Network pose snapshots use that same pose time; microphone/voice samples retain their own measured source-clock mapping. A new capture resets the mapping at the current tick. Walking continues while a saved recording's acoustic tail drains. Deterministic test controls use the existing session directly instead of a separate FixedUpdate helper.
