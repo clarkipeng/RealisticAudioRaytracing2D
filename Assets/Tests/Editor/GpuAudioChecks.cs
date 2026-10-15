@@ -313,4 +313,31 @@ public partial class TakeChecks
         Assert.That(error,Is.LessThan(2e-5));
     }
 
+    [TestCase(128),TestCase(2048),Category("GPU")]
+    public void UnchangedPairsRetainFiltersDuringOtherPairsFades(int size)
+    {
+        RequireGpu();const int rate=8192;var scene=Scene(2);var state=States(2);scene.listeners=new[]{1};
+        scene.sources=new[]{scene.sources[0],new AcousticTake.SourceDefinition{objectIndex=2,clipIndex=0}};
+        var settings=SpectralSettings();settings.fftSize=size;settings.spectralHop=size/4;
+        settings.responseStepSamples=size;settings.transitionSamples=size/2;settings.raysPerBin=1;settings.maxBounces=1;
+        var clip=new float[257];for(int i=0;i<clip.Length;i++)clip[i]=Mathf.Sin(i*.37f)*.2f;
+        var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
+        var signals=new[]{signal,signal};var paths=new RayTransport.Path[2*settings.SpectralSlotsPerPair];
+        paths[0]=new RayTransport.Path{frequencyBin=4,pressureGain=1,direction=new Vector4(1,0,0,0)};
+        using var arrivals=new ComputeBuffer(paths.Length,32);using var gpu=new GpuAudio(scene,rate,settings,signals);
+        var cpu=new TakeRender.Mixer(scene,rate,settings,signals);var actual=new float[size];var expected=new float[size];
+        double error=0,energy=0;
+        for(int frame=0;frame<5;frame++)
+        {
+            paths[settings.SpectralSlotsPerPair]=new RayTransport.Path{frequencyBin=4,pressureGain=1f/(frame+1),direction=new Vector4(0,0,1,.01f)};
+            if(frame==2)state[1].flags&=~AcousticTake.StateFlags.Active;else state[1].flags|=AcousticTake.StateFlags.Active;
+            arrivals.SetData(paths);long sample=frame*(long)size,filters=gpu.Diagnostics.materialFilters;
+            cpu.SetResponse(sample,new TakeRender.DirectPath[2],state,false,paths,0);gpu.SetResponse(sample,false,arrivals,0,scene,state);
+            cpu.Render(sample,size,expected);gpu.Render(sample,size,actual);
+            Assert.That(gpu.Diagnostics.materialFilters-filters,Is.EqualTo(frame==0 || frame==3?2:frame==2?0:1));
+            for(int n=0;n<size;n++){double d=expected[n]-actual[n];error+=d*d;energy+=expected[n]*expected[n];}
+        }
+        Assert.That(energy,Is.GreaterThan(1e-6));Assert.That(Math.Sqrt(error/energy),Is.LessThan(5e-4));
+    }
+
 }

@@ -56,7 +56,8 @@ internal sealed class GpuAudio : IDisposable
             kernels=new[]{reset,compare,commit,groups,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(settings.SpectralSlotsPerPair*2+1);
-            Buffer("AudioMeta",19,4).SetData(new uint[19]);
+            Buffer("AudioMeta",17,4).SetData(new uint[17]);
+            Buffer("AudioPairState",pairs,16).SetData(new uint[pairs*4]);
             Buffer("AudioLast",capacity,32).SetData(new RayTransport.Path[capacity]);
             Buffer("AudioPaths",checked(capacity*2),32);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
             args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
@@ -136,7 +137,7 @@ internal sealed class GpuAudio : IDisposable
         foreach(int k in kernels)commands.SetComputeBufferParam(shader,k,"AudioArrivals",arrivals);
         Set("AudioOffset",offset);Set("AudioChanged",changed);Set("AudioInitialized",initialized?1:0);Set("AudioCut",cut?1:0);Clock("AudioResponseSample",sample);
         commands.BeginSample("Acoustics.GPU.Compare");
-        commands.DispatchCompute(shader,reset,1,1,1);commands.DispatchCompute(shader,compare,(capacity+63)/64,1,1);commands.DispatchCompute(shader,commit,1,1,1);
+        commands.DispatchCompute(shader,reset,(pairs+63)/64,1,1);commands.DispatchCompute(shader,compare,(capacity+63)/64,1,1);commands.DispatchCompute(shader,commit,1,1,1);
         commands.EndSample("Acoustics.GPU.Compare");
         commands.BeginSample("Acoustics.GPU.Group");commands.DispatchCompute(shader,groups,pairs,1,1);commands.EndSample("Acoustics.GPU.Group");
         commands.BeginSample("Acoustics.GPU.Filters");
