@@ -162,7 +162,7 @@ MonoBehaviour:
     minimumDistance: 0.1
     tailSamples: 96000
     transitionSamples: 0
-    delayFilter: 0
+    delayFilter: 1
     listenerOutput: 0
     sincRadius: 16
     maximumDelaySeconds: 2

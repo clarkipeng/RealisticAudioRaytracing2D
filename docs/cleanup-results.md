@@ -1,5 +1,15 @@
 # Cleanup validation and measured bottlenecks
 
+## Windowed-sinc default — 2026-10-16
+
+New settings and all five shipped scenes now select the existing windowed-sinc resampler with radius 16. Linear remains selectable for explicit low-cost comparisons; previously saved render settings retain their recorded choice. No renderer, shader, queue policy or new runtime file is added. The additional declared DSP latency is 16 samples (0.363 ms at 44.1 kHz); the playback queue lead is unchanged. This addresses the artificial resampling sidebands isolated below, not all movement artifacts or the church's unresolved doorway shadowing.
+
+A warmed offline comparison reuses the exact 18-second church walk and three-second tail: one diagnostic tone source, one mono listener, 52 objects / 12,761 triangles, 44.1 kHz, GPU spectral transport/synthesis, FFT 1024/hop 256, response 1024/transition 512, two rays/bin, 32 bounces, diffraction off and batch capacity eight. One warmup per mode is discarded; three measured runs per mode alternate order. On Apple M5/Metal, median whole-render time is **9.116 → 9.687 s (+6.26%)**; ranges are 9.103–9.166 / 9.581–9.837 s. Audio synthesis and its waits account for **3.455 → 3.921 s (+13.47%)** of those times. Numeric working storage differs by just 128 bytes. Repeated output hashes match within each mode; outputs are finite and unclipped, and tails cover sampled response support. This is one-pair offline throughput, not a realtime or multi-voice capacity result.
+
+Validation: **197/197 checks pass** (196 atomic/offline cases and one silent real-callback smoke), including existing CPU/GPU parity cases for both interpolation modes, IR/Spectral and mono/binaural. Two new default-setting regression cases compare approaching/receding 4 kHz tones against the exact constant-velocity source clock, requiring less than 0.1% relative RMS error. Both fail with the old Linear default (2.949% / 2.939%) and pass with sinc. Existing sample-index fixtures that intentionally assume no sinc latency now select Linear explicitly; their assertions are unchanged.
+
+Evidence: `.context/windowed-sinc/benchmark.json`, `summary.json`, retained WAVs and driver, and test XML/logs. Work used one silent batch worker at nice 15 with two job workers, without operating the user's open Editor, mouse or speakers.
+
 ## Analytic artifact isolation — 2026-10-16
 
 The earlier church movement results do not excuse artificial flutter as physical beating. Against independent direct-plus-image-source waveforms, a silent one-wall probe exposes **0.116% relative RMS error at 440 Hz and 2.998% at 4 kHz** for a listener moving parallel to the wall. CPU and GPU agree within 3.69e-7 peak / 3.58e-6 relative RMS, localizing the discrepancy to the shared rendering approximation rather than GPU-only execution. A perpendicular-motion case also reproduces the analytically predicted physical envelope. The fixture uses an ideal rigid plane, zero scattering/absorption/diffraction, one source/listener, one ray/bin, one bounce, 44.1 kHz, FFT 1024/hop 256 and four seconds of motion; it removes stochastic transport from the comparison.

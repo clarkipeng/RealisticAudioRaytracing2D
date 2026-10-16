@@ -250,7 +250,7 @@ public partial class TakeChecks
         }
         using (var take=AcousticTake.Open(Path.Combine(directory,"audio")))
         {
-            var report=TakeRender.RenderDirect(take,new TakeRender.Settings {responseStepSamples=11,speedOfSound=1000,tailSamples=3},Path.Combine(directory,"render"));
+            var report=TakeRender.RenderDirect(take,new TakeRender.Settings {responseStepSamples=11,speedOfSound=1000,tailSamples=3,delayFilter=TakeRender.DelayFilter.Linear},Path.Combine(directory,"render"));
             Check(report.complete,"Completed render manifest.");
             var a=ReadWave(Path.Combine(directory,"render","listener-0.wav"));
             var b=ReadWave(Path.Combine(directory,"render","listener-1.wav"));
@@ -671,7 +671,7 @@ public partial class TakeChecks
         long first=1L<<30;
         var signal=new TakeRender.Signal(new[] {1f,-1f}); signal.SetActive(0,true);
         signal.Append(new AcousticTake.VoiceEvent {sample=first,sourceIndex=0,action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
-        var mixer=new TakeRender.Mixer(Scene(),1024,new TakeRender.Settings(),new[] {signal});
+        var mixer=new TakeRender.Mixer(Scene(),1024,new TakeRender.Settings {delayFilter=TakeRender.DelayFilter.Linear},new[] {signal});
         mixer.SetResponse(first,new[] {new TakeRender.DirectPath {delaySeconds=1f/1024,pressureGain=1}},States());
         var output=new float[4]; mixer.Render(first+2,4,output);
         Check(output[0]==-1 && output[1]==1 && output[2]==-1 && output[3]==1,"Long takes preserve single-sample phase beyond float cursor precision.");
@@ -683,7 +683,7 @@ public partial class TakeChecks
         var output=new float[4];
         var loud=new TakeRender.Signal(new[] {float.MaxValue}); loud.SetActive(0,true);
         loud.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=2,loop=true});
-        var overflow=new TakeRender.Mixer(Scene(),1024,new TakeRender.Settings(),new[] {loud});
+        var overflow=new TakeRender.Mixer(Scene(),1024,new TakeRender.Settings {delayFilter=TakeRender.DelayFilter.Linear},new[] {loud});
         overflow.SetResponse(0,new[] {new TakeRender.DirectPath {pressureGain=1}},States());
         Reject(()=>overflow.Render(0,1,output),"Reject overflowed audio instead of completing a non-finite dataset.");
     }

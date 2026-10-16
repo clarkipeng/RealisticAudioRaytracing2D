@@ -7,7 +7,7 @@ using UnityEngine;
 public partial class TakeChecks
 {
     TakeRender.Settings SpectralSettings() => new TakeRender.Settings {transport=TakeRender.Transport.Raytraced,synthesis=TakeRender.Synthesis.Spectral,audioBackend=TakeRender.AudioBackend.CpuReference,
-        responseStepSamples=128,fftSize=128,spectralHop=32,raysPerBin=4,maxBounces=3,maximumDelaySeconds=.1f,
+        responseStepSamples=128,fftSize=128,spectralHop=32,delayFilter=TakeRender.DelayFilter.Linear,raysPerBin=4,maxBounces=3,maximumDelaySeconds=.1f,
         maximumResponsesPerBatch=4,speedOfSound=8000,minimumDistance=1,airAbsorption=false,diffractionFactor=0,tailSamples=256};
 
     [TestCase(false,false),TestCase(false,true),TestCase(true,false),TestCase(true,true),Category("GPU"),Category("RayDebug")]

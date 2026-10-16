@@ -21,7 +21,7 @@ public static partial class TakeRender
         public float speedOfSound = 343, referenceDistance = 1, minimumDistance = .1f;
         public int tailSamples;
         public int transitionSamples;
-        public DelayFilter delayFilter;
+        public DelayFilter delayFilter=DelayFilter.WindowedSinc;
         [Tooltip("Mono is suitable for speakers. Binaural applies ear filters for headphones.")]
         public ListenerOutput listenerOutput;
         public int ChannelsPerListener => listenerOutput==ListenerOutput.Binaural ? 2:1;
