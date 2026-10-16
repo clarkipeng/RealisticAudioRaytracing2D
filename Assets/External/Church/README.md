@@ -10,6 +10,10 @@ Textures import as ordinary repeating 3D textures (not the project’s default c
 
 The two authored sources play through the existing raytracer. The tower emitter is at the front belfry opening `(0, 52, -4)`, representing radiation out of the tower; it does not model the enclosed bell-to-aperture field. Masonry screens the nave and much of the front courtyard. The east courtyard near `(26, 1, -40)` has a clear path. Speech remains a separate microphone/remote voice source. Keep the dry `Assets/Audio/church_clap.wav` for isolated acoustic diagnostics; the new scene does not automatically play it. Geometry and material coefficients are illustrative and not measured acoustic data.
 
+`Details.fbx` contains original reusable pew, altar, organ, chandelier, window-pane and surrounding-ground meshes made for this scene. `LeadedGlass.png` and `WindowLight.png` are original geometric patterns; `Paving.png` and the wall normal maps derive visual variation from the bundled CC0 stone textures. The normal maps are illustrative relief inferred from texture brightness, not scanned surface measurements. These assets use Unity's existing Standard shader and native lights; there is no new runtime script, shader, post-processing package or lightmap bake. The darker lighting preset uses four candle lights, two window projections and a cool directional light. Flame/glass materials retain their emission keywords after reload.
+
+Pew seat/back collisions use metre-sized boxes on a unit-scale parent, independent of the imported visual node's FBX axis/unit transform. The larger organ has simple wooden housing proxies. Thin closed panes fill selected nave/apse openings and participate in acoustic transport. The surrounding ground has a matching visual/collision/acoustic mesh and joins the courtyard at the same height; its distant edge is hidden by scene fog. Glass/ground acoustic coefficients are illustrative, like the existing stone/wood presets.
+
 Original download SHA-256 hashes:
 
 ```text

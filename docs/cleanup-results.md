@@ -1,5 +1,17 @@
 # Cleanup validation and measured bottlenecks
 
+## Darker cathedral polish — 2026-10-15
+
+Replaced the simple furnishings with one reusable `Details.fbx`: carved pews, a stone altar, a three-tower organ façade, ring chandeliers, selected nave/apse window panes and low-poly surrounding ground. Added original leaded-glass patterns, stone paving, wall normal maps derived from the CC0 textures and scene-specific materials. Four warm candle lights and two cool window projections sit within darker ambient/directional lighting. Native outdoor fog hides the distant ground edge. No new runtime scripts, shaders, packages or lightmap bake; the existing builder grows by seven net lines.
+
+Decorative meshes share simple acoustic/collision proxies. Import scale/axis conversion initially misplaced the new pew boxes; their final unit-scale parent keeps collision dimensions independent of the FBX visual transform. Windows and ground participate in both collision and acoustics, while candles/carving remain visual details. The final scene compiles **52 objects / 12,761 acoustic triangles / six sources / one listener**, retaining four player slots, source clips/gains and the same transport preset. Materials remain illustrative rather than measured acoustic coefficients.
+
+Silent isolated physics checks pass the full nave walk, closed/open entrance doors, walking sideways into a pew (stops at `x=1.70`), and the 600-tick route through the doors and across the courtyard/ground seam (ends at `(48.00, 1.09, -41.47)` with ground support). Reloaded sources remain bound to their clips and manager. Flame/glass emission survives material reload; import settings preserve repeating stone, clamped light cookies and normal-map data.
+
+Four 44.1 kHz mono GPU probes each play two seconds and drain three seconds of tail. Peaks: organ entrance **0.01453**, organ nearby **0.23738**, courtyard bell **0.03185**, screened indoor bell **5.85e-14**. All PCM is finite, below full scale, and the tail covers sampled response support (organ up to **1.65 s**). Single render wall times were **2.568 / 2.585 / 1.228 / 2.540 s** respectively. These static checks do not establish motion-artifact quality, measured RT60, combined-source headroom or realtime multiplayer deadlines; no performance gain is claimed. Full live recording/replay and network tests were not repeated for this visual pass.
+
+Evidence is in `.context/church-polish/`: final screenshots, source-generation scripts, compiled-scene/walking logs, WAVs and waveform/spectrogram measurements. All jobs used one silent headless worker at reduced priority, leaving the user's Editor, mouse and speakers untouched. Previous appearance is checkpointed at `e471c69`; compact-input recordings require their matching scene/build.
+
 ## Imported church and authored audio — 2026-10-15
 
 Replaced the generated church blockout with the CC0 medieval church by Daniel Andersson / AnyRPG. Added textured architecture, pews, altar, organ pipes, courtyard and warm pendant lighting. The existing scene builder now imports editable FBX parts and attaches the existing acoustic surfaces and door actors. Visual geometry is about 48k triangles; repaired, simplified architectural collision meshes plus furniture compile to **47 objects / 11,569 acoustic triangles / six source slots / one listener**. Four multiplayer slots, microphone/remote voices and input recording use the existing session. No new runtime scripts or packages; editor/test code shrinks by 37 lines.

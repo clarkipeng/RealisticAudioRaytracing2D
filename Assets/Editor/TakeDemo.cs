@@ -36,34 +36,36 @@ public static partial class TakeDemo
             }
         }
         UnityEngine.Object.DestroyImmediate(proxy);
-        var wood=Array.Find(model.transform.Find("Bell").GetComponent<Renderer>().sharedMaterials,m=>m.name=="Wood");
-        var stone=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Masonry.mat");
-        var metal=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Steel.mat");
-        string floorPath=assets+"Floor.mat";
-        var floor=AssetDatabase.LoadAssetAtPath<Material>(floorPath);
-        if(floor==null)
+        var details=AssetDatabase.LoadAssetAtPath<GameObject>(assets+"Details.fbx");
+        GameObject Detail(string name,Transform parent,Vector3 position)
         {
-            floor=new Material(Shader.Find("Standard")); floor.mainTexture=AssetDatabase.LoadAssetAtPath<Texture2D>(assets+"Textures/marble.jpg");
-            floor.mainTextureScale=new Vector2(24,36); floor.SetFloat("_Glossiness",.3f); AssetDatabase.CreateAsset(floor,floorPath);
+            var obj=UnityEngine.Object.Instantiate(details.transform.Find(name).gameObject,parent);
+            obj.name=name; obj.transform.localPosition=position; return obj;
         }
+        var floor=AssetDatabase.LoadAssetAtPath<Material>(assets+"Floor.mat");
         StationBox(world,"Stone floor and courtyard",new Vector3(0,.75f,-7),new Vector3(58,.5f,86),floor).GetComponent<AcousticSurface>().material=masonry;
+        foreach(string name in new[]{"Windows","Meadow"})
+        {
+            var obj=Detail(name,world,Vector3.zero); obj.AddComponent<MeshCollider>().sharedMesh=obj.GetComponent<MeshFilter>().sharedMesh;
+            var surface=obj.AddComponent<AcousticSurface>(); surface.geometrySource=AcousticSurface.GeometrySource.Collider;
+            surface.material=name=="Windows" ? ChurchAcoustics("Church glass",2500,.95f,.04f,.025f,.025f):ChurchAcoustics("Church ground",1400,.15f,.35f,.8f,.55f);
+        }
         var furniture=new GameObject("Pews and sanctuary").transform; furniture.SetParent(world,false);
         foreach(float z in new[]{-26f,-22f,-18f,-14f,-10f,-6f}) foreach(float x in new[]{-4f,4f})
         {
+            // Keep metre-sized collision shapes outside the imported mesh's axis/unit transform.
             var pew=new GameObject("Pew").transform; pew.SetParent(furniture,false); pew.localPosition=new Vector3(x,1,z);
-            StationBox(pew,"Seat",new Vector3(0,.48f,0),new Vector3(4,.16f,.65f),wood);
-            StationBox(pew,"Back",new Vector3(0,.95f,-.3f),new Vector3(4,.8f,.14f),wood);
-            foreach(float side in new[]{-1.7f,1.7f}) StationBox(pew,"Support",new Vector3(side,.22f,0),new Vector3(.15f,.44f,.55f),wood,false);
+            Detail("Pew",pew,Vector3.zero);
+            StationProxy(pew,"Seat",new Vector3(0,.48f,0),new Vector3(4,.16f,.65f));
+            StationProxy(pew,"Back",new Vector3(0,.95f,-.3f),new Vector3(4,.8f,.14f));
         }
-        StationBox(furniture,"Altar",new Vector3(0,1.6f,12),new Vector3(4,1.2f,1.4f),stone).GetComponent<AcousticSurface>().material=masonry;
-        StationBox(furniture,"Organ case",new Vector3(0,2,19),new Vector3(6,2,1.5f),wood);
-        for(int i=-5;i<=5;i++)
-        {
-            float height=4-Mathf.Abs(i)*.35f;
-            var pipe=GameObject.CreatePrimitive(PrimitiveType.Cylinder); pipe.name="Organ pipe"; pipe.transform.SetParent(furniture,false);
-            pipe.transform.localPosition=new Vector3(i*.48f,3+height*.5f,19); pipe.transform.localScale=new Vector3(.3f,height*.5f,.3f);
-            pipe.GetComponent<Renderer>().sharedMaterial=metal; UnityEngine.Object.DestroyImmediate(pipe.GetComponent<Collider>());
-        }
+        Detail("Altar",furniture,new Vector3(0,1,12));
+        StationProxy(furniture,"Altar body",new Vector3(0,1.7f,12),new Vector3(4.5f,1.4f,1.65f));
+        furniture.Find("Altar body").GetComponent<AcousticSurface>().material=masonry;
+        Detail("Organ",furniture,new Vector3(0,1,19));
+        StationProxy(furniture,"Organ case",new Vector3(0,2,19),new Vector3(6,2,1.5f));
+        foreach(float x in new[]{-2.1f,0,2.1f})
+            StationProxy(furniture,"Organ tower",new Vector3(x,x==0?5.85f:5.3f,19.42f),new Vector3(1.7f,x==0?5.3f:4.2f,.5f));
         foreach(var surface in furniture.GetComponentsInChildren<AcousticSurface>()) if(surface.material==null) surface.material=timber;
         var host=new GameObject("Acoustic simulation"); var manager=host.AddComponent<RayTraceManager>();
         manager.monitorLive=true; manager.takeRoot=world; manager.takeDimension=AcousticTake.Dimension.Spatial3D;
@@ -90,20 +92,25 @@ public static partial class TakeDemo
         var session=host.AddComponent<SceneSession>(); session.manager=manager; session.player=player; session.actors=doors.ToArray(); session.startSounds=new[]{bell,organ};
         var panel=host.AddComponent<RaytraceControlPanel>(); panel.rayTraceManager=manager; panel.session=session;
         panel.buttonSize=new Vector2(280,32); panel.spacing=6; panel.anchoredPosition=new Vector2(24,-24);
-        var sun=new GameObject("Late afternoon sun").AddComponent<Light>(); sun.type=LightType.Directional;
-        sun.transform.rotation=Quaternion.Euler(35,-55,0); sun.intensity=1; sun.color=new Color(1,.91f,.76f); sun.shadows=LightShadows.Soft;
-        var glow=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Diffuser.mat");
+        var sun=new GameObject("Moonlight").AddComponent<Light>(); sun.type=LightType.Directional;
+        sun.transform.rotation=Quaternion.Euler(25,-70,0); sun.intensity=.18f; sun.color=new Color(.5f,.65f,1); sun.shadows=LightShadows.Soft;
         foreach(float z in new[]{-24f,-12f,0f,12f})
         {
-            StationBox(furniture,"Suspension",new Vector3(0,18,z),new Vector3(.035f,22,.035f),metal,false);
-            StationBox(furniture,"Pendant",new Vector3(0,7,z),new Vector3(.5f,.1f,.5f),metal,false);
-            StationBox(furniture,"Lantern",new Vector3(0,7.3f,z),new Vector3(.25f,.5f,.25f),glow,false);
-            var light=new GameObject("Warm nave light").AddComponent<Light>(); light.transform.SetParent(world,false); light.transform.localPosition=new Vector3(0,6.9f,z);
-            light.type=LightType.Point; light.range=19; light.intensity=2; light.color=new Color(1,.75f,.43f);
+            Detail("Chandelier",furniture,new Vector3(0,6.5f,z));
+            var light=new GameObject("Candlelight").AddComponent<Light>(); light.transform.SetParent(world,false); light.transform.localPosition=new Vector3(0,6.2f,z);
+            light.type=LightType.Point; light.range=12; light.intensity=z==12?2.2f:1.5f; light.color=new Color(1,.72f,.42f);
         }
-        RenderSettings.ambientMode=AmbientMode.Trilight; RenderSettings.ambientSkyColor=new Color(.35f,.4f,.5f);
-        RenderSettings.ambientEquatorColor=new Color(.22f,.24f,.29f); RenderSettings.ambientGroundColor=new Color(.12f,.1f,.08f);
-        RenderSettings.fog=false; RenderSettings.skybox=AssetDatabase.LoadAssetAtPath<Material>(StationAssets+"/Sky.mat");
+        foreach(float z in new[]{-20.32f,-6.04f})
+        {
+            var light=new GameObject("Window light").AddComponent<Light>(); light.transform.SetParent(world,false); light.transform.localPosition=new Vector3(9,9,z);
+            light.transform.LookAt(new Vector3(-1,1,z+4)); light.type=LightType.Spot; light.spotAngle=38; light.range=25; light.intensity=1.4f;
+            light.color=new Color(.36f,.55f,1); light.cookie=AssetDatabase.LoadAssetAtPath<Texture2D>(assets+"Textures/WindowLight.png");
+            light.shadows=LightShadows.Soft; light.shadowResolution=LightShadowResolution.Medium; light.renderMode=LightRenderMode.ForcePixel;
+        }
+        RenderSettings.ambientMode=AmbientMode.Trilight; RenderSettings.ambientSkyColor=new Color(.14f,.17f,.23f);
+        RenderSettings.ambientEquatorColor=new Color(.06f,.08f,.12f); RenderSettings.ambientGroundColor=new Color(.025f,.03f,.04f);
+        RenderSettings.fog=true; RenderSettings.fogMode=FogMode.Linear; RenderSettings.fogStartDistance=90; RenderSettings.fogEndDistance=270; RenderSettings.fogColor=new Color(.055f,.075f,.11f);
+        RenderSettings.skybox=AssetDatabase.LoadAssetAtPath<Material>(assets+"Dusk.mat");
         manager.RegisterTakeObjects(); ConfigureMultiplayer(session);
         EditorSceneManager.SaveScene(scene,"Assets/Scenes/Church.unity"); AssetDatabase.SaveAssets();
         Debug.Log("Church saved. WASD to walk, E for entrance doors, Esc for microphone/multiplayer, R to save.");

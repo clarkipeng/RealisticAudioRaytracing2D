@@ -3,7 +3,17 @@ guid: 2bd2e579be6b54ab1851a34a4589a6ff
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: GreyBrick2
+    second: {fileID: 2100000, guid: 5fab405d26f564fc2bcd6c28fc737858, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Stone
+    second: {fileID: 2100000, guid: 98d5f53efad7b46309dab07f98198c6a, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
