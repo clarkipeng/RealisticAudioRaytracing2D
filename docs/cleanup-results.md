@@ -68,6 +68,63 @@ A small double-precision proposal test, integrating the known half-plane with tr
 
 **Files:** `Transport.hlsl` (`SampleEdge`, `EdgeKernel`, `TracePaths`) and edge preparation in `RayTransport.cs`; reuse `DirectBvh` for candidate culling. Existing `RayTransportChecks` can hold focused regressions. Preserve multi-edge reachability and signed phase. Before enabling Church, pass both mean-error and variance/continuity checks at the intended budget, then render the actual mixed organ/bell/voice gains and measure deadlines. First-order half-plane success does not validate finite-wedge endpoints, impedance materials or multi-edge wave accuracy.
 
+### Literature review and listener-guided sampling — 2026-10-16
+
+**Research/design only.** Keep the current signed finite-edge integral and improve its sampling first. The recommendation to combine BEDRF with A* was premature: they address different problems, and a full combination would require a new estimator. The existing 32-byte arrivals, multi-edge loop, BLAS/TLAS and audio backend can remain the starting point. No production code or scene was changed for this review.
+
+**What the sources establish:**
+
+- [Schissler, Mückl and Calamia, *Fast Diffraction Pathfinding for Dynamic Sound Propagation* (2021)](https://doi.org/10.1145/3450626.3459751): silhouette-edge selection, planar diffraction geometry, an edge-visibility graph, bidirectional exploration, A* for additional higher-order paths, and UTD evaluation. Only the authors' abstract was accessible, including its [ResearchGate record](https://www.researchgate.net/publication/355019890_Fast_diffraction_pathfinding_for_dynamic_sound_propagation); the full ACM/author PDF was unavailable. Exact search costs, heuristic, graph-update rules and benchmark setup remain unverified. Its reported maximum speedup is not an estimate for this renderer.
+- [Cao et al., *BEDRF* (2023), sections 3–7 and supplement](https://arxiv.org/html/2306.01974v1): a reciprocal signed interaction derived for plane waves at ideal wedges. Its directional importance sampler differs from our edge-position sampler. The integrator maps triangle hits onto edges and requires projection densities, visibility geometry, reverse-path bookkeeping and MIS. Section 5.5 explicitly makes outlier suppression biased. Reported auralization uses 12,000 diffraction samples and 36,000 reflection samples per frame; single-thread CPU times are roughly 30–205 ms, not evidence for our low-budget Metal target. Non-planar-wave exactness is unresolved, and creeping waves are unsupported. This is a useful alternative to evaluate later, not an accuracy or performance upgrade established by the paper.
+- [Cao et al., *Interactive Sound Propagation with Bidirectional Path Tracing* (2016)](https://doi.org/10.1145/2980179.2982431), read through the [author-uploaded full text](https://www.researchgate.net/publication/317496717_Bidirectional_sound_transport): source/listener subpaths, balance-heuristic MIS, and variance-driven allocation across arrival times. This is an energy-response method. Its limitations include ideal specular connections and unfavorable source-count scaling in some scenes. Borrow proposal accounting and allocation ideas; do not copy its energy throughput into pressure transport. Its timing table includes substantial connection work, so fewer traced subpaths alone does not establish a faster GPU implementation.
+- [Lawlor and Neumann, *Overwatch: The Elusive Goal; Play by Sound* (GDC 2016), slides 30–39](https://media.gdcvault.com/gdc2016/Presentations/Lawlor_Neumann_Overwatch_Play_by_Sound.pdf): combines ray obstruction and path diversion to control occlusion. These slides support the detour concept, but do not establish a voxel grid or a specific A* implementation. Our proposal below uses connectivity to guide integration, rather than treating that gameplay occlusion measure as acoustic pressure.
+- [Antani et al., *Fast Geometric Sound Propagation with Finite-Edge Diffraction*](https://gamma-web.iacs.umd.edu/BTM/FromRegion.pdf): conservative region visibility reduces candidate edge pairs while retaining a finite-edge BTM model. This is a closer model match to our current code. A midpoint visibility test is not an equivalent conservative test for a whole finite edge.
+
+**Mapping to the code.** `Transport.hlsl:EdgeKernel` already evaluates a signed rigid-wedge secondary-source term; `SampleEdge` samples edge IDs and longitudinal positions, and `TracePaths` supports successive edge events. `RayTransport.cs:Edges` already compiles sorted physical edges, wedge frames and primitive adjacency. This is not BEDRF, full bidirectional tracing, or an edge-visibility graph. The current material-opacity multiplier remains an approximation, and passing the existing two-bend reachability test does not validate multi-edge amplitudes. Preserve these distinctions when naming training references.
+
+The smallest useful graph experiment is a **listener-distance guide for edge selection**, with the edge integral unchanged during the first comparison:
+
+1. Build a coarse grid of acoustic free space from the scene's acoustic geometry. A 2D grid is enough for the initial corridor fixture; 3D requires air connectivity through openings and above obstacles. Character walkability is unsuitable: sound can pass through windows, over walls and through gaps too small for a player. Grid spacing is a measured quality/cost parameter, not a new fidelity claim.
+2. Compute approximate distance-to-listener with a reverse Dijkstra search over nonnegative grid-link lengths. This supplies many source/vertex queries from one field; a separate A* per ray would repeat the search. For very few queries, a local A* may cost less than building the whole field. Reuse static topology; invalidate affected guidance on geometry changes. Head rotation alone does not change a distance-only field.
+3. Associate guide openings/boundaries with actual compiled edge IDs. At a path vertex, score candidate edges by estimated coupling and remaining detour distance. A minimal ablation can rank by inverse estimated total route length; it is a proposal score, not a diffraction coefficient. Keep candidates on competing routes. Grid corners cannot become diffraction events, and actual legs remain straight between physical interactions.
+4. Normalize those scores into an edge-selection probability and mix it with the existing globally supported edge proposal. Retain the current conditional position sampler initially so the effect of route guidance can be measured separately. Evaluate actual visibility, material response, signed kernel, travel delay and direction with the real geometry.
+
+```text
+on guide update:
+    distanceToListener = reverseShortestPaths(acousticGrid, listener.position)
+    publish an immutable guide version for the transport batch
+
+when the existing loop samples an edge:
+    guided = normalizedScores(candidatePhysicalEdges(vertex, distanceToListener))
+    pEdge = (1 - exploration) * guided + exploration * globalEdgeProbability
+    edge = sample(pEdge)                         // 0 < exploration < 1
+    point, pPosition = samplePosition(edge)      // current position proposal first
+    p = pEdgeEvent * pEdge(edge) * pPosition
+    contribution = signedPhysicalContribution(edge, point) / p
+    accumulateWithExistingSampleNormalization(contribution)
+    continueThroughExistingSurfaceAndEdgeLoop()
+```
+
+If the guide is empty, use the global proposal with its actual probability. All overlapping proposal components count in `pEdge`, irrespective of which component generated the sample. Repeated candidate IDs must not accidentally multiply their probability. This normalization preserves the target edge integral under valid sampling; it does not establish the correctness of the current mixed reflection/material model. Deterministic edge integration, if introduced later, needs an explicit partition or residual estimator so the sampled branch does not count that contribution again.
+
+**Continuity and sharing.** Reuse the geometry guide across sources and frequency bins for the same listener. Offline listeners share topology and have separate distance fields. Blend proposal distributions across guide updates and preserve stable sample dimensions; recompute each contribution and its PDF from the same guide version. Reuse proposals, not stale pressure or phase. An imperfect or stale guide may waste work, but real geometry checks and global sampling support prevent it from authorizing a nonexistent path or permanently deleting an alternative from the sampled domain. This does not guarantee low variance after a topology change. Keep transmission sampling outside an air-connectivity-only restriction. Reconstruct guide state deterministically from initialization during replay; no new take payload is required for this experiment.
+
+**Where cost moves.** The guide adds grid construction, shortest-path updates, edge associations and GPU upload/storage. Do that outside the per-ray/per-frequency loop. Sampling must use a local candidate list, not scan every scene edge at every vertex. For scale only, a 100×100×20 m grid contains 200,000 cells at 1 m spacing and 1.6 million at 0.5 m; a float distance field alone occupies 0.8/6.4 MB per listener, before occupancy, associations or search storage. A sparse edge/portal graph could reduce empty-space work but adds graph construction and visibility maintenance. Prototype one guide representation, not multiple interchangeable frameworks. Reuse existing BVH queries, but do not treat BVH containment as acoustic connectivity.
+
+**Why guidance is only part of the fix.** The existing one-interaction half-plane test still flips a 50/50 surface-versus-edge coin. With two independent trials, that alone gives a 25% chance of attempting no edge, even with perfect conditional edge selection. The recorded GPU result was worse: 11/16 dispersed seeds returned zero at two rays/bin. Stratifying event types or using a separately accounted edge connection can remove that particular coin-flip failure. Guidance then addresses wasted routes; resolving the near-boundary edge integral addresses extreme weights; the response-time repair above addresses motion-phase errors. None substitutes for the others. This probability calculation is not a new benchmark.
+
+**Atomic experiment and decision gate:**
+
+| Comparison | What it establishes |
+|---|---|
+| Current edge proposal vs guided proposal, with identical edge kernel and position sampler | Whether routing guidance reduces rejected paths and complex-response error at equal total time, including guide updates |
+| Same proposals near a rigid half-plane boundary, with dispersed seeds | Whether mean, variance, zero-result rate and tails improve; a single known edge isolates the remaining integration problem |
+| Two alternative openings; move listener through equal-route and cell boundaries; move/close a door | Whether guidance retains both routes, refreshes correctly and avoids added discontinuities |
+| Two bends and one mirror-plus-edge fixture, compared with independent references | Multi-edge accuracy and the separate ideal-specular connection gap; nonzero output alone is insufficient |
+| Saved church walk, then timestamped multiple sources | Whole-render time, synthesis/storage cost, waveform residuals and silent callback deadlines |
+
+Use the existing offline fixtures and muted capture path, one low-priority worker. Compare at equal wall time as well as ray count; count guide construction/update time and bytes. Report absolute complex error near cancellation nulls rather than dividing by a vanishing reference. Do not enlarge the production test suite until the prototype answers whether the guide pays for itself. Changes would primarily touch `RayTransport.cs`, `Transport.hlsl` and the existing `RayTransportChecks`; whether grid preparation merits one small helper depends on the prototype. No measured speedup or line-count estimate is justified yet.
+
 ### 3. Repair reflection sampling and its physical contract
 
 There are two distinct problems:
