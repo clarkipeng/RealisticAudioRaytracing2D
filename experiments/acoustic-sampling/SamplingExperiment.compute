@@ -1,0 +1,102 @@
+#pragma kernel Connections
+#pragma kernel Enumerate
+#pragma kernel Estimate
+#define USE_BVH
+#include "Geometry.hlsl"
+#include "Transport.hlsl"
+
+// Research fixture: two real finite-edge events, with discrete Gauss quadrature.
+// All strategies integrate the same signed response; proposals never bend rays.
+struct SampleNode { float4 pointWeight; uint4 ids; };
+StructuredBuffer<SampleNode> SampleNodes;
+StructuredBuffer<float2> ForwardProposal, ReverseProposal; // probability, inclusive CDF
+RWStructuredBuffer<float> ConnectionLengths;
+RWStructuredBuffer<float2> ExperimentOutput;
+float3 ExperimentSource, ExperimentListener;
+float ExperimentFrequency;
+uint NodeCount, SampleCount, TrialCount, Strategy, SeedOffset;
+
+float3 GraphPoint(uint i)
+{
+    return i < NodeCount ? SampleNodes[i].pointWeight.xyz :
+        (i == NodeCount ? ExperimentSource : ExperimentListener);
+}
+
+[numthreads(64, 1, 1)]
+void Connections(uint id : SV_DispatchThreadID)
+{
+    uint count = NodeCount + 2;
+    if (id >= count * count) return;
+    float3 a = GraphPoint(id / count), b = GraphPoint(id % count);
+    float d = length(b - a);
+    ConnectionLengths[id] = d > RayEpsilon && Visible(0, a, b, false) ? d : -1;
+}
+
+float2 Contribution(uint first, uint second)
+{
+    SampleNode a = SampleNodes[first], b = SampleNodes[second];
+    if (a.ids.x == b.ids.x) return 0;
+    float3 x = a.pointWeight.xyz, y = b.pointWeight.xyz;
+    if (!Visible(0, ExperimentSource, x, false) || !Visible(0, x, y, false) ||
+        !Visible(0, y, ExperimentListener, false)) return 0;
+    float r0 = length(x - ExperimentSource), r1 = length(y - x), r2 = length(ExperimentListener - y);
+    if (min(r0, min(r1, r2)) <= RayEpsilon) return 0;
+    float pressure = EdgeKernel(a.ids.x, 0, ExperimentSource, x, y, false) *
+        EdgeKernel(b.ids.x, 0, x, y, ExperimentListener, false) *
+        a.pointWeight.w * b.pointWeight.w / (r0 * r1 * r2);
+    float phase = 2 * RayPi * ExperimentFrequency * (r0 + r1 + r2) / 343;
+    float s, c; sincos(phase, s, c);
+    return pressure * float2(c, -s);
+}
+
+[numthreads(64, 1, 1)]
+void Enumerate(uint id : SV_DispatchThreadID)
+{
+    if (id < NodeCount * NodeCount)
+        ExperimentOutput[id] = Contribution(id / NodeCount, id % NodeCount);
+}
+
+uint Choose(bool reverse, uint row, inout uint rng)
+{
+    float u = RandomRay(rng);
+    uint lo = 0, hi = NodeCount - 1;
+    while (lo < hi)
+    {
+        uint middle = (lo + hi) / 2, offset = row * NodeCount + middle;
+        float cdf = reverse ? ReverseProposal[offset].y : ForwardProposal[offset].y;
+        if (u < cdf) hi = middle; else lo = middle + 1;
+    }
+    return lo;
+}
+
+groupshared float2 Sum[64];
+[numthreads(64, 1, 1)]
+void Estimate(uint id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint group : SV_GroupID)
+{
+    uint trial = id / SampleCount, sample = id % SampleCount;
+    float2 result = 0;
+    if (trial < TrialCount)
+    {
+        uint rng = HashRay(sample + (trial + SeedOffset + 1) * 104729u);
+        uint method = Strategy == 3 ? min(2u, (uint)(3 * RandomRay(rng))) : Strategy;
+        uint first, second;
+        if (method == 0) { first = Choose(false, 0, rng); second = Choose(false, first + 1, rng); }
+        else if (method == 1) { second = Choose(true, 0, rng); first = Choose(true, second + 1, rng); }
+        else { first = Choose(false, 0, rng); second = Choose(true, 0, rng); }
+        float sourceP = ForwardProposal[first].x, listenerP = ReverseProposal[second].x;
+        float forwardP = sourceP * ForwardProposal[(first + 1) * NodeCount + second].x;
+        float reverseP = listenerP * ReverseProposal[(second + 1) * NodeCount + first].x;
+        float joinP = sourceP * listenerP;
+        float p = Strategy == 0 ? forwardP : Strategy == 1 ? reverseP : Strategy == 2 ? joinP :
+            (forwardP + reverseP + joinP) / 3;
+        result = Contribution(first, second) / (p * SampleCount);
+    }
+    Sum[lane] = result;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32; stride > 0; stride >>= 1)
+    {
+        if (lane < stride) Sum[lane] += Sum[lane + stride];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane == 0) ExperimentOutput[group] = Sum[0];
+}

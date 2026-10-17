@@ -1,0 +1,32 @@
+{
+  "checkpoint": "435a18c",
+  "platform": [
+    "Apple M5",
+    "Unity 6000.4.1f1"
+  ],
+  "command_test": "TakeChecks.CompareEdgeSampling",
+  "result": "Passed",
+  "duration_seconds": 1.06743,
+  "metric_rows": 288,
+  "individual_estimates": 9216,
+  "assertions": [
+    "positive CDF probability for every node",
+    "direct fixture connection blocked",
+    "finite enumerated and estimated responses",
+    "path reciprocity on non-coplanar fixtures",
+    "GPU estimator mean within six standard errors of enumerated response"
+  ],
+  "runtime_source_sha256": {
+    "Assets/Shaders/Geometry.hlsl": "7fd780da4363794cd3dee803c253417c0842772b9bbc7b9b9d8fc7e5c06fd218",
+    "Assets/Shaders/Transport.hlsl": "846bd96e7a9e602b795c7acd172645fd16d5e973313628cd8d86ac03e6f48012",
+    "Assets/Scripts/Simulation/RayTransport.cs": "5ddd7a60e599934d3cd06bb61de06cc6eb9b53eed37d0b99190b06b8e78f2085",
+    "Assets/Scripts/Simulation/TransportSolver.cs": "6a076894e1b6adfd5595ec6debb9cc10b1ee9dc4fd9da8f8c8c814aa0459c28b"
+  },
+  "scope": "Two rigid static 3D fixtures; two-edge quadrature target, one pair; not full renderer or production sampler comparison; no multi-pair reuse.",
+  "known_failure": "Equal-height coplanar geometry fails path reciprocity; retained through ACOUSTIC_SAMPLING_COPLANAR=1. No visibility fix or runtime algorithm changes.",
+  "coplanar_reproduction": {
+    "expected_result": "Failed",
+    "actual_result": "Failed",
+    "assertion": "Rigid two-edge target must be reciprocal.\n  Expected: less than 0.002d\n  But was:  0.0062011514839954863d"
+  }
+}
