@@ -1,5 +1,98 @@
 # Cleanup validation and measured bottlenecks
 
+## Remaining artifacts: measured causes and repair plan — 2026-10-16
+
+**Investigation only; production remains `5a957e3`.** The next change should repair response timing, then diffraction sampling. No new renderer, scene preset, runtime dependency or production test was added in this pass. The numerical experiments below identify implementation work; they do not claim that these repairs have shipped. Existing BLAS/TLAS, GPU synthesis, continuous source clocks, sinc interpolation, muted callback capture and recording formats remain the foundation.
+
+### Why the church has diffraction disabled
+
+The October 15 generated-church sweep reached a WAV peak of 1.653 with eight rays/bin. `TakeDemo.BuildChurch` therefore explicitly sets `diffractionFactor=0`, and the saved Church scene retains that override. It is not a global removal of diffraction. Clipping by itself was insufficient evidence for disabling a physical effect: source gain, estimator variance and incorrect physics must be distinguished.
+
+Reinspection of the retained transport data localizes the outlier: one first-edge quadrature contribution has pressure weight **-3.6259**, versus **0.04080** for the direct arrival. At sixteen rays its weight halves to **-1.8130**, as expected from Monte Carlo normalization; the unusually large sample remains. These are signed estimator weights, not an individual physical ray's energy. This explains why merely lowering master gain or increasing rays modestly does not repair the underlying sampling problem. The historical fixture is the generated church, not the subsequently imported cathedral.
+
+Fresh GPU probes use the existing rigid half-plane fixture, 250 Hz, one allowed interaction, a 0.1-second horizon, and sixteen dispersed seeds (`index * 104729`). The receiver is at y = -1.005 m, 5 mm below the shadow-boundary y coordinate. The independent complex reference magnitude is 0.128735. The existing high-budget regression uses 65,536 rays/bin; it does not establish usable quality at the church's two rays/bin.
+
+| Rays/bin | Seeds with zero received field | Relative complex RMS error across seeds | Received magnitude range |
+|---|---:|---:|---:|
+| 2 | 11/16 | 255.5% | 0–1.18769 |
+| 8 | 5/16 | 127.3% | 0–0.41395 |
+| 32 | 0/16 | 70.9% | 0.03984–0.33880 |
+| 256 | 0/16 | 25.5% | 0.08341–0.20256 |
+
+These are numerical errors against a rigid-screen reference, not listening scores or general room accuracy. The initial contiguous-seed probe reused overlapping ray-index ranges; the reported sweep uses dispersed seeds. Both raw runs are retained.
+
+The current imported-church geometry also fails to gain reliable shadow coverage from simply enabling the flag. At 13.95 seconds of the saved walk, six of eight dispersed seeds with two rays/bin retain only the approximately 2.39e-10 straight transmitted contribution. At 32 rays/bin, one illuminated-side probe has magnitude 0.3593 while the disabled-diffraction range is 0.01475–0.01608. There is no independent church reference, so that outlier alone is not a quantified physical error. These are transport-only, single-frequency probes (three bins, selected bin 440 Hz), not full audio renders.
+
+### 1. Align response time and preserve the path's source clock
+
+`SpectralAudio` and `GpuAudio.compute` compensate declared DSP delay in source reads. However, response gains switch/fade using output-sample response boundaries, while their scene states are anchored to those same unshifted sample numbers. Consequently, a sample representing an earlier scene time can use attenuation from a later pose. Each delay is also extrapolated from one solve with a constant slope; curved distance-versus-time then produces phase error. Sinc improves the fractional read but does not correct either approximation.
+
+Twelve new silent renders vary update step and fade independently where possible, using the saved no-wall and one-wall 4 kHz fixtures. At step 1024, extending the fade from 512 to 1024 reduces direct-only relative RMS error **0.1476% → 0.0120%**, but the curved two-path error only falls **0.4819% → 0.4044%**. At fixed fade 256, reducing the step from 1024 to 256 makes the curved case worse, **0.6957% → 1.3500%**. Preset tuning is therefore not a general repair.
+
+An independent double-precision model reproduces the actual renderer's held gains, linear delay slopes and output-time blending to within **0.0096% relative RMS** in four cases. Its ablations localize the dominant errors: direct-only error is almost entirely gain timing; curved two-path error is mainly delay/phase approximation. This is stronger evidence than simply observing a beat in a spectrogram.
+
+**Proposed invariant:** evaluate a persistent acoustic path at the physical arrival time represented by each output sample. Keep scene solve time, DSP output position and device presentation time distinct.
+
+```text
+arrivalSample = outputSample - declaredDspLatency
+left, right = solved responses bracketing arrivalSample
+for each geometrically matching path:
+    delay = Hermite(left.delay, left.delayRate, right.delay, right.delayRate)
+    gain/filter = interpolate endpoint responses at arrivalSample
+    sourceSample = arrivalSample - sampleRate * delay
+    readRatio = 1 - derivative(delay, arrivalTime)
+    accumulate filtered sincRead(source, sourceSample, readRatio)
+```
+
+This is conceptual pseudocode: filter interpolation remains in the existing GPU/CPU DSP, not a new convolution mode or a full filter rebuild per output sample. Cubic Hermite interpolation uses the delay and delay derivative already supplied by transport. The source-read ratio must come from that same interpolated delay; otherwise the anti-alias cutoff and Doppler clock would disagree. Preserve positive causal source-time progression, explicit cuts and startup/shutdown behavior. Do not match unrelated paths by array slot or carry old delay slopes indefinitely. Check path identity and geometry compatibility; use controlled appearance/disappearance transitions only for changed paths. Head pose prediction remains tied to scheduled playback time, separately from the acoustic path's arrival time.
+
+The producer must make the right-hand response available before rendering the interval. Offline rendering can read it directly. Live rendering should use its existing observation buffer/playback lead, with the required lookahead included in readiness/deadline checks. Do not silently add an arbitrary smoothing delay. Only after this timing contract is explicit should existing fade code be replaced.
+
+A mathematical prototype using time-aligned gain interpolation and Hermite delay reduces the 1024/512 curved fixture's model error from approximately 0.484% to **0.000712%**; the direct fixture becomes **0.000455%**. This prototype uses exact geometric endpoint data, double precision and an analytic tone, bypassing shader arithmetic, resampling and filter synthesis. These are feasibility results, not shipped GPU accuracy or guaranteed performance.
+
+**Files:** `TakeRender.Live.cs`, offline orchestration in `TakeRender.cs`, `GpuAudio.cs`, `GpuAudio.compute`, `SpectralAudio.cs`. Reuse the existing response banks and path representation where possible; response anchor/application timestamps and matching metadata need a deliberate change. Keep the CPU oracle straightforward and the GPU interpolation parallel.
+
+**Acceptance:** exact constant-velocity direct tone; curved one-wall tone; stationary invariance; source/listener acceleration and explicit cuts; material-speed paths; path appearance/disappearance; head turns; CPU/GPU and live/offline parity. Independently vary response cadence and fade while preserving known latency. A suitable initial gate for the existing smooth analytic tone fixtures is below 0.1% relative RMS, with boundary residuals and spectrogram sidebands also reported; it is a numerical regression threshold, not an audibility claim.
+
+### 2. Repair diffraction sampling inside the existing tracer
+
+`TracePaths` currently flips a 50/50 edge-versus-surface coin when edge sampling is allowed. `SampleEdge` then mixes the blocking triangle's edges with all scene edges and samples a position along the chosen edge. The local proposal changes when the first blocker changes; small motion can therefore change which edge is selected even with a fixed seed. Rare choices can receive large inverse-probability weights. The same random stream is already shared across frequency bins and held stable across frames, so adding a fixed seed is not the missing fix.
+
+Keep signed edge contributions, geometrical delay, multi-edge continuation and the shared ray loop. Improve the estimator in this order:
+
+1. **Integrate the sharp boundary contribution reliably.** Use the rigid-edge integral's analytic near-apex treatment and numerical integration of its remaining smooth part. Preserve cancellation with the direct/reflected field on the same arrival-time clock. This follows the zone-boundary treatment in [Svensson, Calamia and Nakanishi, sections 2.1–2.2](https://dael.euracoustics.org/bin/EAA/aaua_dl?document_id=64830), rather than clamping large samples or adding an unrelated low-pass occlusion effect.
+2. **Choose important edges consistently.** Reuse compiled edge IDs/adjacency and BLAS/TLAS to form a conservative local candidate set. Candidate support must persist across visibility transitions and include alternatives/multiple bends. Rank/sample by a contribution estimate with the correct probability, rather than only the current first blocking triangle. Keep global support for paths omitted from the local proposal.
+3. **Evaluate the important edge connection as part of the ray vertex's listener connection.** Explore deterministic integration for those candidates while retaining sampled continuation for higher orders. Account for overlap between estimators so first-order paths are counted once. This needs measured extra vertex work/arrival storage; it is not a free one-line toggle and does not revert to the old shortest-edge route.
+
+A small double-precision proposal test, integrating the known half-plane with transformed Gauss quadrature, gives at most **1.29% complex error** across the three near-boundary positions using at most 128 integrand evaluations, and **0.533%** with at most 256. This only integrates the known contributing edge and is not an equal-work comparison with GPU scene traversal. It is not the full analytic singularity-subtraction method and has not been ported. It shows that resolving the integral is a more promising direction than assigning the church tens of thousands of generic rays/bin. Fixed node counts are not proposed as a new scene limit; error and cost must be measured over frequency, geometry and visibility changes.
+
+**Files:** `Transport.hlsl` (`SampleEdge`, `EdgeKernel`, `TracePaths`) and edge preparation in `RayTransport.cs`; reuse `DirectBvh` for candidate culling. Existing `RayTransportChecks` can hold focused regressions. Preserve multi-edge reachability and signed phase. Before enabling Church, pass both mean-error and variance/continuity checks at the intended budget, then render the actual mixed organ/bell/voice gains and measure deadlines. First-order half-plane success does not validate finite-wedge endpoints, impedance materials or multi-edge wave accuracy.
+
+### 3. Repair reflection sampling and its physical contract
+
+There are two distinct problems:
+
+- **Early specular sampling depends on tessellation.** `FirstReflection` samples a short consecutive run of raw primitive IDs and weights each hit by `PrimitiveCount / RaysPerBin`. At a small budget it can miss important surfaces or give a rare hit excessive influence. Compile connected coplanar faces with compatible material into acoustic patches; find/validate mirror candidates on those patches using existing geometry and visibility queries. Preserve the actual reflecting footprint and moving-object transforms. A triangle seam must not create a new physical reflector. Re-triangulating the same wall should preserve the field and comparable sampling error.
+- **Diffuse weighting has a model error beyond variance.** The existing stationary reciprocity audit reported 75.0% / 93.2% forward/reverse gaps in 2D/3D at high ray counts; that unchanged code was not re-benchmarked here. The current positive pressure connection and branch weights are heuristic. Derive a reciprocal scattering law and its proposal weights before claiming a training reference. An energy scattering fraction alone does not specify a coherent complex pressure response. The [Schissler et al. diffuse/reflection formulation](https://gamma-web.iacs.umd.edu/HIGHDIFF/paper.pdf) makes its energy transport and statistical reconstruction assumptions explicit; it is not a drop-in pressure-gain formula for this renderer.
+
+Retain separate acceptance gates for coherent specular/rigid-edge cases and any statistical diffuse model. Symmetrizing the final gain, lowering volume or smoothing the output would conceal the failure without establishing conservation or phase correctness. More rays can reduce variance; they cannot remove a biased physical model. These changes belong in geometry preparation and `Transport.hlsl`, not a new application subsystem.
+
+### 4. Scheduling: keep the passing path and measure the unresolved load
+
+A fresh silent real-device callback probe replays four seconds of saved church motion (original take times 4–8 s), then three seconds of tail. It uses one 440 Hz source/listener, 44.1 kHz mono GPU spectral rendering, sinc, the full church geometry, 1024-sample device blocks, the existing 16,384-sample playback lead and batch capacity eight. The scene is empty visually: no user controls, microphone or graphical multiplayer windows are started.
+
+**Result:** 302 response applications, **zero underrun/late/overflow/channel-mismatch/over-budget counters**, and **exactly matching live/offline PCM** over all 308,701 rendered frames after removing the declared queue lead. The final callback's 547 padded frames are zero. Minimum queue margin sampled on the main thread is 12,612 frames (~286 ms), not a continuously measured worst-case margin. Maximum GPU/readback latency is 51.85 ms and maximum completion-to-consumption delay is 0.0018 ms in this run. This does not justify a smaller playback lead or certify multiple voices, graphics contention, internet voice or another computer.
+
+No new scheduler is justified by this passing case. Next, use this same muted capture path with the authored mixed sources and timestamped synthetic peer streams, one worker at a time. Attribute misses using queue margins and existing GPU/consumer counters. Optimize the measured bottleneck: producer polling for delayed consumption, batch sizing/dispatch or storage work for GPU backlog, and voice jitter handling for late source packets. Do not label all three as GPU stalls or enable overlapping batches before defining buffer ownership.
+
+The disposable callback fixture needed corrections to initialize active source state at sample zero, signal queue completion, and account for device-block padding. Its earlier failures were fixture errors; the final `deadline-v4.xml` passes. No runtime workaround or relaxed waveform/deadline assertion was added.
+
+### Implementation order and evidence
+
+Implement the response-time contract with the analytic regressions first. Then repair the edge integral/proposal, preserving the current renderer in Git, and only re-enable Church after the low-budget boundary and authored-source checks pass. Follow with specular patch sampling and a defensible diffuse transport model. Reuse the silent callback comparison after each DSP/transport change; broaden load only to answer a specific unresolved capacity question.
+
+Evidence: `.context/artifact-fixes/` contains the twelve renders and exact references, `measurements.json`, `clock_model.py` / `clock-model.json`, final dispersed-seed `edge-variance.csv` / `edge-summary.json`, `quadrature.py` / `quadrature.json`, `callback-v4.json`, callback/offline WAVs and numeric take, disposable driver, and XML/logs. Reference values are retained in `.context/integrated-diffraction/reference.json`. One silent headless Metal worker ran at a time, nice 15, two job workers. No speakers, user Editor, cursor capture or new production framework was used.
+
 ## Windowed-sinc default — 2026-10-16
 
 New settings and all five shipped scenes now select the existing windowed-sinc resampler with radius 16. Linear remains selectable for explicit low-cost comparisons; previously saved render settings retain their recorded choice. No renderer, shader, queue policy or new runtime file is added. The additional declared DSP latency is 16 samples (0.363 ms at 44.1 kHz); the playback queue lead is unchanged. This addresses the artificial resampling sidebands isolated below, not all movement artifacts or the church's unresolved doorway shadowing.
