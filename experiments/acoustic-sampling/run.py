@@ -5,11 +5,15 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import csv
+import math
+import statistics
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("runner", type=Path, help="Separate Unity project with matching runtime code and imported Library")
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--unity", type=Path, required=True)
+parser.add_argument("--calibrate-from", type=Path, help="Previous results used to select a production budget near 20 percent error")
 args = parser.parse_args()
 here = Path(__file__).resolve().parent
 repo = Path(subprocess.check_output(["git", "-C", str(here), "rev-parse", "--show-toplevel"], text=True).strip())
@@ -22,7 +26,22 @@ for name in ("Assets/Shaders/Transport.hlsl", "Assets/Scripts/Simulation/RayTran
              "Assets/Scripts/Simulation/TransportSolver.cs"):
     if (repo / name).read_bytes() != (runner / name).read_bytes():
         parser.error(f"Runner differs from this experiment's runtime: {name}")
+if output.exists() and any(output.iterdir()):
+    parser.error("Use an empty output directory so calibration and measurements cannot be mixed with an older run.")
 output.mkdir(parents=True, exist_ok=True)
+if args.calibrate_from:
+    source = args.calibrate_from / "metrics.csv" if args.calibrate_from.is_dir() else args.calibrate_from
+    rows = list(csv.DictReader(source.open()))
+    with (output / "calibration.csv").open("w") as file:
+        writer = csv.writer(file, lineterminator="\n"); writer.writerow(["scene", "hz", "samples", "target"])
+        for scene, hz in sorted({(r["scene"], r["hz"]) for r in rows if r["method"] == "production"}):
+            group = [r for r in rows if r["scene"] == scene and r["hz"] == hz and r["method"] == "production"]
+            largest = max(int(r["samples"]) for r in group)
+            group = [r for r in group if int(r["samples"]) == largest]
+            mse = statistics.mean(float(r["empirical_rmse"]) ** 2 /
+                (float(r["reference_real"]) ** 2 + float(r["reference_imag"]) ** 2) for r in group)
+            samples = max(64, math.ceil(largest * mse / .2 ** 2 / 64) * 64)
+            writer.writerow([scene, hz, samples, .2])
 files = {here / "SamplingExperiment.cs": runner / "Assets/Tests/Editor/SamplingExperiment.cs",
          here / "SamplingExperiment.compute": runner / "Assets/Shaders/SamplingExperiment.compute",
          repo / "Assets/Shaders/Geometry.hlsl": runner / "Assets/Shaders/Geometry.hlsl"}

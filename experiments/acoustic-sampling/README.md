@@ -1,146 +1,115 @@
-# Acoustic sampling pilot
+# Acoustic sampling measurements
 
-The checkpoint is `435a18c`, named `checkpoint/acoustic-sampling-2026-10-17`.
-`experiment/guided-acoustics`, `experiment/listener-acoustics`, and
-`experiment/bidirectional-acoustics` share this comparison harness as their starting point.
-No playback, scene, runtime shader, or runtime C# changes are included.
+Checkpoint: `435a18c` (`checkpoint/acoustic-sampling-2026-10-17`). The original pilot is
+preserved at `d2f5d47`. Guided, listener, and bidirectional experiment branches share
+this harness so comparisons use the same target and code. Runtime Assets are unchanged.
 
-The result does **not** justify replacing the current renderer. Joining one source-side
-edge sample to one listener-side edge sample wins on the single-box fixture. It loses
-on the staggered-wall fixture. Shortest-route guidance slightly helps the box but can
-hurt the staggered case. Source/listener/MIS throughput efficiencies in that second
-fixture are close enough that small timing differences should not pick an architecture.
-See [measurements](measurements.md) for raw-cost accounting and all eight variants.
+[Measured results](measurements.md) include matched-error budgets, single-estimate and
+batched timings, setup/transfer costs, and the production transport control. The numerical
+results support further work on sampling and GPU data flow, not a live-renderer switch.
+Direction alone has no universal winner. Shortest-route guidance can increase variance.
 
-At 250 Hz and 4,096 samples, the box's expected relative complex-response error falls
-from 35.03% for source-only to 12.47% for an unguided two-ended join. This is about 7.9×
-less variance per sample **within this discrete pilot**, not a measured production
-speedup. On staggered walls the corresponding errors are 24.42% and 25.64%; adding
-guidance to the join raises error to 32.05%. Even the better box result is far from
-a high-quality training reference.
+## Target and methods
 
-## What the experiment computes
-
-Only the signed **two-edge diffraction contribution** in static, rigid 3D geometry.
-It reuses production edge extraction, `EdgeKernel`, `Visible`, and BLAS/TLAS buffers.
-It does not include direct sound, one-edge paths, reflections, diffuse scattering,
-transmission, Doppler, head filters, convolution, STFT, or playback. No scene is played.
-This is not full bidirectional sound transport or the BEDRF algorithm.
-
-Each finite physical edge receives Gauss-Legendre quadrature points and integration
-weights. The reference enumerates every ordered pair of points, rejects blocked legs,
-and sums the same signed complex contribution that the samplers estimate:
+The fixtures contain static rigid 3D boxes and one source/listener pair. Only the signed
+two-edge diffraction contribution is compared. Geometry extraction, BLAS/TLAS, visibility,
+and the edge kernel come from production. Gauss-Legendre points on each physical edge
+provide an enumerable discrete target for the prototypes:
 
 ```
-F(a,b) = visible(S,a,b,L)
-       * edgeKernel(S,a,b) * edgeKernel(a,b,L)
-       * quadratureWeight(a) * quadratureWeight(b)
+F(a,b) = visible(S,a,b,L) * K(S,a,b) * K(a,b,L) * weight(a) * weight(b)
        / (distance(S,a) * distance(a,b) * distance(b,L))
        * exp(-i * 2*pi*f * totalDistance / speedOfSound)
+
+source:   a ~ pSource; b ~ pForward[a]; q = pSource(a) * pForward(b|a)
+listener: b ~ pListener; a ~ pReverse[b]; q = pListener(b) * pReverse(a|b)
+join:     a ~ pSource; b ~ pListener; q = pSource(a) * pListener(b)
+mixture:  choose one of those three equally; q = (qSource + qListener + qJoin)/3
+estimate: sum F(a,b) / (q(a,b) * sampleCount)
 ```
 
-Immediate repeated-edge events are excluded. The model is the current renderer's
-secondary-edge approximation; enumeration only makes its **discretized sum** exact.
-It does not turn this approximation into a validated wave simulation. The single-box
-response is stable across 16/32/64 points per edge. The staggered response still changes
-1.21–1.93% from 32 to 64, so its continuum integral is not yet converged.
+The join tests a real connection between source and listener prefixes; it is not an
+average of two one-ended renders. Each method has an unguided and guided proposal.
+The unguided proposal uses visible inverse-square weights. Guidance uses reverse Dijkstra
+over real edge points, favoring shorter remaining routes with an exponential length scale
+of one quarter of source/listener separation. A 15% global exploration mixture preserves
+support. These are fixed research parameters, not runtime defaults or a shortest-path
+audio model. Every sampled leg still uses the real geometric visibility test.
 
-## Samplers
+Two continuous controls separate proposal quality from other transport work:
 
-```
-source:   a ~ sourceProposal; b ~ forwardProposal[a]
-          q = pSource(a) * pForward(b | a)
+- **Production:** run the unmodified `Trace3DBvh` with one frequency bin, two bounces,
+  and absorbing, non-transmitting surfaces; reduce second-event arrivals. This suppresses
+  surface contributions while leaving the current rigid edge kernel/opacity unchanged.
+  The fixture's maximum path delay contains every candidate. Surface calculations and
+  full RayPath writes remain in the timed dispatch. Independent identical source pairs
+  supply 32 random trials without changing the production shader's RNG.
+- **Cauchy only:** call production `SampleEdge` twice, retaining both 50% edge-event choices,
+  and reduce the same two-edge contribution directly. No dense proposal tables are used.
+  This isolates the estimator from surface calculations and RayPath storage; it does not
+  implement the complete renderer. Both controls are checked statistically for agreement.
 
-listener: b ~ listenerProposal; a ~ reverseProposal[b]
-          q = pListener(b) * pReverse(a | b)
+Direct reduction here produces one static complex coefficient. A live implementation must
+still preserve changing delays, Doppler, and path continuity; this benchmark does not show
+that those per-path states can be removed.
 
-join:     a ~ sourceProposal; b ~ listenerProposal
-          q = pSource(a) * pListener(b)
+The prototype target is exact only for its discretization. It is not a wave-equation
+reference. Production/Cauchy results use the 64-point reference; prototypes use 32 points.
+The box converges closely across 16/32/64 points. The staggered response still changes
+about 1.9% at 250 Hz between 32 and 64 and remains unconverged. No training-quality claim follows.
 
-MIS:      choose source, listener, or join with equal probability
-          sample that strategy
-          q = (qSource + qListener + qJoin) / 3
+## Measurement and checks
 
-all:      trace the actual straight segments and evaluate F
-          estimate += F / (q * sampleCount)
-```
+Expected prototype MSE after N samples is `(sum |F|²/q - |sum F|²)/N`. This determines
+budgets near 20% and 10% relative error. Production's 20% budget is calibrated from the
+prior 16,384-sample observations, then tested with different seeds; a 10% production
+budget is not measured. Each row combines 160 observations across five repeats after
+warmup. Source/listener/join order alternates; timing tables show median and interquartile
+range. The fixed-budget results and all individual estimates remain in the CSV data.
 
-The join constructs a source prefix and a listener suffix and tests their connection;
-it is not an average of two one-ended renders. The MIS variant accounts for all three
-overlapping proposal densities. Equal mixture weights are an experiment choice, not
-an optimized runtime policy. The two one-ended controls use visible inverse-square
-proposal weights, **not the production Cauchy edge-position sampler**.
+Dispatch/readback timing excludes CPU final summation and proposal construction/upload.
+Those costs are reported separately. A second connection dispatch separates warm setup
+from first-use initialization. Setup is a single observation, not a median. Common scene
+construction/BVH upload and Unity startup are excluded. Dense O(nodes²) tables are an
+audit-friendly experiment, not the proposed live implementation; no cross-pair reuse or
+moving-endpoint update benefit has been measured.
 
-Guidance runs reverse Dijkstra over visible connections between real edge quadrature
-points. It exponentially favors shorter remaining routes, with a 15% global exploration
-mixture weighted by edge integration measure. The extra-route length scale is one
-quarter of source-listener separation. These fixed research parameters were not tuned
-to the results. No point is removed from support. A graph route ranks candidates;
-it never substitutes for the path's geometry, pressure, delay, or visibility.
+Checks cover finite responses, positive proposal support, blocked direct connections,
+path reciprocity, estimator means against the enumerated target, zero-diffraction
+isolation, and bit-identical single/batch packing. The summary also checks production
+and Cauchy-only means within six combined standard errors. This is a regression check,
+not a proof of zero bias. Other production compilation warnings remain outside this scope.
 
-Dense probability/CDF tables keep this proof easy to audit. They are O(nodes²) per
-pair and **must not become the live implementation**. Guided-table construction took
-10.0/31.1 ms for box/staggered fixtures, versus 4.6/14.6 ms for baseline tables, plus
-connection construction/readback and table upload. Each GPU proposal pair occupies
-2.37/9.45 MB. Any runtime guide needs compact shared data and measured reuse.
+The **known coplanar visibility failure remains**: equal-height staggered boxes can give
+different visibility for a face-grazing segment in opposite directions. Retained diagnostics
+show 0.620%/1.730% path-response reversal discrepancy at 32/64 points per edge. Ordinary
+fixtures use unequal heights. `ACOUSTIC_SAMPLING_COPLANAR=1` reproduces the failing assertion;
+no geometry epsilon, face-skipping rule, or production visibility change is introduced.
 
-## Checks and known failure
+## Reproduce silently
 
-The silent EditMode test checks finite responses, positive proposal support, blocked
-direct segments, source/listener reversal of every path, and GPU estimator means against
-the independently enumerated target. Expected error uses the complete second moment;
-observed error uses 96 estimates per variant/budget/frequency. Timings alternate variant
-order, discard warmup, and retain three repeats. Budgets are 64, 512, and 4,096 samples;
-frequencies are 62.5 and 250 Hz. Those are test cases, not runtime limits or band counts.
-
-**Known production visibility defect:** if both staggered boxes have the same height,
-some connecting segments lie exactly on their top/bottom faces. Visibility can say
-blocked in one direction and clear in the other. With 32-point quadrature, path-response
-reversal discrepancy is 0.620%; with 64 it is 1.730%. A representative segment from
-`(-1.1, 0.1612385, 1.4)` to `(1.1, 1.058919, 1.4)` reproduces the problem. The ordinary
-comparison uses unequal heights to separate sampling behavior from this defect.
-The failing equal-height case remains reproducible with `ACOUSTIC_SAMPLING_COPLANAR=1`;
-its assertion is still enabled. Baseline diagnostics are retained in `results/coplanar-*`.
-
-Changing determinant arithmetic alone did not fix the failure and was discarded.
-A robust grazing/shared-edge intersection policy needs its own regression work before
-promoting reverse-path reuse. [PBRT's rounding-error discussion](https://www.pbr-book.org/4ed/Shapes/Managing_Rounding_Error)
-describes why robust triangle intersections need more than an arbitrary epsilon.
-
-## What this says about the codebase
-
-For one live listener and many sources, listener-side path reuse remains a reasonable
-candidate; for many offline listeners, source-side reuse can be useful. **Neither reuse
-benefit was measured here:** this harness evaluates one pair at a time and performs no
-cross-pair sharing. The existing diffuse model's known reciprocity mismatch also prevents
-assuming that reversing every current transport interaction is physically equivalent.
-
-Keep the existing renderer as the control. Preserve these small experiments separately.
-Before runtime integration, resolve tangent visibility, compare the continuous production
-sampler, measure moving endpoints and multi-source/listener reuse, and obtain a converged
-response reference. The current data favors a two-ended option for some paths, not a
-universal replacement or a shortest-path audio model.
-
-## Reproduce without opening a player or using speakers
-
-Use a separate Unity project with the checkpoint's Assets/Packages/ProjectSettings and
-an imported Library. The script checks core runtime files, refuses the working checkout
-or an open runner, temporarily installs the two experiment files, runs one low-priority
-Metal batch process with two workers, and restores overwritten files on exit.
+Use a separate imported Unity project matching this checkpoint. The script refuses the
+working checkout and an open runner, checks core runtime files, temporarily installs the
+experiment files, runs one low-priority Metal batch process with two workers, and restores
+the runner files. It never enters Play mode; the test creates an empty scene, mutes the
+listener, and only dispatches compute shaders. No microphone/device callbacks are used.
 
 ```
 python3 experiments/acoustic-sampling/run.py /path/to/isolated-runner \
   --unity /Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity \
-  --output /path/to/results
-python3 experiments/acoustic-sampling/summarize.py /path/to/results
+  --output /path/to/new-results \
+  --calibrate-from experiments/acoustic-sampling/results/calibration-source.csv
+python3 experiments/acoustic-sampling/summarize.py /path/to/new-results
 ```
 
-The test requires batch mode, creates an empty test scene, sets listener volume to zero,
-and only dispatches compute shaders. `-nographics` is intentionally absent because this
-is a GPU test. `ACOUSTIC_SAMPLING_COPLANAR=1` makes the same command reproduce the known
-failure. No microphone or audio device callbacks are used.
+Omit `--calibrate-from` for a new calibration pass, then pass that output directory to
+the calibrated run. The script requires empty output directories: presence of `calibration.csv`
+selects the held-out production seed range. Saved calibration data uses the earlier seed
+range. `results/calibration.csv` records the selected budgets; `calibration-source.csv`
+contains the twenty observations that selected them.
 
-`results/metrics.csv`, `reference.csv`, and `setup.csv` contain the numerical measurements;
-`trials.csv.gz` contains individual estimates. `measurements.md` is generated by
-`summarize.py results`. Local runner logs/XML are not committed because they contain
-machine paths and package-import noise. `validation.json` records test status and counts.
+The versioned `metrics.csv`, `reference.csv`, `setup.csv`, compressed `trials.csv.gz`, and
+`validation.json` support `summarize.py results` without a Unity installation. Logs/XML
+remain local because they contain machine paths and import noise. The original coplanar
+diagnostics are preserved. Playback, mixed surface/edge paths, material accuracy, moving
+heads, multi-source/listener sharing, and full church-scene performance remain unmeasured.

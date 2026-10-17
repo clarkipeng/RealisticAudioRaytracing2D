@@ -16,6 +16,8 @@ public partial class TakeChecks
     struct ExperimentEdge { public Vector4 a, b, face, normal; public uint owner, firstFace, secondFace, pad; }
     [StructLayout(LayoutKind.Sequential)]
     struct ExperimentNode { public Vector4 pointWeight; public uint edge, pad0, pad1, pad2; }
+    [StructLayout(LayoutKind.Sequential)]
+    struct ExperimentMaterial { public Vector4 surface, medium; }
     static object Field(object owner, string name) => owner.GetType().GetField(name,
         BindingFlags.NonPublic | BindingFlags.Instance).GetValue(owner);
     static string Csv(params object[] values) => string.Join(",", values.Select(x =>
@@ -125,9 +127,9 @@ public partial class TakeChecks
         using var reference = new StreamWriter(Path.Combine(output, "reference.csv"));
         using var setup = new StreamWriter(Path.Combine(output, "setup.csv"));
         File.WriteAllText(Path.Combine(output, "device.txt"), SystemInfo.graphicsDeviceName + "\nUnity " + Application.unityVersion + "\n");
-        setup.WriteLine("scene,nodes,connections_ms,baseline_tables_ms,guided_tables_ms,proposal_pair_bytes");
-        metrics.WriteLine("scene,hz,nodes,guided,method,samples,trials,repeat,build_ms,upload_ms,batch_ms,readback_bytes,reference_real,reference_imag,expected_rmse,empirical_rmse,mean_real,mean_imag");
-        trials.WriteLine("scene,hz,guided,method,samples,repeat,trial,real,imag");
+        setup.WriteLine("scene,nodes,connections_ms,baseline_tables_ms,guided_tables_ms,proposal_pair_bytes,first_connections_ms");
+        metrics.WriteLine("scene,hz,nodes,guided,method,samples,target_relative_rmse,trials,repeat,build_ms,upload_ms,batch_ms,single_ms,readback_bytes,reference_real,reference_imag,expected_rmse,empirical_rmse,mean_real,mean_imag");
+        trials.WriteLine("scene,hz,guided,method,samples,target_relative_rmse,repeat,trial,real,imag");
         reference.WriteLine("scene,hz,quadrature_order,nodes,real,imag,enumeration_ms,reciprocity_relative_l2");
         var shader = UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/SamplingExperiment.compute"));
         Assert.That(shader, Is.Not.Null);
@@ -164,7 +166,11 @@ public partial class TakeChecks
                 shader.SetInt("BvhNodeCount", ((DirectBvh)Field(solver, "bvh")).NodeCount);
                 shader.SetInt("PrimitiveCount", geometry.Count);
                 shader.SetInt("ObjectCount", state.Length);
-                foreach (int kernel in new[] {enumerate, connections, estimate})
+                int continuous = shader.FindKernel("Continuous");
+                shader.SetInt("EdgeCount", edges.Length);
+                shader.SetBuffer(continuous, "EdgeRanges", (ComputeBuffer)Field(Field(solver, "transport"), "edgeRangeBuffer"));
+                shader.SetBuffer(continuous, "EdgeIndices", (ComputeBuffer)Field(Field(solver, "transport"), "edgeIndexBuffer"));
+                foreach (int kernel in new[] {enumerate, connections, estimate, continuous})
                 {
                     shader.SetBuffer(kernel, "Edges", edgeBuffer);
                     foreach (string field in new[] {"primitives", "states", "bvhNodes", "bvhIndices"})
@@ -181,13 +187,16 @@ public partial class TakeChecks
                     shader.SetBuffer(enumerate, "ExperimentOutput", result);
                     // Only order 32 benchmarks; other orders expose target discretization error.
                     var watch = Stopwatch.StartNew();
-                    Vector2[][] proposals = null; float[] links = null; double buildMs = 0;
+                    Vector2[][] proposals = null; float[] links = null; double[] buildMs = new double[2];
                     if (order == 32)
                     {
                         using var connectionBuffer = new ComputeBuffer((n + 2) * (n + 2), 4);
                         shader.SetBuffer(connections, "ConnectionLengths", connectionBuffer);
                         shader.Dispatch(connections, (connectionBuffer.count + 63) / 64, 1, 1);
                         links = new float[connectionBuffer.count]; connectionBuffer.GetData(links);
+                        double firstConnectionsMs = watch.Elapsed.TotalMilliseconds;
+                        watch.Restart();
+                        shader.Dispatch(connections, (connectionBuffer.count + 63) / 64, 1, 1); connectionBuffer.GetData(links);
                         double connectionsMs = watch.Elapsed.TotalMilliseconds;
                         Assert.That(links[n * (n + 2) + n + 1], Is.LessThan(0), "Fixture must block the direct segment.");
                         proposals = new Vector2[4][];
@@ -197,8 +206,8 @@ public partial class TakeChecks
                         watch.Restart();
                         for (int i = 2; i < 4; i++) proposals[i] = Proposal(nodes, links, state[0].position, state[1].position, i % 2 == 1, true);
                         double guidedMs = watch.Elapsed.TotalMilliseconds;
-                        buildMs = connectionsMs + baselineMs + guidedMs;
-                        setup.WriteLine(Csv(name, n, connectionsMs, baselineMs, guidedMs, (long)(n + 1) * n * 8 * 2)); setup.Flush();
+                        buildMs[0] = connectionsMs + baselineMs; buildMs[1] = connectionsMs + guidedMs;
+                        setup.WriteLine(Csv(name, n, connectionsMs, baselineMs, guidedMs, (long)(n + 1) * n * 8 * 2, firstConnectionsMs)); setup.Flush();
                     }
                     foreach (float hz in new[] {62.5f, 250f})
                     {
@@ -234,8 +243,8 @@ public partial class TakeChecks
                         reference.WriteLine(Csv(name, hz, order, n, real, imag, enumerationMs, reciprocity)); reference.Flush();
                         Assert.That(reciprocity, Is.LessThan(.002), "Rigid two-edge target must be reciprocal.");
                         shader.SetVector("ExperimentSource", state[0].position); shader.SetVector("ExperimentListener", state[1].position);
-                        if (order != 32) continue;
-                        Benchmark(shader, estimate, nodes, proposals, exact, real, imag, name, hz, buildMs, metrics, trials);
+                        if (order == 32) Benchmark(shader, estimate, nodes, proposals, exact, real, imag, name, hz, buildMs, metrics, trials);
+                        if (order == 64) ProductionBenchmark(solver, shader, real, imag, name, hz, metrics, trials);
                     }
                 }
             }
@@ -244,54 +253,148 @@ public partial class TakeChecks
     }
 
     static void Benchmark(ComputeShader shader, int kernel, ExperimentNode[] nodes, Vector2[][] proposals,
-        Vector2[] exact, double real, double imag, string scene, float hz, double buildMs, StreamWriter metrics, StreamWriter trials)
+        Vector2[] exact, double real, double imag, string scene, float hz, double[] buildMs, StreamWriter metrics, StreamWriter trials)
     {
         int n = nodes.Length; const int trialCount = 32;
         using var forward = new ComputeBuffer((n + 1) * n, 8);
         using var reverse = new ComputeBuffer((n + 1) * n, 8);
-        using var output = new ComputeBuffer(4096 * trialCount / 64, 8);
+        var variance = new double[8]; var budgets = new (int samples, double target)[8][];
+        for (int variant = 0; variant < 8; variant++)
+        {
+            int guided = variant / 4, method = variant % 4;
+            var f = proposals[guided * 2]; var r = proposals[guided * 2 + 1];
+            double secondMoment = 0;
+            for (int a = 0; a < n; a++) for (int b = 0; b < n; b++)
+            { var v = exact[a * n + b]; secondMoment += ((double)v.x * v.x + (double)v.y * v.y) / Probability(f, r, n, a, b, method); }
+            variance[variant] = Math.Max(0, secondMoment - real * real - imag * imag);
+            int Samples(double error) => checked(Math.Max(64, (int)Math.Ceiling(variance[variant] / (error * error * (real * real + imag * imag)) / 64) * 64));
+            budgets[variant] = new[] {(64, 0d), (512, 0d), (4096, 0d), (Samples(.2), .2), (Samples(.1), .1)};
+        }
+        using var output = new ComputeBuffer(budgets.SelectMany(x => x).Max(x => x.samples) * trialCount / 64, 8);
         shader.SetBuffer(kernel, "ForwardProposal", forward); shader.SetBuffer(kernel, "ReverseProposal", reverse);
         shader.SetBuffer(kernel, "ExperimentOutput", output); shader.SetInt("TrialCount", trialCount);
         string[] methods = {"source", "listener", "join", "bidirectional_mis"};
         // Alternate order each repeat. Timings include dispatch + blocking readback;
         // graph build and table upload are separately reported, never hidden.
-        for (int repeat = -1; repeat < 3; repeat++) for (int choice = 0; choice < 8; choice++)
+        for (int repeat = -1; repeat < 5; repeat++) for (int choice = 0; choice < 8; choice++)
         {
             int variant = repeat % 2 == 0 ? 7 - choice : choice, guided = variant / 4, method = variant % 4;
             var f = proposals[guided * 2]; var r = proposals[guided * 2 + 1];
-            double secondMoment = 0;
-            for (int a = 0; a < n; a++) for (int b = 0; b < n; b++)
-            {
-                Vector2 value = exact[a * n + b];
-                secondMoment += ((double)value.x * value.x + (double)value.y * value.y) / Probability(f, r, n, a, b, method);
-            }
-            double variance = Math.Max(0, secondMoment - real * real - imag * imag);
             var watch = Stopwatch.StartNew(); forward.SetData(f); reverse.SetData(r);
             double uploadMs = watch.Elapsed.TotalMilliseconds;
-            shader.SetInt("Strategy", method); shader.SetInt("SeedOffset", (repeat + 1) * trialCount);
-            foreach (int samples in new[] {64, 512, 4096})
+            shader.SetInt("Strategy", method); shader.SetInt("SeedOffset", 1000 + (repeat + 1) * trialCount);
+            foreach (var budget in budgets[variant])
             {
+                int samples = budget.samples;
                 shader.SetInt("SampleCount", samples); int groupsPerTrial = samples / 64;
                 var sums = new Vector2[trialCount * groupsPerTrial];
+                shader.SetInt("TrialCount", trialCount);
                 watch.Restart(); shader.Dispatch(kernel, sums.Length, 1, 1); output.GetData(sums, 0, 0, sums.Length);
                 double elapsed = watch.Elapsed.TotalMilliseconds;
+                var single = new Vector2[groupsPerTrial]; shader.SetInt("TrialCount", 1);
+                watch.Restart(); shader.Dispatch(kernel, single.Length, 1, 1); output.GetData(single, 0, 0, single.Length);
+                double singleMs = watch.Elapsed.TotalMilliseconds;
+                Assert.That(single.SequenceEqual(sums.Take(single.Length)), Is.True, "Single estimate must equal first batched estimate.");
                 if (repeat < 0) continue;
-                double error = 0, meanReal = 0, meanImag = 0;
-                for (int trial = 0; trial < trialCount; trial++)
-                {
-                    double x = 0, y = 0;
-                    for (int i = 0; i < groupsPerTrial; i++) { var v = sums[trial * groupsPerTrial + i]; x += v.x; y += v.y; }
-                    Assert.That(double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y), Is.False);
-                    error += (x - real) * (x - real) + (y - imag) * (y - imag); meanReal += x; meanImag += y;
-                    trials.WriteLine(Csv(scene, hz, guided, methods[method], samples, repeat, trial, x, y));
-                }
-                meanReal /= trialCount; meanImag /= trialCount;
+                var stats = EstimateStatistics(sums, trialCount, real, imag, trials, scene, hz, guided, methods[method], samples, budget.target, repeat);
+                double meanReal = stats.real, meanImag = stats.imag;
                 double bias = Math.Sqrt((meanReal - real) * (meanReal - real) + (meanImag - imag) * (meanImag - imag));
-                Assert.That(bias, Is.LessThan(6 * Math.Sqrt(variance / (samples * trialCount)) + 1e-7), "Estimator mean differs from enumerated target.");
-                metrics.WriteLine(Csv(scene, hz, n, guided, methods[method], samples, trialCount, repeat,
-                    buildMs, uploadMs, elapsed, sums.Length * 8, real, imag, Math.Sqrt(variance / samples),
-                    Math.Sqrt(error / trialCount), meanReal, meanImag)); metrics.Flush();
+                Assert.That(bias, Is.LessThan(6 * Math.Sqrt(variance[variant] / (samples * trialCount)) + 1e-7), "Estimator mean differs from enumerated target.");
+                metrics.WriteLine(Csv(scene, hz, n, guided, methods[method], samples, budget.target, trialCount, repeat,
+                    buildMs[guided], uploadMs, elapsed, singleMs, sums.Length * 8, real, imag, Math.Sqrt(variance[variant] / samples),
+                    stats.rmse, meanReal, meanImag)); metrics.Flush();
             }
+        }
+        trials.Flush();
+    }
+
+    static (double real, double imag, double rmse) EstimateStatistics(Vector2[] sums, int trialCount,
+        double real, double imag, StreamWriter trials, string scene, float hz, int guided, string method, int samples, double target, int repeat)
+    {
+        double error = 0, meanReal = 0, meanImag = 0; int groups = sums.Length / trialCount;
+        for (int trial = 0; trial < trialCount; trial++)
+        {
+            double x = 0, y = 0;
+            for (int i = 0; i < groups; i++) { var v = sums[trial * groups + i]; x += v.x; y += v.y; }
+            Assert.That(double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y), Is.False);
+            error += (x - real) * (x - real) + (y - imag) * (y - imag); meanReal += x; meanImag += y;
+            trials.WriteLine(Csv(scene, hz, guided, method, samples, target, repeat, trial, x, y));
+        }
+        return (meanReal / trialCount, meanImag / trialCount, Math.Sqrt(error / trialCount));
+    }
+
+    static void ProductionBenchmark(TransportSolver solver, ComputeShader reducer, double real, double imag,
+        string scene, float hz, StreamWriter metrics, StreamWriter trials)
+    {
+        const int trialCount = 32;
+        var budgets = new List<(int samples, double target)> {(64, 0), (512, 0), (4096, 0), (16384, 0)};
+        string calibration = Path.Combine(Environment.GetEnvironmentVariable("ACOUSTIC_SAMPLING_OUTPUT"), "calibration.csv");
+        int seedBase = File.Exists(calibration) ? 7000001 : 0;
+        if (File.Exists(calibration)) foreach (string line in File.ReadAllLines(calibration).Skip(1))
+        {
+            var columns = line.Split(',');
+            if (columns[0] == scene && float.Parse(columns[1], CultureInfo.InvariantCulture) == hz)
+                budgets.Add((int.Parse(columns[2], CultureInfo.InvariantCulture), double.Parse(columns[3], CultureInfo.InvariantCulture)));
+        }
+        int maximumSamples = budgets.Max(x => x.samples);
+        var watch = Stopwatch.StartNew();
+        var transport = Field(solver, "transport"); var shader = (ComputeShader)Field(solver, "shader");
+        int trace = shader.FindKernel("Trace3DBvh"), reduce = reducer.FindKernel("ReduceProduction"), continuous = reducer.FindKernel("Continuous");
+        using var paths = new ComputeBuffer(trialCount * (1 + 3 * maximumSamples), 32);
+        using var output = new ComputeBuffer(trialCount * maximumSamples / 64, 8);
+        using var sources = new ComputeBuffer(trialCount, 4); sources.SetData(new uint[trialCount]);
+        using var enabled = new ComputeBuffer(trialCount, 4); enabled.SetData(Enumerable.Repeat(1u, trialCount).ToArray());
+        var materials = (ComputeBuffer)Field(transport, "materialBuffer");
+        var original = new ExperimentMaterial[materials.count]; materials.GetData(original);
+        var absorbing = (ExperimentMaterial[])original.Clone();
+        for (int i = 0; i < absorbing.Length; i++) absorbing[i].surface = new Vector4(1, 0, 0, 1);
+        materials.SetData(absorbing);
+        shader.SetBuffer(trace, "RayPaths", paths); shader.SetBuffer(trace, "Sources", sources); shader.SetBuffer(trace, "RayPairEnabled", enabled);
+        shader.SetInt("FrequencyBins", 1); shader.SetInt("MaxBounces", 2); shader.SetInt("FrameCount", 1);
+        reducer.SetBuffer(reduce, "ProductionPaths", paths); reducer.SetBuffer(reduce, "ExperimentOutput", output);
+        reducer.SetBuffer(continuous, "ExperimentOutput", output);
+        double buildMs = watch.Elapsed.TotalMilliseconds;
+        try
+        {
+            for (int repeat = -1; repeat < 5; repeat++) foreach (string method in repeat % 2 == 0 ? new[] {"cauchy", "production"} : new[] {"production", "cauchy"}) foreach (var budget in budgets)
+            {
+                int samples = budget.samples;
+                shader.SetInt("RaysPerBin", samples); shader.SetInt("RaysPerPair", samples); shader.SetInt("SlotsPerPair", 1 + 3 * samples);
+                shader.SetInt("RaySeed", seedBase + (repeat + 1) * 104729); reducer.SetInt("SampleCount", samples);
+                reducer.SetInt("SeedOffset", seedBase + (repeat + 1) * trialCount);
+                var sums = new Vector2[trialCount * samples / 64]; var single = new Vector2[samples / 64];
+                void Dispatch(int count)
+                {
+                    if (method == "cauchy") reducer.Dispatch(continuous, count * samples / 64, 1, 1);
+                    else
+                    {
+                        shader.SetInt("PairCount", count); shader.Dispatch(trace, count * samples / 64, 1, 1);
+                        reducer.Dispatch(reduce, count * samples / 64, 1, 1);
+                    }
+                }
+                if (repeat == -1 && samples == 64 && method == "production")
+                {
+                    shader.SetFloat("DiffractionFactor", 0); Dispatch(1); output.GetData(single, 0, 0, single.Length);
+                    Assert.That(single.All(x => x == Vector2.zero), Is.True, "Production control must contain no surface contribution.");
+                    shader.SetFloat("DiffractionFactor", 1);
+                }
+                watch.Restart(); Dispatch(trialCount); output.GetData(sums, 0, 0, sums.Length);
+                double batchMs = watch.Elapsed.TotalMilliseconds;
+                watch.Restart(); Dispatch(1); output.GetData(single, 0, 0, single.Length);
+                double singleMs = watch.Elapsed.TotalMilliseconds;
+                Assert.That(single.SequenceEqual(sums.Take(single.Length)), Is.True, "Production control single/batch packing differs.");
+                if (repeat < 0) continue;
+                var stats = EstimateStatistics(sums, trialCount, real, imag, trials, scene, hz, 0, method, samples, budget.target, repeat);
+                metrics.WriteLine(Csv(scene, hz, 0, 0, method, samples, budget.target, trialCount, repeat, buildMs, 0,
+                    batchMs, singleMs, sums.Length * 8, real, imag, double.NaN, stats.rmse, stats.real, stats.imag)); metrics.Flush();
+            }
+        }
+        finally
+        {
+            materials.SetData(original);
+            shader.SetBuffer(trace, "RayPaths", (ComputeBuffer)Field(transport, "pathBuffer"));
+            shader.SetBuffer(trace, "Sources", (ComputeBuffer)Field(solver, "sources"));
+            shader.SetBuffer(trace, "RayPairEnabled", (ComputeBuffer)Field(transport, "enabledBuffer"));
         }
         trials.Flush();
     }

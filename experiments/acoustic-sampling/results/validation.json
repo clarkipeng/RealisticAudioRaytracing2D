@@ -1,32 +1,35 @@
 {
   "checkpoint": "435a18c",
-  "platform": [
-    "Apple M5",
-    "Unity 6000.4.1f1"
-  ],
-  "command_test": "TakeChecks.CompareEdgeSampling",
+  "previous_pilot": "d2f5d47",
   "result": "Passed",
-  "duration_seconds": 1.06743,
-  "metric_rows": 288,
-  "individual_estimates": 9216,
-  "assertions": [
-    "positive CDF probability for every node",
-    "direct fixture connection blocked",
-    "finite enumerated and estimated responses",
-    "path reciprocity on non-coplanar fixtures",
-    "GPU estimator mean within six standard errors of enumerated response"
+  "test": "TakeChecks.CompareEdgeSampling",
+  "primary_test_duration_seconds": 6.084202,
+  "verification_test_duration_seconds": 6.213049,
+  "metric_rows": 1000,
+  "individual_estimates": 32000,
+  "repeats": 5,
+  "trials_per_repeat": 32,
+  "verification": "All 32000 individual complex estimates reproduced exactly after the final seed-selection/reproduction change.",
+  "production_control_mean_comparisons": 20,
+  "maximum_combined_standard_errors": 2.223220196777291,
+  "calibration_seed_base": 0,
+  "held_out_seed_base": 7000001,
+  "checks": [
+    "finite responses",
+    "positive proposal support",
+    "direct fixture segment blocked",
+    "reciprocity for non-coplanar fixtures",
+    "prototype mean agrees with enumerated target",
+    "zero diffraction suppresses production second-event response",
+    "single and first batched estimates are bit-identical",
+    "continuous Cauchy means agree with production within six combined standard errors"
   ],
+  "scope": "Static two-edge diffraction only. Prototype reference: 32-point quadrature; continuous reference: 64 points. Staggered continuum reference remains unconverged. No moving or multi-pair reuse or full DSP benchmark.",
+  "known_failure": "Coplanar grazing visibility reversal remains unresolved; prior diagnostics retained.",
   "runtime_source_sha256": {
     "Assets/Shaders/Geometry.hlsl": "7fd780da4363794cd3dee803c253417c0842772b9bbc7b9b9d8fc7e5c06fd218",
     "Assets/Shaders/Transport.hlsl": "846bd96e7a9e602b795c7acd172645fd16d5e973313628cd8d86ac03e6f48012",
     "Assets/Scripts/Simulation/RayTransport.cs": "5ddd7a60e599934d3cd06bb61de06cc6eb9b53eed37d0b99190b06b8e78f2085",
     "Assets/Scripts/Simulation/TransportSolver.cs": "6a076894e1b6adfd5595ec6debb9cc10b1ee9dc4fd9da8f8c8c814aa0459c28b"
-  },
-  "scope": "Two rigid static 3D fixtures; two-edge quadrature target, one pair; not full renderer or production sampler comparison; no multi-pair reuse.",
-  "known_failure": "Equal-height coplanar geometry fails path reciprocity; retained through ACOUSTIC_SAMPLING_COPLANAR=1. No visibility fix or runtime algorithm changes.",
-  "coplanar_reproduction": {
-    "expected_result": "Failed",
-    "actual_result": "Failed",
-    "assertion": "Rigid two-edge target must be reciprocal.\n  Expected: less than 0.002d\n  But was:  0.0062011514839954863d"
   }
 }

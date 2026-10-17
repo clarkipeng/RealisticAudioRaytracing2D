@@ -1,0 +1,5 @@
+scene,hz,samples,target
+box,250,12544,0.2
+box,62.5,1792,0.2
+staggered,250,38208,0.2
+staggered,62.5,8768,0.2
