@@ -1,5 +1,89 @@
 # Cleanup validation and measured bottlenecks
 
+## Continuous spectral path timing — 2026-10-18
+
+**Implemented in the existing CPU/GPU spectral renderers.** Persistent paths now use one Hermite-interpolated propagation clock and its derivative for Doppler/sinc filtering. Gain interpolation uses acoustic arrival time; head rotation retains output time. Two response banks remain. Group matching uses topology identity and canonical frequency, rejects ambiguous matches and requires a monotone source clock. Unmatched paths retain their endpoint clocks. Short-filter overlap outside the endpoint interval uses tangent continuation; this remains an approximation, not arbitrary-trajectory wave reconstruction.
+
+The live/offline orchestrators solve the right endpoint at `max(0, output + responseStep - declaredDspLatency)`. Live retains only the observation history needed for that clock and waits for the required future observation when the response step exceeds DSP latency. Initial state is explicitly primed for that case. DSP latency, playback lead, scene data and the 32-byte arrival format are unchanged. Spectral gain interpolation spans the response interval; `transitionSamples` continues to control Direct/IR fades. A cut prevents interpolation across its solve knot. Current output-time head prediction is applied to both acoustic banks.
+
+Measured on silent controls:
+
+| Control | Before | After |
+|---|---:|---:|
+| Accelerating 4 kHz direct tone, fitted residual | -31.72 dBc | -68.67 dBc |
+| Same motion with the previous half-step fade setting | -34.95 dBc | -68.67 dBc |
+| Curved direct + rigid reflection, unfitted relative RMS | about 0.482% | 0.00947% |
+| Head-turn HRIR control | about -58 dBc | unchanged |
+
+The synthetic live consumer recorded 204,000 frames **bit-identical to the new offline render**, with zero underrun/late/overflow/budget misses. This uses the existing 16,384-frame lead and no graphics, physical microphone or actual device callback. It does not establish low-latency multiplayer capacity.
+
+Three warm repetitions of each 4.5-second small fixture, one low-priority Metal worker: the moving two-path median total render time was **0.1990 → 0.1843 s**, with source FFTs **2,244 → 1,552**. The stationary median was **0.1063 → 0.1179 s**. These include CPU submission and readback, are not isolated GPU timings, and show a stationary overhead rather than a universal speedup. Matched paths with the same compacted index share their source FFT; reordered matches remain correct and synthesize separately. No extra path/spectrum readback was introduced.
+
+**Final regression: 96/96 passing, 26.78 seconds in the test body.** Added one parameterized accelerating-clock regression with two independently varying paths and reordered groups/frequency bins, and updated existing transition/reuse assertions to the new contract. Existing FIR, source-stop, cut, head, live/offline, batching and CPU/GPU checks pass. The final silent consumer again had zero underrun/late/overflow/budget misses. Source changes add a net 139 runtime lines across seven existing files; three existing test files change. No new runtime dependency or source file.
+
+Silent scene integration also completed: the saved 18-second Church walk plus tail rendered 926,101 frames in 7.83 seconds, peak 0.00713; the six-source multiplayer host take plus tail rendered 975,493 frames in 6.46 seconds, peak 0.13335. Both are mono, finite, have no samples over full scale, and include the measured response support. These are single cold scene renders, not before/after performance claims or evidence of live networking. Church retains its existing diffraction-off setting; the voice fixture retains diffraction. Binaural motion is covered separately by the HRIR controls.
+
+One attempted client take failed, and remains excluded: `lan-3-atomic-final-client1` has an unmarked train jump from samples 716,184 to 717,066 at 44.1 kHz, implying 1,686 m/s. The renderer correctly rejects unsupported supersonic motion. The take was not repaired or overwritten; this capture defect remains separate from the timing change. The host take from that session has no such jump and completed.
+
+[Before/after residual waveforms and spectrograms](../.context/path-timing/timing-comparison.png) use the independent direct-plus-image-source formula, declared latency, shared scales and no fitted gain/time shift. [Machine-readable measurements](benchmarks/audio-quality-2026-10-18.json) include the accepted change and rejected experiments. Local evidence, source checkpoints, WAVs, scripts and failed/accepted logs: `.context/path-timing/`. Earlier shader compile failures and a cut/parity bug were corrected before the accepted run; an obsolete spectral-fade assertion was updated to the new acoustic-time contract.
+
+### Diffraction integration trials: not promoted
+
+Derived and tested an exact normalized proposal for the absolute angular terms of the existing rigid-edge kernel. With fixed source and receiver, substituting `eta = asinh((z-zs)/rs) + asinh((z-zr)/rr)` gives an invertible component CDF and controls the narrow longitudinal peak without clamping the signed contribution. Double-precision density integration and the existing GPU half-plane/zone-boundary checks pass. This is consistency with that edge model, not an independent higher-order wave reference.
+
+The same 720-solve two-layout/five-pose sweep and 12-seed spike-pose probe expose the remaining problem:
+
+| Proposal | Zero responses at 32 rays / 240 solves | Largest path weight at 32 rays in sweep | Largest weight at actual spike pose, 32 rays |
+|---|---:|---:|---:|
+| Existing proposal | 69 | 8.85 | 259.61 |
+| Exact weighted edge-envelope CDF | 68 | 8.35 | 123.39 |
+| Exact CDF with fixed uniform component selection | 69 | 12.07 | 235.98 |
+| Exact CDF plus previous-face adjacency | 67 | 23.29 | See retained CSV |
+| Exact CDF plus coplanar-face candidate grouping | 75 | 9.78 | See retained CSV |
+
+The weighted CDF reduces the reproduced spike and 128-ray seed spread, but its 8-ray maximum worsens (10.53 → 13.08). Fixed component selection and the candidate-list changes also fail the combined coverage/outlier gate; coplanar-face grouping reaches a 44.46 path weight at 128 rays. These are equal-ray transport probes, not matched-total-time audio benchmarks. **None is applied to production.**
+
+The fixed-source/receiver envelope bound does not bound a whole multi-edge chain: an earlier point is proposed using the final listener, then its kernel is evaluated toward a subsequently sampled edge. Discrete edge choices also multiply inverse probabilities. The measured outliers establish a remaining integration problem; they do not identify which physical paths are correct. Next work must validate a restricted two-edge case independently and account for the full chain's conditional integrand before extending the proposal. The [authors' EDtoolbox](https://github.com/upsvensson/Edge-diffraction-Matlab-toolbox) is a possible external comparator for convex rigid scattering, not an already-run reference or a general room solver. Training-teacher approval and enabling Church diffraction remain blocked on that validation.
+
+## Movement artifacts and rejected sampling changes — 2026-10-18
+
+**Baseline investigation before the timing repair above, against `435a18c`.** No sampling change passed the acceptance gate in this phase. Fourteen new silent 48 kHz captures separate moving mono, stationary binaural turns and two-wall movement. Four candidate sampling changes were tested in the isolated imported runner and rejected. The source renderer, scene presets and output lead remain unchanged. [Machine-readable results](benchmarks/audio-quality-2026-10-18.json) retain the measurements; local WAVs, shader variants, CSVs, test results and analysis scripts are under `.context/audio-quality/`.
+
+### What the movement captures establish
+
+- **Two-wall transport is unstable.** With the same continuous 4 kHz input and 32 rays/bin, one seed reaches a PCM peak of **51.3033**, while other seeds have exact silent spans up to **0.7183 seconds** during the active interval. These are unclipped float WAVs: values above full scale would overload ordinary output, but have not been clipped in the measurement. A 256-sample response fade reduces abrupt transitions; it does not remove the large contribution or missing routes.
+- **The spike is in transported arrivals.** At response samples 52,736 / 53,248 / 53,760, the same three-edge path's selected-bin weight changes from **-38.1664 → +259.4032 → +229.5154**. Its second and third edges belong to the same box. These are signed estimator weights, not physical ray energies. The diagnostic path dump is separate from timed runs. This localizes the source of the spike; it does not establish whether all of its magnitude is sampling variance or a multi-edge model defect.
+- **The head-turn control is much closer to its stated target.** Sample-timed HRIR comparisons give about **-58 dBc** residual without response fades and **-56 dBc** with them, with maximum absolute residual below 0.00053. Turning, stopping and reversing cross the rear seam. This tests the existing HRTF implementation and motion approximation, not individualized binaural realism or an audibility threshold.
+- **Accelerating direct motion still has clock error.** The smooth walk/stop control has fitted residual **-31.72 dBc**, or **-34.95 dBc** with the half-step fade. Constant-speed walking with that fade is **-60.89 dBc**. The reference accounts for changing distance and Doppler; constant gain/phase bias is reported separately. This is consistent with the response-time/linear-delay limitation documented below. A longer fade is not a general repair.
+
+The earlier analytic captures used no response fade. Church and TrainStation actually use a 1,024-sample response step and 512-sample fade; a separate two-wall capture confirms missing output at their FFT/hop/cadence. **Church currently disables experimental diffraction, so the three-edge spike cannot explain artifacts in that authored configuration.** Transport instability and the response-clock issue must remain separate findings.
+
+Local plots: [motion controls](../.context/audio-quality/movement-before/motion.png), [spike waveform/spectrogram](../.context/audio-quality/spike-waveforms/channel-1.png), [sampling comparisons](../.context/audio-quality/sampling-trials.png). The waveform report uses explicit declared latency removal, shared gain/scales and no guessed alignment.
+
+### Sampling decisions
+
+The transport-only sweep uses two box layouts, five listener poses, 24 disjoint seed ranges and budgets of 8 / 32 / 128 rays/bin: **720 solves per variant**. It evaluates a 4 kHz complex response with FFT 2, three interactions and the existing material/edge model. This isolates sampling cheaply; it is not a full-audio or equal-total-render-time benchmark. Every proposal retains the physical kernel. The guide includes all overlapping proposal probabilities and global support.
+
+| Proposal | Zero responses at 32 rays, out of 240 | Largest absolute path weight at 32 rays | Decision |
+|---|---:|---:|---|
+| Current | 69 | 8.85 | Retain pending a validated replacement |
+| Shifted strata without permutation | 81 | 9.09 | Reject: worse coverage; 128-ray coverage also worsens |
+| Permuted strata | 57 | 68.67 | Reject: better coverage but larger outliers |
+| Exclude the immediately previous edge, with corrected probabilities | 57 | 17.25 | Reject: better coverage but larger outliers |
+| Guide toward the previous edge's adjacent faces | 67 | 18.18 | Reject: no combined improvement; 128-ray coverage worsens |
+
+These are descriptive results, not estimated universal failure probabilities, physical-error scores or proofs of one proposal's expected variance. [Stratified sampling](https://www.pbr-book.org/4ed/Sampling_and_Reconstruction/Stratified_Sampler) motivates spreading samples and independently associating dimensions; it does not guarantee an improvement for this multi-edge integrand. An additional explicit-random-draw ablation produces identical transport values to current Metal output across the sweep: the suspected short-circuit dimension change does not occur on this tested backend. No production edit is justified for it.
+
+At the actual spike pose, a separate 12-seed probe includes the problematic seed and uses non-overlapping ranges up to 8,192 rays/bin. Received complex magnitudes span **0.091–256.54** at 32 rays and still **0.169–2.093** at 8,192. This is evidence of poor reliability, not an error against a chosen reference. Increasing budget reduces that original sample's weight but does not establish convergence at a realtime budget. None of the candidate changes warranted the more expensive full-scene integration benchmark or deployment.
+
+### Delivery and correctness checks
+
+The normal-settings two-wall take also ran through `TakeRender.Live` with a separate wall-clock consumer, 256-frame blocks, final-output muting and the existing 16,384-frame lead. The consumer continued independently while GPU work completed; it did not wait for rendered output. **861 callbacks consumed 220,416 frames with zero underrun, late, overflow or callback-budget misses.** All **204,000 rendered frames exactly match offline PCM** after removing the lead. Maximum consumer wake delay was 2.33 ms, GPU/readback latency 20.44 ms, and completion-to-consumption delay 0.286 ms. This is synthetic-consumer delivery with no graphics or live networking, not a physical-device latency claim; the lead alone is 341.3 ms at 48 kHz.
+
+**20 existing focused checks pass:** mute/capture preservation, backlog batching, sample-timed ears, response fades, the sampled rigid-edge integral against stored quadrature, shadow-boundary continuity and two-bend reachability. These do not establish independent multi-edge wave accuracy. The raw evidence retains one capture-fixture compile failure and one experimental-shader compile failure; both were corrected before measured runs. Failed runs are excluded explicitly, not reported as passing measurements.
+
+**Status after the subsequent repair above:** acoustic response-time interpolation and Church/multi-source integration confirmation are complete. Sharp multi-edge integration and independent physics validation remain unresolved; training-teacher approval remains withheld. Retain the passing scheduler for the tested workload. No weight clamp, arbitrary volume reduction or extra production test framework was added.
+
 ## Remaining artifacts: measured causes and repair plan — 2026-10-16
 
 **Investigation only; production remains `5a957e3`.** The next change should repair response timing, then diffraction sampling. No new renderer, scene preset, runtime dependency or production test was added in this pass. The numerical experiments below identify implementation work; they do not claim that these repairs have shipped. Existing BLAS/TLAS, GPU synthesis, continuous source clocks, sinc interpolation, muted callback capture and recording formats remain the foundation.

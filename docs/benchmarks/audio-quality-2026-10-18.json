@@ -1,0 +1,813 @@
+{
+  "date": "2026-10-18",
+  "runtime_changed": true,
+  "motion": {
+    "occluded-32-0-walk": {
+      "peak": 0.706517219543457,
+      "at_or_above_full_scale": 0,
+      "sha256": "c82f18da6fed53e2d5cb4c269a7a8bea532684b1d7a145ac00b4bb3e3ac528f9",
+      "render_wall_seconds": 0.42643159999999997,
+      "exact_silent_5ms_windows": 40034,
+      "active_rms_dbfs": -16.940450007985415,
+      "maximum_adjacent_step": 0.6035417765378952
+    },
+    "occluded-32-0-walk-fade": {
+      "peak": 0.7049926519393921,
+      "at_or_above_full_scale": 0,
+      "sha256": "d07533adc5a02e10879a4a463ca303f0b607704e606692b375998a2a12f8cce7",
+      "render_wall_seconds": 0.42216339999999997,
+      "exact_silent_5ms_windows": 39779,
+      "active_rms_dbfs": -17.06419388581774,
+      "maximum_adjacent_step": 0.36909613758325577
+    },
+    "occluded-32-1-walk": {
+      "peak": 51.30332946777344,
+      "at_or_above_full_scale": 46731,
+      "sha256": "e8a6d2867028ee8f6f87520b2449e7ba60306ed545adbc64fe5cfba17911e998",
+      "render_wall_seconds": 0.49949469999999996,
+      "exact_silent_5ms_windows": 0,
+      "active_rms_dbfs": 14.630271889028945,
+      "maximum_adjacent_step": 41.812939405441284
+    },
+    "occluded-32-1-walk-fade": {
+      "peak": 51.30332946777344,
+      "at_or_above_full_scale": 46958,
+      "sha256": "98b02ea688ddebca0ca235c955491400df70101dd19e04d2ccdd065bc79d558a",
+      "render_wall_seconds": 0.5535296,
+      "exact_silent_5ms_windows": 0,
+      "active_rms_dbfs": 14.549848216251904,
+      "maximum_adjacent_step": 26.52064323425293
+    },
+    "occluded-32-2-walk": {
+      "peak": 0.6498417258262634,
+      "at_or_above_full_scale": 0,
+      "sha256": "15ac61ad92d02e7fa6ba9e75c55c3bf12ca0e400161a843a8daf9d96ae4bc8ba",
+      "render_wall_seconds": 0.346699,
+      "exact_silent_5ms_windows": 54882,
+      "active_rms_dbfs": -20.895898073540117,
+      "maximum_adjacent_step": 0.3349466472864151
+    },
+    "occluded-32-2-walk-fade": {
+      "peak": 0.6498417258262634,
+      "at_or_above_full_scale": 0,
+      "sha256": "1ef89a3babb348c5379e8c977a853d5ae34672d5c47c80c576421f6f6214f512",
+      "render_wall_seconds": 0.41723839999999995,
+      "exact_silent_5ms_windows": 54627,
+      "active_rms_dbfs": -20.95445126916882,
+      "maximum_adjacent_step": 0.3349466472864151
+    },
+    "occluded-32-3-walk": {
+      "peak": 1.1822394132614136,
+      "at_or_above_full_scale": 145,
+      "sha256": "726482daf1eb47c50c0eb07899a97ab01cf617d74c578d2c3d2a331b834a840f",
+      "render_wall_seconds": 0.5214,
+      "exact_silent_5ms_windows": 14609,
+      "active_rms_dbfs": -14.94556702276359,
+      "maximum_adjacent_step": 0.6009825468063354
+    },
+    "occluded-32-3-walk-fade": {
+      "peak": 1.0953660011291504,
+      "at_or_above_full_scale": 71,
+      "sha256": "f784f989016781b667ba001f1e914f58fec8b32e4f7db3f299ba5bb7bf2aa9b7",
+      "render_wall_seconds": 0.5110219,
+      "exact_silent_5ms_windows": 14354,
+      "active_rms_dbfs": -15.027048633921236,
+      "maximum_adjacent_step": 0.5757018327713013
+    },
+    "occluded-8-0-walk-normal-fade": {
+      "peak": 0.6827942728996277,
+      "at_or_above_full_scale": 0,
+      "sha256": "d4ffd6e6e1d98edb4397e7eada4b17786a42c56c1ac94b67938f9cabd0ce1459",
+      "render_wall_seconds": 0.331706,
+      "exact_silent_5ms_windows": 54371,
+      "active_rms_dbfs": -21.05474703014847,
+      "maximum_adjacent_step": 0.3588953912258148
+    },
+    "turn-binaural": {
+      "peak": 0.060061801224946976,
+      "at_or_above_full_scale": 0,
+      "sha256": "b3809f1511a69ec451a8f46c85d31f36c5a1f1f351b076774f3fc73215368b7a",
+      "render_wall_seconds": 0.5917907,
+      "ears": [
+        {
+          "residual_dbc": -58.339003202578326,
+          "residual_dbfs": -88.69459664349554,
+          "max_absolute_residual": 0.0005283132195472717
+        },
+        {
+          "residual_dbc": -58.238840330277945,
+          "residual_dbfs": -88.49392188814059,
+          "max_absolute_residual": 0.0004639066755771637
+        }
+      ]
+    },
+    "turn-binaural-fade": {
+      "peak": 0.060061801224946976,
+      "at_or_above_full_scale": 0,
+      "sha256": "3ad90c7272b5a4adc2886a7d686ff7bbe16dbc4c112bdad0a10b6ba44463baf6",
+      "render_wall_seconds": 0.3107041,
+      "ears": [
+        {
+          "residual_dbc": -56.52900989659003,
+          "residual_dbfs": -86.88460333750726,
+          "max_absolute_residual": 0.0005283132195472717
+        },
+        {
+          "residual_dbc": -56.022795019783686,
+          "residual_dbfs": -86.27787657764634,
+          "max_absolute_residual": 0.0004639066755771637
+        }
+      ]
+    },
+    "walk-away-fade": {
+      "peak": 0.04936831817030907,
+      "at_or_above_full_scale": 0,
+      "sha256": "845ad5b2e62ffa8748e9232cca592bbeab04d74c919890d21b87dc305131802a",
+      "render_wall_seconds": 0.12260209999999999,
+      "tone": {
+        "status": "measured",
+        "rms_dbfs": -32.31412725146259,
+        "gain_db_re_basis": -0.0417028227888331,
+        "phase_offset_degrees": -0.0012966132263108861,
+        "residual_dbfs": -93.2085467005289,
+        "non_tone_residual_dbc": -60.89441591444781,
+        "gain_ripple_p95_p5_db": 0.01828456471169943,
+        "frequency_bias_hz": -1.4016522970357337e-06,
+        "frequency_error_p95_hz": 0.0008948327976311116,
+        "worst_1ms_residual_dbc": -52.786873707704025,
+        "dropout_candidate_window_starts": 0,
+        "absolute_reference_difference_db": -46.243746209102845
+      }
+    },
+    "walk-stop": {
+      "peak": 0.05000278353691101,
+      "at_or_above_full_scale": 0,
+      "sha256": "3b6dbccb3c0b187e53751d33a82782258e1af9450de16a8576107fb778f1e192",
+      "render_wall_seconds": 0.203389,
+      "tone": {
+        "status": "measured",
+        "rms_dbfs": -30.766004489955705,
+        "gain_db_re_basis": -0.040431148679648254,
+        "phase_offset_degrees": 0.35357885013511914,
+        "residual_dbfs": -62.48561374659089,
+        "non_tone_residual_dbc": -31.716685309106303,
+        "gain_ripple_p95_p5_db": 0.04562872839340808,
+        "frequency_bias_hz": -0.008773896506660234,
+        "frequency_error_p95_hz": 0.024975246282996976,
+        "worst_1ms_residual_dbc": -24.723763342553276,
+        "dropout_candidate_window_starts": 0,
+        "absolute_reference_difference_db": -31.38632904529952
+      }
+    },
+    "walk-stop-fade": {
+      "peak": 0.05001195892691612,
+      "at_or_above_full_scale": 0,
+      "sha256": "93db9caeaecfee92ea7945703758a894838be773179387a270b2142ad3c78cce",
+      "render_wall_seconds": 0.1284612,
+      "tone": {
+        "status": "measured",
+        "rms_dbfs": -30.75999153810801,
+        "gain_db_re_basis": -0.032882743680918876,
+        "phase_offset_degrees": 0.2554117736526106,
+        "residual_dbfs": -65.71177671196085,
+        "non_tone_residual_dbc": -34.950396260229574,
+        "gain_ripple_p95_p5_db": 0.0381539853961992,
+        "frequency_bias_hz": -0.0063005425256154384,
+        "frequency_error_p95_hz": 0.015665745925392563,
+        "worst_1ms_residual_dbc": -29.143662568845464,
+        "dropout_candidate_window_starts": 0,
+        "absolute_reference_difference_db": -34.54048760638549
+      }
+    }
+  },
+  "sampling": {
+    "sampling-before": {
+      "label": "Current",
+      "budgets": [
+        {
+          "rays": 8,
+          "captures": 240,
+          "silent": 90,
+          "maximum_absolute_path_gain": 10.52912425994873,
+          "p95_maximum_absolute_path_gain": 0.8114508807659135,
+          "median_solve_readback_seconds": 0.0005188
+        },
+        {
+          "rays": 32,
+          "captures": 240,
+          "silent": 69,
+          "maximum_absolute_path_gain": 8.8479585647583,
+          "p95_maximum_absolute_path_gain": 1.4909521579742426,
+          "median_solve_readback_seconds": 0.0005901000000000001
+        },
+        {
+          "rays": 128,
+          "captures": 240,
+          "silent": 20,
+          "maximum_absolute_path_gain": 6.210350036621094,
+          "p95_maximum_absolute_path_gain": 1.447639203071591,
+          "median_solve_readback_seconds": 0.0006517999999999999
+        }
+      ],
+      "sha256": "c3923b1564bace47aba5f5d090c78ae7d64051644057d337123f5696c67864f2"
+    },
+    "sampling-stratified": {
+      "label": "Shifted strata",
+      "budgets": [
+        {
+          "rays": 8,
+          "captures": 240,
+          "silent": 90,
+          "maximum_absolute_path_gain": 33.49244689941406,
+          "p95_maximum_absolute_path_gain": 0.9948001056909532,
+          "median_solve_readback_seconds": 0.00051825
+        },
+        {
+          "rays": 32,
+          "captures": 240,
+          "silent": 81,
+          "maximum_absolute_path_gain": 9.091675758361816,
+          "p95_maximum_absolute_path_gain": 1.6938793838024138,
+          "median_solve_readback_seconds": 0.0005495
+        },
+        {
+          "rays": 128,
+          "captures": 240,
+          "silent": 74,
+          "maximum_absolute_path_gain": 4.086733341217041,
+          "p95_maximum_absolute_path_gain": 0.5758021503686905,
+          "median_solve_readback_seconds": 0.00052565
+        }
+      ],
+      "sha256": "2dd6ed444b2ef09355e9d7118dca363e1a7609c67c7057055a08039eab3da5fc"
+    },
+    "sampling-permuted": {
+      "label": "Permuted strata",
+      "budgets": [
+        {
+          "rays": 8,
+          "captures": 240,
+          "silent": 88,
+          "maximum_absolute_path_gain": 40.12321472167969,
+          "p95_maximum_absolute_path_gain": 8.092725324630736,
+          "median_solve_readback_seconds": 0.00049065
+        },
+        {
+          "rays": 32,
+          "captures": 240,
+          "silent": 57,
+          "maximum_absolute_path_gain": 68.67316436767578,
+          "p95_maximum_absolute_path_gain": 3.2135903954505918,
+          "median_solve_readback_seconds": 0.00059405
+        },
+        {
+          "rays": 128,
+          "captures": 240,
+          "silent": 13,
+          "maximum_absolute_path_gain": 5.988449573516846,
+          "p95_maximum_absolute_path_gain": 2.4990032553672727,
+          "median_solve_readback_seconds": 0.0006136
+        }
+      ],
+      "sha256": "ae30db0f531a09ca5c9fa2c9d9da33cf4c8eb02cb04cc2063d3b47957cab1f9c"
+    },
+    "sampling-exclude-previous": {
+      "label": "Exclude previous edge",
+      "budgets": [
+        {
+          "rays": 8,
+          "captures": 240,
+          "silent": 79,
+          "maximum_absolute_path_gain": 32.35379409790039,
+          "p95_maximum_absolute_path_gain": 0.9767858982086182,
+          "median_solve_readback_seconds": 0.0005198
+        },
+        {
+          "rays": 32,
+          "captures": 240,
+          "silent": 57,
+          "maximum_absolute_path_gain": 17.253564834594727,
+          "p95_maximum_absolute_path_gain": 2.9679622292518606,
+          "median_solve_readback_seconds": 0.0005645
+        },
+        {
+          "rays": 128,
+          "captures": 240,
+          "silent": 15,
+          "maximum_absolute_path_gain": 6.665932655334473,
+          "p95_maximum_absolute_path_gain": 2.431361377239226,
+          "median_solve_readback_seconds": 0.00062535
+        }
+      ],
+      "sha256": "aad9460b392cc59ea91fc840de3f4ff61444325fd2f15b018ebedcef03836919"
+    },
+    "sampling-adjacent-fixed": {
+      "label": "Adjacent-face guide",
+      "budgets": [
+        {
+          "rays": 8,
+          "captures": 240,
+          "silent": 90,
+          "maximum_absolute_path_gain": 5.932195663452148,
+          "p95_maximum_absolute_path_gain": 0.7243983209133145,
+          "median_solve_readback_seconds": 0.0004799
+        },
+        {
+          "rays": 32,
+          "captures": 240,
+          "silent": 67,
+          "maximum_absolute_path_gain": 18.184038162231445,
+          "p95_maximum_absolute_path_gain": 3.9532435059547426,
+          "median_solve_readback_seconds": 0.00056305
+        },
+        {
+          "rays": 128,
+          "captures": 240,
+          "silent": 41,
+          "maximum_absolute_path_gain": 6.396519184112549,
+          "p95_maximum_absolute_path_gain": 2.0014511048793704,
+          "median_solve_readback_seconds": 0.0005934
+        }
+      ],
+      "sha256": "b464c5809d61ea3680a395867874934fc6ef24bee4ec693c71834ae16714f00f"
+    },
+    "sampling-stable-dimensions": {
+      "label": "Explicit random draw (no change)",
+      "budgets": [
+        {
+          "rays": 8,
+          "captures": 240,
+          "silent": 90,
+          "maximum_absolute_path_gain": 10.52912425994873,
+          "p95_maximum_absolute_path_gain": 0.8114508807659135,
+          "median_solve_readback_seconds": 0.00052545
+        },
+        {
+          "rays": 32,
+          "captures": 240,
+          "silent": 69,
+          "maximum_absolute_path_gain": 8.8479585647583,
+          "p95_maximum_absolute_path_gain": 1.4909521579742426,
+          "median_solve_readback_seconds": 0.0005314
+        },
+        {
+          "rays": 128,
+          "captures": 240,
+          "silent": 20,
+          "maximum_absolute_path_gain": 6.210350036621094,
+          "p95_maximum_absolute_path_gain": 1.447639203071591,
+          "median_solve_readback_seconds": 0.00057635
+        }
+      ],
+      "sha256": "0a88699400a0766c5f37d4eaf0fa94b001e16d1b17ffa8d2e87e7de9e53e86a1"
+    }
+  },
+  "spike_convergence": [
+    {
+      "rays": 32,
+      "seeds": 12,
+      "minimum_magnitude": 0.09071057712548151,
+      "maximum_magnitude": 256.5385573879256,
+      "median_magnitude": 0.24806951562305637,
+      "complex_standard_deviation": 71.00972834351619
+    },
+    {
+      "rays": 128,
+      "seeds": 12,
+      "minimum_magnitude": 0.14694467323412097,
+      "maximum_magnitude": 63.920319688646224,
+      "median_magnitude": 0.2884261134914173,
+      "complex_standard_deviation": 17.736075579885277
+    },
+    {
+      "rays": 1024,
+      "seeds": 12,
+      "minimum_magnitude": 0.1139232590269984,
+      "maximum_magnitude": 7.75928846304707,
+      "median_magnitude": 0.25794797623362453,
+      "complex_standard_deviation": 2.2058369616328948
+    },
+    {
+      "rays": 8192,
+      "seeds": 12,
+      "minimum_magnitude": 0.16920054062506626,
+      "maximum_magnitude": 2.0931009256086894,
+      "median_magnitude": 0.37060309752092924,
+      "complex_standard_deviation": 0.7312803151267119
+    }
+  ],
+  "silent_delivery": {
+    "underrun": 0,
+    "late": 0,
+    "overflow": 0,
+    "callbacks": 861,
+    "overBudget": 0,
+    "frames": 220416,
+    "leadSamples": 16384,
+    "maximumPending": 4,
+    "maximumWakeDelay": 0.002327433333333323,
+    "maximumReadback": 0.0204402,
+    "maximumConsumeDelay": 0.0002863,
+    "compared_frames": 204000,
+    "offline_max_absolute_difference": 0.0,
+    "scope": "Synthetic consumer, not device callbacks; no graphics or live network load."
+  },
+  "focused_checks": {
+    "result": "Passed",
+    "passed": 20,
+    "failed": 0
+  },
+  "decision": "Reject all changed proposals; none meets the combined quality gates. Response-clock and multi-edge reconstruction remain unresolved.",
+  "limits": [
+    "Sampling sweep is transport-only at 4 kHz, FFT 2; motion captures exercise full synthesis. Timings include synchronous readback, not isolated GPU work.",
+    "The 24-seed sweep and 12-seed spike probe are descriptive. No occluded output is designated ground truth.",
+    "No equal-total-render-time winner, independent multi-edge wave validation, new live network or physical device test is claimed.",
+    "Church currently disables experimental diffraction; edge spikes do not establish the cause of artifacts in that configuration.",
+    "Floating-point WAV values above full scale are retained unclipped; device clipping is a separate consequence."
+  ],
+  "baseline_revision": "435a18cd2b5ec48f27a123b1605a5013bfde5213",
+  "timing_repair": {
+    "dsp_contract": "gpu-path-clock-spectral-interpolated-v3",
+    "description": "One Hermite source clock for uniquely matched persistent paths; acoustic-time gain interpolation and output-time head rotation; unchanged IR behavior.",
+    "scope": "Existing CPU/GPU spectral backends. No new runtime dependency or tracked source file. Endpoint tangent continuation remains an approximation.",
+    "before_motion": {
+      "walk-stop": {
+        "peak": 0.05000278353691101,
+        "at_or_above_full_scale": 0,
+        "sha256": "3b6dbccb3c0b187e53751d33a82782258e1af9450de16a8576107fb778f1e192",
+        "render_wall_seconds": 0.203389,
+        "tone": {
+          "status": "measured",
+          "rms_dbfs": -30.766004489955705,
+          "gain_db_re_basis": -0.040431148679648254,
+          "phase_offset_degrees": 0.35357885013511914,
+          "residual_dbfs": -62.48561374659089,
+          "non_tone_residual_dbc": -31.716685309106303,
+          "gain_ripple_p95_p5_db": 0.04562872839340808,
+          "frequency_bias_hz": -0.008773896506660234,
+          "frequency_error_p95_hz": 0.024975246282996976,
+          "worst_1ms_residual_dbc": -24.723763342553276,
+          "dropout_candidate_window_starts": 0,
+          "absolute_reference_difference_db": -31.38632904529952
+        }
+      },
+      "walk-stop-fade": {
+        "peak": 0.05001195892691612,
+        "at_or_above_full_scale": 0,
+        "sha256": "93db9caeaecfee92ea7945703758a894838be773179387a270b2142ad3c78cce",
+        "render_wall_seconds": 0.1284612,
+        "tone": {
+          "status": "measured",
+          "rms_dbfs": -30.75999153810801,
+          "gain_db_re_basis": -0.032882743680918876,
+          "phase_offset_degrees": 0.2554117736526106,
+          "residual_dbfs": -65.71177671196085,
+          "non_tone_residual_dbc": -34.950396260229574,
+          "gain_ripple_p95_p5_db": 0.0381539853961992,
+          "frequency_bias_hz": -0.0063005425256154384,
+          "frequency_error_p95_hz": 0.015665745925392563,
+          "worst_1ms_residual_dbc": -29.143662568845464,
+          "dropout_candidate_window_starts": 0,
+          "absolute_reference_difference_db": -34.54048760638549
+        }
+      },
+      "walk-away-fade": {
+        "peak": 0.04936831817030907,
+        "at_or_above_full_scale": 0,
+        "sha256": "845ad5b2e62ffa8748e9232cca592bbeab04d74c919890d21b87dc305131802a",
+        "render_wall_seconds": 0.12260209999999999,
+        "tone": {
+          "status": "measured",
+          "rms_dbfs": -32.31412725146259,
+          "gain_db_re_basis": -0.0417028227888331,
+          "phase_offset_degrees": -0.0012966132263108861,
+          "residual_dbfs": -93.2085467005289,
+          "non_tone_residual_dbc": -60.89441591444781,
+          "gain_ripple_p95_p5_db": 0.01828456471169943,
+          "frequency_bias_hz": -1.4016522970357337e-06,
+          "frequency_error_p95_hz": 0.0008948327976311116,
+          "worst_1ms_residual_dbc": -52.786873707704025,
+          "dropout_candidate_window_starts": 0,
+          "absolute_reference_difference_db": -46.243746209102845
+        }
+      }
+    },
+    "after_motion": {
+      "walk-stop-fade": {
+        "status": "measured",
+        "rms_dbfs": -30.728115762858966,
+        "gain_db_re_basis": 0.00038245914673017795,
+        "phase_offset_degrees": -0.002624592195573177,
+        "residual_dbfs": -99.39646836057845,
+        "non_tone_residual_dbc": -68.6683520075876,
+        "gain_ripple_p95_p5_db": 0.00012761052469465102,
+        "frequency_bias_hz": 5.1074502326877406e-05,
+        "frequency_error_p95_hz": 0.0032227844969199464,
+        "worst_1ms_residual_dbc": -60.218842742472454,
+        "dropout_candidate_window_starts": 0,
+        "absolute_reference_difference_db": -68.54082701010546
+      },
+      "walk-away-fade": {
+        "status": "measured",
+        "rms_dbfs": -32.27202037448366,
+        "gain_db_re_basis": 0.0004074897572854969,
+        "phase_offset_degrees": -0.0012619450646305598,
+        "residual_dbfs": -108.69453832440811,
+        "non_tone_residual_dbc": -76.42251785094783,
+        "gain_ripple_p95_p5_db": 1.8023690009905265e-05,
+        "frequency_bias_hz": -2.3270893129555704e-06,
+        "frequency_error_p95_hz": 0.000738777217259455,
+        "worst_1ms_residual_dbc": -72.10268421720686,
+        "dropout_candidate_window_starts": 0,
+        "absolute_reference_difference_db": -75.93826626041991
+      },
+      "turn-binaural": {
+        "residual_dbc": [
+          -58.339003202578326,
+          -58.238840330277945
+        ]
+      },
+      "turn-binaural-fade": {
+        "residual_dbc": [
+          -58.339003202578326,
+          -58.238840330277945
+        ]
+      },
+      "walk-stop": {
+        "status": "measured",
+        "rms_dbfs": -30.728115762858966,
+        "gain_db_re_basis": 0.00038245914673017795,
+        "phase_offset_degrees": -0.002624592195573177,
+        "residual_dbfs": -99.39646836057845,
+        "non_tone_residual_dbc": -68.6683520075876,
+        "gain_ripple_p95_p5_db": 0.00012761052469465102,
+        "frequency_bias_hz": 5.1074502326877406e-05,
+        "frequency_error_p95_hz": 0.0032227844969199464,
+        "worst_1ms_residual_dbc": -60.218842742472454,
+        "dropout_candidate_window_starts": 0,
+        "absolute_reference_difference_db": -68.54082701010546
+      }
+    },
+    "curved_two_path_unfitted_relative_rms": 9.474118185494212e-05,
+    "cost_scope": "4.5 s per fixture, one discarded warmup plus three measured renders; CPU submission/readback included, not GPU-only; runs were not interleaved.",
+    "cost": {
+      "curved-4k-sinc": {
+        "before": {
+          "wall_seconds": [
+            0.1989751,
+            0.18341649999999998,
+            0.2121494
+          ],
+          "median_wall_seconds": 0.1989751,
+          "input_ffts": [
+            2244,
+            2244,
+            2244
+          ]
+        },
+        "after": {
+          "wall_seconds": [
+            0.1842819,
+            0.1933547,
+            0.1769972
+          ],
+          "median_wall_seconds": 0.1842819,
+          "input_ffts": [
+            1552,
+            1552,
+            1552
+          ]
+        }
+      },
+      "stationary-4k-sinc": {
+        "before": {
+          "wall_seconds": [
+            0.1069547,
+            0.10625789999999999,
+            0.1045369
+          ],
+          "median_wall_seconds": 0.10625789999999999,
+          "input_ffts": [
+            1552,
+            1552,
+            1552
+          ]
+        },
+        "after": {
+          "wall_seconds": [
+            0.1179296,
+            0.1164499,
+            0.1254609
+          ],
+          "median_wall_seconds": 0.1179296,
+          "input_ffts": [
+            1552,
+            1552,
+            1552
+          ]
+        }
+      }
+    },
+    "regression": {
+      "total": "96",
+      "passed": "96",
+      "failed": "0",
+      "duration": "26.779314"
+    },
+    "silent_delivery": {
+      "underrun": 0,
+      "late": 0,
+      "overflow": 0,
+      "callbacks": 861,
+      "overBudget": 0,
+      "frames": 220416,
+      "leadSamples": 16384,
+      "maximumPending": 2,
+      "maximumWakeDelay": 0.002717099999999986,
+      "maximumReadback": 0.0065404,
+      "maximumConsumeDelay": 0.0001302
+    },
+    "live_offline": {
+      "rate": 48000,
+      "frames": 204000,
+      "identical": true,
+      "maximum_difference": 0.0
+    },
+    "scenes": {
+      "church": {
+        "complete": true,
+        "sample_rate": 44100,
+        "frames": 926101,
+        "channels": 1,
+        "source_count": 1,
+        "wall_seconds": 7.830957499999999,
+        "finite": true,
+        "peak": 0.007130850106477737,
+        "rms": 0.002800851205815924,
+        "frames_over_fullscale": 0,
+        "tail_covers_support": true,
+        "numeric_bytes": 865367154,
+        "peak_groups": 41,
+        "dsp_latency": 1040,
+        "audio_hashes": [
+          "f544fb1019771e1b252df308ebd5a8e36bd3f754e71c8f2c64f38871b116dcae"
+        ]
+      },
+      "voices": {
+        "complete": true,
+        "sample_rate": 44100,
+        "frames": 975493,
+        "channels": 1,
+        "source_count": 6,
+        "wall_seconds": 6.4569772,
+        "finite": true,
+        "peak": 0.13335373997688293,
+        "rms": 0.021594876982299904,
+        "frames_over_fullscale": 0,
+        "tail_covers_support": true,
+        "numeric_bytes": 490830892,
+        "peak_groups": 1114,
+        "dsp_latency": 1040,
+        "audio_hashes": [
+          "b5149cc61da0e844287c9b2f9b776fe0fb1ce529573d280a1afa0dd64178285d"
+        ]
+      }
+    },
+    "excluded_take": {
+      "name": "lan-3-atomic-final-client1",
+      "reason": "Unmarked train jump between samples 716184 and 717066 at 44100 Hz; inferred speed 1686.18 m/s. Original input preserved. Church completed in that run; client render failed validation."
+    },
+    "local_evidence": ".context/path-timing/",
+    "diffraction_trials": {
+      "edge-exact-v1": {
+        "promoted": false,
+        "sampling": {
+          "8": {
+            "zero_responses": 90,
+            "solves": 240,
+            "largest_absolute_path_weight": 13.082794189453125
+          },
+          "32": {
+            "zero_responses": 68,
+            "solves": 240,
+            "largest_absolute_path_weight": 8.348024368286133
+          },
+          "128": {
+            "zero_responses": 19,
+            "solves": 240,
+            "largest_absolute_path_weight": 2.799649715423584
+          }
+        },
+        "spike_pose": {
+          "32": {
+            "seeds": 12,
+            "complex_seed_std": 33.705996917519236,
+            "largest_absolute_path_weight": 123.38880920410156
+          },
+          "8192": {
+            "seeds": 12,
+            "complex_seed_std": 0.4287794241756878,
+            "largest_absolute_path_weight": 1.460603952407837
+          }
+        }
+      },
+      "edge-stable-v1": {
+        "promoted": false,
+        "sampling": {
+          "8": {
+            "zero_responses": 90,
+            "solves": 240,
+            "largest_absolute_path_weight": 7.025064945220947
+          },
+          "32": {
+            "zero_responses": 69,
+            "solves": 240,
+            "largest_absolute_path_weight": 12.068753242492676
+          },
+          "128": {
+            "zero_responses": 20,
+            "solves": 240,
+            "largest_absolute_path_weight": 6.949255466461182
+          }
+        },
+        "spike_pose": {
+          "32": {
+            "seeds": 12,
+            "complex_seed_std": 64.51990353506896,
+            "largest_absolute_path_weight": 235.98178100585938
+          },
+          "8192": {
+            "seeds": 12,
+            "complex_seed_std": 0.5805693990738723,
+            "largest_absolute_path_weight": 1.922231912612915
+          }
+        }
+      },
+      "edge-adjacent-v1": {
+        "promoted": false,
+        "sampling": {
+          "8": {
+            "zero_responses": 90,
+            "solves": 240,
+            "largest_absolute_path_weight": 4.237246990203857
+          },
+          "32": {
+            "zero_responses": 67,
+            "solves": 240,
+            "largest_absolute_path_weight": 23.286693572998047
+          },
+          "128": {
+            "zero_responses": 41,
+            "solves": 240,
+            "largest_absolute_path_weight": 9.389937400817871
+          }
+        },
+        "spike_pose": {
+          "32": {
+            "seeds": 12,
+            "complex_seed_std": 0.5773415791616702,
+            "largest_absolute_path_weight": 2.106034994125366
+          },
+          "8192": {
+            "seeds": 12,
+            "complex_seed_std": 0.5712902076275506,
+            "largest_absolute_path_weight": 1.7076221704483032
+          }
+        }
+      },
+      "edge-faces-v1": {
+        "promoted": false,
+        "sampling": {
+          "8": {
+            "zero_responses": 81,
+            "solves": 240,
+            "largest_absolute_path_weight": 11.804590225219727
+          },
+          "32": {
+            "zero_responses": 75,
+            "solves": 240,
+            "largest_absolute_path_weight": 9.78327465057373
+          },
+          "128": {
+            "zero_responses": 39,
+            "solves": 240,
+            "largest_absolute_path_weight": 44.458457946777344
+          }
+        },
+        "spike_pose": {
+          "32": {
+            "seeds": 12,
+            "complex_seed_std": 4.8830459731754905,
+            "largest_absolute_path_weight": 15.177058219909668
+          },
+          "8192": {
+            "seeds": 12,
+            "complex_seed_std": 0.18614272102945437,
+            "largest_absolute_path_weight": 0.39543992280960083
+          }
+        }
+      }
+    },
+    "diffraction_decision": "All candidates rejected: fixed-source/receiver exact edge-envelope sampling passes first-order checks but higher-order outliers and low-budget coverage remain unreliable. No Transport.hlsl/RayTransport.cs changes promoted; no training teacher accepted."
+  }
+}

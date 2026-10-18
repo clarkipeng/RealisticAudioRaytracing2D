@@ -20,6 +20,7 @@ public static partial class TakeRender
         public int responseStepSamples = 512;
         public float speedOfSound = 343, referenceDistance = 1, minimumDistance = .1f;
         public int tailSamples;
+        [Tooltip("Direct/IR output fade. Spectral interpolates consecutive responses at acoustic arrival time.")]
         public int transitionSamples;
         public DelayFilter delayFilter=DelayFilter.WindowedSinc;
         [Tooltip("Mono is suitable for speakers. Binaural applies ear filters for headphones.")]
@@ -52,6 +53,7 @@ public static partial class TakeRender
         public bool airAbsorption=true;
         [Min(2)] public int fftSize=1024,spectralHop=256;
         public int DspLatencySamples => (transport==Transport.Raytraced ? fftSize:0)+(delayFilter==DelayFilter.WindowedSinc ? sincRadius:0);
+        internal long ResponseSample(long outputSample) => transport==Transport.Raytraced && synthesis==Synthesis.Spectral ? Math.Max(0,outputSample+responseStepSamples-DspLatencySamples):outputSample;
         public long HistorySamples(int rate) => checked((long)Math.Ceiling((double)maximumDelaySeconds*rate)+2L*DspLatencySamples+2+(listenerOutput==ListenerOutput.Binaural ? Hrtf.Load(rate).Taps-1:0));
     }
 
@@ -199,10 +201,10 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="integrated-edge-preview-v6";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-head-hop-v2";
+            report.method="integrated-edge-preview-v6";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-interpolated-v3";
             if(useGpuAudio)
             {
-                report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-path-filter-overlap-save-v1":"gpu-path-clock-spectral-head-hop-v2";
+                report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-path-filter-overlap-save-v1":"gpu-path-clock-spectral-interpolated-v3";
                 report.audioShaderDependencyHash=AcousticTake.Provenance.Capture(Resources.Load<ComputeShader>("Acoustics/GpuAudio")).shaderDependencyHash;
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
@@ -213,6 +215,7 @@ public static partial class TakeRender
         string reportPath=Path.Combine(outputDirectory,"run.json");
         File.WriteAllText(reportPath,JsonUtility.ToJson(report,true));
         var state=new AcousticTake.State[scene.objects.Length];
+        var headStates=settings.ChannelsPerListener==2?new AcousticTake.State[state.Length]:null;
         var response=new DirectPath[scene.sources.Length*scene.listeners.Length];
         var pcm=new float[scene.clips.Length][];
         for (int c=0; c<pcm.Length; c++) { pcm[c]=take.ReadClip(c); report.preparedPcmBytes+=(long)pcm[c].Length*4; }
@@ -228,7 +231,7 @@ public static partial class TakeRender
         report.responseBatchCapacity=batchCapacity;
         using (var solver=new TransportSolver(scene,take.Geometry,settings,shader,batchCapacity,metadata.sampleRate,!useGpuAudio))
         {
-            report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+(long)state.Length*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+initialMixerBytes+
+            report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+((long)state.Length+(headStates?.Length??0))*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+initialMixerBytes+
                 (batchCapacity==1?0:(long)batchStates.Length*80+(long)batchPaths.Length*DirectPathStride);
             report.backend=solver.Backend;
             report.preparationSeconds=watch.Elapsed.TotalSeconds;
@@ -249,14 +252,22 @@ public static partial class TakeRender
                 }
                 using (var writer=new BinaryWriter(File.Create(Path.Combine(outputDirectory,"responses.bin"))))
                 {
+                    if(settings.ResponseSample(0)>0)
+                    {
+                        take.Evaluate(0,state);solver.Solve(state,response);
+                        if(useGpuAudio){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state,0);gpuAudio.CompletePreparation();}
+                        else mixer.SetResponse(0,response,state,true,solver.RayPaths,0,0);
+                        writer.Write(0L);foreach(var path in response)WritePath(writer,path);report.responseCount++;
+                    }
                     for (long first=0; first<length; first+=(long)batchCapacity*settings.responseStepSamples)
                     {
                         int frames=(int)Math.Min(batchCapacity,(length-first-1)/settings.responseStepSamples+1);
                         long start=Stopwatch.GetTimestamp();
                         for(int f=0;f<frames;f++)
                         {
-                            take.Evaluate(Math.Min(first+(long)f*settings.responseStepSamples,metadata.durationSamples),state);
-                            if(first+(long)f*settings.responseStepSamples>metadata.durationSamples)FreezeMotion(state);
+                            long anchor=settings.ResponseSample(first+(long)f*settings.responseStepSamples);
+                            take.Evaluate(Math.Min(anchor,metadata.durationSamples),state);
+                            if(anchor>metadata.durationSamples)FreezeMotion(state);
                             if(batchCapacity>1)Array.Copy(state,0,batchStates,f*state.Length,state.Length);
                         }
                         report.evaluationSeconds+=Elapsed(start);
@@ -276,12 +287,14 @@ public static partial class TakeRender
                             long sample=first+(long)f*settings.responseStepSamples;
                             if(batchCapacity>1) {Array.Copy(batchStates,f*state.Length,state,0,state.Length);Array.Copy(batchPaths,f*response.Length,response,0,response.Length);}
                             start=Stopwatch.GetTimestamp();
-                            bool cut=(settings.transport==Transport.Raytraced || settings.transitionSamples>0) && take.HasCut(sample-settings.responseStepSamples,sample);
-                            if(useGpuAudio)gpuAudio.SetResponse(sample,cut,solver.RayBuffer,f*solver.RayPathsPerFrame,scene,state);
-                            else mixer.SetResponse(sample,response,state,cut,solver.RayPaths,f*solver.RayPathsPerFrame);
+                            long anchor=settings.ResponseSample(sample);
+                            if(headStates!=null){take.Evaluate(Math.Min(sample,metadata.durationSamples),headStates);if(sample>metadata.durationSamples)FreezeMotion(headStates);}
+                            bool cut=(settings.transport==Transport.Raytraced || settings.transitionSamples>0) && take.HasCut(settings.ResponseSample(sample-settings.responseStepSamples),anchor);
+                            if(useGpuAudio)gpuAudio.SetResponse(sample,cut,solver.RayBuffer,f*solver.RayPathsPerFrame,scene,state,anchor,headStates);
+                            else mixer.SetResponse(sample,response,state,cut,solver.RayPaths,f*solver.RayPathsPerFrame,anchor,headStates);
                             double responseTime=Elapsed(start);report.audioSeconds+=responseTime;report.responsePreparationSeconds+=responseTime;
                             start=Stopwatch.GetTimestamp();
-                            writer.Write(sample);
+                            writer.Write(anchor);
                             foreach (var path in response) WritePath(writer,path);
                             report.responseCount++;
                             int count=(int)Math.Min(settings.responseStepSamples,length-sample);
@@ -450,12 +463,12 @@ public static partial class TakeRender
             delay=new long[current.Length]; oldDelay=new long[delay.Length];
         }
         public void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut=false) => SetResponse(sample,paths,state,cut,null,0);
-        internal void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut,RayTransport.Path[] arrivals,int offset)
+        internal void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut,RayTransport.Path[] arrivals,int offset,long? anchor=null,AcousticTake.State[] headStates=null)
         {
             if(paths.Length!=signals.Length*scene.listeners.Length || state.Length!=scene.objects.Length || (initialized && sample<responseSample)) throw new ArgumentException("Invalid response order/shape.");
             if(spectral!=null || ir!=null)
             {
-                if(spectral!=null)spectral.SetResponse(sample,cut,arrivals,offset,scene,state);else ir.SetResponse(sample,cut,arrivals,offset,scene,state);
+                if(spectral!=null)spectral.SetResponse(sample,cut,arrivals,offset,scene,state,anchor,headStates);else ir.SetResponse(sample,cut,arrivals,offset,scene,state);
                 responseSample=sample;initialized=true;return;
             }
             ValidatePaths(paths);

@@ -115,7 +115,7 @@ public partial class TakeChecks
     }
 
     [TestCase(false,TakeRender.Synthesis.ImpulseResponse),TestCase(true,TakeRender.Synthesis.ImpulseResponse)]
-    [TestCase(false,TakeRender.Synthesis.Spectral),TestCase(true,TakeRender.Synthesis.Spectral),Category("GPU")]
+    [Category("GPU")]
     public void ResponseChangesMatchContinuousOutputCrossfade(bool accelerated,TakeRender.Synthesis method)
     {
         RequireGpu();const int rate=8192,step=128,change=step*3;
@@ -308,7 +308,7 @@ public partial class TakeChecks
         {var actual=new Vector2[sentinel.Length];buffer.GetData(actual,0,0,actual.Length);Assert.That(actual,Is.EqualTo(sentinel),"Head updates must not rebuild acoustic filters.");}
         gpu.Render(size,size,actualPcm);cpu.SetResponse(size,direct,state,false,paths,0);cpu.Render(size,size,expectedPcm);
         Assert.That(gpu.Diagnostics.materialFilters,Is.EqualTo(filters));
-        Assert.That(gpu.Diagnostics.inputFfts-ffts,Is.EqualTo(turn && delayRate!=0?6:4),"Different Doppler anchors need separate old/current input FFTs.");
+        Assert.That(gpu.Diagnostics.inputFfts-ffts,Is.EqualTo(4),"Matched responses share the same interpolated source clock, including head turns.");
         double error=0;for(int i=0;i<actualPcm.Length;i++)error=Math.Max(error,Math.Abs(actualPcm[i]-expectedPcm[i]));
         Assert.That(error,Is.LessThan(2e-5));
     }

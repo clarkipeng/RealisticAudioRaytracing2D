@@ -18,6 +18,17 @@ internal static class Doppler
         if(!(ratio>0) || !double.IsFinite(ratio))throw new NotSupportedException("Noncausal Doppler path; supersonic receiver motion is unsupported.");
         delay=(float)seconds;delayRate=(float)(1-ratio);
     }
+    // Interpolate one source clock, rather than mixing two independently pitched reads.
+    // Endpoint continuation also supplies the short filter's overlap outside this interval.
+    public static bool Continuous(double span,double left,double right,double leftRate,double rightRate) =>
+        span>0 && 2-leftRate-rightRate<=3*(1-(right-left)/span);
+    public static void Clock(double time,double span,double left,double right,double leftRate,double rightRate,out double delay,out double rate)
+    {
+        if(time<=0){delay=left+leftRate*time;rate=leftRate;return;}
+        if(time>=span){delay=right+rightRate*(time-span);rate=rightRate;return;}
+        double u=time/span,delta=right-left,a=3*delta-span*(2*leftRate+rightRate),b=-2*delta+span*(leftRate+rightRate);
+        delay=left+time*leftRate+u*u*(a+u*b);rate=leftRate+u*(2*a+3*u*b)/span;
+    }
     public static float Read(TakeRender.Signal signal,double sample,double ratio,TakeRender.DelayFilter filter,int radius)
     {
         if(!(ratio>0) || !double.IsFinite(ratio) || !double.IsFinite(sample))throw new InvalidOperationException("Invalid propagation clock.");

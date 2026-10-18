@@ -12,7 +12,7 @@ internal sealed class GpuAudio : IDisposable
     readonly TakeRender.Settings settings;
     readonly TakeRender.Signal[] signals;
     readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock;
-    readonly int reset,compare,commit,groups,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
+    readonly int reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
     readonly int[] kernels,transformKernels;
     readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
     readonly ComputeBuffer args,headsPose,source,work,transform,output;
@@ -51,15 +51,15 @@ internal sealed class GpuAudio : IDisposable
         {
             commands=new CommandBuffer {name="Acoustics GPU audio"};
             shader=UnityEngine.Object.Instantiate(asset);
-            reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
+            reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");match=Kernel("AudioMatch");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
-            kernels=new[]{reset,compare,commit,groups,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
+            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(settings.SpectralSlotsPerPair*2+1);
-            Buffer("AudioMeta",17,4).SetData(new uint[17]);
+            Buffer("AudioMeta",23,4).SetData(new uint[23]);
             Buffer("AudioPairState",pairs,16).SetData(new uint[pairs*4]);
             Buffer("AudioLast",capacity,32).SetData(new RayTransport.Path[capacity]);
-            Buffer("AudioPaths",checked(capacity*2),32);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
+            Buffer("AudioMatches",checked(capacity*2),4);Buffer("AudioPaths",checked(capacity*2),32);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
             args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
             Buffer("AudioTable",checked(pairs*hash),8);Buffer("AudioHeads",capacity,4);Buffer("AudioNext",capacity,4);Buffer("AudioBlends",checked(2*capacity),32);
             headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);
@@ -117,16 +117,16 @@ internal sealed class GpuAudio : IDisposable
         foreach(var item in rings){item.Value.Sort((a,b)=>a.x.CompareTo(b.x));rows[row++]=new Vector4(item.Key,offset,item.Value.Count,0);foreach(var angle in item.Value)angles[offset++]=angle;}
         Buffer("AudioRings",rows.Length,16).SetData(rows);Buffer("AudioAngles",angles.Length,8).SetData(angles);Set("AudioRingCount",rows.Length);
     }
-    public void SetResponse(long sample,bool cut,ComputeBuffer arrivals,int offset,AcousticTake.Scene scene,AcousticTake.State[] states)
+    public void SetResponse(long sample,bool cut,ComputeBuffer arrivals,int offset,AcousticTake.Scene scene,AcousticTake.State[] states,long? anchor=null,AcousticTake.State[] headStates=null)
     {
         if(disposed || pending || sample!=cursor)throw new InvalidOperationException("GPU response must match the owned audio cursor.");
-        int changed=0;
+        int changed=0;headStates??=states;
         foreach(var state in states)cut|=(state.flags&AcousticTake.StateFlags.Cut)!=0;
         for(int l=0;l<listeners;l++)
         {
-            var state=states[scene.listeners[l]];bool enabled=TakeRender.Enabled(state,AcousticTake.StateFlags.Listener);
+            var state=headStates[scene.listeners[l]];bool enabled=TakeRender.Enabled(states[scene.listeners[l]],AcousticTake.StateFlags.Listener);
             var velocity=channels==2 && settings.synthesis==TakeRender.Synthesis.Spectral?Hrtf.HeadVelocity(state):Vector3.zero;
-            var rotation=new Vector4(state.rotation.x,state.rotation.y,state.rotation.z,state.rotation.w);
+            var rotation=channels==2?new Vector4(state.rotation.x,state.rotation.y,state.rotation.z,state.rotation.w):new Vector4(0,0,0,1);
             var motion=new Vector4(enabled?1:0,velocity.x,velocity.y,velocity.z);
             changed|=!poses[l].Equals(rotation) || !poses[listeners+l].Equals(motion) || velocity.sqrMagnitude>0?1:0;
             if(poses[listeners+l].x!=motion.x)changed|=2; // Activity changes group membership; head motion does not.
@@ -135,11 +135,11 @@ internal sealed class GpuAudio : IDisposable
         headsPose.SetData(poses,0,poseCursor*poses.Length,poses.Length);UploadedBytes+=poses.Length*16;
         Set("AudioPoseOffset",poseCursor*poses.Length);poseCursor++;
         foreach(int k in kernels)commands.SetComputeBufferParam(shader,k,"AudioArrivals",arrivals);
-        Set("AudioOffset",offset);Set("AudioChanged",changed);Set("AudioInitialized",initialized?1:0);Set("AudioCut",cut?1:0);Clock("AudioResponseSample",sample);
+        Set("AudioOffset",offset);Set("AudioChanged",changed);Set("AudioInitialized",initialized?1:0);Set("AudioCut",cut?1:0);Clock("AudioResponseSample",sample);Clock("AudioSolveSample",anchor??sample);
         commands.BeginSample("Acoustics.GPU.Compare");
         commands.DispatchCompute(shader,reset,(pairs+63)/64,1,1);commands.DispatchCompute(shader,compare,(capacity+63)/64,1,1);commands.DispatchCompute(shader,commit,1,1,1);
         commands.EndSample("Acoustics.GPU.Compare");
-        commands.BeginSample("Acoustics.GPU.Group");commands.DispatchCompute(shader,groups,pairs,1,1);commands.EndSample("Acoustics.GPU.Group");
+        commands.BeginSample("Acoustics.GPU.Group");commands.DispatchCompute(shader,groups,pairs,1,1);if(settings.synthesis==TakeRender.Synthesis.Spectral)commands.DispatchCompute(shader,match,pairs,1,1);commands.EndSample("Acoustics.GPU.Group");
         commands.BeginSample("Acoustics.GPU.Filters");
         Set("AudioWhich",0);Set("AudioBuildingFilter",1);
         for(int pair=0;pair<pairs;pair++)
@@ -204,7 +204,7 @@ internal sealed class GpuAudio : IDisposable
                 for(int which=0;which<2;which++)
                 {
                     // No sample in this hop can use the previous response after its fade ends.
-                    if(which!=0 && block-responseSample>=settings.transitionSamples)continue;
+                    if(which!=0 && settings.synthesis!=TakeRender.Synthesis.Spectral && block-responseSample>=settings.transitionSamples)continue;
                     Set("AudioWhich",which);
                     commands.BeginSample("Acoustics.GPU.InputFFT");
                     for(int pair=0;pair<pairs;pair++)

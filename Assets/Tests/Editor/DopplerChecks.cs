@@ -4,6 +4,45 @@ using UnityEngine;
 
 public partial class TakeChecks
 {
+    [TestCase(false,128),TestCase(true,128),TestCase(false,512),TestCase(true,512),Category("GPU")]
+    public void PersistentPathsFollowOneAcceleratingClock(bool accelerated,int step)
+    {
+        RequireGpu();const int rate=8192;var scene=Scene();var states=States();
+        var settings=SpectralSettings();settings.raysPerBin=1;settings.maxBounces=1;settings.delayFilter=TakeRender.DelayFilter.WindowedSinc;
+        settings.responseStepSamples=step;settings.transitionSamples=0;
+        var clip=new float[rate*2];for(int n=0;n<clip.Length;n++)clip[n]=.2f*(float)Math.Sin(2*Math.PI*1000*n/rate);
+        var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1});
+        using var gpu=accelerated?new GpuAudio(scene,rate,settings,new[]{signal},2):null;
+        var cpu=accelerated?null:new TakeRender.Mixer(scene,rate,settings,new[]{signal});
+        var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];var direct=new TakeRender.DirectPath[1];var pcm=new float[step];
+        using var arrivals=new ComputeBuffer(paths.Length,32);
+        void Response(long output,long anchor)
+        {
+            double t=anchor/(double)rate;bool swap=(output/step)%2!=0;
+            for(int p=0;p<2;p++)for(int bin=0;bin<settings.FrequencyBins;bin++)
+                paths[(swap?1-p:p)*settings.FrequencyBins+(swap?settings.FrequencyBins-1-bin:bin)]=new RayTransport.Path{identity=(uint)(17+p),frequencyBin=(uint)bin,
+                    pressureGain=(float)(p==0?.5+.1*t:.2),delaySeconds=(float)(p==0?.02+.005*t+.002*t*t:.03-.003*t+.001*t*t),
+                    direction=new Vector4(0,0,1,(float)(p==0?.005+.004*t:-.003+.002*t))};
+            arrivals.SetData(paths);
+            if(accelerated)gpu.SetResponse(output,false,arrivals,0,scene,states,anchor);else cpu.SetResponse(output,direct,states,false,paths,0,anchor);
+        }
+        Response(0,0);gpu?.CompletePreparation();double error=0,energy=0,maximum=0;
+        for(int sample=0;sample<rate;sample+=step)
+        {
+            Response(sample,settings.ResponseSample(sample));
+            if(accelerated)gpu.Render(sample,step,pcm);else cpu.Render(sample,step,pcm);
+            for(int n=0;n<step;n++)
+            {
+                double t=(sample+n-settings.DspLatencySamples)/(double)rate;if(t<.1)continue;
+                double expected=.2*((.5+.1*t)*Math.Sin(2*Math.PI*1000*(t-(.02+.005*t+.002*t*t)))+
+                    .2*Math.Sin(2*Math.PI*1000*(t-(.03-.003*t+.001*t*t))));
+                double residual=pcm[n]-expected;error+=residual*residual;energy+=expected*expected;maximum=Math.Max(maximum,Math.Abs(residual));
+            }
+        }
+        Assert.That(Math.Sqrt(error/energy),Is.LessThan(.001),"Two reordered paths must retain their individual continuous source clocks.");
+        Assert.That(maximum,Is.LessThan(.001));
+    }
+
     [TestCase("{\"transport\":1}",TakeRender.Synthesis.Spectral)]
     [TestCase("{\"synthesis\":0}",TakeRender.Synthesis.ImpulseResponse)]
     [TestCase("{\"synthesis\":1}",TakeRender.Synthesis.Spectral), Category("Core")]

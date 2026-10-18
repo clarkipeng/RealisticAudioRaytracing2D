@@ -400,7 +400,7 @@ public partial class TakeChecks
         {
             state[1].flags=at>=512?0:AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Listener;
             renderer.SetResponse((long)at,new TakeRender.DirectPath[1],state,false,paths,0);renderer.Render(at,128,samples);
-            if(at>=512)for(int n=0;n<128;n++)Near(samples[n],Mathf.Clamp01(1-(at+n-512)/64f),"Complete receiver output fade",2e-5f);
+            if(at>=512)for(int n=0;n<128;n++)Near(samples[n],Mathf.Clamp01(1-(at+n-512)/128f),"Receiver activity follows the acoustic response interval",2e-5f);
         }
     }
     [Test, Category("GPU")]
@@ -452,25 +452,27 @@ public partial class TakeChecks
             Check(settings.RaysPerPair==settings.FrequencyBins*rays,"Every configured bin gets its requested samples");
         }
     }
-    [Test, Category("GPU")]
-    public void SpectralTransitions()
+    [TestCase(false),TestCase(true),Category("GPU")]
+    public void SpectralTransitions(bool accelerated)
     {
-        var shader=RequireGpu();
-        var scene=Scene();var state=States();state[1].position=Vector3.zero;
+        var shader=RequireGpu();var scene=Scene();var state=States();state[1].position=Vector3.zero;
         foreach(bool cut in new[]{false,true})
         {
-            var settings=SpectralSettings();settings.responseStepSamples=512;settings.transitionSamples=64;
-            var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
-            var mixer=new TakeRender.Mixer(scene,8000,settings,new[]{signal});
+            var settings=SpectralSettings();settings.responseStepSamples=512;
+            var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
+            var mixer=accelerated?null:new TakeRender.Mixer(scene,8000,settings,new[]{signal});
+            using var gpu=accelerated?new GpuAudio(scene,8000,settings,new[]{signal}):null;
             using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
             var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);var rays=solver.RayPaths;
-
-            mixer.SetResponse(0L,direct,state,false,rays,0);var output=new float[1024];mixer.Render(0,512,output);
-            Array.Clear(rays,0,rays.Length);mixer.SetResponse(512L,direct,state,cut,rays,0);mixer.Render(512,512,output);
-            for(int n=0;n<512;n++)
+            using var arrivals=new ComputeBuffer(rays.Length,32);var output=new float[512];
+            for(int sample=0;sample<1536;sample+=512)
             {
-                float expected=cut?0:Mathf.Clamp01(1-n/64f);
-                Near(output[n],expected,"Receiver response changes crossfade in output time",2e-5f);
+                if(sample>0)Array.Clear(rays,0,rays.Length);arrivals.SetData(rays);
+                long anchor=settings.ResponseSample(sample);
+                if(accelerated){gpu.SetResponse(sample,cut && sample==512,arrivals,0,scene,state,anchor);gpu.Render(sample,512,output);}
+                else {mixer.SetResponse(sample,direct,state,cut && sample==512,rays,0,anchor);mixer.Render(sample,512,output);}
+                if(sample==0)continue;
+                for(int n=0;n<512;n++)Near(output[n],sample==1024?0:cut?1:1-n/512f,"Acoustic gain follows arrival time; a cut never anticipates its knot.",2e-5f);
             }
         }
     }
@@ -575,7 +577,7 @@ public partial class TakeChecks
         }
         using var take=AcousticTake.Open(path);var settings=SpectralSettings();settings.audioBackend=backend;settings.synthesis=method;settings.airAbsorption=true;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=64;
         var report=TakeRender.RenderDirect(take,settings,path+"-render",shader:shader);
-        if(backend==TakeRender.AudioBackend.Gpu)Assert.That(report.gpuAudio.readbacks,Is.EqualTo((report.responseCount+report.responseBatchCapacity-1)/report.responseBatchCapacity));
+        if(backend==TakeRender.AudioBackend.Gpu)Assert.That(report.gpuAudio.readbacks,Is.EqualTo((report.responseCount-(settings.ResponseSample(0)>0?1:0)+report.responseBatchCapacity-1)/report.responseBatchCapacity));
         var samples=new[]{new List<float>(),new List<float>()};Action<long,float[],int> collect=(at,block,count)=>{for(int n=0;n<count;n++)for(int l=0;l<2;l++)for(int ear=0;ear<2;ear++)samples[l].Add(block[n*4+l*2+ear]);};
         var left=new AcousticTake.State[4];var right=new AcousticTake.State[4];take.ReadStoredFrame(0,left);
         using(var live=new TakeRender.Live(scene,take.Geometry,new[]{pcm},8000,settings,null,0,0,shader))
