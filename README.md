@@ -26,6 +26,8 @@ The current experimental renderer samples surface and edge interactions inside t
 
 This remains an unvalidated training teacher. Mixed diffuse/surface weights are approximate; exact specular–edge connections, general impedance wedges and vertex corrections are incomplete. More rays reduce sampling noise but do not establish physical accuracy. Planar geometry represents an infinite extrusion perpendicular to XY with spherical point sources. [Model and limitations](docs/simulation-contracts.md#integrated-edge-trial).
 
+For independent pressure maps behind walls, use the [silent wave-reference comparison](docs/cleanup-results.md#independent-wave-pressure-maps--2026-10-18). It compares the actual GPU transport with a 3D Helmholtz boundary-element solution, checks the reference against an analytic sphere, and exports shared-scale maps, route plots, complex pressures and mesh-refinement measurements.
+
 ## Microphone and multiplayer
 
 Use **Church** or **TrainStation**, press Play, then **Esc**. The controls include:

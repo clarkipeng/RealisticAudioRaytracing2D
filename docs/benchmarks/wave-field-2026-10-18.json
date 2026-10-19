@@ -1,0 +1,498 @@
+{
+  "date": "2026-10-18",
+  "rendererRevision": "3d24edc062b4ccef216e4e2c4fa676b48a2eeb98",
+  "solver": "Independent 3D rigid-wall Helmholtz BEM; Burton-Miller; continuous P1; alpha=i/k; residual tolerance 1e-8",
+  "hardware": "Apple M5; Unity 6000.4.1f1 / Metal; CPU BEM with two Numba threads. NumPy/SciPy use Apple Accelerate; its BLAS thread count was not measured.",
+  "scope": "Stationary finite rigid 3D walls in free space. Numerical reference, not measured real-world truth.",
+  "pressure": "Unit free-field amplitude at 1 m; exp(+i*w*t); no HRTF, output limiter or gain matching.",
+  "timing": "Warm transport submission, synchronous readback and CPU bookkeeping; no DSP. Not GPU-only time.",
+  "dependencies": {
+    "bempp-cl": "0.4.2",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "numba": "0.68.0",
+    "matplotlib": "3.11.2"
+  },
+  "scene": {
+    "source": [
+      -3,
+      -0.4,
+      0.2
+    ],
+    "walls": [
+      {
+        "center": [
+          -0.8,
+          -0.9,
+          0
+        ],
+        "half": [
+          0.3,
+          1.1,
+          1.4
+        ]
+      },
+      {
+        "center": [
+          0.8,
+          0.9,
+          0
+        ],
+        "half": [
+          0.3,
+          1.1,
+          1.7
+        ]
+      }
+    ],
+    "frequencies": [
+      125,
+      250,
+      500
+    ],
+    "speedOfSound": 343,
+    "sampleRate": 1000,
+    "fftSize": 8,
+    "maxBounces": 4,
+    "maximumDelaySeconds": 0.1,
+    "rays": [
+      8,
+      128
+    ],
+    "seeds": [
+      17,
+      65554,
+      131091,
+      196628
+    ]
+  },
+  "points": 1178,
+  "shadowPoints": 712,
+  "sphereValidation": [
+    {
+      "triangles": 128,
+      "dofs": 66,
+      "seconds": 25.023290708020795,
+      "iterations": 17,
+      "finalResidual": 4.973449674055197e-09,
+      "hz": 125,
+      "refinement": 2,
+      "relativeL2": 0.03586989584454386,
+      "maximumAbsoluteError": 0.023550273766546576,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 512,
+      "dofs": 258,
+      "seconds": 2.28723491699202,
+      "iterations": 25,
+      "finalResidual": 7.874507851372052e-09,
+      "hz": 125,
+      "refinement": 3,
+      "relativeL2": 0.00924626360574166,
+      "maximumAbsoluteError": 0.006146236888594564,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 2048,
+      "dofs": 1026,
+      "seconds": 13.84083791601006,
+      "iterations": 43,
+      "finalResidual": 7.3886200416219215e-09,
+      "hz": 125,
+      "refinement": 4,
+      "relativeL2": 0.0023200902556442214,
+      "maximumAbsoluteError": 0.0015487355289283637,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 128,
+      "dofs": 66,
+      "seconds": 1.1471918749739416,
+      "iterations": 17,
+      "finalResidual": 3.8459196194975075e-09,
+      "hz": 250,
+      "refinement": 2,
+      "relativeL2": 0.06378842135184258,
+      "maximumAbsoluteError": 0.07010138434740674,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 512,
+      "dofs": 258,
+      "seconds": 3.4708912080386654,
+      "iterations": 25,
+      "finalResidual": 6.9880905489175e-09,
+      "hz": 250,
+      "refinement": 3,
+      "relativeL2": 0.014584127786132557,
+      "maximumAbsoluteError": 0.013184923477069864,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 2048,
+      "dofs": 1026,
+      "seconds": 12.286737541027833,
+      "iterations": 37,
+      "finalResidual": 8.668709869747735e-09,
+      "hz": 250,
+      "refinement": 4,
+      "relativeL2": 0.003479941558533093,
+      "maximumAbsoluteError": 0.002861054369041628,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 128,
+      "dofs": 66,
+      "seconds": 0.8939908749889582,
+      "iterations": 11,
+      "finalResidual": 1.7448090313559886e-09,
+      "hz": 500,
+      "refinement": 2,
+      "relativeL2": 0.2012532634476598,
+      "maximumAbsoluteError": 0.2657666795160711,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 512,
+      "dofs": 258,
+      "seconds": 1.7100064160185866,
+      "iterations": 20,
+      "finalResidual": 6.7093212605389904e-09,
+      "hz": 500,
+      "refinement": 3,
+      "relativeL2": 0.038962938479451925,
+      "maximumAbsoluteError": 0.05478059078484587,
+      "seriesRelativeChange": 0.0
+    },
+    {
+      "triangles": 2048,
+      "dofs": 1026,
+      "seconds": 9.31509437499335,
+      "iterations": 29,
+      "finalResidual": 8.703607187181442e-09,
+      "hz": 500,
+      "refinement": 4,
+      "relativeL2": 0.006795027963863316,
+      "maximumAbsoluteError": 0.007572363452963354,
+      "seriesRelativeChange": 0.0
+    }
+  ],
+  "referenceConvergence": [
+    {
+      "hz": 125,
+      "coarse": 0.6,
+      "fine": 0.4,
+      "relativeL2": 0.03587929793396813,
+      "shadowRelativeL2": 0.10082514682057829,
+      "maxAbsoluteChange": 0.04896699994812844
+    },
+    {
+      "hz": 125,
+      "coarse": 0.4,
+      "fine": 0.28,
+      "relativeL2": 0.00856478080913837,
+      "shadowRelativeL2": 0.023897974755268756,
+      "maxAbsoluteChange": 0.009760479320549732
+    },
+    {
+      "hz": 125,
+      "coarse": 0.28,
+      "fine": 0.2,
+      "relativeL2": 0.0026433478197437237,
+      "shadowRelativeL2": 0.008089055336615024,
+      "maxAbsoluteChange": 0.002436641432406967
+    },
+    {
+      "hz": 125,
+      "coarse": 0.2,
+      "fine": 0.14,
+      "relativeL2": 0.0040399394811608275,
+      "shadowRelativeL2": 0.011470008979086573,
+      "maxAbsoluteChange": 0.004266897125397912
+    },
+    {
+      "hz": 250,
+      "coarse": 0.6,
+      "fine": 0.4,
+      "relativeL2": 0.1145976749612079,
+      "shadowRelativeL2": 0.4586865773368491,
+      "maxAbsoluteChange": 0.1324328317436181
+    },
+    {
+      "hz": 250,
+      "coarse": 0.4,
+      "fine": 0.28,
+      "relativeL2": 0.020107955974611836,
+      "shadowRelativeL2": 0.07817500326045847,
+      "maxAbsoluteChange": 0.02484900347613101
+    },
+    {
+      "hz": 250,
+      "coarse": 0.28,
+      "fine": 0.2,
+      "relativeL2": 0.0061114526846929905,
+      "shadowRelativeL2": 0.023895378525397852,
+      "maxAbsoluteChange": 0.007515508474127949
+    },
+    {
+      "hz": 250,
+      "coarse": 0.2,
+      "fine": 0.14,
+      "relativeL2": 0.00849887623110727,
+      "shadowRelativeL2": 0.032279624934874844,
+      "maxAbsoluteChange": 0.009598695543890963
+    },
+    {
+      "hz": 250,
+      "coarse": 0.14,
+      "fine": 0.1,
+      "relativeL2": 0.0025985259937714718,
+      "shadowRelativeL2": 0.00983191396617211,
+      "maxAbsoluteChange": 0.0029405641217569952
+    },
+    {
+      "hz": 500,
+      "coarse": 0.6,
+      "fine": 0.4,
+      "relativeL2": 0.17152701860264388,
+      "shadowRelativeL2": 0.9960271514518435,
+      "maxAbsoluteChange": 0.25160283613477985
+    },
+    {
+      "hz": 500,
+      "coarse": 0.4,
+      "fine": 0.28,
+      "relativeL2": 0.08706856950630505,
+      "shadowRelativeL2": 0.3641141135285129,
+      "maxAbsoluteChange": 0.15038885342582547
+    },
+    {
+      "hz": 500,
+      "coarse": 0.28,
+      "fine": 0.2,
+      "relativeL2": 0.020026276978452922,
+      "shadowRelativeL2": 0.08106903387979471,
+      "maxAbsoluteChange": 0.03824142143731209
+    },
+    {
+      "hz": 500,
+      "coarse": 0.2,
+      "fine": 0.14,
+      "relativeL2": 0.02570977678677693,
+      "shadowRelativeL2": 0.12508114806628842,
+      "maxAbsoluteChange": 0.0392965517185607
+    }
+  ],
+  "quality": [
+    {
+      "hz": 125,
+      "diffraction": 0,
+      "raysPerBin": 128,
+      "complexRelativeL2Range": [
+        1.0,
+        1.0
+      ],
+      "amplitudeRelativeL2Range": [
+        0.9999999999999999,
+        0.9999999999999999
+      ],
+      "zeroShadowPointsRange": [
+        712,
+        712
+      ],
+      "medianSolveMsAcrossSeeds": 0.48455
+    },
+    {
+      "hz": 125,
+      "diffraction": 1,
+      "raysPerBin": 8,
+      "complexRelativeL2Range": [
+        1.0548812206299538,
+        8.29787491217029
+      ],
+      "amplitudeRelativeL2Range": [
+        0.9922678110367118,
+        8.010109488344696
+      ],
+      "zeroShadowPointsRange": [
+        218,
+        642
+      ],
+      "medianSolveMsAcrossSeeds": 0.593825
+    },
+    {
+      "hz": 125,
+      "diffraction": 1,
+      "raysPerBin": 128,
+      "complexRelativeL2Range": [
+        1.7696548773366794,
+        65.71974481256618
+      ],
+      "amplitudeRelativeL2Range": [
+        1.115895815627471,
+        65.57431394301268
+      ],
+      "zeroShadowPointsRange": [
+        0,
+        143
+      ],
+      "medianSolveMsAcrossSeeds": 0.652325
+    },
+    {
+      "hz": 250,
+      "diffraction": 0,
+      "raysPerBin": 128,
+      "complexRelativeL2Range": [
+        1.0,
+        1.0
+      ],
+      "amplitudeRelativeL2Range": [
+        0.9999999999999998,
+        0.9999999999999998
+      ],
+      "zeroShadowPointsRange": [
+        712,
+        712
+      ],
+      "medianSolveMsAcrossSeeds": 0.48455
+    },
+    {
+      "hz": 250,
+      "diffraction": 1,
+      "raysPerBin": 8,
+      "complexRelativeL2Range": [
+        1.0781193462036973,
+        11.485305010713596
+      ],
+      "amplitudeRelativeL2Range": [
+        0.8659107313660923,
+        10.938966679299048
+      ],
+      "zeroShadowPointsRange": [
+        218,
+        642
+      ],
+      "medianSolveMsAcrossSeeds": 0.593825
+    },
+    {
+      "hz": 250,
+      "diffraction": 1,
+      "raysPerBin": 128,
+      "complexRelativeL2Range": [
+        1.9807429412738127,
+        75.82852815922868
+      ],
+      "amplitudeRelativeL2Range": [
+        1.4286668118423764,
+        75.68613316560307
+      ],
+      "zeroShadowPointsRange": [
+        0,
+        143
+      ],
+      "medianSolveMsAcrossSeeds": 0.652325
+    },
+    {
+      "hz": 500,
+      "diffraction": 0,
+      "raysPerBin": 128,
+      "complexRelativeL2Range": [
+        1.0,
+        1.0
+      ],
+      "amplitudeRelativeL2Range": [
+        1.0,
+        1.0
+      ],
+      "zeroShadowPointsRange": [
+        712,
+        712
+      ],
+      "medianSolveMsAcrossSeeds": 0.48455
+    },
+    {
+      "hz": 500,
+      "diffraction": 1,
+      "raysPerBin": 8,
+      "complexRelativeL2Range": [
+        1.2854407961099534,
+        16.94716179384582
+      ],
+      "amplitudeRelativeL2Range": [
+        1.128818997821477,
+        16.346231681622026
+      ],
+      "zeroShadowPointsRange": [
+        218,
+        642
+      ],
+      "medianSolveMsAcrossSeeds": 0.593825
+    },
+    {
+      "hz": 500,
+      "diffraction": 1,
+      "raysPerBin": 128,
+      "complexRelativeL2Range": [
+        2.309234650910303,
+        145.42726198514444
+      ],
+      "amplitudeRelativeL2Range": [
+        1.5823326249834269,
+        145.28256386278073
+      ],
+      "zeroShadowPointsRange": [
+        0,
+        143
+      ],
+      "medianSolveMsAcrossSeeds": 0.652325
+    }
+  ],
+  "artifacts": ".context/wave-field/run: scene.json, validation.json, reference-*.npz/json, renderer.csv, renderer-tests.xml, renderer-provenance.json, pressure-*.png, report.json",
+  "dataHashes": {
+    "scene.json": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+    "renderer.csv": "fc88f29217b636a3e88dcb1e1abd301eeaa4fbf46e212f1bc318c65850bbf808",
+    "reference-0.28-250.npz": "671b14ebd1ecf38076fe9b463aee964145f8ea2c481cc8ea13a7460561ed47c9",
+    "reference-0.4-250.npz": "f152d9cee90e3e98f936529884cc8709749984f6b5f2cb125df52c396482c514",
+    "reference-0.4-125.npz": "162b55333707025f93c0238b0137e0374125a0259784f6d68d180e32958550e5",
+    "reference-0.28-125.npz": "11616438c0b80988074e3edf317995fec3488a1505de6260616b5ee083abc3ee",
+    "reference-0.6-250.npz": "0034b5df059a8531d13f2648f5025a2b313b44bd1ffd64d5c2b050be3dea2f2e",
+    "reference-0.2-500.npz": "98c428a184fee515436738af548f69f2d156498f3314be65abc02099043f5a6a",
+    "reference-0.6-125.npz": "af0fda1120b26e7443a988e613149b759c5c0bfe25fc0203845236a5c5cb85dc",
+    "reference-0.14-125.npz": "a2cb799a2bfc0070697fa6e2b230b37dc4ca5d8653c460fd8c97bd3dc70e5123",
+    "reference-0.14-250.npz": "9e42f709569fe8eb5e43c4ca31d7684a00c92bdf78732fe7dad9d98b62cb253e",
+    "reference-0.2-250.npz": "a562c43e9e1705d03f0fe95ec1562714da95fedeeac451259a89cc457b323b7c",
+    "reference-0.2-125.npz": "e85b78061416766961245572540f43e22de87ff574ace15c4197b08fe3c2c941",
+    "reference-0.6-500.npz": "6f48a53a5944f738ccf46f0b0b9b67451f3db9a78861e3674ac1b5e59056071a",
+    "reference-0.14-500.npz": "19bcd6028a573c17f24eaeed5b4e3623f9998ab9f6906d658371293f54b824e9",
+    "reference-0.1-250.npz": "d98c361124ed16579036e76b078f6de9462ca778c763368c476f3c298c91cb0d",
+    "reference-0.28-500.npz": "2dafd0ab82266dc3e1db50e2a063f36e916b5b8334b2f31bcf9f1e719dde6f97",
+    "reference-0.4-500.npz": "02441a74fbe7f9f95713746453d0f7d21dd90afd7a59fe70b0f998569febb43c"
+  },
+  "largestAbsoluteError250HzSeed17": {
+    "point": 876,
+    "position": [
+      1.263157894736842,
+      1.3764705882352941,
+      0.2
+    ],
+    "reference": [
+      0.0194263510269001,
+      -0.01413333302544137
+    ],
+    "renderer": [
+      13.014748510788062,
+      -68.40908597227806
+    ],
+    "amplitudeRatio": 2898.651754309538,
+    "levelErrorDb": 69.24392084199853,
+    "localReferenceLastMeshRelativeChange": 0.013342046001422848
+  },
+  "limitations": [
+    "Mesh changes measure numerical stability, not a rigorous error bound.",
+    "500 Hz shadow-field last mesh change is 12.51%; exploratory, needs further refinement.",
+    "Current renderer capped at four bounces and 0.1 s; BEM is steady-state and includes all scattering orders. Error includes model truncation and missing transport, not only sampling.",
+    "Only current integrated renderer at two ray budgets and diffraction-disabled control were measured; historical shared-route/guided/bidirectional variants were not measured.",
+    "Four seed ranges are descriptive, not confidence intervals; no general runtime speedup or training-teacher approval."
+  ]
+}

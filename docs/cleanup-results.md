@@ -1,5 +1,58 @@
 # Cleanup validation and measured bottlenecks
 
+## Independent wave pressure maps — 2026-10-18
+
+**The current renderer produces missing shadow responses and very large pressure outliers against an independent wave solution. Raising the ray count alone is not a reliable fix in this fixture.** The runtime is unchanged; this adds one offline Python tool and one opt-in Unity measurement fixture.
+
+[`tools/compare_wave_field.py`](../tools/compare_wave_field.py) solves the stationary 3D Helmholtz equation using Bempp-cl 0.4.2, continuous linear boundary elements and the combined Burton–Miller rigid-wall formulation. Its reference uses no ray paths, shortest-route search or wedge coefficients. The formulation is described in [Smigaj et al., equation 43](https://www.bempp.org/files/bempp-toms-preprint.pdf); [Bempp's operator documentation](https://bempp.com/handbook/api/boundary_operators.html) defines the double-layer and hypersingular operators. The exported reference is conjugated to the renderer's `exp(+i*omega*t)` convention.
+
+Both solvers use the earlier staggered-wall layout: two closed boxes centered at `(-0.8,-0.9,0)` and `(0.8,0.9,0)`, with half-extents `(0.3,1.1,1.4)` and `(0.3,1.1,1.7)`. The monopole source is `(-3,-0.4,0.2)`. The map measures **1,178 points** in the plane `z=0.2`, including **712 geometrically shadowed points**. An independent analytic segment/box test agrees with every GPU direct-visibility result. Points inside walls or within the 0.15 m exclusion margin are omitted, rather than extrapolated into a solid. Finite wall heights matter: the image is a slice of a 3D solution, not a 2D cylindrical-wave approximation.
+
+Source strength is identical: free-field complex pressure `exp(-i*k*r)/r`, with unit amplitude at one metre. Plots show dB relative to that unit, not calibrated physical SPL. There is no separate gain normalization, HRTF, audio playback or limiter. The GPU field is the coherent sum of every returned arrival's signed gain and propagation phase, including direct and reflected paths. Frequencies are 125, 250 and 500 Hz; the transport-only FFT8/sample-rate1000 configuration selects exact frequency bins without synthesizing audio.
+
+The independent analytic monopole/rigid-sphere solution is checked at 100 receiver positions with 128, 512 and 2,048 mesh triangles. Increasing the analytic expansion from 40 to 60 terms changes none of the stored double-precision answers. The finest sphere errors and final wall-mesh changes are:
+
+| Hz | Sphere complex relative L2 error | Wall mesh change, whole map | Wall mesh change, shadow only |
+|---:|---:|---:|---:|
+| 125 | 0.232% | 0.404% | 1.147% |
+| 250 | 0.348% | 0.260% | 0.983% |
+| 500 | 0.680% | 2.571% | 12.508% |
+
+Wall meshes progress through 252, 608, 1,204, 2,000 and 4,420 triangles, with an additional **8,000-triangle solve at 250 Hz**. Mesh differences quantify observed stability, not a rigorous bound on remaining error. **The 500 Hz shadow map remains exploratory and needs further refinement.** Sphere agreement alone does not establish wall-map accuracy.
+
+At 250 Hz, across seeds `17,65554,131091,196628`:
+
+| Current transport configuration | Zero responses among 712 shadow points | Shadow complex relative L2 error | Median warm solve/readback |
+|---|---:|---:|---:|
+| Diffraction disabled, 128 rays/bin | 712 | 100% | 0.485 ms |
+| Integrated diffraction, 8 rays/bin | 218–642 | 108–1,149% | 0.594 ms |
+| Integrated diffraction, 128 rays/bin | 0–143 | 198–7,583% | 0.652 ms |
+
+The error is `norm(predicted-reference)/norm(reference)` over the shadow points. Ranges describe four individual seeds, not a confidence interval or an averaged production renderer. This metric retains phase error and is deliberately sensitive to severe outliers. The higher ray budget fills many holes but can expose much larger weighted samples. At `(1.26316,1.37647,0.2)`, seed 17 / 128 rays produces pressure magnitude **69.636**, versus **0.02402** from the reference: **2,899 times too large (+69.24 dB)**. This is the location of the largest absolute complex error in that run; the reference's last local mesh change is 1.33%. Raw values are retained even where the map's color scale saturates.
+
+These configurations use four bounces and a 0.1-second delay horizon. The BEM reference is steady-state and includes all scattering orders. Differences therefore include omitted transport and truncation as well as sampling/model errors. Historical shared-route, guided and bidirectional experiments are not included in this run. Diffraction-disabled silence is a diagnostic control, not an accurate alternative. These results do not approve a training teacher.
+
+The Unity measurement passed and completed in **13.70 seconds**, silently in the isolated project. Timings above include submission, CPU bookkeeping and synchronous readback of all five transport bins; they exclude DSP, allocation and cold dispatch. They are not GPU-only kernel timings or a realtime speedup claim. BEM used two Numba threads; Apple Accelerate's BLAS thread count was not measured (the original OpenBLAS environment setting does not control Accelerate). The reproduction command below also sets its specific limit. The final 250 Hz solve took 132 seconds including compilation/evaluation. [Parameters, convergence, dependency versions, hashes and results](benchmarks/wave-field-2026-10-18.json). Raw CSV, compressed complex fields, logs and all three PNG reports are under `.context/wave-field/run/`.
+
+Reproduce with an isolated Unity project containing matching runtime and test helpers. The script refuses to run on this working checkout or a locked runner. Bempp is an optional offline dependency; no Unity runtime package was added.
+
+```sh
+uv venv .context/wave-field/venv
+uv pip install --python .context/wave-field/venv/bin/python bempp-cl==0.4.2 numpy scipy matplotlib
+export OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 NUMBA_NUM_THREADS=2
+export PYTHONDONTWRITEBYTECODE=1
+.context/wave-field/venv/bin/python tools/compare_wave_field.py prepare .context/wave-field/repeat
+nice -n 15 .context/wave-field/venv/bin/python tools/compare_wave_field.py validate .context/wave-field/repeat
+nice -n 15 .context/wave-field/venv/bin/python tools/compare_wave_field.py reference .context/wave-field/repeat
+nice -n 15 .context/wave-field/venv/bin/python tools/compare_wave_field.py reference .context/wave-field/repeat --mesh .2
+nice -n 15 .context/wave-field/venv/bin/python tools/compare_wave_field.py reference .context/wave-field/repeat --mesh .14
+nice -n 15 .context/wave-field/venv/bin/python tools/compare_wave_field.py reference .context/wave-field/repeat --mesh .1 --hz 250
+.context/wave-field/venv/bin/python tools/compare_wave_field.py renderer .context/wave-field/repeat --runner .context/gpu-audio/runner --unity /Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity
+.context/wave-field/venv/bin/python tools/compare_wave_field.py plot .context/wave-field/repeat
+```
+
+`prepare` writes an editable `scene.json`; change it before measuring. Unity requires frequencies on its configured FFT grid. `reference` can resume completed mesh/frequency pairs after checking the scene hash. `MeasureWaveField` skips ordinary test runs unless `ACOUSTIC_WAVE_OUTPUT` is set, and measures the existing transport rather than asserting it is physically accurate. The PNGs share scales, show signed level errors and trace a route around both walls; shaded route bands retain the range across seeds.
+
 ## Two-edge diffraction: amplitude correction and conditional sampling — 2026-10-18
 
 **Accepted:** shared-solid-face multiplicity and stable grazing-face classification. **Rejected:** a conditional sampler specialized to parallel edge pairs. Solver provenance advances to `integrated-edge-preview-v7`; take payloads remain v3.
