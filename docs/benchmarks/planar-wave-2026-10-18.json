@@ -150,5 +150,145 @@
         "complete": true
       }
     }
-  ]
+  ],
+  "researchPilot": {
+    "baselineCommit": "1b8fec8",
+    "runtimeChanged": false,
+    "profile": "pilot",
+    "split": "development",
+    "studySceneCount": 25,
+    "splitCounts": {"development": 12, "validation": 6, "test": 6, "control": 1},
+    "pilotManifestSha256": "8b10c5939a3311228c14e8b95d237e5f780be7866e8cce66e5a6d225e54f93e4",
+    "studyManifestSha256": "06400775c6a37afea64f387316decd51c611d77984fc6101dfd0eba9e9b6f239",
+    "sourceHashes": {"tools/compare_wave_field.py": "a892262ac3a31c481637f90cc9c7b15641518f600a98ebe8633041e400b7c9e0", "tools/planar_wave.py": "16fb87aeb190612d08ed35617b174691b12d3f9ff1f8b3045845ecaf620d75eb", "Assets/Tests/Editor/WaveFieldMeasurement.cs": "2bc2b5635f45979ac3a1bc9cf083cfc2994e7b1ad78f9d86011df2127c2e4113"},
+    "status": "provisional",
+    "warnings": ["barrier-1: full numerical audit missing or exceeds 0.5%", "slit-1: full numerical audit missing or exceeds 0.5%", "corridor-1: full numerical audit missing or exceeds 0.5%"],
+    "definition": "100*sqrt(mean_family(mean_geometry(mean_frequency_seed_region(complex relative L2 squared)))); lit/shadow regions receive equal weight. Lower is better. No clipping.",
+    "timing": "Mean of per-run median transport submission/readback times. Excludes DSP/inference and cold dispatch.",
+    "frequencies": [250],
+    "seeds": [17, 65554, 131091, 196628],
+    "maxBounces": 4,
+    "maximumDelaySeconds": 0.1,
+    "note": "Four nominal development families measured; free control excluded from score. Validation/test inputs generated but not measured. New kernels/models are proposals.",
+    "cases": [
+      {
+        "path": "free-1",
+        "sceneSha256": "cae7a4331c16087d72dac0ec474fb4334805107b2b701836ca36fd915c3d605e",
+        "probes": 575,
+        "reused": true,
+        "finalMeshChange": {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.00013681620386731417, "shadowRelativeL2": null, "maxAbsoluteChange": 0.00035926206313255583},
+        "unityResult": "Passed",
+        "unityDurationSeconds": 5.1806201
+      },
+      {
+        "path": "barrier-1",
+        "sceneSha256": "f3ac87a0e6bf0381f37bd59965bce026ebe2191ebd500372705d3687c1c59326",
+        "probes": 531,
+        "reused": true,
+        "finalMeshChange": {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.0030547502825150835, "shadowRelativeL2": 0.0018738176305592642, "maxAbsoluteChange": 0.02118001276610915},
+        "unityResult": "Passed",
+        "unityDurationSeconds": 6.0839164
+      },
+      {
+        "path": "staggered-1",
+        "sceneSha256": "fd034343af84b7a674a0b6f23f73f811b6128dc9818905e427b64100560cc5bb",
+        "probes": 487,
+        "reused": true,
+        "finalMeshChange": {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.0007100375871766557, "shadowRelativeL2": 0.002830539382182732, "maxAbsoluteChange": 0.0007126698981728453},
+        "unityResult": "Passed",
+        "unityDurationSeconds": 5.2306127
+      },
+      {
+        "path": "slit-1",
+        "sceneSha256": "142709d90d5c3474087010082c9af511b6e277a749853df8d2a16cc533bc1b2a",
+        "probes": 509,
+        "reused": false,
+        "finalMeshChange": {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.0006738664968733494, "shadowRelativeL2": 0.002970163378282544, "maxAbsoluteChange": 0.0012714539475226334},
+        "unityResult": "Passed",
+        "unityDurationSeconds": 5.8257633,
+        "referenceRuns": [
+          {"meshSize": 0.5, "dofs": 14481, "meshSeconds": 0.08548695797799155, "seconds": 3.955942625005264},
+          {"meshSize": 0.35, "dofs": 28311, "meshSeconds": 0.1623236250015907, "seconds": 9.577900334028527},
+          {"meshSize": 0.25, "dofs": 56425, "meshSeconds": 0.2938049170188606, "seconds": 17.540191625012085}
+        ]
+      },
+      {
+        "path": "corridor-1",
+        "sceneSha256": "f7132947bf2fcb0dd5155e80f3bde0319fea8ebd6b9bb0bfdb40c58e3eac3d79",
+        "probes": 461,
+        "reused": false,
+        "finalMeshChange": {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.0012383001269499804, "shadowRelativeL2": 0.0017856991070351583, "maxAbsoluteChange": 0.007209520344248327},
+        "unityResult": "Passed",
+        "unityDurationSeconds": 4.9268211,
+        "referenceRuns": [
+          {"meshSize": 0.5, "dofs": 14305, "meshSeconds": 0.1153842500061728, "seconds": 3.5936861250083894},
+          {"meshSize": 0.35, "dofs": 27943, "meshSeconds": 0.13463904202217236, "seconds": 9.705641167005524},
+          {"meshSize": 0.25, "dofs": 55577, "meshSeconds": 0.7098724999814294, "seconds": 17.565516666974872}
+        ]
+      }
+    ],
+    "scores": [
+      {
+        "method": "diffraction=0,rays=128",
+        "balancedComplexNrmsePercent": 73.12005130733868,
+        "meanWarmSolveMs": 0.47226874999999996,
+        "worstSeedRegionPercent": 102.92601612602918,
+        "families": {
+          "barrier": [
+            {"case": "barrier-1", "meanSquaredError": 0.5114154224346966, "shadowSquaredError": 1.0, "warmSolveMs": 0.481875, "worstSeedRegionPercent": 100.0}
+          ],
+          "staggered": [
+            {"case": "staggered-1", "meanSquaredError": 0.5185017884898127, "shadowSquaredError": 1.0, "warmSolveMs": 0.4533, "worstSeedRegionPercent": 100.0}
+          ],
+          "slit": [
+            {"case": "slit-1", "meanSquaredError": 0.5246966158212109, "shadowSquaredError": 1.0057682395121632, "warmSolveMs": 0.45282500000000003, "worstSeedRegionPercent": 100.28799726348927}
+          ],
+          "corridor": [
+            {"case": "corridor-1", "meanSquaredError": 0.5840029345294163, "shadowSquaredError": 1.059376479557562, "warmSolveMs": 0.5010749999999999, "worstSeedRegionPercent": 102.92601612602918}
+          ]
+        }
+      },
+      {
+        "method": "diffraction=1,rays=8",
+        "balancedComplexNrmsePercent": 2466.6277361163784,
+        "meanWarmSolveMs": 0.46781874999999995,
+        "worstSeedRegionPercent": 13863.087631015778,
+        "families": {
+          "barrier": [
+            {"case": "barrier-1", "meanSquaredError": 2403.401956012966, "shadowSquaredError": 4806.060054315943, "warmSolveMs": 0.49087499999999995, "worstSeedRegionPercent": 13863.087631015778}
+          ],
+          "staggered": [
+            {"case": "staggered-1", "meanSquaredError": 3.5128095330343783, "shadowSquaredError": 1.8633634615758843, "warmSolveMs": 0.45285, "worstSeedRegionPercent": 448.644524312032}
+          ],
+          "slit": [
+            {"case": "slit-1", "meanSquaredError": 2.715918733114388, "shadowSquaredError": 1.2494441292913296, "warmSolveMs": 0.452075, "worstSeedRegionPercent": 402.4567057031962}
+          ],
+          "corridor": [
+            {"case": "corridor-1", "meanSquaredError": 24.070271152329546, "shadowSquaredError": 27.93403789055653, "warmSolveMs": 0.475475, "worstSeedRegionPercent": 984.1350308831378}
+          ]
+        }
+      },
+      {
+        "method": "diffraction=1,rays=128",
+        "balancedComplexNrmsePercent": 792.793669370706,
+        "meanWarmSolveMs": 0.5236749999999999,
+        "worstSeedRegionPercent": 2318.5556280376063,
+        "families": {
+          "barrier": [
+            {"case": "barrier-1", "meanSquaredError": 12.657307309105654, "shadowSquaredError": 24.66754131334695, "warmSolveMs": 0.511675, "worstSeedRegionPercent": 873.3838982400363}
+          ],
+          "staggered": [
+            {"case": "staggered-1", "meanSquaredError": 42.18804617047396, "shadowSquaredError": 71.95013939079716, "warmSolveMs": 0.51185, "worstSeedRegionPercent": 1380.286575854309}
+          ],
+          "slit": [
+            {"case": "slit-1", "meanSquaredError": 120.65147199212475, "shadowSquaredError": 100.6015604033132, "warmSolveMs": 0.559225, "worstSeedRegionPercent": 1756.4266901710998}
+          ],
+          "corridor": [
+            {"case": "corridor-1", "meanSquaredError": 75.91189540600291, "shadowSquaredError": 139.04019505018474, "warmSolveMs": 0.5119499999999999, "worstSeedRegionPercent": 2318.5556280376063}
+          ]
+        }
+      }
+    ],
+    "verification": ["34 generated pilot/study layouts checked for disjoint walls, source/probe clearance, valid FFT bins and unique hashes", "Aggregate scores independently recomputed from raw CSV/NPZ", "Unequal-family weighting checked against hand-computable oracle; missing regions/scenes rejected", "All 72 legacy 3D comparisons and convergence values unchanged"]
+  }
 }

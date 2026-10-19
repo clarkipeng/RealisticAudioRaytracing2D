@@ -253,7 +253,7 @@ def plot(output):
         if (not validation['passed'] or validation['controlSha256'] != control_fingerprint(config)
                 or any(r['solverSha256'] != solver_fingerprint(output) for r in reference_runs)):
             raise ValueError('Planar controls/reference use different settings or solver code.')
-    report = dict(scene=config, analyticValidation=validation,
+    report = dict(scene=config, metricVersion=2, analyticValidation=validation,
                   referenceRuns=reference_runs, rendererProvenance=provenance, comparisons=[], ensembles=[], convergence=[],
                   timing='Warm transport submission, synchronous readback and CPU bookkeeping; no DSP. Not GPU-only time.',
                   pressure='Unit free-field amplitude at 1 m; exp(+i*w*t); no HRTF, output limiter or gain matching.',
@@ -275,7 +275,7 @@ def plot(output):
     nx = shape[1]
     route_grid = ([hi*nx+x for x in range(ix+1)] + [y*nx+ix for y in range(hi-1, lo-1, -1)] +
                   [lo*nx+x for x in range(ix+1, nx)])
-    route = np.array([grid_to_point[i] for i in route_grid])
+    route = np.array(config.get('routeIndices', [grid_to_point[i] for i in route_grid if i in grid_to_point]), dtype=int)
     distance = np.r_[0, np.cumsum(np.linalg.norm(np.diff(points[route], axis=0), axis=1))]
     for hz in config['frequencies']:
         meshes = sorted((r['meshSize'] for r in reference_runs if r['hz'] == hz), reverse=True)
@@ -298,7 +298,7 @@ def plot(output):
                 if not np.array_equal(run['direct_visible']==0, shadow):
                     raise ValueError('Shader occlusion disagrees with analytic segment/box intersection.')
                 pressure = run['real']+1j*run['imag']; samples.append(pressure)
-                for region, mask in [('all', np.ones(len(points), dtype=bool)), ('shadow', shadow)]:
+                for region, mask in [('all', np.ones(len(points), dtype=bool)), ('lit', ~shadow), ('shadow', shadow)]:
                     if not mask.any():
                         continue
                     ref, value = reference_field[mask], pressure[mask]
@@ -308,7 +308,7 @@ def plot(output):
                         maximumPressure=float(abs(value).max()), zeroPoints=int(np.count_nonzero(value==0)),
                         medianSolveMs=float(np.median(run['solve_seconds'])*1000)))
             ensemble = np.array(samples)
-            for region, mask in [('all', np.ones(len(points), dtype=bool)), ('shadow', shadow)]:
+            for region, mask in [('all', np.ones(len(points), dtype=bool)), ('lit', ~shadow), ('shadow', shadow)]:
                 if not mask.any():
                     continue
                 values, ref = ensemble[:, mask], reference_field[mask]
@@ -319,7 +319,8 @@ def plot(output):
             title = f'Diffraction: {rays} rays/bin' if diffraction else 'Diffraction disabled'
             display.append((title, samples[0], np.array(samples)))
         fig = plt.figure(figsize=(16, 10), layout='constrained')
-        grid = fig.add_gridspec(3, len(display), height_ratios=[1, 1, .9])
+        grid = fig.add_gridspec(3 if len(route) else 2, len(display),
+                                 height_ratios=[1, 1, .9] if len(route) else [1, 1])
         map_axes, images = [[], []], [None, None]
         for column, (title, value, _) in enumerate(display):
             for row in range(2):
@@ -346,18 +347,19 @@ def plot(output):
                 images[row] = im
         for row, label in enumerate(['Pressure (dB re free-field amplitude at 1 m)', 'Level difference from final reference (dB)']):
             fig.colorbar(images[row], ax=map_axes[row], label=label, shrink=.8, extend='both')
-        ax = fig.add_subplot(grid[2, :])
-        for title, value, samples in display:
-            line, = ax.plot(distance, db(value[route]), label=title, lw=1.5)
-            if samples is not None:
-                levels = db(samples[:, route])
-                ax.fill_between(distance, levels.min(0), levels.max(0), color=line.get_color(), alpha=.12)
-        ax.set(xlabel='Distance along dashed route (m)', ylabel='Pressure level (dB)', ylim=(-60, 12))
-        ax.grid(alpha=.2); ax.legend(loc='lower left', ncol=2)
+        if len(route):
+            ax = fig.add_subplot(grid[2, :])
+            for title, value, samples in display:
+                line, = ax.plot(distance, db(value[route]), label=title, lw=1.5)
+                if samples is not None:
+                    levels = db(samples[:, route])
+                    ax.fill_between(distance, levels.min(0), levels.max(0), color=line.get_color(), alpha=.12)
+            ax.set(xlabel='Distance along dashed route (m)', ylabel='Pressure level (dB)', ylim=(-60, 12))
+            ax.grid(alpha=.2); ax.legend(loc='lower left', ncol=2)
         shadow_change = f'{change["shadowRelativeL2"]:.2%}' if shadow.any() else 'n/a'
         title = f'{config.get("family", "walls")} · infinitely extruded walls, point source' if planar else 'two finite rigid 3D walls · slice at z=0.2 m'
         fig.suptitle(f'{hz:g} Hz · {title}\n'
-                     f'Maps: seed {config["seeds"][0]}; route shading: range of {len(config["seeds"])} seeds. '
+                     f'Maps: seed {config["seeds"][0]}; {len(config["seeds"])} seeds measured. '
                      'Color limits clip extremes; raw values retained.\n'
                      f'Last reference mesh change: {change["relativeL2"]:.2%} overall, '
                      f'{shadow_change} in shadow (not an error bound).', fontsize=12)
@@ -367,11 +369,142 @@ def plot(output):
     save_json(output/'report.json', report)
 
 
+def prepare_suite(output, profile):
+    """Generate data-only fixtures; never launch a solver or Unity implicitly."""
+    from planar_wave import prepare as prepare_planar
+    if (output/'suite.json').exists():
+        raise FileExistsError('Suite already exists; preserve its geometry/split manifest.')
+    families = dict(barrier='development', staggered='development', slit='development',
+                    corridor='development', double_slit='validation', offset_doors='validation',
+                    triple='test', pillars='test')
+    cases = []
+    def box(x, y, hx, hy):
+        return dict(center=[x, y, 0], half=[hx, hy, 1])
+    def screen(x, intervals):
+        return [box(x, (a+b)/2, .15, (b-a)/2) for a, b in intervals]
+    for family, split in [('free', 'control')]+list(families.items()):
+        for variant in [1] if profile == 'pilot' or family == 'free' else range(3):
+            path = output/f'{family}-{variant}'; path.mkdir()
+            prepare_planar(path, family if family in ['free', 'barrier', 'staggered'] else 'free')
+            config = json.loads((path/'scene.json').read_text())
+            walls = config['walls']
+            if family == 'barrier':
+                walls = [box(-.8, -.9, [.12, .3, .6][variant], 1.1)]
+            elif family == 'staggered':
+                distance = [.6, .8, 1.1][variant]
+                walls = [box(-distance, -.9, .3, 1.1), box(distance, .9, .3, 1.1)]
+            elif family == 'slit':
+                gap = [.35, .7, 1.4][variant]
+                walls = screen(0, [(-2.5, -gap/2), (gap/2, 2.5)])
+            elif family == 'corridor':
+                width = [.55, .85, 1.25][variant]
+                walls = [box(.2, y*(width+.15), 2.1, .15) for y in [-1, 1]]
+            elif family == 'double_slit':
+                gap = [.25, .45, .7][variant]
+                walls = screen(0, [(-2.5, -.9-gap/2), (-.9+gap/2, .9-gap/2), (.9+gap/2, 2.5)])
+            elif family == 'offset_doors':
+                gap = [.35, .7, 1.1][variant]
+                walls = [w for x, y in [(-.8, -.8), (.8, .8)]
+                         for w in screen(x, [(-2.5, y-gap/2), (y+gap/2, 2.5)])]
+            elif family == 'triple':
+                shift = [.75, 1, 1.25][variant]
+                walls = [box(x, y*shift, .18, 1.1) for x, y in [(-1.3, -.9), (0, .9), (1.3, -.9)]]
+            elif family == 'pillars':
+                half = [.15, .3, .45][variant]
+                walls = [box(x, y, half, half) for x in [-.7, .8, 2.3] for y in [-1.5, 0, 1.5]]
+            config.update(family=family, walls=walls)
+            xx, yy = np.meshgrid(config['x'], config['y'])
+            points = np.c_[xx.ravel(), yy.ravel(), np.zeros(xx.size)]
+            keep = np.ones(len(points), dtype=bool)
+            for wall in walls:
+                keep &= np.any(abs(points[:, :2]-wall['center'][:2]) > np.array(wall['half'][:2])+.15, axis=1)
+            config.update(points=points[keep].ravel().tolist(), gridIndices=np.flatnonzero(keep).tolist())
+            if family not in ['free', 'barrier', 'staggered']:
+                config['routeIndices'] = []  # These are static maps; do not invent a walk through walls.
+            if profile == 'study':
+                config.update(frequencies=[125, 250, 500], rays=[8, 32, 128, 512],
+                              seeds=[17+65537*i for i in range(8)])
+            save_json(path/'scene.json', config)
+            cases.append(dict(path=path.name, family=family, variant=variant, split=split,
+                              sceneSha256=hashlib.sha256((path/'scene.json').read_bytes()).hexdigest()))
+    save_json(output/'suite.json', dict(version=1, profile=profile, cases=cases,
+              note='Static rigid point-extruded benchmark. Generate first; run explicitly. Test families stay held out.'))
+
+
+def score_suite(output, split):
+    """Equal family/geometry/frequency/seed/region weights; incomplete suites fail."""
+    manifest = json.loads((output/'suite.json').read_text()); groups = {}; runtime = None; warnings = []
+    cases = [c for c in manifest['cases'] if c['split'] == split]
+    if not cases:
+        raise ValueError('No cases in the requested split.')
+    for case in cases:
+        report = json.loads((output/case['path']/'report.json').read_text())
+        if report['dataHashes']['scene.json'] != case['sceneSha256']:
+            raise ValueError(f'Scene differs from frozen manifest: {case["path"]}')
+        provenance = report['rendererProvenance']
+        workload = {k: report['scene'][k] for k in ['frequencies', 'sampleRate', 'fftSize', 'rays', 'seeds', 'maxBounces', 'maximumDelaySeconds']}
+        identity = (provenance['files'], provenance['fixtureSha256'], workload)
+        if runtime is not None and runtime != identity:
+            raise ValueError('Cannot pool different renderer implementations or workloads into one score.')
+        runtime = identity
+        latest = [c for c in report['convergence'] if c['fine'] == min(report['scene']['meshSizes'])]
+        if len(latest) != len(report['scene']['frequencies']) or any(
+                c['relativeL2'] > .005 or (c['shadowRelativeL2'] or 0) > .005 for c in latest):
+            warnings.append(case['path']+': reference mesh change exceeds 0.5% or is incomplete')
+        if not report['analyticValidation'].get('passed', False):
+            raise ValueError('Analytic reference controls have not passed.')
+        audit = report.get('numericalAudit', {})
+        if not audit.get('complete') or any(max(c['relativeL2'], c['shadowRelativeL2'] or 0) > .005 for c in audit.get('checks', [])):
+            warnings.append(case['path']+': full numerical audit missing or exceeds 0.5%')
+        if report.get('metricVersion') != 2:
+            raise ValueError('Re-run plot with the current reporter to obtain separate lit/shadow errors.')
+        config = report['scene']; expected = len(config['frequencies'])*len(config['seeds'])
+        shadow = shadow_mask(config, np.array(config['points']).reshape(-1, 3))
+        regions = ['all'] + (['lit'] if (~shadow).any() else []) + (['shadow'] if shadow.any() else [])
+        for diffraction, rays in [(0, max(config['rays']))]+[(1, r) for r in config['rays']]:
+            selected = [r for r in report['comparisons'] if r['diffraction'] == diffraction and r['rays'] == rays]
+            per_region = {}
+            for region in regions:
+                rows = [r for r in selected if r['region'] == region]
+                keys = {(r['hz'], r['seed']) for r in rows}
+                wanted = {(hz, seed) for hz in config['frequencies'] for seed in config['seeds']}
+                if len(rows) != expected or keys != wanted:
+                    raise ValueError('Incomplete/duplicate scene-frequency-seed-region measurements.')
+                if region != 'all':
+                    per_region[region] = float(np.mean([r['complexRelativeL2']**2 for r in rows]))
+            if not per_region:
+                raise ValueError('No physical regions measured.')
+            key = f'diffraction={diffraction},rays={rays}'
+            all_rows = [r for r in selected if r['region'] == 'all']
+            groups.setdefault(key, {}).setdefault(case['family'], []).append(dict(
+                case=case['path'], meanSquaredError=float(np.mean(list(per_region.values()))),
+                shadowSquaredError=per_region.get('shadow'),
+                warmSolveMs=float(np.mean([r['medianSolveMs'] for r in all_rows])),
+                worstSeedRegionPercent=100*max(r['complexRelativeL2'] for r in selected if r['region'] != 'all')))
+    scores = []
+    for method, families in groups.items():
+        mse = np.mean([np.mean([c['meanSquaredError'] for c in cases]) for cases in families.values()])
+        scores.append(dict(method=method, balancedComplexNrmsePercent=float(100*np.sqrt(mse)),
+            meanWarmSolveMs=float(np.mean([np.mean([c['warmSolveMs'] for c in cases]) for cases in families.values()])),
+            worstSeedRegionPercent=max(c['worstSeedRegionPercent'] for cases in families.values() for c in cases),
+            families=families))
+    result = dict(profile=manifest['profile'], split=split, cases=len(cases), scores=scores,
+        status='provisional' if warnings else 'reference refinement checks passed', warnings=warnings,
+        definition='100*sqrt(mean_family(mean_geometry(mean_frequency_seed_region(complex relative L2 squared)))); lit/shadow regions receive equal weight. Lower is better. No clipping.',
+        timing='Mean of per-run median transport submission/readback times. Excludes DSP/inference and cold dispatch.')
+    save_json(output/f'score-{split}.json', result)
+    print(json.dumps({k: v for k, v in result.items() if k != 'scores'}, indent=2))
+    for score in scores:
+        print({k: v for k, v in score.items() if k != 'families'})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare', 'validate', 'reference', 'audit', 'renderer', 'plot'])
+    parser.add_argument('command', choices=['prepare', 'suite', 'score', 'validate', 'reference', 'audit', 'renderer', 'plot'])
     parser.add_argument('output', type=Path)
     parser.add_argument('--planar', choices=['free', 'barrier', 'staggered'], help='prepare a point-source/extruded-wall FEM fixture')
+    parser.add_argument('--profile', choices=['pilot', 'study'], default='pilot', help='suite workload; generation does not run it')
+    parser.add_argument('--split', choices=['development', 'validation', 'test'], default='development')
     parser.add_argument('--mesh', type=float)
     parser.add_argument('--hz', type=float)
     parser.add_argument('--runner', type=Path)
@@ -384,6 +517,10 @@ def main():
             planar_prepare(args.output, args.planar)
         else:
             prepare(args.output)
+    elif args.command == 'suite':
+        prepare_suite(args.output, args.profile)
+    elif args.command == 'score':
+        score_suite(args.output, args.split)
     elif args.command == 'audit':
         from planar_wave import audit
         audit(args.output)

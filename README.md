@@ -30,6 +30,8 @@ For independent pressure maps behind walls, use the [silent wave-reference compa
 
 The optional [planar wave lab](docs/cleanup-results.md#planar-wave-reference--2026-10-18) adds cheap 2D analytic controls and a 2.5D FEM reference matched to `Planar2D`: free space, a barrier and staggered walls. The [contracts and next steps](docs/simulation-contracts.md#wave-reference-suite-research-and-implementation-plan) distinguish implemented checks from future material, scene and training coverage.
 
+The [research experiment protocol](docs/simulation-contracts.md#ray-transport-and-learned-reconstruction-experiment) specifies kernel candidates, staged parameter searches and a 25-scene benchmark. `compare_wave_field.py suite` generates its fixtures; `score` reports balanced complex-pressure error with equal scene-family weights.
+
 ## Microphone and multiplayer
 
 Use **Church** or **TrainStation**, press Play, then **Esc**. The controls include:

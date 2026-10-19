@@ -40,6 +40,26 @@ More rays fill the holes but expose large weighted outliers. The four-seed mean 
 
 Observed numerical stability is not a rigorous error bound or proof of real-world material accuracy. These are steady-state rigid fixtures; the reference includes all scattering orders, while the renderer truncates depth and delay. The raw response precedes HRTF, resampling, audio output and limiting. The fixtures support transport diagnosis; they do not yet qualify broadband moving-scene ML training labels.
 
+### Multi-scene research pilot
+
+The [experiment protocol](simulation-contracts.md#ray-transport-and-learned-reconstruction-experiment) now specifies candidate diffraction kernels, sampling methods, search ranges and learned reconstruction. The existing comparison tool generates 25 reproducible fixtures: eight geometry families with three variants each, plus free space. Twelve are development cases, six validation and six held-out test cases. This is a static rigid-wall transport benchmark; broadband motion/audio training remains future work.
+
+The silent pilot measures four nominal development cases at 250 Hz and four seeds. It reuses byte-identical free/barrier/staggered measurements and adds a slit and open corridor. The slit has 509 probes and final mesh changes of **0.0674% overall / 0.2970% shadow**; the corridor has 461 probes and changes of **0.1238% / 0.1786%**. Their finest reference solves take 17.54 and 17.57 seconds respectively. Both new isolated Unity measurements pass.
+
+The aggregate is RMS relative complex-pressure error, weighting each scene family and each nonempty lit/shadow region equally. It retains outliers and measures amplitude and phase together. Lower is better; it is not a perceptual quality percentage. The free-space control is excluded.
+
+| Current renderer | Four-family error score | Mean warm transport/readback |
+|---|---:|---:|
+| Diffraction disabled, 128 rays/bin | 73.12% | 0.472 ms |
+| Integrated diffraction, 8 rays/bin | 2,466.63% | 0.468 ms |
+| Integrated diffraction, 128 rays/bin | 792.79% | 0.524 ms |
+
+These scores are **provisional**: all four final mesh changes meet the 0.5% budget and the shared analytic controls pass, but only staggered barriers have the full seven-setting field audit. The three missing audits remain visible warnings. Validation/test fixtures have been generated and geometry-checked, not measured. Timings exclude DSP, inference and cold compilation; their small differences do not establish a speedup.
+
+Disabling diffraction scores better here because some current diffraction samples are catastrophically large. It still returns zero throughout geometric shadow and is a deliberately incomplete control. More rays lower the aggregate error but do not consistently improve every scene. A successful replacement must recover shadow sound and reduce complex error without clipping contributions. No candidate kernel or neural-model improvement is claimed by this pilot.
+
+Verification independently recomputes all three scores from raw CSV/NPZ, checks unequal-family weighting against a hand-computable example, rejects missing scenes/regions, validates all 34 generated pilot/study layouts and preserves all 72 earlier 3D comparisons and convergence values. Results and hashes are appended under `researchPilot` in the existing [measurement record](benchmarks/planar-wave-2026-10-18.json). Raw pilot outputs are in `.context/wave-study/pilot/`; the shader/runtime is unchanged.
+
 ### Reproduce
 
 ```sh

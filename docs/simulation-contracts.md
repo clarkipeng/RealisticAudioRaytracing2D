@@ -6,7 +6,7 @@ Updated 2026-10-07 against the current Unity 6 working tree. This is the single 
 
 Planning update, 2026-10-18: [artifact reduction and sampling](#artifact-reduction-and-sampling-plan) defines the next investigation. It does not change the implementation status of the earlier sections.
 
-Research update, 2026-10-18: [wave reference suite](#wave-reference-suite-research-and-implementation-plan) specifies independent 2D/2.5D physics references, scene families and tracer evaluation. The proposed solvers have not been integrated or benchmarked here.
+Research update, 2026-10-18: the [planar wave reference](#wave-reference-suite-research-and-implementation-plan) is implemented and benchmarked. The [ray/learned reconstruction experiment](#ray-transport-and-learned-reconstruction-experiment) defines candidate kernels, search ranges, a reproducible scene suite and an aggregate score; the replacement kernels and neural models remain proposed.
 
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
@@ -310,6 +310,127 @@ For this exterior rigid problem at source/receiver `z=0`, the implementation def
 2. Expand from the initial three fixtures to openings, three-wall paths, oblique layouts and cavities, with the appropriate source, radiation and resonance checks. Improve corner refinement before broad high-frequency sweeps.
 3. Verify transferred changes against the existing finite-height 3D wave reference and vertical/oblique probes. Shared sampling strategies can transfer; spreading laws, PDFs, finite edges and out-of-plane propagation require their own checks.
 4. Add broadband/moving-receiver references and training examples only after transport agreement and numerical accuracy meet a declared budget. Preserve geometry-family train/validation splits. Moving sources, moving walls, binaural head scattering and materials each need further physical validation.
+
+### Ray transport and learned reconstruction experiment
+
+**Question:** can sparse acoustic paths plus a small causal reconstruction model approximate a converged wave field on unfamiliar geometry, with less total computation and fewer motion artifacts? The benchmark infrastructure below exists; the replacement kernels and neural models are proposals. Publication novelty and speedups are not established by the current implementation.
+
+#### Candidate kernels and integrators
+
+Keep the source normalization, complex-pressure output and scene compiler fixed. A *kernel* defines the physical interaction; a *sampler/integrator* estimates its contribution. Compare those axes separately before combining their winners. Keep the existing `RayPath`/spectral pipeline while an alternative is being verified.
+
+| Candidate | Concrete change | Why test it / principal risk |
+|---|---|---|
+| Frozen baseline | Current `integrated-edge-preview-v7`, including failures. | Establishes reproducibility; higher ray count is not ground truth. |
+| Corrected secondary-edge integral | Derive and test complete path weights, measures, shared-face terms and valid mirror→edge/edge→mirror connections. Integrate the first-order edge contribution deterministically; sample the remaining orders without counting that term twice. | Closest to the present implementation. Separates missing physics/path classes from sampling variance. Independent wedge/two-edge integrals and full-wave maps are required. |
+| BEDRF | Prototype the published local, reciprocal edge interaction and its sampler, then its edge-intersection/path-space treatment. Preserve signed pressure. | A strong candidate for integration into the existing ray loop. Wedge agreement does not establish arbitrary high-order accuracy; its geometry/intersection machinery can cost more than ordinary rays. |
+| UDFA filter approximation | Evaluate the published two-/four-term diffraction filters as complex transfer functions on the configured frequency grid, for the paths being compared. Keep the published sign/zone-transition rules. | A deliberately cheap physical baseline and possible input to the neural residual. Higher-order extensions are approximations; smoothness alone does not establish accuracy. No switch to a separate IR-only audio backend is implied. |
+
+The [BEDRF paper](https://arxiv.org/abs/2306.01974) derives a local convex-wedge model with reciprocal, signed interactions and a specialized importance sampler. Its reported limitations include creeping waves and the cost of edge intersection. Treat its claimed infinite-wedge agreement as a restricted control to reproduce. [Kirsch and Ewert's UDFA work](https://doi.org/10.1051/aacus/2024059) supplies an inexpensive filter approximation with explicit boundary transitions and higher-order limitations. Neither is assumed better than the current secondary-source model before measurement. [Monte Carlo secondary-source diffraction](https://www.eurasip.org/Proceedings/Eusipco/Eusipco2011/papers/1569424561.pdf) and [multiple importance sampling](https://graphics.stanford.edu/papers/veach_thesis/) motivate the integration experiments; optical nonnegative-energy rules cannot be copied blindly into signed acoustic pressure.
+
+For a fixed physical kernel, compare these integrators in order:
+
+1. **Stratified / scrambled low-discrepancy sampling.** Allocate stable dimensions by interaction and bounce; share geometric samples across frequencies. Measure independent scrambles, and keep the current hash sampler as the control. This changes sample placement, not amplitudes.
+2. **Conditional integration and control variates.** Resolve a narrow final-edge integral with a small deterministic quadrature while sampling the earlier path. Alternatively, subtract a cheap analytically integrated approximation and sample its residual. Account for quadrature bias and extra visibility work. The former conditional-Cauchy experiment failed full-scene tests; do not rebrand that implementation as a proven improvement.
+3. **Bidirectional connections with MIS.** Grow source and listener subpaths and connect valid vertices. Evaluate forward/reverse densities in the same path measure, include strategy probabilities/Jacobians, and handle delta mirrors with constrained connections. This may help obstructed paths; it can also spend more work on rejected connections. A reciprocity test alone does not prove correct normalization.
+4. **Temporal path reuse.** Revalidate cached geometry/path identities and recompute current delays, directions and weights. Mix reused proposals with fresh samples using the correct combined density. Retiming must be per path/component: one phase rotation of the entire response cannot align several different arrivals. Compare against plain temporal averaging so reduced noise cannot conceal added lag.
+
+A distance grid or A* result may guide proposal probabilities. It must retain support for alternatives and never become a separate shortest-route pressure contribution. Preserve signed cancellation, and do not clip large samples to make the score look better. Shared geometry traversal across frequencies and GPU-resident accumulation are execution optimizations to benchmark independently of physical model changes.
+
+#### Initial search space
+
+These are editable experimental choices, not runtime limits or a fixed acoustic band scheme. A parameter is varied only after its PDF, normalization and physical meaning are established. Start with one factor at a time; use a small randomized search over the surviving interactions rather than the Cartesian product.
+
+| Parameter | Initial values | Condition / interpretation |
+|---|---|---|
+| Ray budget per bin | 8, 32, 128, 512 | Work/quality curve; compare measured compute as well as equal counts. |
+| Path depth | 2, 4, 8 | Truncation convergence, not a fitted diffraction gain. |
+| Delay support | 0.1, 0.2, 0.4 s | Separate support study; hold fixed during an estimator comparison. |
+| Sampler | Current hash; stratified; Owen-scrambled Sobol | Independent seeds/scrambles, stable dimensions. |
+| Edge-event allocation | 0.25, 0.5, 0.75 | Include selection probability in the estimator; retain surface paths. |
+| Global edge proposal share | 0.1, 0.25, 0.5 | Remaining share uses a justified local/conditional proposal; global support stays nonzero. |
+| Along-edge proposal scale | 0.5×, 1×, 2× derived scale | Evaluate the exact changed density. The scale changes sampling, not physical amplitude. |
+| Conditional quadrature points | 1, 4, 8, 16 | Compare equal wall time; 1 is the stochastic control, not accurate quadrature. |
+| Bidirectional source/listener work | 25/75, 50/50, 75/25 | Count both tracing and connections in the budget. |
+| MIS heuristic | Balance; power with exponent 2 | After deriving densities in a common measure. |
+| History duration | 0, 20, 80 ms | Causal history at a declared update cadence; report lag and invalidation cost. |
+| Reused proposal share | 0, 0.5, 0.8 | Fresh samples remain present; no stale-pressure blending. |
+
+Do not search physical speed, material values, `diffractionFactor`, per-scene gain/phase offsets or reference tolerances to reduce error. Keep rigid-wall strength at its declared physical value. First run pilot controls for a small candidate set; then evaluate roughly 16 sampler configurations on development scenes as an initial search budget, expanding only where results justify it. Correctness failures eliminate a candidate before tuning. Repeat close comparisons with additional seeds instead of selecting a lucky realization.
+
+#### Frozen scene suite
+
+`tools/compare_wave_field.py suite OUTPUT --profile study` prepares **25 JSON fixtures**: one free-space control plus three physical variants of each of eight families. This creates inputs only. Every fixture uses the same XY domain, source `(-3,-0.4,0)`, point-source convention, rigid disjoint boxes, probe-generation rule and solver settings. Slit walls are finite in XY and infinite in Z; they are not claimed to be infinite-plane analytic slit fixtures. Source/geometry/receivers match the GPU measurement exactly.
+
+| Family | Three variants | Purpose | Split |
+|---|---|---|---|
+| Thick barrier | Thickness 0.24 / 0.60 / 1.20 m | Single-object diffraction, lit/shadow transition | Development |
+| Staggered barriers | Center separation 1.2 / 1.6 / 2.2 m | Multi-edge paths and the reproduced failure | Development |
+| Single slit | Opening 0.35 / 0.70 / 1.40 m | Aperture transmission and interference | Development |
+| Open corridor | Clear width 1.1 / 1.7 / 2.5 m | Repeated reflections and spectral structure | Development |
+| Double slit | Each opening 0.25 / 0.45 / 0.70 m | Interference between distinct openings | Validation |
+| Offset doorways | Opening 0.35 / 0.70 / 1.10 m through two offset screens | Coupled apertures, difficult path discovery | Validation |
+| Three alternating barriers | Vertical offsets scaled by 0.75 / 1 / 1.25 | Higher-order shadow paths | Held-out test |
+| Pillar cluster | Nine square pillars, width 0.3 / 0.6 / 0.9 m | Many competing paths and multiple scattering | Held-out test |
+
+The manifest freezes scene hashes, family, variant and split. Development has 12 scenes, validation 6 and test 6; the free-field control is excluded from the headline score. Rotations, source/receiver swaps and mesh tessellations are invariance checks, not independent scene families. The benchmark uses disjoint boxes to avoid accidentally comparing a FEM solid union with overlapping primitive boundaries. Joined L/U rooms, oblique polygons, curved obstacles, materials and finite-height 3D scenes need their own matched geometry/reference controls and are subsequent extensions.
+
+The default `pilot` profile creates nine nominal fixtures and uses **250 Hz, four seeds and 8/128 rays per bin**. Only its four development families plus free space are run during setup; validation/test metrics stay uninspected. The study profile requests **125/250/500 Hz, eight seeds and 8/32/128/512 rays**, with four bounces and 0.1 s support as the frozen initial baseline. These three frequencies sample different wavelength regimes, not full-band audio. A higher frequency or difficult opening may require more reference refinement than the generated mesh defaults. A generated fixture is not an accepted reference.
+
+This compact suite is for method selection and regression. It is too small to train and substantiate a general neural model by itself. Generate additional geometry seeds from development families for training, split by complete geometry/trajectory, and never split neighboring probes or frequency bins from one scene across training and test. Once validation results influence design, they are development evidence; reserve fresh layouts/families for the final paper test.
+
+#### One headline number, with visible failure measures
+
+The implemented `score OUTPUT --split development` consumes complete per-scene reports. For each scene, frequency, seed and geometric region, compute:
+
+```text
+e_region² = sum(|H_method - H_wave|²) / sum(|H_wave|²)
+scene_error² = mean over frequency, seed, and nonempty lit/shadow regions of e_region²
+score (%) = 100 * sqrt(mean over families(mean over variants(scene_error²)))
+```
+
+Lower is better; values above 100% are valid. Equal family/variant weights prevent a dense scene from dominating; equal lit/shadow weights prevent direct sound from hiding diffraction failures. This is one explicit evaluation choice, not a perceptual quality scale. Preserve per-scene scores, separate shadow error, seed-mean discrepancy/variance and the worst seed/region. Do not normalize each method's level, fit phase, clip outliers, or pool “all” and “shadow” as if they were disjoint. Reports now expose disjoint `lit` and `shadow` metrics as well as the whole map.
+
+Missing scenes, seeds, frequencies or mismatched renderer/workload provenance invalidate the aggregate. Numerical controls, mesh/order/PML/integration refinement remain separate from method error. The initial reference budget is 0.5% observed change in both whole-field and shadow norms; this is not a rigorous error bound. The score stays **provisional** if per-scene audits are absent or outside that budget. Unresolved references are reported, not silently omitted from the denominator or assigned zero error.
+
+Show the score against measured cost. Initial timing is transport submission/readback only. Paper claims must additionally include inference, DSP, geometry uploads, guide construction/update, memory, cold/warm behavior and end-to-end latency. Compare methods at matched total time by adjusting their work budgets, including a faster non-neural method with more samples. The current small runs are about 0.5 ms including readback; a network may cost more than the work it saves.
+
+Before motion/audio claims, add dense, ordered receiver trajectories: cross a shadow boundary, pass a slit, move down a corridor, reverse direction, then pause. Keep static sources/geometry first. Compare spatial/temporal finite differences of **complex residual error** against the wave reference, so real interference is not counted as an artifact. Report residual-jump percentiles, tones/sweeps, sidebands/dropouts and causal latency. Three isolated tones do not support broadband waveforms, decay estimates or waveform-based training. A dense uniform frequency grid needs sufficient time support and wraparound checks; head rotation additionally requires a validated directional/binaural target.
+
+#### Neural reconstruction experiment
+
+Start with `H_prediction = H_base + network(features, history)` in complex pressure. Features must be available at runtime: sparse path delays/directions/signed contributions and PDFs, source/listener pose and motion, frequency, ray budget and declared geometry/visibility features. Normalize lengths by wavelength where useful. Never feed wave-reference values, test-scene IDs or future poses into inference. Preserve direct/validated mirror terms separately when assessing the residual; learn physically missing wave effects only after correcting known estimator defects.
+
+| Choice | Initial search | Purpose |
+|---|---|---|
+| Model | Per-frequency residual MLP; small causal GRU | Separate spatial correction from temporal reconstruction. |
+| Hidden width | 32, 64 | Measure inference cost; enlarge only if underfitting is demonstrated. |
+| MLP depth | 2, 3 hidden layers | Small architecture comparison. |
+| History | 0, 20, 80 ms | Same history study as the non-neural baseline. |
+| Learning rate | 1e-4, 3e-4, 1e-3 | Initial optimizer search. |
+| Weight decay | 0, 1e-4 | Generalization ablation. |
+| Loss | Complex normalized error weight 1; amplitude term 0 / 0.1; residual-difference term 0 / 0.1 / 1 | Temporal term matches the reference's change, not a blanket smoothness penalty. |
+| Sparse frequency stride | 1, 2, 4 | Only after a validated dense frequency dataset exists; preserve phase/delay structure. |
+
+A causal network in frame time does not automatically produce a causal acoustic filter: verify dense-grid response support and Hermitian consistency before audio rendering. Use a staged small random search and successive halving with equal training work, then retain validation Pareto candidates. Record teacher-generation and training cost separately from inference savings. Ablations remove rays, geometry features and history individually; compare against deterministic interpolation/reuse and the best corrected non-neural tracer at equal compute. Training on a higher-ray output is a separate weak-teacher experiment, not a replacement for wave targets. Start offline; exporting the winning tiny network into the GPU pipeline is conditional on an actual end-to-end benefit.
+
+Prior work already combines [learned scattering with ray tracing](https://arxiv.org/abs/2010.04865), and [ray-to-wave image translation](https://www.jstage.jst.go.jp/article/jrsj/44/6/44_44_633/_article/-char/en) is also published. Our hypothesis is a phase-preserving, temporally stable, inexpensive reconstruction that generalizes across geometry; a related-work review and measured advantage over relevant baselines are still required.
+
+#### Run order and minimal implementation
+
+1. Generate and inspect fixtures; reuse existing analytic controls only with matching fingerprints. Run the four-family pilot, retaining failures. No full search starts implicitly.
+2. Validate corrected secondary-edge and single-wedge BEDRF prototypes before integrating more path classes. Run sampler changes as isolated experiments. UDFA supplies a cheap approximation baseline.
+3. Promote promising configurations to the development study, resolve reference failures, then select on validation. Keep the test split untouched until settings are frozen.
+4. Add dense frequency/trajectory targets, then train the small residual models and benchmark total GPU/audio cost. Validate transfer on finite 3D cases before claiming general realtime acoustics.
+
+Reuse `tools/compare_wave_field.py`, `tools/planar_wave.py` and `WaveFieldMeasurement.cs`. The suite is JSON data, not new Unity art scenes or runtime components. No new benchmark framework, training service or model dependency is needed for this first stage. References run one low-priority CPU job at a time; GPU measurements use the existing isolated silent runner.
+
+```sh
+python tools/compare_wave_field.py suite .context/wave-study/pilot
+python tools/compare_wave_field.py suite .context/wave-study/study --profile study
+# Explicitly run validate/reference/audit/renderer/plot on selected scene directories.
+python tools/compare_wave_field.py score .context/wave-study/pilot --split development
+```
 
 ### 2D propagation debugger
 
