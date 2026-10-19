@@ -32,6 +32,8 @@ The optional [planar wave lab](docs/cleanup-results.md#planar-wave-reference--20
 
 The [research experiment protocol](docs/simulation-contracts.md#ray-transport-and-learned-reconstruction-experiment) specifies kernel candidates, staged parameter searches and a 25-scene benchmark. `compare_wave_field.py suite` generates its fixtures; `score` reports balanced complex-pressure error with equal scene-family weights.
 
+The [material/room/motion extension](docs/simulation-contracts.md#materials-enclosed-spaces-and-motion) specifies the next physical cases. A [silent early-reflection control](docs/cleanup-results.md#material-enclosed-room-and-motion-controls--2026-10-18) already checks synthetic absorption and receiver movement in enclosed 2D/3D boxes (`renderer --room-control`).
+
 ## Microphone and multiplayer
 
 Use **Church** or **TrainStation**, press Play, then **Esc**. The controls include:

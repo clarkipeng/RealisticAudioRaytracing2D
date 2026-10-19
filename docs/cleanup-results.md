@@ -1,5 +1,29 @@
 # Cleanup validation and measured bottlenecks
 
+## Material, enclosed-room and motion controls — 2026-10-18
+
+The [expanded experiment spec](simulation-contracts.md#materials-enclosed-spaces-and-motion) adds material/impedance controls, treated and coupled rooms, long corridors, a simplified church, moving receivers/sources and moving doors. These future wave-reference cases do not alter the frozen 25-scene exterior suite or its scores.
+
+One small opt-in measurement in the existing `WaveFieldMeasurement.cs` now checks **direct plus first-order image reflections** against analytic geometry while a receiver moves at 1.25 m/s. It covers a 6×4 m `Planar2D` enclosure (point source, infinitely extruded sides) and a finite 6×4×3 m 3D box, with 33 positions over two seconds. Materials have uniform energy absorption 0 / 0.2 / 0.6 / 0.9, plus a frequency-dependent 0.1 / 0.4 / 0.8 curve at 125 / 250 / 500 Hz. These are declared synthetic surfaces with real positive reflection factors, not measured concrete/wood/curtain materials.
+
+All **990 complex-pressure samples** are finite. Aggregate relative L2 error is **0.0001384%**; the worst dimension/material case is **0.0001780%**, against the declared 0.01% early-path control tolerance. Per-case median warm solve/readback times are 0.475–0.637 ms for five configured FFT bins; DSP, inference and cold compilation are excluded. Four planar or twelve spatial rays/bin cover each primitive once, with one reflection, zero scattering/transmission and diffraction disabled to isolate the analytic terms. This is not a performance comparison against the full diffraction method.
+
+The same silent runner passes **10 focused cases in 3.27 seconds of test execution**, including the new measurement, source/listener and moving-mirror Doppler, material-speed propagation, moving/rotating interface clock derivatives and interior media. It validates the existing transport/DSP contracts exercised by those cases, not general moving-boundary wave physics. No runtime shader or audio path changed.
+
+The remaining limits are substantive: current materials lack arbitrary complex reflection phase; the numerical wave helper only supports rigid stationary exterior geometry; these early images do not establish high-order room reverberation, decay or broadband continuity. Material wave comparisons require shared impedance/phase definitions. Finite rooms need matched interior boundaries and convergence of late response support. Frozen snapshots cannot certify moving-door dynamics. Those requirements and their implementation order are now explicit in the spec.
+
+Reproduce just the early-path measurement with the existing isolated runner; the command creates its output directory and needs no scene JSON:
+
+```sh
+OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 \
+.context/wave-planar/venv/bin/python tools/compare_wave_field.py renderer \
+  .context/wave-study/room-control-repeat --room-control \
+  --runner .context/gpu-audio/runner \
+  --unity /Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity
+```
+
+The job is sequential, low priority, in batch mode with audio disabled. It writes `room-material-motion.csv`, test XML and provenance, and refuses to overwrite previous CSV measurements. Detailed measured values are appended under `roomMaterialMotion` in the existing [measurement ledger](benchmarks/planar-wave-2026-10-18.json); the original multi-case run is under `.context/wave-study/material-room-motion/`.
+
 ## Planar wave reference — 2026-10-18
 
 **A small independent wave lab now measures the current planar renderer without changing its runtime.** It adds one optional numerical helper, `tools/planar_wave.py`, and extends the existing comparison command and opt-in Unity fixture. The initial suite contains free space, a thick barrier and staggered barriers at 250 Hz. All runs were silent, offline, sequential and low priority; NGSolve and numerical-library threading were limited to one thread.

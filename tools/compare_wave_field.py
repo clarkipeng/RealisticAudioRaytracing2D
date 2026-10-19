@@ -175,7 +175,7 @@ def reference(output, validate=False, only_mesh=None, only_hz=None):
             save_json(Path(str(stem)+'.json'), stats); print('walls', stats, flush=True)
 
 
-def renderer(output, runner, unity):
+def renderer(output, runner, unity, room_control=False):
     root = Path(__file__).resolve().parents[1]
     runner = runner.resolve(); output = output.resolve()
     if runner == root or (runner/'Temp/UnityLockfile').exists():
@@ -192,16 +192,18 @@ def renderer(output, runner, unity):
                 raise ValueError(f'Runner runtime differs: {relative}')
             hashes[str(relative)] = hashlib.sha256(source.read_bytes()).hexdigest()
     destination = runner/'Assets/Tests/Editor/WaveFieldMeasurement.cs'
-    if destination.exists() or (output/'renderer.csv').exists():
+    if destination.exists() or any(output.glob('*.csv')):
         raise ValueError('Preserve existing measurements; use a fresh output directory.')
+    measurement = 'MeasureRoomMaterialMotion' if room_control else 'MeasureWaveField'
     save_json(output/'renderer-provenance.json', dict(files=hashes,
         fixtureSha256=hashlib.sha256((root/'Assets/Tests/Editor/WaveFieldMeasurement.cs').read_bytes()).hexdigest(),
-        sceneSha256=hashlib.sha256((output/'scene.json').read_bytes()).hexdigest()))
+        measurement=measurement,
+        sceneSha256=None if room_control else hashlib.sha256((output/'scene.json').read_bytes()).hexdigest()))
     shutil.copy2(root/'Assets/Tests/Editor/WaveFieldMeasurement.cs', destination)
     try:
         subprocess.run(['nice', '-n', '15', str(unity), '-batchmode', '-force-metal', '-disable-audio',
                         '-job-worker-count', '2', '-projectPath', str(runner), '-runTests',
-                        '-testPlatform', 'EditMode', '-testFilter', 'TakeChecks.MeasureWaveField',
+                        '-testPlatform', 'EditMode', '-testFilter', 'TakeChecks.'+measurement,
                         '-testResults', str(output/'renderer-tests.xml'), '-logFile', str(output/'renderer.log')],
                        env=dict(os.environ, ACOUSTIC_WAVE_OUTPUT=str(output)), check=True)
         import xml.etree.ElementTree as xml
@@ -505,6 +507,7 @@ def main():
     parser.add_argument('--planar', choices=['free', 'barrier', 'staggered'], help='prepare a point-source/extruded-wall FEM fixture')
     parser.add_argument('--profile', choices=['pilot', 'study'], default='pilot', help='suite workload; generation does not run it')
     parser.add_argument('--split', choices=['development', 'validation', 'test'], default='development')
+    parser.add_argument('--room-control', action='store_true', help='renderer: analytic early room/material/motion control; no scene.json needed')
     parser.add_argument('--mesh', type=float)
     parser.add_argument('--hz', type=float)
     parser.add_argument('--runner', type=Path)
@@ -527,7 +530,7 @@ def main():
     elif args.command == 'renderer':
         if args.runner is None or args.unity is None:
             parser.error('renderer requires --runner and --unity')
-        renderer(args.output, args.runner, args.unity)
+        renderer(args.output, args.runner, args.unity, args.room_control)
     elif args.command == 'plot':
         plot(args.output)
     else:

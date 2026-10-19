@@ -290,5 +290,71 @@
       }
     ],
     "verification": ["34 generated pilot/study layouts checked for disjoint walls, source/probe clearance, valid FFT bins and unique hashes", "Aggregate scores independently recomputed from raw CSV/NPZ", "Unequal-family weighting checked against hand-computable oracle; missing regions/scenes rejected", "All 72 legacy 3D comparisons and convergence values unchanged"]
+  },
+  "roomMaterialMotion": {
+    "date": "2026-10-18",
+    "runtimeCommit": "6bc0c0c",
+    "runtimeChanged": false,
+    "scope": "Analytic direct plus first-image reflections only; synthetic nonnegative pressure reflection. Not full-wave room decay or moving-boundary validation.",
+    "dimensionConvention": {"Planar2D": "Point source between four infinitely extruded side walls; no ceiling/floor", "Spatial3D": "Point source in finite 6 x 4 x 3 m box"},
+    "fixtureSha256": "c8fe479b5a22f7a68c2729710d46a0699acb151108002d2169ca2b21722e7063",
+    "csvSha256": "594f2f6888a33f139f10eb25d53135501f9b4f7b8357c0bcef521ee9381f9097",
+    "roomSizeMetres": [6, 4, 3],
+    "source": [-1.5, -0.5, 0],
+    "receiverStart": [-1, 0.4, 0],
+    "receiverVelocity": [1.25, 0, 0],
+    "durationSeconds": 2,
+    "poseIntervalSeconds": 0.0625,
+    "frequencies": [125, 250, 500],
+    "sampleRate": 1000,
+    "fftSize": 8,
+    "raysPerBin": {"Planar2D": 4, "Spatial3D": 12},
+    "maxBounces": 1,
+    "diffraction": false,
+    "airAbsorption": false,
+    "scattering": 0,
+    "transmission": 0,
+    "absorption": [
+      [0, 0, 0],
+      [0.2, 0.2, 0.2],
+      [0.6, 0.6, 0.6],
+      [0.9, 0.9, 0.9],
+      [0.1, 0.4, 0.8]
+    ],
+    "pressureReflection": "sqrt(1-absorption)",
+    "sampleCount": 990,
+    "aggregateComplexRelativeL2": 1.3839842247791807e-06,
+    "acceptanceRelativeL2": 0.0001,
+    "measurements": [
+      {"dimension": "Planar2D", "material": 0, "complexRelativeL2": 1.4569979526278458e-06, "maximumAbsoluteError": 3.581408982298793e-06, "derivativeResidualRelativeL2": 4.140960168983683e-06, "medianWarmSolveMs": 0.503},
+      {"dimension": "Planar2D", "material": 1, "complexRelativeL2": 1.3796758798385996e-06, "maximumAbsoluteError": 3.2849002154753127e-06, "derivativeResidualRelativeL2": 3.871738200472532e-06, "medianWarmSolveMs": 0.5044},
+      {"dimension": "Planar2D", "material": 2, "complexRelativeL2": 1.163284783525541e-06, "maximumAbsoluteError": 2.5451990487813503e-06, "derivativeResidualRelativeL2": 3.141761541711803e-06, "medianWarmSolveMs": 0.4751},
+      {"dimension": "Planar2D", "material": 3, "complexRelativeL2": 8.367658394390058e-07, "maximumAbsoluteError": 1.6613936365400185e-06, "derivativeResidualRelativeL2": 2.15245280335814e-06, "medianWarmSolveMs": 0.5215000000000001},
+      {"dimension": "Planar2D", "material": 4, "complexRelativeL2": 9.98653805811661e-07, "maximumAbsoluteError": 2.0306917524381206e-06, "derivativeResidualRelativeL2": 2.8666083486015637e-06, "medianWarmSolveMs": 0.4808},
+      {"dimension": "Spatial3D", "material": 0, "complexRelativeL2": 1.7798008818518219e-06, "maximumAbsoluteError": 5.3271519945991425e-06, "derivativeResidualRelativeL2": 5.5601989450240596e-06, "medianWarmSolveMs": 0.5519999999999999},
+      {"dimension": "Spatial3D", "material": 1, "complexRelativeL2": 1.6947699957976469e-06, "maximumAbsoluteError": 4.816219373759143e-06, "derivativeResidualRelativeL2": 5.254537117862824e-06, "medianWarmSolveMs": 0.6371},
+      {"dimension": "Spatial3D", "material": 2, "complexRelativeL2": 1.4364462597283862e-06, "maximumAbsoluteError": 3.517689101909168e-06, "derivativeResidualRelativeL2": 4.312797572283507e-06, "medianWarmSolveMs": 0.5972},
+      {"dimension": "Spatial3D", "material": 3, "complexRelativeL2": 9.897145819946222e-07, "maximumAbsoluteError": 1.931714257295546e-06, "derivativeResidualRelativeL2": 2.811690519392081e-06, "medianWarmSolveMs": 0.5584},
+      {"dimension": "Spatial3D", "material": 4, "complexRelativeL2": 1.227852559065177e-06, "maximumAbsoluteError": 2.5963427142121705e-06, "derivativeResidualRelativeL2": 4.0713569430943034e-06, "medianWarmSolveMs": 0.5701999999999999}
+    ],
+    "timing": "Warm solver + readback; five FFT bins. Excludes DSP, audio playback, inference and cold dispatch.",
+    "tests": {
+      "passed": 10,
+      "failed": 0,
+      "seconds": 3.2688603,
+      "cases": [
+        {"name": "MaterialBoundaryClockRate(False,False,0.28f)", "result": "Passed", "seconds": 0.064079},
+        {"name": "MaterialBoundaryClockRate(False,True,2.0f)", "result": "Passed", "seconds": 0.077079},
+        {"name": "MaterialBoundaryClockRate(True,False,2.0f)", "result": "Passed", "seconds": 0.04672},
+        {"name": "MaterialBoundaryClockRate(True,True,0.28f)", "result": "Passed", "seconds": 0.035785},
+        {"name": "MaterialSpeedDoppler", "result": "Passed", "seconds": 0.020127},
+        {"name": "MeasureRoomMaterialMotion", "result": "Passed", "seconds": 0.286424},
+        {"name": "MovingMirrorDoppler(False)", "result": "Passed", "seconds": 0.309605},
+        {"name": "MovingMirrorDoppler(True)", "result": "Passed", "seconds": 0.234926},
+        {"name": "SourceAndListenerDoppler", "result": "Passed", "seconds": 2.034209},
+        {"name": "TransportMedia", "result": "Passed", "seconds": 0.108199}
+      ]
+    },
+    "rawDirectory": ".context/wave-study/material-room-motion"
   }
 }
