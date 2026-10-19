@@ -1,8 +1,70 @@
 # Cleanup validation and measured bottlenecks
 
+## Two-edge diffraction: amplitude correction and conditional sampling — 2026-10-18
+
+**Accepted:** shared-solid-face multiplicity and stable grazing-face classification. **Rejected:** a conditional sampler specialized to parallel edge pairs. Solver provenance advances to `integrated-edge-preview-v7`; take payloads remain v3.
+
+The previous two-bend test proved that a route existed, but did not check its pressure. The authors' [EDwedge2nd](https://github.com/upsvensson/Edge-diffraction-Matlab-toolbox/blob/67e53c4f510c0033821c9c879f91652d1a131244/toolbox/internal/EDwedge2nd.m) and [EDwedgeN](https://github.com/upsvensson/Edge-diffraction-Matlab-toolbox/blob/67e53c4f510c0033821c9c879f91652d1a131244/toolbox/internal/EDwedgeN.m) apply a factor of one half for each inter-edge leg along a shared solid face. Our product of ordinary edge kernels omitted it. Thin-sheet pairs retain their two-sided multiplicity, consistent with the authors' thin-plate correction in `EDmakeHODirs`.
+
+The new shader helper compares the adjacent face planes in object coordinates, including coplanar faces made from different triangles. It applies the factor only to an edge-to-edge connection on the same object, and excludes pairs of open thin-sheet edges. It adds no buffers, dispatches, settings or scene components. This is a restricted shared-face correction, not a general solution for non-convex scattering, mixed thin/solid chains or mixed specular/diffracted paths.
+
+The transformed-cube check exposed two additional numerical defects. A grazing angle could wrap from approximately zero to approximately `2*pi` after a rigid rotation and get rejected as inside the wedge. Separately, the ray/triangle test treated a roundoff-sized determinant as a real intersection and blocked coplanar connections. Wedge angles now classify face proximity with the existing `0.0001 m` visibility tolerance; segment/triangle parallel checks scale their single-precision tolerance with the determinant's operands. These fix geometry classification, without adding an audio fade or clipping pressure. The first two validation attempts retained their failures: shared-face weighting alone had complex DC error `0.15898`; fixing angle wrap alone reduced it to `0.07691`. The intersection correction addresses the remaining false blockers.
+
+```text
+continue an edge path:
+    gain *= previousEdgeKernel / previousLegDistance
+    if the two edges share a solid face:
+        gain *= 1/2
+    continue the existing travel, sampling and listener-connection code
+```
+
+Independent double-precision integration of the published second-order formula uses a rigid cube `[-1,1]^3`, source `(-3,0,0)`, receiver `(3,0,0)`, sound speed 343 m/s and four equivalent two-edge routes. Tensor Gauss–Legendre integration at 32, 64 and 128 nodes per edge agrees within `4e-15` in complex pressure. At DC the expected response is **0.16099048**: eight disjoint GPU seeds at 65,536 rays give **0.32532006 before → 0.16266003 after**. Checks at 125, 250 and 500 Hz include phase. This independently evaluates the authors' second-order model; it does **not** run the complete MATLAB toolbox or establish full-wave truth. The upgraded regression also covers a transformed cube and the DC response of the infinitely extruded 2D box with the same delay horizon.
+
+The conditional sampling trial proposes the next point from a mixture of its own kernel's peaks and the preceding edge's peaks, with both normalized PDFs in the weight. In a known parallel two-edge route near a shadow boundary, 256 independent 32-sample estimates reduce relative complex RMSE from **239% to 55.5%**, and the largest contribution from **0.3430 to 0.01512**. Numerical reference convergence is below `8e-8` relative. This isolates integration on a known route; it excludes route discovery, other orders and audio synthesis. An individual diffraction order can change discontinuously at a shadow boundary, so its raw jump is not a total-field continuity test.
+
+That improvement does not transfer reliably to the full GPU walk. Holding the amplitude correction fixed, the 720-solve, two-layout/five-pose/24-seed sweep gives:
+
+| Rays | Largest contribution, existing sampler | Conditional sampler | Missing responses, existing → conditional |
+|---:|---:|---:|---:|
+| 8 | 3.039 | 3.039 | 90 → 90 / 240 |
+| 32 | 4.424 | 6.759 | 69 → 69 / 240 |
+| 128 | 3.083 | 3.658 | 20 → 19 / 240 |
+
+The reproduced spike worsens **129.80 → 139.72** with that sampler. Median tiny-solve wall time rises about 4–6%; these include submission/readback and are not isolated GPU times. It remains an unshipped experiment. The accepted amplitude correction alone reduces the previous spike **259.61 → 129.80**, preserving sampled routes, but that is still unacceptable. Fading cannot turn this estimator into a reliable teacher. More general joint-path sampling and independent total-field validation remain necessary; Church diffraction and training eligibility are unchanged.
+
+The final build passes **27 focused regression cases** and completes four measurement jobs. The thin-sheet two-edge control is byte-identical before/after. The cube's warm median solve time at 65,536 rays/bin, five bins and eight seeds is **9.63 → 9.82 ms**; this includes CPU submission/readback and does not measure complete audio rendering. Runtime changes total **28 net shader lines** across two existing files, plus the solver provenance revision; the conditional sampler adds no shipped code.
+
+Focused results and measured timings are in the [measurement record](benchmarks/audio-quality-2026-10-18.json). Local reproducible Python integrals, experimental shaders and pinned author sources are under `.context/two-edge/`; GPU fixtures, CSVs, source hashes and logs are under `.context/path-timing/{cube-baseline,cube-face-weight,face-weight-motion,conditional-motion,face-weight-final,face-boundary-final,face-geometry-final,face-planar-final}`. All runs were silent, offline and limited to one low-priority GPU worker.
+
 ## Continuous spectral path timing — 2026-10-18
 
-**Implemented in the existing CPU/GPU spectral renderers.** Persistent paths now use one Hermite-interpolated propagation clock and its derivative for Doppler/sinc filtering. Gain interpolation uses acoustic arrival time; head rotation retains output time. Two response banks remain. Group matching uses topology identity and canonical frequency, rejects ambiguous matches and requires a monotone source clock. Unmatched paths retain their endpoint clocks. Short-filter overlap outside the endpoint interval uses tangent continuation; this remains an approximation, not arbitrary-trajectory wave reconstruction.
+Commit `d413066` repairs how the existing spectral renderer turns successive ray responses into continuous audio. The accepted change is in audio synthesis and its scheduling. The geometric transport shader and scene materials retain their previous behavior; the diffraction experiments below were rejected.
+
+For an arrival at time `t`, the source sample belongs to `t - delay(t)`. As a source or listener moves, that delay changes continuously. Its derivative also determines the Doppler read speed: `1 - delayRate(t)`. Previously, the old and new response each extrapolated its own delay and read its own source samples. Crossfading those filtered waveforms could mix two slightly different phases/pitches for the same physical path, producing artificial modulation.
+
+The repair matches a persistent path across consecutive responses, then builds one cubic Hermite delay curve from the endpoint delays and their rates of change. Both response filters use that same source clock. The derivative of the same curve drives Doppler and the sinc antialiasing cutoff, keeping pitch consistent with travel time. Matching rejects ambiguous identities, discontinuities and curves that fail the monotone source-time condition. Paths that appear or disappear still use their own endpoint clock and the response gain transition; this does not solve unstable path discovery.
+
+Conceptual before/after, omitting FFT/filter alignment details:
+
+```text
+before:
+    oldInput = source[t - oldResponse.predictDelay(t)]
+    newInput = source[t - newResponse.predictDelay(t)]
+    output = fade(oldFilter(oldInput), newFilter(newInput))
+
+after, for a matched persistent path:
+    t = outputTime - declaredDspLatency
+    delay, delayRate = interpolateDelay(previousResponse, currentResponse, t)
+    input = sincRead(source, t - delay, readSpeed = 1 - delayRate)
+    output = blendFilters(input, previousResponse, currentResponse,
+                          gainTime = t, headPose = headAt(outputTime))
+```
+
+The acoustic response must be evaluated at the time represented by the delayed audio. Head orientation must remain tied to the current output time, so a propagation delay does not also delay a head turn. Live rendering therefore retains the needed recent pose observations and waits for a future endpoint when required; offline rendering evaluates the same anchors from the take. When matched GPU groups occupy the same compacted index, their source FFT is reused across both filters. Reordered matches stay correct but do not use that shortcut.
+
+The implementation is contained in seven existing runtime files: `Doppler.cs` owns the CPU interpolation math; `SpectralAudio.cs` and `GpuAudio.compute` implement the CPU/GPU synthesis; `GpuAudio.cs` binds GPU matching/clock state; `TakeRender.cs` and `TakeRender.Live.cs` align solve/head times; `Take.cs` updates DSP provenance. Three existing test files change. Most of the commit's added lines are documentation and the 813-line measurement JSON, which also records the preceding investigation.
+
+Two response banks remain. Matching uses topology identity and canonical frequency. Short-filter overlap outside the endpoint interval uses tangent continuation; this remains an approximation, not arbitrary-trajectory wave reconstruction.
 
 The live/offline orchestrators solve the right endpoint at `max(0, output + responseStep - declaredDspLatency)`. Live retains only the observation history needed for that clock and waits for the required future observation when the response step exceeds DSP latency. Initial state is explicitly primed for that case. DSP latency, playback lead, scene data and the 32-byte arrival format are unchanged. Spectral gain interpolation spans the response interval; `transitionSamples` continues to control Direct/IR fades. A cut prevents interpolation across its solve knot. Current output-time head prediction is applied to both acoustic banks.
 

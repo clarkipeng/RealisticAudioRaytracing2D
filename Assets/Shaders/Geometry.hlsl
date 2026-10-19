@@ -75,7 +75,7 @@ float IntersectPrimitive(uint id, uint stateOffset, float3 o, float3 d, bool is2
     {
         float2 e = b.xy - a.xy, q = a.xy - o.xy;
         float det = d.x * e.y - d.y * e.x;
-        if (abs(det) < 1e-12)
+        if (abs(det) <= 8 * 1.1920929e-7 * length(d.xy) * length(e))
             return 1e30;
         float t = (q.x * e.y - q.y * e.x) / det, u = (q.x * d.y - q.y * d.x) / det;
         normal = normalize(float3(-e.y, e.x, 0));
@@ -83,7 +83,9 @@ float IntersectPrimitive(uint id, uint stateOffset, float3 o, float3 d, bool is2
     }
     float3 c = PastPoint(state, p.c.xyz, lag), e1 = b - a, e2 = c - a, h = cross(d, e2);
     float det = dot(e1, h);
-    if (abs(det) < 1e-12)
+    // A rotated coplanar ray has a float-roundoff determinant, not an
+    // intersection. Scale the parallel test with the operands, as in 2D.
+    if (abs(det) <= 8 * 1.1920929e-7 * length(d) * length(e1) * length(e2))
         return 1e30;
     float3 s = o - a, q = cross(s, e1);
     float u = dot(s, h) / det, v = dot(d, q) / det, t = dot(e2, q) / det;

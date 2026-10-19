@@ -648,13 +648,19 @@ public partial class TakeChecks
             Assert.That((EdgeResponse(solver.RayPaths,1,250)-expected).Magnitude,Is.LessThan(.006),"The complex total field stays continuous across the geometrical shadow.");
         }
     }
-    [TestCase(false),TestCase(true),Category("GPU"),Category("Diffraction")]
-    public void EdgeChainsNeedTwoBendsAroundSolid(bool planar)
+    [TestCase(false,false),TestCase(false,true),TestCase(true,false),TestCase(true,true),Category("GPU"),Category("Diffraction")]
+    public void EdgeChainsMatchRigidSecondOrder(bool planar,bool transformed)
     {
         KnifeEdgeFixture(planar,out var scene,out _,out var state);var settings=EdgeSettings();
-        settings.fftSize=2;settings.spectralHop=1;settings.raysPerBin=16384;settings.useBvh=true;
+        settings.fftSize=8;settings.spectralHop=2;settings.raysPerBin=65536;settings.useBvh=true;settings.seed=17;
         var geometry=TransportBox(scene.dimension,2,0,1);scene.objects[2].primitiveCount=geometry.Length;
         state[0].position=Vector3.left*3;state[1].position=Vector3.right*3;
+        if(transformed)
+        {
+            var rotation=planar?Quaternion.Euler(0,0,37):Quaternion.Euler(12,37,9);var translation=new Vector3(4,-2,3);
+            state[2].rotation=rotation;state[2].position=translation;
+            for(int i=0;i<2;i++)state[i].position=rotation*state[i].position+translation;
+        }
         foreach(int order in new[]{1,2})
         {
             settings.maxBounces=order;
@@ -666,6 +672,16 @@ public partial class TakeChecks
                 Assert.That(p.delaySeconds,Is.GreaterThanOrEqualTo((2*Mathf.Sqrt(5)+2)/343-1e-6f),"No path can shortcut the solid.");
             }
             if(order==1)Assert.That(arrivals,Is.Zero);else Assert.That(arrivals,Is.GreaterThan(0),"Two edge events share the ordinary bounce loop.");
+            if(order!=2)continue;
+            // EDtoolbox EDwedge2nd (67e53c4f), continuous double quadrature:
+            // a shared solid face contributes 1/2, independently of triangle seams.
+            // 3D: four finite edge pairs. 2D: two infinite pairs, same 0.1 s horizon.
+            int[] bins=planar?new[]{0}:new[]{0,1,4};
+            double[] real=planar?new[]{.199807}:new[]{.160990476380,-.132356150111,-.065193018566};
+            double[] imag=planar?new[]{0d}:new[]{0d,-.077646144425,.063496034679};
+            for(int i=0;i<bins.Length;i++)
+                Assert.That((EdgeResponse(solver.RayPaths,bins[i],bins[i]*125)-new System.Numerics.Complex(real[i],imag[i])).Magnitude,
+                    Is.LessThan(.012),"Second-order complex pressure, bin "+bins[i]);
         }
     }
     [Test,Category("GPU"),Category("Diffraction")]

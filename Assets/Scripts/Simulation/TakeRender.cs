@@ -201,7 +201,7 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="integrated-edge-preview-v6";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-interpolated-v3";
+            report.method="integrated-edge-preview-v7";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-linear-fir-hrtf-v1":"path-clock-spectral-interpolated-v3";
             if(useGpuAudio)
             {
                 report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-path-filter-overlap-save-v1":"gpu-path-clock-spectral-interpolated-v3";

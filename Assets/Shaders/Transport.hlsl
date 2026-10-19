@@ -210,10 +210,18 @@ void EdgeFrame(uint id, uint stateOffset, bool is2D, out float3 a, out float3 ax
     normal = Rotate(pose.rotation, edge.normal.xyz);
     angle = edge.face.w;
 }
-float EdgeAngle(float3 direction, float3 face, float3 normal)
+float EdgeAngle(float3 direction, float3 face, float3 normal, float exterior)
 {
-    float angle = atan2(dot(direction, normal), dot(direction, face));
-    return angle < 0 ? angle + 2 * RayPi : angle;
+    float2 radial = float2(dot(direction, face), dot(direction, normal));
+    float angle = atan2(radial.y, radial.x);
+    angle = angle < 0 ? angle + 2 * RayPi : angle;
+    // Face-grazing connections use the visibility tolerance. Rigid rotation
+    // must not wrap roundoff at zero to 2*pi and classify the ray as solid.
+    if (min(angle, 2 * RayPi - angle) * length(radial) <= RayEpsilon)
+        angle = 0;
+    if (abs(angle - exterior) * length(radial) <= RayEpsilon)
+        angle = exterior;
+    return angle;
 }
 float4 EdgeAngles(float source, float receiver)
 {
@@ -229,7 +237,7 @@ float EdgeKernel(uint id, uint stateOffset, float3 source, float3 edgePoint, flo
     float rs = length(incoming - zs * axis), rr = length(outgoing - zr * axis);
     if (rs <= RayEpsilon || rr <= RayEpsilon)
         return 0;
-    float ts = EdgeAngle(incoming, face, normal), tr = EdgeAngle(outgoing, face, normal);
+    float ts = EdgeAngle(incoming, face, normal, angle), tr = EdgeAngle(outgoing, face, normal, angle);
     if (ts > angle || tr > angle)
         return 0; // Inside the solid wedge.
     float nu = RayPi / angle;
@@ -249,6 +257,24 @@ float EdgeKernel(uint id, uint stateOffset, float3 source, float3 edgePoint, flo
             beta += sin(phi[i]) / denominator;
     }
     return -nu * beta / (4 * RayPi);
+}
+// EDtoolbox EDwedge2nd/EDwedgeN: an edge-to-edge leg on a shared
+// solid face has multiplicity 1/2. Thin-sheet edge pairs retain both sides.
+float EdgeConnectionWeight(uint first, uint second)
+{
+    Edge a = Edges[first], b = Edges[second];
+    float weight = 1;
+    if (a.ids.x == b.ids.x && !(a.ids.y == a.ids.z && b.ids.y == b.ids.z))
+    {
+        float3 an[2] = {a.normal.xyz, cos(a.face.w) * a.normal.xyz - sin(a.face.w) * a.face.xyz};
+        float3 bn[2] = {b.normal.xyz, cos(b.face.w) * b.normal.xyz - sin(b.face.w) * b.face.xyz};
+        [unroll] for (uint i = 0; i < 2; i++)
+            [unroll] for (uint j = 0; j < 2; j++)
+                if (abs(dot(an[i], bn[j])) > .99999 &&
+                    abs(dot(an[i], b.a.xyz - a.a.xyz)) <= RayEpsilon)
+                    weight = .5;
+    }
+    return weight;
 }
 float EdgeOpacity(uint id, uint frequencyBin)
 {
@@ -309,7 +335,7 @@ bool SampleEdge(uint stateOffset, float3 source, float3 receiver, bool is2D, ino
         return false;
     float apex = (zs * rr + zr * rs) / (rs + rr);
     float m = length(s - apex * axis), l = length(r - apex * axis), nu = RayPi / angle;
-    float4 phi = nu * EdgeAngles(EdgeAngle(s, face, normal), EdgeAngle(r, face, normal));
+    float4 phi = nu * EdgeAngles(EdgeAngle(s, face, normal, angle), EdgeAngle(r, face, normal, angle));
     // Cauchy importance sampling resolves narrow zone-boundary contributions.
     // Planar scenes model point sources around infinitely extruded XY geometry.
     float4 scale = max(RayEpsilon, 2 * abs(sin(phi * .5)) * (m * l / (m + l)) / nu);
@@ -626,8 +652,8 @@ void TracePaths(uint index, bool is2D)
             frequencyRatio /= 1 - dot(vertexVelocity, incoming) / speed;
             if (previousEdge != 0xffffffff)
             {
-                gain *= EdgeKernel(previousEdge, stateOffset, edgeSource, position, edgePoint, is2D) /
-                        edgeDistance;
+                gain *= EdgeConnectionWeight(previousEdge, edge) *
+                        EdgeKernel(previousEdge, stateOffset, edgeSource, position, edgePoint, is2D) / edgeDistance;
                 spreadingDistance = 0;
             }
             else if (bounce > 0)
