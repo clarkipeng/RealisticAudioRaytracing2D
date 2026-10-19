@@ -285,13 +285,14 @@ public static class SceneToTake
         sealed class MaterialSnapshot
         {
             readonly AudioMaterial.EnergyKnot[] knots;
+            readonly AudioMaterial.AdmittanceKnot[] admittance;
             readonly float roughness,density,porosity,rigidity;
             readonly bool trans,bands;
             readonly float[] absorption,scattering,transmission,ior,damping;
             static T[] Copy<T>(T[] values) => values==null ? null:(T[])values.Clone();
             public MaterialSnapshot(AudioMaterial m)
             {
-                knots=Copy(m.energyCurve); roughness=m.roughness; density=m.density; porosity=m.porosity; rigidity=m.rigidity; trans=m.overrideTrans; bands=m.overrideBands;
+                knots=Copy(m.energyCurve); admittance=Copy(m.admittanceCurve); roughness=m.roughness; density=m.density; porosity=m.porosity; rigidity=m.rigidity; trans=m.overrideTrans; bands=m.overrideBands;
                 absorption=Copy(m.absorptionBands); scattering=Copy(m.scatteringBands); transmission=Copy(m.transmissionBands); ior=Copy(m.iorBands); damping=Copy(m.dampingBands);
             }
             public void Validate(AudioMaterial m)
@@ -299,6 +300,13 @@ public static class SceneToTake
                 if (m==null || roughness!=m.roughness || density!=m.density || porosity!=m.porosity || rigidity!=m.rigidity || trans!=m.overrideTrans || bands!=m.overrideBands ||
                     !Same(absorption,m.absorptionBands) || !Same(scattering,m.scatteringBands) || !Same(transmission,m.transmissionBands) || !Same(ior,m.iorBands) || !Same(damping,m.dampingBands)) Changed();
                 // Explicit value comparisons avoid boxing EnergyKnot on the hot path.
+                if((admittance==null)!=(m.admittanceCurve==null))Changed();
+                if(admittance!=null)
+                {
+                    if(admittance.Length!=m.admittanceCurve.Length)Changed();
+                    for(int i=0;i<admittance.Length;i++)if(admittance[i].frequencyHz!=m.admittanceCurve[i].frequencyHz ||
+                        admittance[i].real!=m.admittanceCurve[i].real || admittance[i].imaginary!=m.admittanceCurve[i].imaginary)Changed();
+                }
                 if (knots==null || m.energyCurve==null) { if (knots!=m.energyCurve) Changed(); return; }
                 if (knots.Length!=m.energyCurve.Length) Changed();
                 for (int i=0;i<knots.Length;i++) if (knots[i].frequencyHz!=m.energyCurve[i].frequencyHz || knots[i].absorption!=m.energyCurve[i].absorption || knots[i].scattering!=m.energyCurve[i].scattering) Changed();

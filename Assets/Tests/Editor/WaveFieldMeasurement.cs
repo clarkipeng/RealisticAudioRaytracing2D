@@ -7,6 +7,7 @@ using UnityEngine;
 public partial class TakeChecks
 {
     [Serializable] sealed class WaveWall { public float[] center, half; }
+    [Serializable] sealed class WaveMotion { public float[] velocity; }
     [Serializable] sealed class WaveScene
     {
         public string physicalModel;
@@ -15,6 +16,10 @@ public partial class TakeChecks
         public int[] rays, seeds;
         public int sampleRate, fftSize, maxBounces;
         public float speedOfSound, maximumDelaySeconds;
+        public float[] triangles;
+        public int[] triangleMaterials;
+        public AcousticTake.MaterialDefinition[] materials;
+        public WaveMotion receiverMotion;
     }
     static Vector3 WaveVector(float[] values, int offset=0) =>
         new Vector3(values[offset], values[offset+1], values[offset+2]);
@@ -27,20 +32,46 @@ public partial class TakeChecks
         if(string.IsNullOrEmpty(output))Assert.Ignore("Set ACOUSTIC_WAVE_OUTPUT to a prepared pressure-map directory.");
         Assert.That(Application.isBatchMode,Is.True,"Use an isolated batch project.");
         AudioListener.volume=0;
-        var config=JsonUtility.FromJson<WaveScene>(File.ReadAllText(Path.Combine(output,"scene.json")));
-        Assert.That(config.physicalModel,Is.Null.Or.Empty.Or.EqualTo("point-extruded"),"Unsupported source/geometry model.");
-        var scene=Scene(1+config.walls.Length);scene.listeners=new[]{1};
+        string compiled=Path.Combine(output,"renderer-scene.json");
+        var config=JsonUtility.FromJson<WaveScene>(File.ReadAllText(File.Exists(compiled)?compiled:Path.Combine(output,"scene.json")));
+        Assert.That(config.physicalModel,Is.Null.Or.Empty.Or.EqualTo("point-extruded").Or.EqualTo("point-room-3d"),"Unsupported source/geometry model.");
+        int owners=config.triangles==null?config.walls.Length:1;
+        var scene=Scene(1+owners);scene.listeners=new[]{1};
         if(config.physicalModel=="point-extruded")
         {
             scene.dimension=AcousticTake.Dimension.Planar2D;
             Assert.That(config.source[2],Is.Zero);
             for(int p=2;p<config.points.Length;p+=3)Assert.That(config.points[p],Is.Zero);
         }
-        var state=States(1+config.walls.Length);state[0].position=WaveVector(config.source);
-        scene.materials=new[]{new AcousticTake.MaterialDefinition {name="rigid",frequencies=new[]{0f},
+        var state=States(1+owners);state[0].position=WaveVector(config.source);
+        if(config.receiverMotion!=null)
+        {state[1].velocity=WaveVector(config.receiverMotion.velocity);state[1].flags|=AcousticTake.StateFlags.VelocityValid;}
+        scene.materials=config.materials??new[]{new AcousticTake.MaterialDefinition {name="rigid",frequencies=new[]{0f},
             absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f}}};
         var geometry=new List<AcousticTake.Primitive>();
-        for(int w=0;w<config.walls.Length;w++)
+        if(config.triangles!=null)
+        {
+            Assert.That(config.triangles.Length,Is.EqualTo(config.triangleMaterials.Length*9));
+            state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+            var bounds=new Bounds(WaveVector(config.triangles),Vector3.zero);
+            for(int triangle=0;triangle<config.triangleMaterials.Length;triangle++)
+            {
+                // FEM normals leave the air. The tracer needs normals leaving the solid.
+                geometry.Add(new AcousticTake.Primitive {objectIndex=2,materialIndex=config.triangleMaterials[triangle],
+                    a=WaveVector(config.triangles,9*triangle),b=WaveVector(config.triangles,9*triangle+6),c=WaveVector(config.triangles,9*triangle+3)});
+                var p=geometry[triangle];bounds.Encapsulate(p.a);bounds.Encapsulate(p.b);bounds.Encapsulate(p.c);
+            }
+            // Close the opaque solid outside the air cavity. These outer faces are
+            // inaccessible from inside; they preserve solid winding and wedge angles.
+            foreach(var face in TransportBox(scene.dimension,2,0,1))
+            {
+                var p=face;var half=bounds.extents+Vector3.one;
+                p.a=bounds.center+Vector3.Scale(p.a,half);p.b=bounds.center+Vector3.Scale(p.b,half);p.c=bounds.center+Vector3.Scale(p.c,half);
+                geometry.Add(p);
+            }
+            scene.objects[2].primitiveCount=geometry.Count;
+        }
+        for(int w=0;config.triangles==null && w<config.walls.Length;w++)
         {
             int owner=w+2;var wall=config.walls[w];
             state[owner].position=WaveVector(wall.center);

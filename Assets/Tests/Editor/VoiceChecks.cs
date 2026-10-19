@@ -69,7 +69,7 @@ public partial class TakeChecks
         var arrivals=new RayTransport.Path[settings.SpectralSlotsPerPair*2];
         for(int pair=0;pair<2;pair++)for(int bin=0;bin<settings.FrequencyBins;bin++)
             arrivals[pair*settings.SpectralSlotsPerPair+bin]=new RayTransport.Path {frequencyBin=(uint)bin,pressureGain=1,delaySeconds=.01f};
-        using var buffer=gpu?new ComputeBuffer(arrivals.Length,32):null;buffer?.SetData(arrivals);
+        using var buffer=gpu?new ComputeBuffer(arrivals.Length,RayTransport.PathStride):null;buffer?.SetData(arrivals);
         using var accelerated=gpu?new GpuAudio(scene,8192,settings,new[]{signal}):null;
         if(gpu)Assert.That(accelerated.Diagnostics.filterBytes,Is.EqualTo(2L*settings.SpectralSlotsPerPair*(size+1)*8),"Only the audible pair owns both filter banks.");
         var reference=gpu?null:new TakeRender.Mixer(scene,8192,settings,new[]{signal});

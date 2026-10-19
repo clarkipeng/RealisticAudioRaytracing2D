@@ -24,6 +24,13 @@ public class AudioMaterial : ScriptableObject
 
     [Tooltip("Optional ordered energy coefficients at any frequency knots. Empty preserves the legacy material. Linear interpolation in Hz, clamped at endpoints.")]
     public EnergyKnot[] energyCurve = new EnergyKnot[0];
+    [System.Serializable] public struct AdmittanceKnot
+    {
+        [Min(0)] public float frequencyHz, real;
+        public float imaginary;
+    }
+    [Tooltip("Optional smooth opaque boundary: rho_air*c_air/Z, exp(+i*omega*t). Replaces energy/legacy surface controls. Real part must be nonnegative.")]
+    public AdmittanceKnot[] admittanceCurve = new AdmittanceKnot[0];
 
     const int BandCount = 8;
     static readonly float[] OctaveBandsHz = { 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f };
@@ -139,6 +146,14 @@ public class AudioMaterial : ScriptableObject
     public AcousticTake.MaterialDefinition ExportEnergyCurve()
     {
         var result = new AcousticTake.MaterialDefinition { name = name };
+        if(admittanceCurve!=null && admittanceCurve.Length>0)
+        {
+            int count=admittanceCurve.Length;result.frequencies=new float[count];
+            result.admittanceReal=new float[count];result.admittanceImag=new float[count];
+            for(int i=0;i<count;i++)
+            {result.frequencies[i]=admittanceCurve[i].frequencyHz;result.admittanceReal[i]=admittanceCurve[i].real;result.admittanceImag[i]=admittanceCurve[i].imaginary;}
+            result.ValidateAdmittance();return result;
+        }
         if (energyCurve != null && energyCurve.Length > 0)
         {
             ValidateEnergyCurve();

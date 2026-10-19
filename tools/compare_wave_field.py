@@ -198,6 +198,7 @@ def renderer(output, runner, unity, room_control=False):
     save_json(output/'renderer-provenance.json', dict(files=hashes,
         fixtureSha256=hashlib.sha256((root/'Assets/Tests/Editor/WaveFieldMeasurement.cs').read_bytes()).hexdigest(),
         measurement=measurement,
+        boundarySha256=hashlib.sha256((output/'renderer-scene.json').read_bytes()).hexdigest() if (output/'renderer-scene.json').exists() else None,
         sceneSha256=None if room_control else hashlib.sha256((output/'scene.json').read_bytes()).hexdigest()))
     shutil.copy2(root/'Assets/Tests/Editor/WaveFieldMeasurement.cs', destination)
     try:

@@ -173,6 +173,15 @@ public partial class TakeChecks
             Near(material.GetShaderData().absorptionLow.z,.4f,"Legacy shader samples the authored curve.");
             material.energyCurve[1].frequencyHz=0;
             Reject(()=>material.ExportEnergyCurve(),"Reject unordered material knots.");
+            material.admittanceCurve=new[]{new AudioMaterial.AdmittanceKnot {frequencyHz=0,real=.4f},
+                new AudioMaterial.AdmittanceKnot {frequencyHz=125,real=.4f,imaginary=-.3f}};
+            curve=material.ExportEnergyCurve();Near(curve.admittanceImag[1],-.3f,"Boundary export preserves signed reactive admittance.");
+            var scene=Scene();scene.materials=new[]{curve};string path=Path.Combine(directory,"impedance");
+            using(var writer=new AcousticTake.Writer(path,8000,scene,Array.Empty<AcousticTake.Primitive>(),new[]{new[]{1f}}))
+            {writer.Append(0,States());writer.Complete();}
+            using(var take=AcousticTake.Open(path))Near(take.Metadata.scene.materials[0].admittanceImag[1],-.3f,"Version 4 authenticates complex materials.");
+            Reject(()=>new AcousticTake.Writer(Path.Combine(directory,"legacy-impedance"),8000,scene,Array.Empty<AcousticTake.Primitive>(),new[]{new[]{1f}},version:3),"Legacy schemas cannot store impedance.");
+            material.admittanceCurve[0].real=-1;Reject(()=>material.ExportEnergyCurve(),"Reject an active boundary.");
         }
         finally { UnityEngine.Object.DestroyImmediate(material); }
     }
@@ -449,6 +458,8 @@ public partial class TakeChecks
             var indices=mesh.triangles; int first=indices[0]; indices[0]=indices[1]; mesh.triangles=indices;
             Reject(guard.Validate,"In-place mesh index edits are detected."); indices[0]=first; mesh.triangles=indices;
             material.energyCurve[0].absorption=.3f; Reject(guard.Validate,"In-place authored material knots are detected."); material.energyCurve[0].absorption=.2f;
+            material.admittanceCurve=new[]{new AudioMaterial.AdmittanceKnot {real=.5f}};
+            Reject(guard.Validate,"Changing boundary impedance invalidates capture.");material.admittanceCurve=Array.Empty<AudioMaterial.AdmittanceKnot>();
             surface.geometrySource=AcousticSurface.GeometrySource.None; Reject(guard.Validate,"Geometry selection changes are detected."); surface.geometrySource=AcousticSurface.GeometrySource.Auto;
             guard.Validate();
             manager.BeginTakeRecording(Path.Combine(directory,"owned-session"));

@@ -74,8 +74,8 @@ internal sealed class SpectralAudio
             int basePath=offset+pair*slots,count=0;groups.Clear();
             for(int slot=0;slot<slots;slot++)
             {
-                var path=paths[basePath+slot];if(path.pressureGain==0)continue;
-                if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 ||
+                var path=paths[basePath+slot];if(path.pressureGain==0 && path.pressureImag==0)continue;
+                if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.pressureImag) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 ||
                     !float.IsFinite(path.direction.sqrMagnitude) || path.direction.w>=1)throw new InvalidOperationException("Invalid or noncausal spectral arrival at pair "+pair+", slot "+slot+": delay="+path.delaySeconds+", rate="+path.direction.w);
                 var key=(path.delaySeconds,path.direction,path.identity);
                 if(!groups.TryGetValue(key,out int group)){group=count++;groups.Add(key,group);heads[group]=-1;}
@@ -88,13 +88,14 @@ internal sealed class SpectralAudio
                 filter.pair=pair;filter.direction=path.direction;filter.rate=path.direction.w;filter.delay=path.delaySeconds*(double)rate;filter.sample=current.sample;filter.identity=path.identity;filter.bin=path.frequencyBin;filter.other=null;
                 Array.Clear(native,0,size);
                 for(int member=slot;member>=0;member=next[member])
-                {var value=paths[basePath+member];native[value.frequencyBin].x+=value.pressureGain;filter.bin=Math.Min(filter.bin,value.frequencyBin);}
+                {var value=paths[basePath+member];native[value.frequencyBin]+=new Vector2(value.pressureGain,value.pressureImag);filter.bin=Math.Min(filter.bin,value.frequencyBin);}
                 var key=(pair,filter.identity,filter.bin);
                 if(!current.index.TryAdd(key,filter))current.index[key]=null;
                 // The solve supplies the retarded-time anchor. Carrying an
                 // approximate slope between solves can accumulate nonphysical drift.
                 if(filter.delay<0 || filter.delay>maximumDelay)throw new InvalidOperationException("Propagation clock is outside the declared delay horizon; retrace the path or increase Maximum Delay Seconds.");
-                for(int k=1;k<size/2;k++)native[size-k]=native[k];ImpulseResponseAudio.Fft(native,true);
+                native[0].y=native[size/2].y=0;
+                for(int k=1;k<size/2;k++)native[size-k]=new Vector2(native[k].x,-native[k].y);ImpulseResponseAudio.Fft(native,true);
                 Array.Clear(pressure,0,fft);
                 for(int n=0;n<size;n++)pressure[n].x=native[(n+size/2)%size].x;
                 ImpulseResponseAudio.Fft(pressure,false);

@@ -3,7 +3,7 @@
 struct RayMaterial
 {
     // surface: absorption, scattering, transmission, relative slowness (air speed / material speed).
-    // medium.x: pressure attenuation per metre.
+    // medium: pressure loss/metre, normalized admittance real/imag, boundary mode.
     float4 surface, medium;
 };
 struct Edge
@@ -17,7 +17,23 @@ struct RayPath
     float4 direction;
     float delaySeconds, pressureGain;
     uint frequencyBin, identity;
+    float pressureImag;
+    uint padding0, padding1, padding2;
 };
+float2 ComplexProduct(float2 a, float2 b) { return float2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x); }
+float2 ReflectionPressure(RayMaterial material, float cosine)
+{
+    if(material.medium.w==0)
+        return float2(sqrt(saturate((1-material.surface.x)*(1-material.surface.z)*(1-material.surface.y))),0);
+    float2 y=material.medium.yz, denominator=float2(cosine+y.x,y.y);
+    float norm=dot(denominator,denominator);
+    return norm>0?ComplexProduct(float2(cosine-y.x,-y.y),float2(denominator.x,-denominator.y))/norm:float2(1,0);
+}
+RayPath ApplyMaterial(RayPath path, float2 coefficient)
+{
+    float2 value=ComplexProduct(float2(path.pressureGain,path.pressureImag),coefficient);
+    path.pressureGain=value.x;path.pressureImag=value.y;return path;
+}
 StructuredBuffer<RayMaterial> RayMaterials;
 StructuredBuffer<Edge> Edges;
 StructuredBuffer<uint2> EdgeRanges;
@@ -81,8 +97,9 @@ void DebugWrite(uint slot, uint path, uint kind, int material, float3 a, float3 
 }
 void DebugArrival(uint slot, uint path, float3 a, float3 b, float time, RayPath arrival)
 {
-    if (arrival.pressureGain != 0)
-        DebugWrite(slot, path, DebugListener, -1, a, b, time, arrival.delaySeconds, arrival.pressureGain);
+    float pressure=arrival.pressureImag==0?arrival.pressureGain:length(float2(arrival.pressureGain,arrival.pressureImag));
+    if (pressure != 0)
+        DebugWrite(slot, path, DebugListener, -1, a, b, time, arrival.delaySeconds, pressure);
 }
 uint HashRay(uint x)
 {
@@ -555,16 +572,16 @@ RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequ
     float frequencyRatio =
         InteractionFrequencyRatio(speed, incoming, outgoing, sourceVelocity, listenerVelocity, velocity);
     RayMaterial material = RayMaterials[p.indices.y * FrequencyBins + frequencyBin];
-    float gain =
-        sqrt(saturate((1 - material.surface.x) * (1 - material.surface.z) * (1 - material.surface.y)));
+    float2 reflected=ReflectionPressure(material,abs(dot(incoming,normalize(image-start))));
+    float gain = 1;
     gain *= BoundaryWeight(id, stateOffset, reflectionPoint, is2D);
     float time = 0, lengthTo = total * speed;
     Travel(lengthTo, medium, frequencyBin, max(1, frequencyBin * FrequencyStep), time, gain);
-    result = Arrival(
+    result = ApplyMaterial(Arrival(
         reflectionPoint, end, time,
         gain * (float)PrimitiveCount / RaysPerBin * ReferenceDistance / max(MinimumDistance, lengthTo),
-        frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), HashRay(0x40000000u ^ id));
-    if (result.pressureGain != 0)
+        frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), HashRay(0x40000000u ^ id)),reflected);
+    if (result.pressureGain != 0 || result.pressureImag != 0)
     {
         DebugWrite(debugBase, 1 + 2 * sampleIndex, DebugReflection, p.indices.y, start, reflectionPoint, 0,
                    firstLength / speed, result.pressureGain);
@@ -602,6 +619,7 @@ void TracePaths(uint index, bool is2D)
     }
     float3 direction = UnitDirection(rng, is2D);
     float gain = 1, time = 0;
+    float2 materialWeight=float2(1,0);
     uint medium = MediumAt(stateOffset, position, is2D);
     float3 sourceVelocity = Velocity(stateOffset + source),
            listenerVelocity = Velocity(stateOffset + listener);
@@ -679,7 +697,7 @@ void TracePaths(uint index, bool is2D)
                                  (edgeDistance * last) * ReferenceDistance * weight *
                                  exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last);
                 RayPaths[first + bounce] =
-                    Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity);
+                    ApplyMaterial(Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity),materialWeight);
                 DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
             }
             previousEdge = edge;
@@ -727,11 +745,11 @@ void TracePaths(uint index, bool is2D)
         if (cosine > 0 && Visible(stateOffset, position + n * RayEpsilon, end, is2D))
         {
             RayPaths[first + bounce] =
-                Arrival(position, end, time + last / speed,
+                ApplyMaterial(Arrival(position, end, time + last / speed,
                         gain * sqrt(saturate((1 - material.surface.z) * material.surface.y)) * weight *
                             cosine * .5 * exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last) *
                             ReferenceDistance / max(MinimumDistance, spreadingDistance + last),
-                        frequencyBin, arrivalRatio, identity);
+                        frequencyBin, arrivalRatio, identity),materialWeight);
             DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
         }
         surfaceNormal = n;
@@ -760,6 +778,8 @@ void TracePaths(uint index, bool is2D)
         if (dot(diffuse, n) < 0)
             diffuse = -diffuse;
         bool scattered = RandomRay(rng) < saturate(material.surface.y);
+        if(material.medium.w!=0)
+            materialWeight=ComplexProduct(materialWeight,ReflectionPressure(material,abs(dot(direction,n))));
         float3 nextDirection = scattered ? diffuse : reflect(direction, n);
         DebugWrite(debugSlot, debugPath, scattered ? DebugScatter : DebugReflection,
                    Primitives[hit].indices.y, segmentStart, position, segmentTime, time, gain * weight);

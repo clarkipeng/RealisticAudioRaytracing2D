@@ -7,12 +7,15 @@ using UnityEngine.Rendering;
 // Shared 2D/3D GPU transport: direct arrivals and sampled surface/edge paths.
 internal sealed class RayTransport : IDisposable
 {
+    public const int PathStride = 48;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     public struct Path
     {
         public Vector4 direction; // xyz arrival direction; w = d(propagation seconds)/d(receiver second)
         public float delaySeconds, pressureGain;
         public uint frequencyBin, identity;
+        public float pressureImag;
+        public uint padding0, padding1, padding2;
     }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Material
@@ -47,7 +50,7 @@ internal sealed class RayTransport : IDisposable
     public int PathsPerFrame { get; }
     public int SlotsPerPair { get; }
     internal ComputeBuffer Buffer => pathBuffer;
-    public long CpuBytes => Paths.Length * 32L + enabledPairs.Length * 4L + everActive.Length;
+    public long CpuBytes => Paths.Length * (long)PathStride + enabledPairs.Length * 4L + everActive.Length;
     public long GpuBytes { get; }
     public RayTransport(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
                         TakeRender.Settings settings, ComputeShader shader, ComputeBuffer primitives,
@@ -55,7 +58,7 @@ internal sealed class RayTransport : IDisposable
                         ComputeBuffer bvhNodes, ComputeBuffer bvhIndices, int rate, int maximumFrames,
                         bool readback = true)
     {
-        if (Marshal.SizeOf<Path>() != 32 || Marshal.SizeOf<Material>() != 32 ||
+        if (Marshal.SizeOf<Path>() != PathStride || Marshal.SizeOf<Material>() != 32 ||
             Marshal.SizeOf<Edge>() != 80 || Marshal.SizeOf<Volume>() != 48)
             throw new InvalidOperationException("Spectral GPU ABI mismatch.");
         this.shader = shader;
@@ -65,6 +68,7 @@ internal sealed class RayTransport : IDisposable
         everActive = new bool[scene.sources.Length];
         enabledPairs = new uint[checked(pairs * maximumFrames)];
         int bins = settings.fftSize / 2 + 1;
+        foreach(var material in scene.materials)material.ValidateAdmittance();
         SlotsPerPair = settings.SpectralSlotsPerPair;
         PathsPerFrame = checked(pairs * SlotsPerPair);
         Paths = new Path[readback ? checked(PathsPerFrame * maximumFrames) : 0];
@@ -91,7 +95,9 @@ internal sealed class RayTransport : IDisposable
                                                              Sample(material, material.transmission, hz, 0),
                                                              Sample(material, material.ior, hz, 1)),
                                        medium =
-                                           new Vector4(Sample(material, material.damping, hz, 0), 0, 0, 0) };
+                                           new Vector4(Sample(material, material.damping, hz, 0),
+                                               Sample(material, material.admittanceReal, hz, 0),
+                                               Sample(material, material.admittanceImag, hz, 0, true), material.HasAdmittance?1:0) };
                 }
             materialBuffer = new ComputeBuffer(materials.Length, 32);
             materialBuffer.SetData(materials);
@@ -103,7 +109,7 @@ internal sealed class RayTransport : IDisposable
             volumeBuffer = new ComputeBuffer(Math.Max(1, volumes.Length), 48);
             if (volumes.Length > 0)
                 volumeBuffer.SetData(volumes);
-            pathBuffer = new ComputeBuffer(checked(PathsPerFrame * maximumFrames), 32);
+            pathBuffer = new ComputeBuffer(checked(PathsPerFrame * maximumFrames), PathStride);
             enabledBuffer = new ComputeBuffer(enabledPairs.Length, 4);
             var adjacency = new List<int>[geometry.Length];
             for (int i = 0; i < adjacency.Length; i++)
@@ -159,7 +165,7 @@ internal sealed class RayTransport : IDisposable
             shader.SetInt("UseAirAbsorption", settings.airAbsorption ? 1 : 0);
             GpuBytes = (long)edgeRangeBuffer.count * 8 + (long)edgeIndexBuffer.count * 4 +
                        (long)materials.Length * 32 + (long)Math.Max(1, edges.Length) * 80 +
-                       Math.Max(1, volumes.Length) * 48L + (long)PathsPerFrame * maximumFrames * 32 +
+                       Math.Max(1, volumes.Length) * 48L + (long)PathsPerFrame * maximumFrames * PathStride +
                        enabledPairs.Length * 4L;
         }
         catch
@@ -286,7 +292,7 @@ internal sealed class RayTransport : IDisposable
         return result.ToArray();
     }
     static float Sample(AcousticTake.MaterialDefinition material, float[] values, float frequency,
-                        float fallback)
+                        float fallback, bool signed=false)
     {
         if (values == null || values.Length == 0)
             return fallback;
@@ -296,7 +302,7 @@ internal sealed class RayTransport : IDisposable
         int upper = 0;
         for (int i = 0; i < values.Length; i++)
         {
-            if (!float.IsFinite(values[i]) || values[i] < 0 || !float.IsFinite(knots[i]) || knots[i] < 0 ||
+            if (!float.IsFinite(values[i]) || (!signed && values[i] < 0) || !float.IsFinite(knots[i]) || knots[i] < 0 ||
                 (i > 0 && knots[i] <= knots[i - 1]))
                 throw new ArgumentException("Invalid material coefficient curve.");
         }
@@ -426,7 +432,7 @@ internal sealed class RayTransport : IDisposable
             completed = false;
             failed = false;
             request =
-                AsyncGPUReadback.Request(pathBuffer, checked(frames * PathsPerFrame * 32), 0, completion);
+                AsyncGPUReadback.Request(pathBuffer, checked(frames * PathsPerFrame * PathStride), 0, completion);
         }
         else
             pathBuffer.GetData(Paths, 0, 0, frames * PathsPerFrame);

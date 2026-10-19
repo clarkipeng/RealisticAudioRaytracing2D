@@ -68,7 +68,7 @@ internal sealed class ImpulseResponseAudio
         native=new Vector2[size];int padded=1;while(padded<size+hrirTaps-1)padded=checked(padded*2);
         pressureWork=new Vector2[padded];earWork=new Vector2[padded];
         prefixReal=new double[checked(channels*(hrirTaps+1))];prefixImag=new double[prefixReal.Length];
-        NumericBytes=lastPaths.LongLength*32+lastHeads.LongLength*16+lastEnabled.Length+(groupHeads.LongLength+next.LongLength)*4+
+        NumericBytes=lastPaths.LongLength*RayTransport.PathStride+lastHeads.LongLength*16+lastEnabled.Length+(groupHeads.LongLength+next.LongLength)*4+
             (native.LongLength+pressureWork.LongLength+earWork.LongLength)*8+current.Bytes+previous.Bytes+historyKeys.LongLength*8+signals.Length*(long)historyKeys.Length*bins*8+
             (work.LongLength+sum.LongLength)*8+(impulse.LongLength+cosine.LongLength+sine.LongLength+prefixReal.LongLength+prefixImag.LongLength)*8+delayWeights.LongLength*4;
     }
@@ -80,7 +80,7 @@ internal sealed class ImpulseResponseAudio
         for(int i=0;i<lastPaths.Length && unchanged;i++)
         {
             var a=lastPaths[i];var b=paths[offset+i];
-            unchanged=a.pressureGain==b.pressureGain && a.delaySeconds==b.delaySeconds && a.frequencyBin==b.frequencyBin && a.direction.Equals(b.direction);
+            unchanged=a.pressureGain==b.pressureGain && a.pressureImag==b.pressureImag && a.delaySeconds==b.delaySeconds && a.frequencyBin==b.frequencyBin && a.direction.Equals(b.direction);
         }
         for(int l=0;l<listeners;l++)
         {
@@ -102,8 +102,8 @@ internal sealed class ImpulseResponseAudio
             int pathOffset=offset+pair*slots;
             for(int slot=0;slot<slots;slot++)
             {
-                var path=paths[pathOffset+slot];if(path.pressureGain==0)continue;
-                if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 || !float.IsFinite(path.direction.sqrMagnitude))
+                var path=paths[pathOffset+slot];if(path.pressureGain==0 && path.pressureImag==0)continue;
+                if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.pressureImag) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 || !float.IsFinite(path.direction.sqrMagnitude))
                     throw new InvalidOperationException("Invalid spectral arrival.");
                 var key=(path.delaySeconds,path.direction);
                 if(!groups.TryGetValue(key,out int group)){group=groupCount++;groups.Add(key,group);groupHeads[group]=-1;}
@@ -125,8 +125,9 @@ internal sealed class ImpulseResponseAudio
                     // One short FFT and linear HRIR convolution replaces per-bin FIR work.
                     Array.Clear(native,0,size);
                     for(int member=slot;member>=0;member=next[member])
-                    {var arrival=paths[pathOffset+member];native[arrival.frequencyBin].x+=arrival.pressureGain;}
-                    for(int k=1;k<size/2;k++)native[size-k]=native[k];
+                    {var arrival=paths[pathOffset+member];native[arrival.frequencyBin]+=new Vector2(arrival.pressureGain,arrival.pressureImag);}
+                    native[0].y=native[size/2].y=0;
+                    for(int k=1;k<size/2;k++)native[size-k]=new Vector2(native[k].x,-native[k].y);
                     Fft(native,true);Array.Clear(pressureWork,0,pressureWork.Length);
                     for(int n=0;n<size;n++)pressureWork[n].x=native[(n+size/2)%size].x;
                     Fft(pressureWork,false);
@@ -153,11 +154,11 @@ internal sealed class ImpulseResponseAudio
                             prefixImag[p+t+1]=prefixImag[p+t]-h*sine[basis+t%size];
                         }
                     }
-                    double gain=path.pressureGain*(bin==0 || bin==size/2?1.0:2.0)/size;
+                    double scale=(bin==0 || bin==size/2?1.0:2.0)/size, gain=path.pressureGain*scale, imaginary=(bin==0 || bin==size/2?0:path.pressureImag*scale);
                     for(int n=0;n<size+hrirTaps-1;n++)
                     {
                         int a=Math.Max(0,n-size+1),b=Math.Min(n+1,hrirTaps),phase=(n+size/2)%size;
-                        double re=cosine[basis+phase]*gain,im=sine[basis+phase]*gain;
+                        double re=cosine[basis+phase]*gain-sine[basis+phase]*imaginary,im=sine[basis+phase]*gain+cosine[basis+phase]*imaginary;
                         for(int ear=0;ear<channels;ear++)
                         {
                             int p=ear*(hrirTaps+1);

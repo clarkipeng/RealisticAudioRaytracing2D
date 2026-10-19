@@ -20,7 +20,7 @@
 // CPU and GPU exchange scene inputs and finished PCM. Paths, filters, FFTs and
 // sums stay here. The small-transform fast path uses one workgroup per path;
 // larger transforms use the same radix-2 operations in global-memory stages.
-struct AudioPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,identity; };
+struct AudioPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,identity; float pressureImag; uint padding0,padding1,padding2; };
 StructuredBuffer<AudioPath> AudioArrivals;
 RWStructuredBuffer<AudioPath> AudioLast,AudioPaths;
 RWStructuredBuffer<int2> AudioTable;
@@ -74,7 +74,7 @@ void AudioCompare(uint3 id:SV_DispatchThreadID)
 {
     uint i=id.x;if(i>=AudioCapacity)return;if(AudioFilterPairs[i/AudioSlots]<0)return;
     AudioPath a=AudioArrivals[AudioOffset+i],b=AudioLast[i];
-    if(!AudioSame(a,b) || a.pressureGain!=b.pressureGain || a.frequencyBin!=b.frequencyBin){InterlockedOr(AudioMeta[1],1);InterlockedOr(AudioPairState[i/AudioSlots].z,1);}
+    if(!AudioSame(a,b) || a.pressureGain!=b.pressureGain || a.pressureImag!=b.pressureImag || a.frequencyBin!=b.frequencyBin){InterlockedOr(AudioMeta[1],1);InterlockedOr(AudioPairState[i/AudioSlots].z,1);}
     if(AudioSpectral!=0 && a.direction.w!=0)InterlockedOr(AudioMeta[1],2);
     AudioLast[i]=a;
 }
@@ -171,8 +171,8 @@ void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
         for(uint slot=tid.x;slot<AudioSlots;slot+=64)
         {
             uint i=base+slot;AudioPath path=AudioArrivals[AudioOffset+i];AudioNext[i]=-1;
-            if(path.pressureGain==0 || AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x==0)continue;
-            if(!isfinite(path.pressureGain) || !isfinite(path.delaySeconds) || !all(isfinite(path.direction)) || path.delaySeconds<0 || path.delaySeconds>AudioMaximumDelay || path.frequencyBin>AudioSize/2 || (AudioSpectral!=0 && path.direction.w>=1)) {AudioError(1);continue;}
+            if((path.pressureGain==0 && path.pressureImag==0) || AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x==0)continue;
+            if(!isfinite(path.pressureGain) || !isfinite(path.pressureImag) || !isfinite(path.delaySeconds) || !all(isfinite(path.direction)) || path.delaySeconds<0 || path.delaySeconds>AudioMaximumDelay || path.frequencyBin>AudioSize/2 || (AudioSpectral!=0 && path.direction.w>=1)) {AudioError(1);continue;}
             uint hash=AudioHash(AudioBits(path.delaySeconds));
             for(uint k=0;k<4;k++)hash=AudioHash(hash^AudioBits(path.direction[k]));
             if(AudioSpectral!=0)hash=AudioHash(hash^path.identity);
@@ -295,11 +295,12 @@ void AudioFilter(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     if(t==0)
     {
         int i=AudioHeads[g];
-        for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];AudioShared[p.frequencyBin].x+=p.pressureGain;i=AudioNext[i];}
+        for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];AudioShared[p.frequencyBin]+=float2(p.pressureGain,p.pressureImag);i=AudioNext[i];}
         if(i>=0)AudioError(4);
+        AudioShared[0].y=AudioShared[AudioSize/2].y=0;
     }
     GroupMemoryBarrierWithGroupSync();
-    for(uint mirror=t+1;mirror<AudioSize/2;mirror+=256)AudioShared[AudioSize-mirror]=AudioShared[mirror];GroupMemoryBarrierWithGroupSync();
+    for(uint mirror=t+1;mirror<AudioSize/2;mirror+=256)AudioShared[AudioSize-mirror]=AudioShared[mirror]*float2(1,-1);GroupMemoryBarrierWithGroupSync();
     AudioFftShared(AudioSize,true,t);
     for(uint shift=t;shift<AudioSize/2;shift+=256){float2 a=AudioShared[shift];AudioShared[shift]=AudioShared[shift+AudioSize/2];AudioShared[shift+AudioSize/2]=a;}
     // Small transforms exchange bins across threads before clearing roundoff.
@@ -455,7 +456,7 @@ void AudioWrite(uint3 id:SV_DispatchThreadID)
 void AudioMaterialGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(AudioPairState[AudioPair].z==0)return;uint g=AudioPair*AudioSlots+group.x;
-    for(uint k=tid.x;k<AudioSize;k+=256){uint bin=min(k,AudioSize-k);float gain=0;int i=AudioHeads[g];for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];if(p.frequencyBin==bin)gain+=p.pressureGain;i=AudioNext[i];}if(i>=0)AudioError(4);AudioTransform[group.x*AudioFft+k]=float2(gain,0);}
+    for(uint k=tid.x;k<AudioSize;k+=256){uint bin=min(k,AudioSize-k);float2 gain=0;int i=AudioHeads[g];for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];if(p.frequencyBin==bin)gain+=float2(p.pressureGain,p.pressureImag);i=AudioNext[i];}if(i>=0)AudioError(4);if(k==0 || k==AudioSize/2)gain.y=0;else if(k>AudioSize/2)gain.y=-gain.y;AudioTransform[group.x*AudioFft+k]=gain;}
 }
 [numthreads(256,1,1)]
 void AudioPadGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)

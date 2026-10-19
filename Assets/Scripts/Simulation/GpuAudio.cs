@@ -58,8 +58,8 @@ internal sealed class GpuAudio : IDisposable
             int hash=checked(settings.SpectralSlotsPerPair*2+1);
             Buffer("AudioMeta",23,4).SetData(new uint[23]);
             Buffer("AudioPairState",pairs,16).SetData(new uint[pairs*4]);
-            Buffer("AudioLast",capacity,32).SetData(new RayTransport.Path[capacity]);
-            Buffer("AudioMatches",checked(capacity*2),4);Buffer("AudioPaths",checked(capacity*2),32);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
+            Buffer("AudioLast",capacity,RayTransport.PathStride).SetData(new RayTransport.Path[capacity]);
+            Buffer("AudioMatches",checked(capacity*2),4);Buffer("AudioPaths",checked(capacity*2),RayTransport.PathStride);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
             args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
             Buffer("AudioTable",checked(pairs*hash),8);Buffer("AudioHeads",capacity,4);Buffer("AudioNext",capacity,4);Buffer("AudioBlends",checked(2*capacity),32);
             headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);

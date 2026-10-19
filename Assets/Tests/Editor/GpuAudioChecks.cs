@@ -17,7 +17,7 @@ public partial class TakeChecks
         var clip=new float[257];for(int i=0;i<clip.Length;i++)clip[i]=.2f*Mathf.Sin(i*.37f);
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
         var signals=new[]{signal,signal};var paths=new RayTransport.Path[4*settings.SpectralSlotsPerPair];
-        using var arrivals=new ComputeBuffer(paths.Length,32);
+        using var arrivals=new ComputeBuffer(paths.Length,RayTransport.PathStride);
         using var gpu=new GpuAudio(scene,rate,settings,signals);var cpu=new TakeRender.Mixer(scene,rate,settings,signals);
         var a=new float[size*2*settings.ChannelsPerListener];var b=new float[a.Length];double error=0,energy=0;
         for(int frame=0;frame<6;frame++)
@@ -26,7 +26,7 @@ public partial class TakeChecks
             Array.Clear(paths,0,paths.Length);
             if(frame!=3)for(int pair=0;pair<4;pair++)for(int p=0;p<33-pair;p++)
                 paths[pair*settings.SpectralSlotsPerPair+p]=new RayTransport.Path{identity=(uint)p,frequencyBin=(uint)(p%17),
-                    pressureGain=(p%2==0?.5f:-.3f)/(pair+1),delaySeconds=(p+frame)/(float)rate,direction=new Vector4(1,0,0,.01f)};
+                    pressureGain=(p%2==0?.5f:-.3f)/(pair+1),pressureImag=.2f/(pair+1),delaySeconds=(p+frame)/(float)rate,direction=new Vector4(1,0,0,.01f)};
             state[1].rotation=Quaternion.Euler(0,frame*19,0);state[1].angularVelocity=Vector3.up;
             state[1].flags|=AcousticTake.StateFlags.VelocityValid;
             arrivals.SetData(paths);long sample=frame*(long)size;
@@ -45,7 +45,7 @@ public partial class TakeChecks
         var settings=SpectralSettings();settings.fftSize=size;settings.spectralHop=size/4;settings.responseStepSamples=size;
         settings.raysPerBin=1;settings.maxBounces=1;
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];paths[0]=new RayTransport.Path{pressureGain=1};
-        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var arrivals=new ComputeBuffer(paths.Length,RayTransport.PathStride);arrivals.SetData(paths);
         using var gpu=new GpuAudio(scene,8192,settings,new[]{new TakeRender.Signal(new[]{1f})});
         var pcm=new float[size];gpu.SetResponse(0,false,arrivals,0,scene,States());gpu.Render(0,size,pcm);
         Assert.That(pcm,Is.All.Zero);Assert.That(gpu.Diagnostics.activeGroups,Is.Zero);
@@ -82,7 +82,7 @@ public partial class TakeChecks
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
         for(int bin=0;bin<settings.FrequencyBins;bin++)paths[bin]=new RayTransport.Path{direction=direction,frequencyBin=(uint)bin,pressureGain=1,delaySeconds=delay/(float)rate};
-        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var arrivals=new ComputeBuffer(paths.Length,RayTransport.PathStride);arrivals.SetData(paths);
         using var gpu=accelerated?new GpuAudio(scene,rate,settings,new[]{signal}):null;
         var cpu=accelerated?null:new TakeRender.Mixer(scene,rate,settings,new[]{signal});var direct=new TakeRender.DirectPath[1];
         var hrtf=Hrtf.Load(rate);var pcm=new float[step*2];double error=0,energy=0;
@@ -138,7 +138,7 @@ public partial class TakeChecks
         oldResponse.SetResponse(0,direct,before,false,oldPaths,0);newResponse.SetResponse(0,direct,after,false,newPaths,0);
         using var gpu=accelerated?new GpuAudio(scene,rate,settings,signals):null;
         var cpu=accelerated?null:new TakeRender.Mixer(scene,rate,settings,signals);
-        using var arrivals=new ComputeBuffer(oldPaths.Length,32);
+        using var arrivals=new ComputeBuffer(oldPaths.Length,RayTransport.PathStride);
         var a=new float[step*4];var b=new float[a.Length];var actual=new float[a.Length];double error=0,energy=0;
         for(int sample=0;sample<step*7;sample+=step)
         {
@@ -228,7 +228,7 @@ public partial class TakeChecks
         signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
         for(int bin=0;bin<settings.FrequencyBins;bin++)paths[bin]=new RayTransport.Path {frequencyBin=(uint)bin,pressureGain=1};
-        using var buffer=new ComputeBuffer(paths.Length,32);buffer.SetData(paths);
+        using var buffer=new ComputeBuffer(paths.Length,RayTransport.PathStride);buffer.SetData(paths);
         using var gpu=new GpuAudio(scene,8192,settings,new[]{signal});
         var pcm=new float[settings.responseStepSamples];
         for(int batch=0;batch<2;batch++)
@@ -263,7 +263,7 @@ public partial class TakeChecks
         signal.Append(new AcousticTake.VoiceEvent{gain=1});
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
         for(int bin=0;bin<settings.FrequencyBins;bin++)paths[bin]=new RayTransport.Path{frequencyBin=(uint)bin,pressureGain=1};
-        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var arrivals=new ComputeBuffer(paths.Length,RayTransport.PathStride);arrivals.SetData(paths);
         using var gpu=new GpuAudio(scene,8192,settings,new[]{signal},maximumResponses:2);
         gpu.SetResponse(0,false,arrivals,0,scene,state);
         long before=gpu.UploadedBytes;
@@ -287,7 +287,7 @@ public partial class TakeChecks
         settings.fftSize=size;settings.spectralHop=size/4;settings.responseStepSamples=size;settings.transitionSamples=size/2;settings.raysPerBin=1;settings.maxBounces=1;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
         paths[0]=new RayTransport.Path{pressureGain=1,direction=new Vector4(1,0,0,delayRate)};
-        using var arrivals=new ComputeBuffer(paths.Length,32);arrivals.SetData(paths);
+        using var arrivals=new ComputeBuffer(paths.Length,RayTransport.PathStride);arrivals.SetData(paths);
         var clip=new float[256];for(int i=0;i<clip.Length;i++)clip[i]=Mathf.Sin(i*.3f);
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
         var signals=new[]{signal};using var gpu=new GpuAudio(scene,8192,settings,signals);var cpu=new TakeRender.Mixer(scene,8192,settings,signals);
@@ -324,7 +324,7 @@ public partial class TakeChecks
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
         var signals=new[]{signal,signal};var paths=new RayTransport.Path[2*settings.SpectralSlotsPerPair];
         paths[0]=new RayTransport.Path{frequencyBin=4,pressureGain=1,direction=new Vector4(1,0,0,0)};
-        using var arrivals=new ComputeBuffer(paths.Length,32);using var gpu=new GpuAudio(scene,rate,settings,signals);
+        using var arrivals=new ComputeBuffer(paths.Length,RayTransport.PathStride);using var gpu=new GpuAudio(scene,rate,settings,signals);
         var cpu=new TakeRender.Mixer(scene,rate,settings,signals);var actual=new float[size];var expected=new float[size];
         double error=0,energy=0;
         for(int frame=0;frame<5;frame++)

@@ -99,7 +99,7 @@ public partial class TakeChecks
     {
         var scene=Scene();scene.materials=new[]{new AcousticTake.MaterialDefinition {name="glass",frequencies=new[]{100f,5000f},
             absorption=new[]{.1f,.2f},scattering=new[]{.3f,.4f},transmission=new[]{.8f,.6f},ior=new[]{.1f,.2f},damping=new[]{.01f,.02f}}};
-        foreach(int version in new[]{1,2})
+        foreach(int version in new[]{1,2,3,4})
         {
             string path=Path.Combine(directory,"version-"+version);
             using(var writer=new AcousticTake.Writer(path,8000,scene,Array.Empty<AcousticTake.Primitive>(),new[]{new[]{1f}},version:version))
@@ -108,6 +108,29 @@ public partial class TakeChecks
             Check(take.Metadata.version==version,"Versioned material read.");
             if(version==1)Check(take.Metadata.scene.materials[0].transmission==null,"V1 does not authenticate new coefficients.");
             else Near(take.Metadata.scene.materials[0].transmission[1],.6f,"V2 transmission round trip");
+        }
+    }
+    [TestCase(0f,0f),TestCase(.5f,0f),TestCase(2f,0f),TestCase(8f,0f)]
+    [TestCase(.4f,.3f),TestCase(.4f,-.3f),Category("GPU")]
+    public void ImpedanceReflectionMatchesPlaneWave(float real,float imaginary)
+    {
+        foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
+        foreach(float separation in new[]{0f,1f,8f})
+        {
+            var scene=Scene(2);scene.dimension=dimension;scene.listeners=new[]{1};scene.objects[2].primitiveCount=1;
+            scene.materials=new[]{new AcousticTake.MaterialDefinition {frequencies=new[]{0f,125f},
+                admittanceReal=new[]{real,real},admittanceImag=new[]{0f,imaginary}}};
+            var state=States(2);state[0].position=new Vector3(-1,-separation,0);state[1].position=new Vector3(-1,separation,0);
+            state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+            var geometry=new[]{new AcousticTake.Primitive {objectIndex=2,a=new Vector3(0,-10,-10),b=new Vector3(0,10,-10),c=new Vector3(0,0,10)}};
+            var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=4;settings.raysPerBin=1;settings.maxBounces=1;settings.diffractionFactor=0;settings.airAbsorption=false;
+            using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
+            solver.Solve(state,new TakeRender.DirectPath[1]);var mirror=solver.RayPaths[settings.FrequencyBins+2];
+            var y=new System.Numerics.Complex(real,imaginary);double distance=2*Math.Sqrt(1+separation*separation),cosine=2/distance;
+            var expected=(cosine-y)/(cosine+y)/distance;
+            Assert.That(mirror.delaySeconds,Is.EqualTo(distance/343).Within(1e-7));
+            Assert.That(mirror.pressureGain,Is.EqualTo(expected.Real).Within(1e-6));
+            Assert.That(mirror.pressureImag,Is.EqualTo(expected.Imaginary).Within(1e-6));
         }
     }
     [Test, Category("GPU")]
@@ -464,7 +487,7 @@ public partial class TakeChecks
             using var gpu=accelerated?new GpuAudio(scene,8000,settings,new[]{signal}):null;
             using var solver=new TransportSolver(scene,Array.Empty<AcousticTake.Primitive>(),settings,shader,sampleRate:8000);
             var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);var rays=solver.RayPaths;
-            using var arrivals=new ComputeBuffer(rays.Length,32);var output=new float[512];
+            using var arrivals=new ComputeBuffer(rays.Length,RayTransport.PathStride);var output=new float[512];
             for(int sample=0;sample<1536;sample+=512)
             {
                 if(sample>0)Array.Clear(rays,0,rays.Length);arrivals.SetData(rays);
@@ -615,7 +638,7 @@ public partial class TakeChecks
     {
         var value=System.Numerics.Complex.Zero;
         foreach(var p in paths)if(p.frequencyBin==bin)
-            value+=p.pressureGain*System.Numerics.Complex.Exp(new System.Numerics.Complex(0,-2*Math.PI*frequency*p.delaySeconds));
+            value+=new System.Numerics.Complex(p.pressureGain,p.pressureImag)*System.Numerics.Complex.Exp(new System.Numerics.Complex(0,-2*Math.PI*frequency*p.delaySeconds));
         return value;
     }
     // Deterministic double-precision quadrature of Svensson et al. (2009),
@@ -716,6 +739,36 @@ public partial class TakeChecks
         Assert.That(solver.RayPaths[4].pressureGain,Is.EqualTo(1/Vector3.Distance(state[0].position,state[1].position)).Within(1e-6));
         for(int i=settings.FrequencyBins;i<solver.RayPaths.Length;i++)Assert.That(solver.RayPaths[i].pressureGain,Is.Zero);
     }
+    [TestCase(TakeRender.Synthesis.ImpulseResponse,64,false),TestCase(TakeRender.Synthesis.Spectral,64,false)]
+    [TestCase(TakeRender.Synthesis.ImpulseResponse,64,true),TestCase(TakeRender.Synthesis.Spectral,64,true)]
+    [TestCase(TakeRender.Synthesis.Spectral,2048,false),Category("GPU")]
+    public void ComplexArrivalsPreserveMaterialPhase(TakeRender.Synthesis method,int size,bool singleBin)
+    {
+        RequireGpu();var scene=Scene();var state=States();var settings=SpectralSettings();
+        settings.synthesis=method;settings.fftSize=size;settings.spectralHop=size/4;settings.responseStepSamples=size*2;settings.raysPerBin=1;settings.maxBounces=1;
+        var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);
+        signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
+        var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
+        for(int bin=0;bin<settings.FrequencyBins;bin++)
+        {
+            if(singleBin && bin!=3)continue;
+            double phase=-2*Math.PI*bin*3/size;
+            paths[bin]=new RayTransport.Path {frequencyBin=(uint)bin,delaySeconds=5f/8192,
+                pressureGain=singleBin?0:(float)Math.Cos(phase),pressureImag=singleBin?1:(float)Math.Sin(phase)};
+        }
+        using var buffer=new ComputeBuffer(paths.Length,RayTransport.PathStride);buffer.SetData(paths);
+        using var gpu=new GpuAudio(scene,8192,settings,new[]{signal});var cpu=new TakeRender.Mixer(scene,8192,settings,new[]{signal});
+        cpu.SetResponse(0,new TakeRender.DirectPath[1],state,false,paths,0);gpu.SetResponse(0,false,buffer,0,scene,state);
+        var a=new float[size*2];var b=new float[a.Length];cpu.Render(0,a.Length,a);gpu.Render(0,b.Length,b);
+        for(int n=0;n<a.Length;n++)
+        {
+            int relative=n-settings.DspLatencySamples-5;
+            double expected=singleBin?(relative>=-size/2 && relative<size/2?-2*Math.Sin(2*Math.PI*3*relative/size)/size:0):(relative==3?1:0);
+            // Includes single-precision FFT roundoff at the 2048-point size.
+            Assert.That(a[n],Is.EqualTo(expected).Within(1e-4),"CPU sample "+n);
+            Assert.That(b[n],Is.EqualTo(expected).Within(1e-4),"GPU sample "+n);
+        }
+    }
     [TestCase(TakeRender.Synthesis.ImpulseResponse),TestCase(TakeRender.Synthesis.Spectral),Category("GPU"),Category("Diffraction")]
     public void SignedArrivalsPreserveDelayedCancellation(TakeRender.Synthesis method)
     {
@@ -729,7 +782,7 @@ public partial class TakeChecks
             paths[bin]=new RayTransport.Path{frequencyBin=(uint)bin,pressureGain=.25f,delaySeconds=5f/8192};
             paths[settings.FrequencyBins+bin]=new RayTransport.Path{frequencyBin=(uint)bin,pressureGain=-.75f,delaySeconds=9f/8192,identity=1};
         }
-        using var buffer=new ComputeBuffer(paths.Length,32);buffer.SetData(paths);
+        using var buffer=new ComputeBuffer(paths.Length,RayTransport.PathStride);buffer.SetData(paths);
         using var gpu=new GpuAudio(scene,8192,settings,new[]{signal});var cpu=new TakeRender.Mixer(scene,8192,settings,new[]{signal});
         cpu.SetResponse(0,new TakeRender.DirectPath[1],state,false,paths,0);gpu.SetResponse(0,false,buffer,0,scene,state);
         var a=new float[128];var b=new float[128];cpu.Render(0,a.Length,a);gpu.Render(0,b.Length,b);

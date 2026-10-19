@@ -356,5 +356,340 @@
       ]
     },
     "rawDirectory": ".context/wave-study/material-room-motion"
+  },
+  "roomWavePilot": {
+    "date": "2026-10-19",
+    "runtimeChanged": true,
+    "solverContract": "integrated-edge-impedance-preview-v8",
+    "takeVersion": 4,
+    "scope": "Diagnostic low-frequency finite 3D rooms; not broadband training approval.",
+    "referenceModel": "Finite 3D interior Helmholtz with exact monopole split and complex local Robin boundaries; exp(+i*w*t).",
+    "outputs": ".context/wave-study/rooms-v2",
+    "rayBudgets": [
+      16,
+      64
+    ],
+    "seeds": [
+      17,
+      65554
+    ],
+    "reportedFrequencies": [
+      62.5,
+      125
+    ],
+    "configuredFrequencyBins": 33,
+    "maxBounces": 8,
+    "maximumDelaySeconds": 0.4,
+    "gpuSamples": 4224,
+    "receiverReferenceSamplesPerFrequency": 2001,
+    "referenceSolves": 67,
+    "analyticControls": {
+      "passed": true,
+      "count": 30,
+      "worstImpedanceRelativeL2": 0.0003736644084797351,
+      "worstRoomRelativeL2": 6.19745618106396e-05
+    },
+    "maximumLastMeshChange": 0.002625980953998223,
+    "focusedUnityChecks": {
+      "passed": 39,
+      "failed": 0,
+      "roomMeasurementsPassed": 8
+    },
+    "timing": "Warm transport, synchronous readback and CPU bookkeeping. Excludes DSP, inference, mesh construction and shader compilation. Diagnostic timings, not isolated GPU time.",
+    "sourceHashes": {
+      "tools/room_wave.py": "1d402310dc416e9e4a6d804385bf84fade6f50841f9269fcdfaeca9ee996fa52",
+      "tools/compare_wave_field.py": "3ed1d65889e6f3878a24a9a40852e3d438b12b4b42df15be487e66cb94cfadab",
+      "Assets/Tests/Editor/WaveFieldMeasurement.cs": "ca0a83177c77ad17743c8e79236103d8dc821412ef72106d8f8eba938bf636d7"
+    },
+    "cases": [
+      {
+        "name": "room",
+        "sceneSha256": "a96bfaf7854acfc65eb1aa0a10fc864945ebec6feec6febe16b13d6119ba1eee",
+        "rendererCsvSha256": "461e40f158e2828662aa17a3a8f182a3d26fc1c848006b6ab2fa15b75707dd5d",
+        "maximumLastMeshChange": 0.00019581474661943782,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 1.9809411965925314,
+            "worstComplexRelativeL2": 2.7125102672773407,
+            "medianSolveMs": 3.5742
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 2.98241881957817,
+            "worstComplexRelativeL2": 4.362723550442741,
+            "medianSolveMs": 4.4822500000000005
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 1.980941394693469,
+            "worstComplexRelativeL2": 2.71251072704302,
+            "medianSolveMs": 3.92275
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 2.982418771872791,
+            "worstComplexRelativeL2": 4.362723268823343,
+            "medianSolveMs": 5.146299999999999
+          }
+        ]
+      },
+      {
+        "name": "resistive",
+        "sceneSha256": "6ef03513ff76ab038e7d92b6220138383e5075a2a17f8f16b5f712a544d565a1",
+        "rendererCsvSha256": "b049605d3a68394d818a1e95edb5cb6db61d1a29e9eb790d8819aea62754bcf5",
+        "maximumLastMeshChange": 4.390276838445324e-05,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 0.4791815207080477,
+            "worstComplexRelativeL2": 0.6293924523191775,
+            "medianSolveMs": 3.5158
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 0.5388033822849586,
+            "worstComplexRelativeL2": 0.6702566303607428,
+            "medianSolveMs": 4.3397499999999996
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 0.4791816410178901,
+            "worstComplexRelativeL2": 0.6293927834525628,
+            "medianSolveMs": 4.0104
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 0.538803399172827,
+            "worstComplexRelativeL2": 0.6702567339597666,
+            "medianSolveMs": 5.09295
+          }
+        ]
+      },
+      {
+        "name": "reactive",
+        "sceneSha256": "729dca1ca81872283978d6a8207639b15a2cbc4b73346f8eb5ef3c97d5b343a3",
+        "rendererCsvSha256": "05437098bf1db56295d1c3ca819997f4c47dbf7c7d5776d1cc3975926d36abc4",
+        "maximumLastMeshChange": 0.0001310577115264549,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 0.8785858050151704,
+            "worstComplexRelativeL2": 0.879522968607853,
+            "medianSolveMs": 3.51015
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 1.5623411942698564,
+            "worstComplexRelativeL2": 1.9948984150762992,
+            "medianSolveMs": 4.42195
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 0.8785859076592328,
+            "worstComplexRelativeL2": 0.8795231247532299,
+            "medianSolveMs": 3.87025
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 1.562341155276325,
+            "worstComplexRelativeL2": 1.9948985358634235,
+            "medianSolveMs": 5.0407
+          }
+        ]
+      },
+      {
+        "name": "treated",
+        "sceneSha256": "f188c4b6a7ff5d545b70be4f518cd9369fce0dcbf1cfffc6671fa88c739bb58f",
+        "rendererCsvSha256": "fa591e737c79a117cad001480538684b0bf8011b0804da7ca80f7e9a8d4bd615",
+        "maximumLastMeshChange": 0.00016515966677815941,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 1.9720000074446513,
+            "worstComplexRelativeL2": 2.689682387404719,
+            "medianSolveMs": 3.7001999999999997
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 2.402092520701731,
+            "worstComplexRelativeL2": 3.806191757365947,
+            "medianSolveMs": 4.38035
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 1.9720002036134023,
+            "worstComplexRelativeL2": 2.6896828452382717,
+            "medianSolveMs": 3.9385499999999998
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 2.402092467499887,
+            "worstComplexRelativeL2": 3.806191926751116,
+            "medianSolveMs": 5.06795
+          }
+        ]
+      },
+      {
+        "name": "coupled",
+        "sceneSha256": "98e1cf3eae3d8bee36df4050d7dfd6fa3decc4703922d6c5565da4c2990d3fa1",
+        "rendererCsvSha256": "253a21c47b899c333cde8546ae081862f6f624a8593c8ed06ce93851132f1ad9",
+        "maximumLastMeshChange": 0.002507508208812396,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 4.981855925854859,
+            "worstComplexRelativeL2": 9.127015410072795,
+            "medianSolveMs": 4.1545499999999995
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 2.515688956980397,
+            "worstComplexRelativeL2": 2.935077006409426,
+            "medianSolveMs": 5.179899999999999
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 4.981854448379564,
+            "worstComplexRelativeL2": 9.127011280843185,
+            "medianSolveMs": 4.2888
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 2.7088323031138146,
+            "worstComplexRelativeL2": 3.404165326039835,
+            "medianSolveMs": 5.61285
+          }
+        ]
+      },
+      {
+        "name": "elbow",
+        "sceneSha256": "325180416d1ae638ac66f7b9c70b5579052c404b94385627e15481f0ec465acb",
+        "rendererCsvSha256": "96b4d3b6f42ad58b7268f3cabde18eab17d84d3b1a1e25edf2cab87fccba321b",
+        "maximumLastMeshChange": 0.0006367768363664204,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 4.2683148667950945,
+            "worstComplexRelativeL2": 5.657261729260102,
+            "medianSolveMs": 3.30235
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 3.406191400514694,
+            "worstComplexRelativeL2": 5.742957553529804,
+            "medianSolveMs": 4.192150000000001
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 4.268315098797215,
+            "worstComplexRelativeL2": 5.657262131604613,
+            "medianSolveMs": 3.5652
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 3.496621876208843,
+            "worstComplexRelativeL2": 5.7429573251965085,
+            "medianSolveMs": 4.5106
+          }
+        ]
+      },
+      {
+        "name": "corridor",
+        "sceneSha256": "b751cc68dbd4926b30b2f1eb50d536afd623482da05922644ad5fa8bd5d87e3c",
+        "rendererCsvSha256": "a38b48cde3dd7e14e66dc5060ff4835995216c1ea8cc38351b3f572d98e2711c",
+        "maximumLastMeshChange": 0.00022802193941490298,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 1.102151077645228,
+            "worstComplexRelativeL2": 1.2808313313223731,
+            "medianSolveMs": 3.2729500000000002
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 0.9328756896821064,
+            "worstComplexRelativeL2": 1.0273699167998762,
+            "medianSolveMs": 3.86175
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 1.1021510605707854,
+            "worstComplexRelativeL2": 1.2808313159351192,
+            "medianSolveMs": 3.6202500000000004
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 0.9328756780098435,
+            "worstComplexRelativeL2": 1.027369880819206,
+            "medianSolveMs": 4.4246
+          }
+        ]
+      },
+      {
+        "name": "church",
+        "sceneSha256": "d5a115d19796b6d3a0dedc04b8e4a084e1dd9445deffd0252020591c44c7c198",
+        "rendererCsvSha256": "eaaf4eb2c757ce4f2292a31f4b53b37e390d8d63d1d35d2fad84683ae9109b0d",
+        "maximumLastMeshChange": 0.002625980953998223,
+        "comparisons": [
+          {
+            "diffraction": 0,
+            "rays": 16,
+            "complexRelativeL2": 7.646897833885666,
+            "worstComplexRelativeL2": 14.97270362360763,
+            "medianSolveMs": 5.327649999999999
+          },
+          {
+            "diffraction": 0,
+            "rays": 64,
+            "complexRelativeL2": 4.265245440448666,
+            "worstComplexRelativeL2": 7.531707889890118,
+            "medianSolveMs": 6.6641
+          },
+          {
+            "diffraction": 1,
+            "rays": 16,
+            "complexRelativeL2": 8.34907653140254,
+            "worstComplexRelativeL2": 16.057515043437533,
+            "medianSolveMs": 5.5885
+          },
+          {
+            "diffraction": 1,
+            "rays": 64,
+            "complexRelativeL2": 4.526088564983754,
+            "worstComplexRelativeL2": 7.660250338575373,
+            "medianSolveMs": 7.5458
+          }
+        ]
+      }
+    ]
   }
 }

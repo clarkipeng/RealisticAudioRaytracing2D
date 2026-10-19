@@ -15,7 +15,7 @@ public partial class TakeChecks
         using var gpu=accelerated?new GpuAudio(scene,rate,settings,new[]{signal},2):null;
         var cpu=accelerated?null:new TakeRender.Mixer(scene,rate,settings,new[]{signal});
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];var direct=new TakeRender.DirectPath[1];var pcm=new float[step];
-        using var arrivals=new ComputeBuffer(paths.Length,32);
+        using var arrivals=new ComputeBuffer(paths.Length,RayTransport.PathStride);
         void Response(long output,long anchor)
         {
             double t=anchor/(double)rate;bool swap=(output/step)%2!=0;

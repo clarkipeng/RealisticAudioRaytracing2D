@@ -1,5 +1,55 @@
 # Cleanup validation and measured bottlenecks
 
+## Complex materials and finite room references — 2026-10-19
+
+The renderer now supports **complex local boundary admittance** through the existing transport and both CPU/GPU audio methods. Unity materials expose ordered real/imaginary admittance knots. Reflection uses the incidence angle and preserves negative and reactive phase, while propagation stays on its physical travel-time clock. Existing energy materials retain their behavior. Take v4 authenticates the added fields; actual historical v1/v3 manifests and v1–v4 round trips remain readable.
+
+`tools/room_wave.py` adds eight small, finite 3D diagnostic scenes: low-loss box, resistive box, resonant surface, treated ceiling, coupled rooms, L-shaped room, corridor and simplified church. It reuses the existing scientific environment and Unity measurement fixture. The FEM reference solves the reflected field with an exact analytic monopole, physical wall boundaries and no PML escape path. The GPU receives the same inner boundary/materials, enclosed by an opaque outer shell to preserve solid winding. No new runtime solver framework or UI is added.
+
+Independent controls check complex plane-wave reflection and a rectangular-room Green function summed independently of FEM/ray tracing. Refined worst relative errors are **0.03737%** for the impedance controls and **0.00620%** for the rigid-room controls. The modal sum itself changes by less than 5.5e-10 under truncation refinement. Each scene is additionally refined in mesh and polynomial order; a small solver residual alone does not approve a reference.
+
+The pilot records 62.5/125 Hz at 33 ordered probes, with two seeds and 16/64 rays per bin, and diffraction off/on measured separately. GPU timing covers all 33 configured FFT bins (4 kHz sample rate, FFT size 64), eight bounces and 0.4 s support, not just the two reported frequencies. Each FEM solve also evaluates a two-second receiver walk directly at 2,001 positions. Raw complex-pressure NPZ arrays, CSV renderer samples and JSON provenance preserve phase and physical levels. Reports include field error and changes in the complex residual along the walk. These measurements exclude HRTF, DSP, output limiting and microphone/network transport.
+
+All eight GPU measurements completed: **4,224 complex-pressure samples**, with **39 distinct focused Unity checks passing** across the final reruns. The 30 numerical control measurements are retained; all refined controls pass. The 67 reference solves include mesh/order refinement; the worst final mesh change is **0.2626%** across both the sparse probes and dense walk. This is observed numerical convergence, not a rigorous real-world error bound.
+
+The diffraction-enabled baseline gives the following complex relative errors (RMS across two frequencies and two seeds). Lower is better; these are field errors, not perceptual scores:
+
+| Room | 16 rays/bin error | 64 rays/bin error | 64-ray solve/readback |
+|---|---:|---:|---:|
+| Room | 198.1% | 298.2% | 5.15 ms |
+| Resistive | 47.9% | 53.9% | 5.09 ms |
+| Reactive | 87.9% | 156.2% | 5.04 ms |
+| Treated | 197.2% | 240.2% | 5.07 ms |
+| Coupled | 498.2% | 270.9% | 5.61 ms |
+| Elbow | 426.8% | 349.7% | 4.51 ms |
+| Corridor | 110.2% | 93.3% | 4.42 ms |
+| Church | 834.9% | 452.6% | 7.55 ms |
+
+The renderer remains far from the numerical field. The magnitude plots show abrupt changes where the wave reference is smooth; no per-method level adjustment was applied. Two seeds cannot establish asymptotic bias or rank close alternatives, and more rays do not consistently improve these runs. Code inspection identifies missing higher-order specular connections and triangle-dependent first-mirror selection as concrete next targets. Correct complex wall reflection does not by itself reconstruct a room's full standing-wave field.
+
+![Room pressure comparison](benchmarks/room-wave-2026-10-19.png)
+
+The [existing measurement ledger](benchmarks/planar-wave-2026-10-18.json) now contains `roomWavePilot`, including diffraction-off controls, hashes, costs and test counts. Raw arrays/CSV/XML are under `.context/wave-study/rooms-v2/`. These results are a baseline for kernel correction; they do not approve the current raytracer as a training teacher.
+
+Reproduce in a fresh directory, using the existing closed batch runner:
+
+```sh
+# Optional Python environment: numpy, scipy and ngsolve==6.2.2608.
+export OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1
+.context/wave-planar/venv/bin/python tools/room_wave.py prepare .context/rooms-repeat
+.context/wave-planar/venv/bin/python tools/room_wave.py validate .context/rooms-repeat
+.context/wave-planar/venv/bin/python tools/room_wave.py reference .context/rooms-repeat/room
+.context/wave-planar/venv/bin/python tools/room_wave.py reference .context/rooms-repeat/room --mesh .45 --order 4
+.context/wave-planar/venv/bin/python tools/compare_wave_field.py renderer .context/rooms-repeat/room \
+  --runner .context/gpu-audio/runner \
+  --unity /Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity
+.context/wave-planar/venv/bin/python tools/room_wave.py report .context/rooms-repeat/room
+```
+
+Runner source must match the working runtime; the comparison helper checks this before launching. Measurements run silently in batch mode, with audio disabled. Reference solves run one numerical thread; the recorded jobs additionally use low process priority. Existing CSV/reference payloads are preserved rather than overwritten.
+
+**Limits:** this is a low-frequency scalar-pressure benchmark, not a trained reconstruction model or a broadband moving-scene teacher. General moving-source/boundary wave references, decay estimation, real measured material calibration and directional targets remain outstanding. Existing analytic Doppler/media checks cover their specific contracts only. The raytracer still lacks validated high-order specular/edge combinations and impedance diffraction. An admittance table's passive real part does not prove its interpolated broadband causality. The new complex gain expands path records from 32 to 48 bytes (50% more path-buffer storage/traffic); material buffers stay 32 bytes, with no new transport dispatch or readback.
+
 ## Material, enclosed-room and motion controls — 2026-10-18
 
 The [expanded experiment spec](simulation-contracts.md#materials-enclosed-spaces-and-motion) adds material/impedance controls, treated and coupled rooms, long corridors, a simplified church, moving receivers/sources and moving doors. These future wave-reference cases do not alter the frozen 25-scene exterior suite or its scores.
