@@ -28,6 +28,8 @@ This remains an unvalidated training teacher. Mixed diffuse/surface weights are 
 
 For independent pressure maps behind walls, use the [silent wave-reference comparison](docs/cleanup-results.md#independent-wave-pressure-maps--2026-10-18). It compares the actual GPU transport with a 3D Helmholtz boundary-element solution, checks the reference against an analytic sphere, and exports shared-scale maps, route plots, complex pressures and mesh-refinement measurements.
 
+The optional [planar wave lab](docs/cleanup-results.md#planar-wave-reference--2026-10-18) adds cheap 2D analytic controls and a 2.5D FEM reference matched to `Planar2D`: free space, a barrier and staggered walls. The [contracts and next steps](docs/simulation-contracts.md#wave-reference-suite-research-and-implementation-plan) distinguish implemented checks from future material, scene and training coverage.
+
 ## Microphone and multiplayer
 
 Use **Church** or **TrainStation**, press Play, then **Esc**. The controls include:

@@ -9,6 +9,7 @@ public partial class TakeChecks
     [Serializable] sealed class WaveWall { public float[] center, half; }
     [Serializable] sealed class WaveScene
     {
+        public string physicalModel;
         public float[] source, points, frequencies;
         public WaveWall[] walls;
         public int[] rays, seeds;
@@ -27,7 +28,14 @@ public partial class TakeChecks
         Assert.That(Application.isBatchMode,Is.True,"Use an isolated batch project.");
         AudioListener.volume=0;
         var config=JsonUtility.FromJson<WaveScene>(File.ReadAllText(Path.Combine(output,"scene.json")));
+        Assert.That(config.physicalModel,Is.Null.Or.Empty.Or.EqualTo("point-extruded"),"Unsupported source/geometry model.");
         var scene=Scene(1+config.walls.Length);scene.listeners=new[]{1};
+        if(config.physicalModel=="point-extruded")
+        {
+            scene.dimension=AcousticTake.Dimension.Planar2D;
+            Assert.That(config.source[2],Is.Zero);
+            for(int p=2;p<config.points.Length;p+=3)Assert.That(config.points[p],Is.Zero);
+        }
         var state=States(1+config.walls.Length);state[0].position=WaveVector(config.source);
         scene.materials=new[]{new AcousticTake.MaterialDefinition {name="rigid",frequencies=new[]{0f},
             absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f}}};
@@ -37,7 +45,7 @@ public partial class TakeChecks
             int owner=w+2;var wall=config.walls[w];
             state[owner].position=WaveVector(wall.center);
             state[owner].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
-            var mesh=TransportBox(AcousticTake.Dimension.Spatial3D,owner,0,1);
+            var mesh=TransportBox(scene.dimension,owner,0,1);
             scene.objects[owner].primitiveStart=geometry.Count;scene.objects[owner].primitiveCount=mesh.Length;
             foreach(var triangle in mesh)
             {

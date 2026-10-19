@@ -6,6 +6,8 @@ Updated 2026-10-07 against the current Unity 6 working tree. This is the single 
 
 Planning update, 2026-10-18: [artifact reduction and sampling](#artifact-reduction-and-sampling-plan) defines the next investigation. It does not change the implementation status of the earlier sections.
 
+Research update, 2026-10-18: [wave reference suite](#wave-reference-suite-research-and-implementation-plan) specifies independent 2D/2.5D physics references, scene families and tracer evaluation. The proposed solvers have not been integrated or benchmarked here.
+
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
 **Invariant:** the take determines scene and source inputs; the render configuration determines computation. Changing quality never changes the recorded experiment.
@@ -195,6 +197,119 @@ This is an experiment, not an approved training teacher. More rays reduce sampli
 `DirectBenchmark.MeasureReciprocity` now quantifies one of these limits with the actual transport. For a stationary reciprocal wall, swapping the omnidirectional source and receiver should preserve its scalar transfer. At 250 Hz and 65,536 rays/bin, eight seeds give relative forward/reverse reflected-pressure gaps of **75.0% in 2D and 93.2% in 3D**; first-order mirror controls agree. These are reciprocity violations, not measured-room accuracy percentages. The gap persists as sampling noise falls. The diffuse connection currently combines a source-direction proposal with a cosine/path-length pressure weight without a reciprocal, physically justified scattering kernel. Symmetrizing a gain would not establish energy conservation or a pressure/phase model. The next transport change needs that derivation and independent references before altering training eligibility. Ideal specular-to-edge paths additionally require constrained reflection connections (for example unfolded mirror/edge paths); diffuse next-event sampling cannot satisfy a delta reflection by increasing ray count. [Fixtures, seeds and measured results](benchmarks/gpu-improvements-2026-10-07.json).
 
 An [independent 3D wave-field audit](cleanup-results.md#independent-wave-pressure-maps--2026-10-18) now compares total complex pressure around two finite rigid walls with a Helmholtz boundary-element reference. It exposes missing shadow responses and large sample outliers in the current renderer. Its reference has separate analytic-sphere and mesh-refinement checks; it does not reuse our edge kernels. The fixture is stationary and excludes binaural DSP, materials and moving-boundary timing. The 500 Hz shadow field needs further reference refinement. This evidence does not approve the current renderer as a training teacher.
+
+### Wave reference suite: research and implementation plan
+
+**Decision:** use a cheap planar wave lab first, then confirm transferable improvements in 3D. The optional NGSolve backend in `tools/planar_wave.py` now runs through `tools/compare_wave_field.py`: true-2D analytic controls, 2.5D point-source reconstruction, and matched `Planar2D` GPU measurements. Initial fixtures are free space, one thick barrier and staggered barriers. The existing finite-wall 3D Bempp reference remains a separate check. The broader scene/material/training coverage below is still a plan; a solver's name or residual is not an accuracy certificate.
+
+#### Physical model and dimensionality
+
+For ordinary sound propagation in stationary air, solve linear pressure acoustics with declared density, sound speed, sources and boundaries. For homogeneous air at one angular frequency, this is `laplacian(p) + (omega/c)^2*p = -q`. The heterogeneous form uses density and bulk modulus inside the differential operator. Reflection, diffraction, interference, multiple scattering and enclosure modes then follow from the solved field; there is no manually selected diffraction route or bounce limit. Numerical bandwidth, discretization and boundary models still limit the result.
+
+The initial suite uses rigid boundaries and lossless homogeneous air so propagation errors can be isolated. Add frequency-dependent complex impedance and explicit fluid interfaces after that passes. An absorption coefficient does not determine reflection phase. Porous layers, compliant panels, narrow thermoviscous passages, wind and moving boundaries require their corresponding physical models; inventing more material sliders cannot supply them. Perfectly rigid closed cavities have undamped resonances: use analytic modal frequencies or a declared finite-duration excitation, rather than silently adding damping to obtain a finite harmonic response at a pole.
+
+Three different targets must remain explicit:
+
+| Target | Physical meaning | Appropriate comparison |
+|---|---|---|
+| True 2D | Field and source are invariant in the third direction; a point in the drawing represents an infinite line source. | A cylindrical-wave tracer or solver with matching source units. |
+| 2.5D | Geometry is infinitely extruded, but the source is a 3D point source. | The intended physics of our current `Planar2D` mode. |
+| 3D | Finite geometry and point sources in space. | The existing finite-wall Bempp fixture and eventual authored rooms. |
+
+True 2D uses a Hankel-function free-space response, with far-field pressure decaying approximately as `1/sqrt(r)`; 3D point-source free-field pressure decays as `1/r`. True 2D also has a physical temporal tail behind the wavefront. Changing the attenuation exponent alone does not make the current planar renderer a true 2D wave model. [Barnett's wave Green functions](https://users.flatironinstitute.org/~ahb/dartmouth/notes/waveequation.pdf) derive the dimensional difference.
+
+**Preserve the current renderer's physical contract.** The implemented planar reference validates its numerical backend on true-2D analytic controls and uses 2.5D reconstruction when comparing against `Planar2D`. A Fourier transform along the extruded direction turns the 3D problem into a family of 2D solves with transverse squared wavenumber `k^2-kz^2`. Integrating those fields over `kz`, with the source/receiver separation and correct Fourier normalization, reconstructs the point-source response. Resolve the propagating/evanescent transition, evanescent contribution and integration tail explicitly; a single 2D solve or inverse-distance correction is insufficient. This is established in [2.5D acoustic BEM research](https://dael.euracoustics.org/confs/fa2023/data/articles/000196.pdf). Validate this integration in free space and against an independently converged extruded-geometry case. Finite-height walls are a different 3D problem. A 2D slice through a solved 3D field is useful for visualization, but is not a matched reference for infinitely extruded `Planar2D` geometry.
+
+#### Solver choice and research relevance
+
+| Method | Role in this project | Main accuracy/cost issue |
+|---|---|---|
+| Existing 3D BEM | Finite-height 3D transfer check: the implemented Bempp tool and its analytic-sphere/refinement controls. | Current frequency/geometry coverage is limited; the 500 Hz shadow result still needs refinement. |
+| High-order FEM, locally refined in size and polynomial order | Implemented planar reference: NGSolve, geometry-fitted meshes, Helmholtz pressure, rigid boundaries and an exterior PML. Impedance interfaces and a 3D FEM audit remain extensions. | Corner resolution, wavelength dispersion, source singularity and artificial-boundary error all need separate checks. |
+| High-order boundary integrals with corner treatment | Independent audit of selected homogeneous, rigid scattering cases; chunkIE's Neumann formulation with RCIP is a concrete candidate. | Singular/near-singular quadrature, corners and formulation resonances need treatment. MATLAB toolchain is an additional dependency. |
+| High-order time-domain DG / spectral elements | Later broadband wave movies, long impulse responses and extensions needing time evolution. | Spatial and temporal convergence, stable causal impedance boundaries and radiation boundaries. |
+| k-space pseudospectral / FDTD | Alternative time-domain cross-check if appropriate for a fixture. | An efficient propagation scheme still needs accurate geometry, high-contrast interfaces and wall conditions. |
+
+NGSolve has published [high-order complex Helmholtz examples](https://docu.ngsolve.org/latest/i-tutorials/unit-1.7-helmholtz/helmholtz.html) and a [2D PML implementation](https://ngsolve.org/ngsolve/docs/i-tutorials/unit-1.7-helmholtz/pml.html). The tutorial's outgoing Robin condition is not a general material model. The initial implementation uses curved geometry and global mesh/order refinement; local corner grading remains an improvement. It injects an FE point load instead of a source blob and checks the resulting error analytically. An incident/scattered-field split could reduce source discretization error further. The tested NGSolve version is pinned to 6.2.2608.
+
+[chunkIE's rigid-corner example](https://chunkie.readthedocs.io/en/latest/guide/chunkgraphbvps.html) combines a regularized integral formulation with recursively compressed inverse preconditioning (RCIP) for singular corner densities. This is a full boundary-field solution, independent of our sampled wedge formula. It is a candidate audit backend, not a drop-in Python replacement: MATLAB and Octave are not currently on this machine's PATH, and compatibility/installation has not been tested. Do not port an entire BEM library to avoid that dependency.
+
+Recent research supports these method families rather than establishing one universally most accurate solver. [Wang, Palha and Hornikx's 2024 open-source DG work](https://research.tue.nl/files/339147521/IN_2024_3868.pdf) supplies a room-acoustics implementation; [Kraxberger et al., DAGA 2026](https://pub.dega-akustik.de/DAGA_2026/files/upload/paper/155.pdf) apply matrix-free high-order DG and PML to noise barriers. Those results motivate a later scalable transient backend; their application-scale performance is not a benchmark for this Mac or proof of our 2D adapter. [k-Wave](https://www.k-wave.org/documentation.php) provides k-space pseudospectral propagation with heterogeneous material parameters and absorption; its homogeneous-medium temporal accuracy does not establish rigid-corner accuracy for our fixtures. Neural surrogates and reduced-order models remain approximations to a validated reference, not independent ground truth.
+
+#### Scene families
+
+Generate small parameterized acoustic fixtures, not new art scenes. Use one physical geometry description for the reference and renderer, and preserve the reference mesh separately. These families isolate different errors:
+
+| Family | Variations | What it establishes |
+|---|---|---|
+| Free field | Distance, source strength, frequency, source/receiver swap | Dimensional spreading, phase, source normalization and arrival time. |
+| Plane reflector and circular obstacle | Incidence angle, radius, receiver ring | Image-source and analytic cylinder-series checks; reflection and curved scattering. Use analytic infinite-plane geometry or explicitly account for finite edges. |
+| Single wedge / finite thick barrier | Exterior angle, thickness, grazing positions | Shadow transition, edge phase and near-corner resolution. Infinite-wedge analytic tests and finite barriers are distinct fixtures. |
+| Staggered two- and three-wall arrangements | Separation, rotation, overlap, listener route | Multiple diffraction, reflection/edge combinations, missing paths and outliers. Include the reproduced failure. |
+| Door/slit and coupled cavities | Opening width relative to wavelength, wall depth | Aperture diffraction, coupling and resonances. |
+| Straight duct, L-bend and U-bend | Width, bend angle, source offset | Cutoff/modal behavior, repeated interactions and deep shadow. |
+| Rectangular enclosure | Aspect ratio, rigid versus declared impedance walls | Analytic mode locations, standing waves and decay when loss is physically specified. |
+| Concave/convex shapes and obstacle groups | Curvature, spacing, resolved surface roughness | Focusing, multiple scattering and the limits of a ray-only representation. |
+| Material/interface controls | Complex wall impedance, fluid density/speed, slab thickness | Reflection phase, transmission and refraction after rigid cases pass. |
+
+Vary size relative to wavelength (`k*size`, gap/wavelength), source/listener positions and physical material parameters. Frequencies are configured per experiment, without a fixed band count. Survey frequency responses adaptively around narrow resonances; use a sufficiently dense uniform frequency grid when reconstructing a finite-duration waveform. Start with tiny analytic controls and the failing walls, then expand to the other families. Transformed copies check coordinate invariance but do not count as independent physical layouts.
+
+#### Reference acceptance and output
+
+Every accepted reference binds geometry/source/material definitions, dimensionality, units, Fourier convention, source phase, boundary conditions, requested frequency/time range, solver revision/settings, mesh and refinement results. Use float64/complex128 in the offline numerical reference. No peak normalization, fitted phase offset or delay alignment is permitted to hide mismatched source conventions.
+
+Acceptance requires evidence beyond one fine run:
+
+1. Match analytic free-space, plane-reflection and circular-scattering controls. Check cavity mode locations separately. Evaluate both pressure and phase where the signal supports it.
+2. Vary mesh size and polynomial order independently; refine corners and near-boundary evaluation. Tighten quadrature and solver tolerance. A small residual only proves that the discrete system was solved accurately.
+3. For exterior FEM, change PML thickness, strength and distance from the physical scene independently. For 2.5D, refine the longitudinal-wavenumber integral separately from the spatial solve. For transient solvers, refine the time step, source injection and receiver interpolation.
+4. Check selected difficult cases with the independent boundary-integral implementation. Agreement between implementations sharing the same physical assumptions still does not validate real material data.
+5. Check source/receiver reciprocity with matching source normalization, causal propagation and physical energy balance. Local pressure can exceed free-field pressure through focusing or interference; a local amplitude cap is not an energy-conservation test.
+
+Each run records observed convergence changes and unresolved discrepancies, not a fabricated confidence interval. Set an explicit reference error budget substantially below the desired tracer error before tuning; choose absolute and relative tolerances together so pressure nulls do not create meaningless ratios. Refinement failing to meet that budget leaves the case diagnostic-only, with the failure retained in the report. The existing 500 Hz BEM shadow map remains in that category. Neither convergence alone nor agreement at a few frequencies proves broadband real-world fidelity.
+
+Reuse the current JSON/NPZ/CSV tools. Store complex transfer `H[source, probe, frequency]`, probe positions, validity, convergence evidence and hashes. Optional pressure gradients/particle velocity support later intensity checks; they do not uniquely specify a complete angular arrival distribution. Save selected full-field snapshots for visualization, not every field at every simulation time by default. Geometry matrices/factorizations can be reused for multiple source right-hand sides at a fixed frequency; many receivers evaluate the same solved field. Changing materials/frequency generally changes the operator. Versioned computed references are reusable offline outputs, not a new runtime scene database.
+
+For audio comparisons, both methods receive the same known source spectrum, passband and time support. Frequency spacing controls the periodic time window; extend it until wraparound/truncation is below the declared error budget. Verify interpolation before using maps to synthesize a moving receiver. A field plot animated at one tone is not a broadband propagation simulation.
+
+#### Tuning and validation of the ray tracer
+
+Compare the actual complex transfer before HRTF, resampling, output limiting or listening normalization. Retain per-source responses before mixing. Use the same physical source model, geometry, material parameters and bandwidth; report ray delay/order truncation independently from reference error.
+
+Across independent ray seeds, separate the complex mean error (model/estimator bias) from variance (sampling noise). A biased mean after ray-budget convergence calls for correcting or extending the transport model. Large seed variance with a converged mean calls for better integration/proposals. Tune sample allocation, joint connection proposals, quadrature, valid MIS weights, bounce/support convergence and reuse. Do not fit one global diffraction gain to compensate for missing specular-edge paths, wrong source dimension or incorrect material phase.
+
+Report a small set of complementary quantities: complex-field error; absolute and logarithmic amplitude error with declared null handling; phase/group delay where meaningful; missing responses, worst outliers and seed spread; and spatial/temporal derivative error against the reference. For enclosure waveforms add early arrival timing and supported decay/modal metrics. Compare movement residuals against the reference's own interference pattern: physical beats must not be scored as artifacts. Hold geometry families and parameter regions out of tuning, group related trajectories in the same split, and show quality-versus-compute curves including full DSP cost before claiming realtime gains. Use transport-only timing to isolate a kernel change, clearly labeled.
+
+Stationary geometry admits a Green-function history calculation for moving sources/receivers: evaluate the source at emission position/time and receiver at reception position/time. A sequence of frozen responses at the current source position is not an exact Doppler teacher. Moving walls require a time-dependent boundary solution and are a separate milestone. Begin with fixed sources and static receiver probes, then a moving receiver, then moving sources and finally moving geometry. Arbitrary 3D scenes, binaural head scattering and material realism need their own 3D validation even after this suite passes.
+
+If a converged ray method cannot represent a feature such as a cavity mode or subwavelength aperture response, record the capability gap. Tuning cannot manufacture missing physics. A wave/ray hybrid or learned residual can be considered after the reference establishes what information the low-cost representation lacks.
+
+#### Implemented offline path
+
+```text
+prepare a shared scene.json: source, probe grid, rigid boxes, frequency bins
+mesh the XY air region; remove rigid boxes; surround it with an absorbing layer
+for each frequency:
+    for each longitudinal-wavenumber integration point q:
+        solve [-laplacian_xy - (k² - q²)] G = delta(source)
+        evaluate G at every probe from this one field solution
+    pressure = conjugate(4 * integral_0^infinity G(q) dq)
+run the actual Planar2D GPU transport at the same probes, frequencies and geometry
+compare complex pressure, amplitude, seed spread, missing responses and computation time
+```
+
+NGSolve's high-order H1 elements and sparse direct solve provide the numerical engine; no PDE implementation or Unity package was added. Rigid surfaces use natural zero-normal-derivative conditions. The outer Dirichlet boundary lies behind a radial PML. The point load evaluates FE basis functions at the actual source position; source discretization error still needs refinement. `G` is the unit-delta 2D Green function; the factor 4 is the inverse Fourier normalization times the renderer's `4*pi` point-source normalization. Conjugation converts the solver's outgoing `exp(-i*omega*t)` convention to the renderer's `exp(+i*omega*t)`.
+
+For this exterior rigid problem at source/receiver `z=0`, the implementation deforms the positive longitudinal-wavenumber contour below the outgoing branch point, `q=t*exp(-i*angle)`. Gauss–Legendre quadrature covers a finite `t` interval. This avoids sampling the propagating/evanescent branch point directly; it still needs order, tail and contour checks. Analytic Hankel free space and cylindrical-harmonic rigid-cylinder solutions independently check normalization and scattering. This contour implementation is not claimed to support ducts, guided modes, lossy layered media or moving boundaries without further analysis.
+
+`validate` checks those analytic controls, reciprocity and independent FEM/PML changes; it only marks success after every check completes. `reference` records mesh refinements and complex128 NPZ fields. `audit` independently varies polynomial order, PML radius/thickness/strength and integration count/limit/angle on the actual scene. The report retains numerical changes rather than labeling a field exact. Solver/scene hashes prevent mixing incompatible outputs. Analytic controls may be reused between scene families only with the identical checked control fingerprint. All dependencies stay in an optional Python environment.
+
+#### Remaining sequence
+
+1. Use these matched controls to repair the existing model/estimator and compare quality against measured compute. Keep the current runtime until a candidate improves held-out cases. Four seeds diagnose gross variance; they do not establish asymptotic bias.
+2. Expand from the initial three fixtures to openings, three-wall paths, oblique layouts and cavities, with the appropriate source, radiation and resonance checks. Improve corner refinement before broad high-frequency sweeps.
+3. Verify transferred changes against the existing finite-height 3D wave reference and vertical/oblique probes. Shared sampling strategies can transfer; spreading laws, PDFs, finite edges and out-of-plane propagation require their own checks.
+4. Add broadband/moving-receiver references and training examples only after transport agreement and numerical accuracy meet a declared budget. Preserve geometry-family train/validation splits. Moving sources, moving walls, binaural head scattering and materials each need further physical validation.
 
 ### 2D propagation debugger
 

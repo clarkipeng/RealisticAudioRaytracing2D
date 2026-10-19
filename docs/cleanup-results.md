@@ -1,5 +1,67 @@
 # Cleanup validation and measured bottlenecks
 
+## Planar wave reference — 2026-10-18
+
+**A small independent wave lab now measures the current planar renderer without changing its runtime.** It adds one optional numerical helper, `tools/planar_wave.py`, and extends the existing comparison command and opt-in Unity fixture. The initial suite contains free space, a thick barrier and staggered barriers at 250 Hz. All runs were silent, offline, sequential and low priority; NGSolve and numerical-library threading were limited to one thread.
+
+The solver uses NGSolve 6.2.2608, geometry-fitted fourth-order finite elements, an exact FE point load, natural rigid boundaries, a radial absorbing layer (PML) and sparse direct solves. The [NGSolve Helmholtz/PML tutorial](https://ngsolve.org/ngsolve/docs/i-tutorials/unit-1.7-helmholtz/pml.html) describes the discretization. Point loads still have spatial discretization error. No ray paths, wedge coefficients, shortest routes or fitted diffraction gains enter the reference.
+
+Our `Planar2D` shader represents a **3D point source around infinitely extruded walls**. Consequently, comparing it directly to one true-2D wave solve would use the wrong source physics. The new helper integrates a family of 2D fields over the longitudinal wavenumber, including evanescent contributions, to reconstruct that point-source field. It uses 48 Gauss–Legendre points on a deformed contour; independent count, tail and angle checks accompany the field. The implementation and source normalization are specified in the [contracts](simulation-contracts.md#implemented-offline-path). The current contour is checked for these exterior rigid fixtures, not arbitrary waveguides or moving boundaries.
+
+### Accuracy and measurements
+
+At 250 Hz, the refined analytic controls have **0.0152% complex relative L2 error in free space** and **0.0163% against an independent rigid-cylinder series**. Increasing polynomial order reduces the cylinder error to **0.00114%**. Seventeen analytic/refinement/reciprocity checks pass the declared 0.5% control tolerance. Reusing these controls across the three scene families requires identical frequency, wave speed, FEM and integration settings and solver-code hashes.
+
+The GPU free-space field agrees with the finest numerical map to **0.00260%** complex relative L2, checking the shared phase and amplitude convention end to end.
+
+The staggered-wall map contains **487 probes, including 291 in geometric shadow**. Mesh spacing decreases from 0.5 to 0.35 to 0.25 m. The last refinement changes complex pressure by **0.0710% overall and 0.2831% in shadow**. The three maps take **4.17, 9.90 and 18.50 seconds**, excluding mesh construction (0.09–0.56 seconds). Each field solve serves every probe. These are measured wall times for this fixture; they are not a same-geometry speed comparison against the finite-height 3D BEM.
+
+The actual two-wall field is also audited by changing polynomial order, PML distance, PML thickness, PML strength, integration count, tail limit and contour angle one at a time. Increasing order changes shadow pressure by 0.3595%; increasing integration count from 48 to 72 changes it by less than 0.000001%. These separate corner/spatial resolution from integration error.
+
+The initial scene suite completed these matched comparisons:
+
+| Fixture | Probes | Final mesh change, whole map / shadow | 128-ray shadow error across seeds |
+|---|---:|---:|---:|
+| Free space | 575 | 0.0137% / n/a | n/a; whole-field GPU error 0.00260% |
+| One barrier | 531 | 0.3055% / 0.1874% | 255–873% |
+| Staggered barriers | 487 | 0.0710% / 0.2831% | 564–1,380% |
+
+The seven-setting field audit above was run on staggered barriers. Free-space and single-barrier maps have analytic controls and mesh refinements, not the same full per-scene audit. All three isolated Unity measurements pass, including agreement between shader visibility and independent analytic segment/box visibility.
+
+Across four independent GPU seeds, with four bounces and a 0.1-second delay horizon:
+
+| Staggered-wall transport | Silent shadow probes / 291 | Shadow complex relative L2 error | Median warm solve/readback |
+|---|---:|---:|---:|
+| Diffraction disabled, 128 rays/bin | 291 | 100% | 0.435–0.498 ms |
+| Integrated diffraction, 8 rays/bin | 202–242 | 126–144% | 0.436–0.480 ms |
+| Integrated diffraction, 128 rays/bin | 0 | 564–1,380% | 0.486–0.542 ms |
+
+More rays fill the holes but expose large weighted outliers. The four-seed mean still has 418% shadow error at 128 rays, with normalized RMS seed spread of 738%. Four seeds do not establish asymptotic estimator bias. The report now separates mean discrepancy and seed spread, retaining per-seed measurements. All transport timing includes submission, readback and CPU bookkeeping for five configured FFT bins; it excludes DSP and cold shader compilation.
+
+Observed numerical stability is not a rigorous error bound or proof of real-world material accuracy. These are steady-state rigid fixtures; the reference includes all scattering orders, while the renderer truncates depth and delay. The raw response precedes HRTF, resampling, audio output and limiting. The fixtures support transport diagnosis; they do not yet qualify broadband moving-scene ML training labels.
+
+### Reproduce
+
+```sh
+uv venv .context/wave-planar/venv
+uv pip install --python .context/wave-planar/venv/bin/python ngsolve==6.2.2608 numpy scipy matplotlib
+export OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1
+export PYTHONDONTWRITEBYTECODE=1
+wave_python=.context/wave-planar/venv/bin/python
+"$wave_python" tools/compare_wave_field.py prepare .context/wave-planar/repeat --planar staggered
+nice -n 15 "$wave_python" tools/compare_wave_field.py validate .context/wave-planar/repeat
+nice -n 15 "$wave_python" tools/compare_wave_field.py reference .context/wave-planar/repeat
+nice -n 15 "$wave_python" tools/compare_wave_field.py audit .context/wave-planar/repeat
+"$wave_python" tools/compare_wave_field.py renderer .context/wave-planar/repeat --runner .context/gpu-audio/runner --unity /Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity
+"$wave_python" tools/compare_wave_field.py plot .context/wave-planar/repeat
+```
+
+Use `--planar free` or `--planar barrier` with another output directory for the other fixtures. Edit generated `scene.json` before computing; frequency choices must match configured Unity FFT bins. `audit` varies each FEM/PML/integration setting on the actual wall field independently. It records convergence evidence without declaring a solution exact. Larger frequency ranges need mesh/integration refinement and new validation. Analytic controls can be copied between family directories only when their checked control fingerprint matches; references and GPU measurements are scene-specific.
+
+Validation also recomputes the existing 3D report: all **72 per-seed comparisons and all convergence values are unchanged**. Invalid singular-source, source-in-PML and source-inside-wall inputs are rejected before solving. These checks do not rerun or newly validate the 3D physical simulation.
+
+Raw NPZ/CSV/logs and shared-scale pressure maps live in `.context/wave-planar/{free,barrier,staggered}/`. A compact [measurement record](benchmarks/planar-wave-2026-10-18.json) preserves settings, dependency versions, code hashes, analytic checks, convergence and per-budget results. The former 3D BEM command remains available with no NGSolve dependency; the planar command needs no Bempp. No editor window, mouse capture or speaker playback is used. The next transport change should improve these measured fields and then pass a compatible finite-height 3D check, rather than fitting a global gain or hiding outliers with audio smoothing.
+
 ## Independent wave pressure maps — 2026-10-18
 
 **The current renderer produces missing shadow responses and very large pressure outliers against an independent wave solution. Raising the ray count alone is not a reliable fix in this fixture.** The runtime is unchanged; this adds one offline Python tool and one opt-in Unity measurement fixture.

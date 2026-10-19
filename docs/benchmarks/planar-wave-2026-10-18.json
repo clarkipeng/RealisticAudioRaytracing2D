@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-18",
+  "physicalModel": "point source, infinitely extruded rigid XY walls, stationary, 250 Hz",
+  "baselineCommit": "62f0382",
+  "runtimeChanged": false,
+  "threadLimit": 1,
+  "versions": {
+    "python": "3.13.12",
+    "ngsolve": "6.2.2608",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "matplotlib": "3.11.2"
+  },
+  "sourceHashes": {
+    "tools/planar_wave.py": "16fb87aeb190612d08ed35617b174691b12d3f9ff1f8b3045845ecaf620d75eb",
+    "tools/compare_wave_field.py": "d682b206f0697efebb87d1957a4b207d9e502cfa13a0e71cfca97e1fefd7fcc7",
+    "Assets/Tests/Editor/WaveFieldMeasurement.cs": "2bc2b5635f45979ac3a1bc9cf083cfc2994e7b1ad78f9d86011df2127c2e4113"
+  },
+  "analyticControls": {
+    "passed": true,
+    "count": 17,
+    "relativeTolerance": 0.005,
+    "checks": [
+      {"check": "analytic point-source normalization", "hz": 250, "relativeL2": 3.132653923556674e-10},
+      {"check": "analytic cylinder integral/series refinement", "hz": 250, "relativeL2": 2.757207345952594e-10},
+      {"check": "analytic cylinder integral/series refinement", "hz": 250, "relativeL2": 5.747122068036516e-09},
+      {"check": "analytic cylinder integral/series refinement", "hz": 250, "relativeL2": 9.748362112943572e-08},
+      {"check": "2D free field", "hz": 250, "relativeL2": 0.0013223958825311756, "meshSize": 0.5, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "2.5D free field", "hz": 250, "relativeL2": 0.0011712811356731963, "meshSize": 0.5, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "2D free field", "hz": 250, "relativeL2": 0.00016824035280929299, "meshSize": 0.35, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "2.5D free field", "hz": 250, "relativeL2": 0.00015231836833217889, "meshSize": 0.35, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "2D rigid cylinder", "hz": 250, "relativeL2": 0.0016328008554014387, "meshSize": 0.5, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "2.5D rigid cylinder", "hz": 250, "relativeL2": 0.0015140536086649134, "meshSize": 0.5, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "2D rigid cylinder", "hz": 250, "relativeL2": 0.00017049315659197807, "meshSize": 0.35, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "2.5D rigid cylinder", "hz": 250, "relativeL2": 0.00016299493418465877, "meshSize": 0.35, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "FEM/PML refinement", "hz": 250, "relativeL2": 1.1395538526392904e-05, "meshSize": 0.35, "order": 5, "radius": 5.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "FEM/PML refinement", "hz": 250, "relativeL2": 0.00020412931017361072, "meshSize": 0.35, "order": 4, "radius": 6.0, "thickness": 3.0, "strength": 2.0},
+      {"check": "FEM/PML refinement", "hz": 250, "relativeL2": 0.00016624181087012636, "meshSize": 0.35, "order": 4, "radius": 5.0, "thickness": 4.0, "strength": 2.0},
+      {"check": "FEM/PML refinement", "hz": 250, "relativeL2": 0.00030259864329362817, "meshSize": 0.35, "order": 4, "radius": 5.0, "thickness": 3.0, "strength": 3.0},
+      {"check": "reciprocity", "hz": 250, "relativeL2": 5.559254484395048e-16}
+    ]
+  },
+  "scenes": [
+    {
+      "family": "free",
+      "points": 575,
+      "sceneSha256": "cae7a4331c16087d72dac0ec474fb4334805107b2b701836ca36fd915c3d605e",
+      "rays": [8, 128],
+      "seeds": [17, 65554, 131091, 196628],
+      "maxBounces": 4,
+      "maximumDelaySeconds": 0.1,
+      "referenceRuns": [
+        {"dofs": 29185, "meshSize": 0.35, "order": 4, "meshSeconds": 0.13624600000912324, "seconds": 9.229933707974851},
+        {"dofs": 57931, "meshSize": 0.25, "order": 4, "meshSeconds": 0.38181670900667086, "seconds": 19.06123554200167},
+        {"dofs": 13907, "meshSize": 0.5, "order": 4, "meshSeconds": 0.06583100004354492, "seconds": 3.8471754170022905}
+      ],
+      "convergence": [
+        {"hz": 250, "coarse": 0.5, "fine": 0.35, "relativeL2": 0.003614460470205996, "shadowRelativeL2": null, "maxAbsoluteChange": 0.020903070594522143},
+        {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.00013681620386731417, "shadowRelativeL2": null, "maxAbsoluteChange": 0.00035926206313255583}
+      ],
+      "ensembles": [
+        {"hz": 250, "diffraction": 0, "rays": 128, "region": "all", "meanComplexRelativeL2": 2.6029327756356046e-05, "seedRmsRelativeL2": 0.0},
+        {"hz": 250, "diffraction": 1, "rays": 8, "region": "all", "meanComplexRelativeL2": 2.6029327756356046e-05, "seedRmsRelativeL2": 0.0},
+        {"hz": 250, "diffraction": 1, "rays": 128, "region": "all", "meanComplexRelativeL2": 2.6029327756356046e-05, "seedRmsRelativeL2": 0.0}
+      ],
+      "runs": [
+        {"diffraction": 0, "rays": 128, "region": "all", "points": 575, "complexRelativeL2": [2.6029327756356046e-05, 2.6029327756356046e-05], "amplitudeRelativeL2": [1.3873212255681136e-05, 1.3873212255681136e-05], "maximumPressure": [1.6545566320419314, 1.6545566320419314], "zeroPoints": [0, 0], "medianSolveMs": [0.3551, 0.3997]},
+        {"diffraction": 1, "rays": 8, "region": "all", "points": 575, "complexRelativeL2": [2.6029327756356046e-05, 2.6029327756356046e-05], "amplitudeRelativeL2": [1.3873212255681136e-05, 1.3873212255681136e-05], "maximumPressure": [1.6545566320419314, 1.6545566320419314], "zeroPoints": [0, 0], "medianSolveMs": [0.3609, 0.4937]},
+        {"diffraction": 1, "rays": 128, "region": "all", "points": 575, "complexRelativeL2": [2.6029327756356046e-05, 2.6029327756356046e-05], "amplitudeRelativeL2": [1.3873212255681136e-05, 1.3873212255681136e-05], "maximumPressure": [1.6545566320419314, 1.6545566320419314], "zeroPoints": [0, 0], "medianSolveMs": [0.3278, 0.4317]}
+      ]
+    },
+    {
+      "family": "barrier",
+      "points": 531,
+      "sceneSha256": "f3ac87a0e6bf0381f37bd59965bce026ebe2191ebd500372705d3687c1c59326",
+      "rays": [8, 128],
+      "seeds": [17, 65554, 131091, 196628],
+      "maxBounces": 4,
+      "maximumDelaySeconds": 0.1,
+      "referenceRuns": [
+        {"dofs": 28112, "meshSize": 0.35, "order": 4, "meshSeconds": 0.13031633401988074, "seconds": 9.819414792000316},
+        {"dofs": 56374, "meshSize": 0.25, "order": 4, "meshSeconds": 0.2918618329567835, "seconds": 21.730415792029817},
+        {"dofs": 13846, "meshSize": 0.5, "order": 4, "meshSeconds": 0.08560479199513793, "seconds": 3.5586203330312856}
+      ],
+      "convergence": [
+        {"hz": 250, "coarse": 0.5, "fine": 0.35, "relativeL2": 0.006629191738021257, "shadowRelativeL2": 0.007953807155495169, "maxAbsoluteChange": 0.03420482764554308},
+        {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.0030547502825150835, "shadowRelativeL2": 0.0018738176305592642, "maxAbsoluteChange": 0.02118001276610915}
+      ],
+      "ensembles": [
+        {"hz": 250, "diffraction": 0, "rays": 128, "region": "all", "meanComplexRelativeL2": 0.22122098239412286, "seedRmsRelativeL2": 0.0},
+        {"hz": 250, "diffraction": 0, "rays": 128, "region": "shadow", "meanComplexRelativeL2": 1.0, "seedRmsRelativeL2": 0.0},
+        {"hz": 250, "diffraction": 1, "rays": 8, "region": "all", "meanComplexRelativeL2": 5.685287880053605, "seedRmsRelativeL2": 9.839165185084884},
+        {"hz": 250, "diffraction": 1, "rays": 8, "region": "shadow", "meanComplexRelativeL2": 34.67252450644867, "seedRmsRelativeL2": 60.032292132365384},
+        {"hz": 250, "diffraction": 1, "rays": 128, "region": "all", "meanComplexRelativeL2": 0.5408109186262625, "seedRmsRelativeL2": 0.998184647269145},
+        {"hz": 250, "diffraction": 1, "rays": 128, "region": "shadow", "meanComplexRelativeL2": 2.433008735709558, "seedRmsRelativeL2": 4.329897204935463}
+      ],
+      "runs": [
+        {"diffraction": 0, "rays": 128, "region": "all", "points": 531, "complexRelativeL2": [0.22122098239412286, 0.22122098239412286], "amplitudeRelativeL2": [0.19559874752800466, 0.19559874752800466], "maximumPressure": [1.9083436368129414, 1.9083436368129414], "zeroPoints": [255, 255], "medianSolveMs": [0.4395, 0.5465]},
+        {"diffraction": 0, "rays": 128, "region": "shadow", "points": 255, "complexRelativeL2": [1.0, 1.0], "amplitudeRelativeL2": [1.0, 1.0], "maximumPressure": [0.0, 0.0], "zeroPoints": [255, 255], "medianSolveMs": [0.4395, 0.5465]},
+        {"diffraction": 1, "rays": 8, "region": "all", "points": 531, "complexRelativeL2": [0.23408418265075995, 22.71986358694522], "amplitudeRelativeL2": [0.1802996663598925, 22.648979013023553], "maximumPressure": [1.9083436368129378, 44.66131805019842], "zeroPoints": [0, 206], "medianSolveMs": [0.44989999999999997, 0.5620999999999999]},
+        {"diffraction": 1, "rays": 8, "region": "shadow", "points": 255, "complexRelativeL2": [1.104176008973922, 138.6308763101578], "amplitudeRelativeL2": [0.8858637214664439, 138.26650537678282], "maximumPressure": [0.12627771496772763, 44.66131805019842], "zeroPoints": [0, 206], "medianSolveMs": [0.44989999999999997, 0.5620999999999999]},
+        {"diffraction": 1, "rays": 128, "region": "all", "points": 531, "complexRelativeL2": [0.5765967694332178, 1.4748700499003968], "amplitudeRelativeL2": [0.40090666426907046, 1.3808924493868906], "maximumPressure": [1.5856648877223183, 3.184787868354091], "zeroPoints": [0, 0], "medianSolveMs": [0.48879999999999996, 0.565]},
+        {"diffraction": 1, "rays": 128, "region": "shadow", "points": 255, "complexRelativeL2": [2.550307234891864, 8.733838982400362], "amplitudeRelativeL2": [2.0916601325161177, 8.398470856474963], "maximumPressure": [0.4682924777522925, 2.788757387277511], "zeroPoints": [0, 0], "medianSolveMs": [0.48879999999999996, 0.565]}
+      ]
+    },
+    {
+      "family": "staggered",
+      "points": 487,
+      "sceneSha256": "fd034343af84b7a674a0b6f23f73f811b6128dc9818905e427b64100560cc5bb",
+      "rays": [8, 128],
+      "seeds": [17, 65554, 131091, 196628],
+      "maxBounces": 4,
+      "maximumDelaySeconds": 0.1,
+      "referenceRuns": [
+        {"dofs": 27711, "meshSize": 0.35, "order": 4, "meshSeconds": 0.5587505000294186, "seconds": 9.902720582962502},
+        {"dofs": 55457, "meshSize": 0.25, "order": 4, "meshSeconds": 0.2723476249957457, "seconds": 18.49999400001252},
+        {"dofs": 13625, "meshSize": 0.5, "order": 4, "meshSeconds": 0.0883708749897778, "seconds": 4.168182583991438}
+      ],
+      "convergence": [
+        {"hz": 250, "coarse": 0.5, "fine": 0.35, "relativeL2": 0.004532599892997572, "shadowRelativeL2": 0.011760288417453519, "maxAbsoluteChange": 0.023101981172502083},
+        {"hz": 250, "coarse": 0.35, "fine": 0.25, "relativeL2": 0.0007100375871766557, "shadowRelativeL2": 0.002830539382182732, "maxAbsoluteChange": 0.0007126698981728453}
+      ],
+      "ensembles": [
+        {"hz": 250, "diffraction": 0, "rays": 128, "region": "all", "meanComplexRelativeL2": 0.249890078564342, "seedRmsRelativeL2": 0.0},
+        {"hz": 250, "diffraction": 0, "rays": 128, "region": "shadow", "meanComplexRelativeL2": 1.0, "seedRmsRelativeL2": 0.0},
+        {"hz": 250, "diffraction": 1, "rays": 8, "region": "all", "meanComplexRelativeL2": 1.1532348027037642, "seedRmsRelativeL2": 1.9352393693151146},
+        {"hz": 250, "diffraction": 1, "rays": 8, "region": "shadow", "meanComplexRelativeL2": 1.0221143299174342, "seedRmsRelativeL2": 0.9047904498574898},
+        {"hz": 250, "diffraction": 1, "rays": 128, "region": "all", "meanComplexRelativeL2": 1.8264706594549058, "seedRmsRelativeL2": 3.2653532435590606},
+        {"hz": 250, "diffraction": 1, "rays": 128, "region": "shadow", "meanComplexRelativeL2": 4.17779480638325, "seedRmsRelativeL2": 7.382152121607513}
+      ],
+      "runs": [
+        {"diffraction": 0, "rays": 128, "region": "all", "points": 487, "complexRelativeL2": [0.249890078564342, 0.249890078564342], "amplitudeRelativeL2": [0.20867910598832068, 0.20867910598832068], "maximumPressure": [1.9083436368129374, 1.9083436368129374], "zeroPoints": [291, 291], "medianSolveMs": [0.43520000000000003, 0.4982]},
+        {"diffraction": 0, "rays": 128, "region": "shadow", "points": 291, "complexRelativeL2": [1.0, 1.0], "amplitudeRelativeL2": [1.0, 1.0], "maximumPressure": [0.0, 0.0], "zeroPoints": [291, 291], "medianSolveMs": [0.43520000000000003, 0.4982]},
+        {"diffraction": 1, "rays": 8, "region": "all", "points": 487, "complexRelativeL2": [0.289335047194573, 4.432819240065644], "amplitudeRelativeL2": [0.18975594975784427, 4.182351178416041], "maximumPressure": [1.6965176687031072, 9.37048025406277], "zeroPoints": [202, 242], "medianSolveMs": [0.43629999999999997, 0.4801]},
+        {"diffraction": 1, "rays": 8, "region": "shadow", "points": 291, "complexRelativeL2": [1.263258663839187, 1.4385489540465852], "amplitudeRelativeL2": [0.7932682976807115, 1.3568350286569717], "maximumPressure": [0.2609582543373108, 0.4709376692771911], "zeroPoints": [202, 242], "medianSolveMs": [0.43629999999999997, 0.4801]},
+        {"diffraction": 1, "rays": 128, "region": "all", "points": 487, "complexRelativeL2": [0.9598680610501513, 6.453710721863145], "amplitudeRelativeL2": [0.8651783194886045, 5.885621003833164], "maximumPressure": [1.9143060315464964, 11.36195073427867], "zeroPoints": [0, 0], "medianSolveMs": [0.486, 0.5421]},
+        {"diffraction": 1, "rays": 128, "region": "shadow", "points": 291, "complexRelativeL2": [5.642438326926566, 13.802865758543089], "amplitudeRelativeL2": [4.992124601095835, 13.09451499303237], "maximumPressure": [0.778292179107666, 2.4436373121742356], "zeroPoints": [0, 0], "medianSolveMs": [0.486, 0.5421]}
+      ],
+      "numericalAudit": {
+        "solverSha256": "1603ca0ab45ffb15142515b9cfa0d994ada3b775fd4f0cb887c241b657528201",
+        "checks": [
+          {"hz": 250, "fem": {"order": 5, "radius": 5.0, "thickness": 3.0, "strength": 2.0}, "quadrature": {"count": 48, "limit": 35.0, "angle": 35.0}, "seconds": 37.640611374983564, "relativeL2": 0.0008818215718575298, "shadowRelativeL2": 0.0035949659286297585, "maximumAbsoluteChange": 0.000937151795540974},
+          {"hz": 250, "fem": {"order": 4, "radius": 6.0, "thickness": 3.0, "strength": 2.0}, "quadrature": {"count": 48, "limit": 35.0, "angle": 35.0}, "seconds": 28.151946166006383, "relativeL2": 9.858833775091906e-05, "shadowRelativeL2": 7.236685505590585e-05, "maximumAbsoluteChange": 0.0007099493864280746},
+          {"hz": 250, "fem": {"order": 4, "radius": 5.0, "thickness": 4.0, "strength": 2.0}, "quadrature": {"count": 48, "limit": 35.0, "angle": 35.0}, "seconds": 23.91363933403045, "relativeL2": 4.775096123838331e-07, "shadowRelativeL2": 1.436009925409028e-06, "maximumAbsoluteChange": 5.351618226476601e-07},
+          {"hz": 250, "fem": {"order": 4, "radius": 5.0, "thickness": 3.0, "strength": 3.0}, "quadrature": {"count": 48, "limit": 35.0, "angle": 35.0}, "seconds": 22.17067149997456, "relativeL2": 1.3758884237228524e-05, "shadowRelativeL2": 4.319156299886745e-05, "maximumAbsoluteChange": 1.5076607979890424e-05},
+          {"hz": 250, "fem": {"order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0}, "quadrature": {"count": 72, "limit": 35.0, "angle": 35.0}, "seconds": 27.568465541000478, "relativeL2": 6.354767744999603e-10, "shadowRelativeL2": 2.375784909892785e-09, "maximumAbsoluteChange": 5.386520597350571e-10},
+          {"hz": 250, "fem": {"order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0}, "quadrature": {"count": 48, "limit": 45.0, "angle": 35.0}, "seconds": 18.093530540994834, "relativeL2": 6.948705007342218e-07, "shadowRelativeL2": 4.458917767780243e-08, "maximumAbsoluteChange": 4.493211062601247e-06},
+          {"hz": 250, "fem": {"order": 4, "radius": 5.0, "thickness": 3.0, "strength": 2.0}, "quadrature": {"count": 48, "limit": 35.0, "angle": 25.0}, "seconds": 17.402344166010153, "relativeL2": 2.9977898864798575e-07, "shadowRelativeL2": 4.2578364593203893e-07, "maximumAbsoluteChange": 1.8170652500968687e-06}
+        ],
+        "complete": true
+      }
+    }
+  ]
+}
