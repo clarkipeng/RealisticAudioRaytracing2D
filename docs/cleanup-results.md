@@ -1,5 +1,59 @@
 # Cleanup validation and measured bottlenecks
 
+## Planar edge estimator audit — 2026-10-19
+
+**The large runtime artifacts are not fixed.** The new deterministic diagnostic separates integration noise from missing physical paths. Three sampling trials were measured and rejected; their shader variants stay under `.context/edge-audit/`. The retained runtime edit preserves the preceding edge vertex directly instead of reconstructing it from a rounded direction and distance. It is a numerical repair, not an audible artifact improvement: the 16-seed walk changes only about `3.5e-7` in relative response norm at 128 rays/bin.
+
+`tools/edge_integral.py` evaluates stationary rigid boxes in the same point-source/infinite-extrusion model as `Planar2D`. It enumerates visible one-edge and two-edge chains and integrates their heights with double-precision quadrature, splitting panels around angular peaks and clipping the integration domain to the exact 0.1-second path-length horizon. It does not use the GPU's random sampler or proposal density. Source normalization, signed pressure, complex propagation phase and shared-solid-face multiplicity match the declared edge model. This is an independent integration of that approximation, not an independent wave solver.
+
+The same helper unfolds and validates direct, first/second mirror, mirror–edge and edge–mirror paths. Every physical segment must be clear. These mixed paths exist in the **offline diagnostic only**; the runtime still lacks the corresponding general specular connections. The helper is restricted to disjoint rigid XY boxes, stationary source/probes at z=0, and the tested nondegenerate geometries. Exact corner-grazing total-field limits, arbitrary materials, moving boundaries and 3D transfer remain outside its validation.
+
+Nine numerical controls pass: half-plane DC/complex pressure, two-edge refinement at three frequencies, two-edge reciprocity, analytic one/two-mirror distances, and nonzero mixed-path reciprocity. The GPU's existing half-plane, shadow-boundary, second-order/transformed geometry, moving-edge, transparency and debug checks also pass: **16 focused cases**. These controls establish their stated contracts, not overall acoustic realism.
+
+The matched one-wall and two-wall walks each contain 31 measured positions at 250 Hz. Quadrature orders 8 and 16 agree to less than **0.00005%** in edge-response norm on both walks. Against the previously validated FEM wave fields:
+
+| Offline diagnostic | Whole-walk complex error | Shadow complex error |
+|---|---:|---:|
+| One wall, direct + first mirror + edge orders 1–2 | 2.00% | 6.30% |
+| Two walls, direct + first mirror + edge orders 1–2 | 21.58% | 62.17% |
+| Two walls, also mirror–edge / edge–mirror and second mirrors | 15.42% | 53.14% |
+
+The extra mixed paths improve the two-wall field but do not recover its deep interference minimum. Nor does the smaller field error guarantee a smaller residual jump at every position: the two-wall residual-jump p99 rises from 0.114 to 0.135 pressure units in this comparison. The refined Python integrations take 10.41 seconds for the one-wall walk and 27.17 seconds for the two-wall walk on one numerical thread. They are diagnostic controls, **not realtime implementations or compute-matched competitors**. The figure shows one explicit GPU seed; the ledger retains all seeds and outliers.
+
+![Integrated path diagnostic versus wave reference](benchmarks/edge-diagnostic-2026-10-19.png)
+
+The GPU fixture now optionally writes `path-orders.csv` beside the existing total-response CSV. Slots distinguish direct sound, the separate first-mirror estimator, and subsequent bounce contributions, including arrival count and largest absolute path weight. For these rigid fixtures, those bounce contributions are pure edge paths. Summing the exported slots reproduces every recorded total within `1e-9`. The fixture also handles an omitted `receiverMotion` correctly: Unity can instantiate that optional object with a null velocity array.
+
+Five-probe, four-seed measurements at 128/8,192 rays/bin identify large third/fourth-edge outliers. At the final two-wall walk point, the deterministic second-order result has magnitude 0.03947; the wave value is 0.03883. Individual low-budget second-order contributions reach 0.597. At 8,192 rays, the second-order average approaches the integral, while third/fourth-order spread remains large. This supports a sampling-variance diagnosis for those terms, not a claim that all higher-order physics is correct.
+
+The broader trial uses both walks, 16 seeds, 8/128 rays per bin and four bounces. Settings are changed one proposal at a time:
+
+| Proposal | Measured reason for rejection |
+|---|---|
+| Uniform reservoir of reachable planar edges | Five-probe 128-ray relative field error increases from 211% to 608%; a fourth-order contribution grows from below 0.6 to above 4.6. |
+| Reachable edges plus an incoming/outgoing angular mixture | At 8 rays, one-wall silent shadow samples increase from 114 to 182 of 320. At 128 rays, the two-wall maximum pressure increases from 11.36 to 14.55. |
+| Local/global reachable-edge mixture plus incoming angular mixture | One-wall 128-ray error improves from 176% to 60%, but two-wall error worsens from 422% to 473% and maximum pressure increases to 18.73. |
+
+The original renderer's newly expanded 16-seed sweep also exposes a much worse 8-ray outlier: pressure magnitude 184.14. Earlier four-seed plots did not contain that seed. The trials preserve these failures. Equal-ray measurements are **not matched-time speedups**; warm submission/readback medians vary between approximately 0.4 and 0.9 ms across these short runs. The visibility trials additionally scan scene edges per sample and would need a separate scaling study before adoption.
+
+**Next gate:** a continuation proposal must account for the complete edge chain, including how an earlier height was sampled before its next edge was known. Local visibility and a conditional proposal for only the next height do not reliably control that product. Compare a joint-chain sampler or deterministic low-order control with a sampled residual against the new order-resolved integrals before promoting it. General runtime specular–edge connections, higher-order convergence, temporal artifact repair and DLSS training remain unfinished. No failing sampler or gain clipping was added to production.
+
+The existing [measurement ledger](benchmarks/planar-wave-2026-10-18.json) contains `edgeEstimatorAudit`: **14,208 measured responses from 11 successful GPU jobs**, per-method errors/dropouts/jumps, hashes, numerical controls and test counts. Raw inputs, CSV/NPZ/XML, failed setup logs and candidate shaders are under `.context/edge-audit/`. All jobs used silent batch mode, a closed isolated Unity runner and low process priority; numerical work used one thread.
+
+Reproduce the numerical controls and selected probes with the existing optional scientific environment:
+
+```sh
+export OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1
+export PYTHONDONTWRITEBYTECODE=1
+nice -n 15 .context/wave-planar/venv/bin/python tools/edge_integral.py \
+  .context/edge-repeat/validation.json --validate
+nice -n 15 .context/wave-planar/venv/bin/python tools/edge_integral.py \
+  .context/edge-repeat/probes-q16 --scene .context/wave-planar/staggered/scene.json \
+  --points 240 270 300 196 190 --order 16 --hz 250
+```
+
+Use a fresh output stem, repeat at another quadrature order, and compare complex responses. Set `"decompose": true` in a GPU measurement scene JSON to export the path-order breakdown through the existing `tools/compare_wave_field.py renderer` command. It does not change the transport workload or add runtime buffers.
+
 ## Complex materials and finite room references — 2026-10-19
 
 The renderer now supports **complex local boundary admittance** through the existing transport and both CPU/GPU audio methods. Unity materials expose ordered real/imaginary admittance knots. Reflection uses the incidence angle and preserves negative and reactive phase, while propagation stays on its physical travel-time clock. Existing energy materials retain their behavior. Take v4 authenticates the added fields; actual historical v1/v3 manifests and v1–v4 round trips remain readable.

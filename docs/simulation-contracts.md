@@ -200,6 +200,8 @@ An [independent 3D wave-field audit](cleanup-results.md#independent-wave-pressur
 
 ### Wave reference suite: research and implementation plan
 
+**Planar estimator audit (2026-10-19):** `tools/edge_integral.py` now supplies deterministic one/two-edge integrals and unfolded mirror/mixed-path controls for stationary rigid extruded boxes. The existing GPU measurement optionally exports individual bounce contributions. Nine numerical controls and 16 focused GPU cases pass; two 31-position walks and 16 GPU seeds separate sampling noise from missing path classes. Three visibility/angular proposal trials failed the combined coverage/outlier checks and remain unshipped. Only a previous-vertex roundoff repair enters runtime. The offline mixed paths are not yet runtime features; artifact repair and teacher approval remain incomplete. [Results, limits and reproduction](cleanup-results.md#planar-edge-estimator-audit--2026-10-19).
+
 **Decision:** use a cheap planar wave lab first, then confirm transferable improvements in 3D. The optional NGSolve backend in `tools/planar_wave.py` now runs through `tools/compare_wave_field.py`: true-2D analytic controls, 2.5D point-source reconstruction, and matched `Planar2D` GPU measurements. Initial fixtures are free space, one thick barrier and staggered barriers. The existing finite-wall 3D Bempp reference remains a separate check. The broader scene/material/training coverage below is still a plan; a solver's name or residual is not an accuracy certificate.
 
 #### Physical model and dimensionality

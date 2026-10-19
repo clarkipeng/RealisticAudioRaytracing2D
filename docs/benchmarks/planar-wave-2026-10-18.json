@@ -691,5 +691,384 @@
         ]
       }
     ]
+  },
+  "edgeEstimatorAudit": {
+    "date": "2026-10-19",
+    "baselineCommit": "c7093d7",
+    "accepted": "Preserve the previous edge vertex without a floating-point reconstruction; diagnostic tools and fixture repair.",
+    "rejected": [
+      "visible-edge reservoir",
+      "visible edges plus incoming angular mixture",
+      "local/global visible edges plus incoming angular mixture"
+    ],
+    "scope": "Stationary rigid planar boxes, point-source/infinite-extrusion physics, 250 Hz, 0.1 s horizon. No realtime audio quality claim.",
+    "samplingComparison": "Equal rays, not matched elapsed compute. Timing includes submission/readback and is noisy at this scale.",
+    "controls": {
+      "checks": [
+        {
+          "check": "half-plane",
+          "hz": 0,
+          "absoluteError": 4.636291350834654e-13
+        },
+        {
+          "check": "half-plane",
+          "hz": 250,
+          "absoluteError": 3.8124982933308685e-13
+        },
+        {
+          "check": "two-edge refinement",
+          "hz": 0,
+          "relativeChange": 1.5271539010297403e-06
+        },
+        {
+          "check": "two-edge refinement",
+          "hz": 125,
+          "relativeChange": 1.3778674199674879e-06
+        },
+        {
+          "check": "two-edge refinement",
+          "hz": 250,
+          "relativeChange": 7.409966062147931e-07
+        },
+        {
+          "check": "two-edge reciprocity",
+          "relativeError": 4.2644417760930816e-08
+        },
+        {
+          "check": "analytic mirror distance",
+          "absoluteError": 0.0
+        },
+        {
+          "check": "analytic two-mirror distance",
+          "absoluteError": 0.0
+        },
+        {
+          "check": "mixed-path reciprocity",
+          "relativeError": 0.0
+        }
+      ],
+      "passed": true,
+      "solverSha256": "33e3fb5458c34d462911bdaf57db79473f390635ba921004095a8cc888774ae8"
+    },
+    "gpuChecks": {
+      "passed": 16,
+      "duration": 39.393058
+    },
+    "sourceHashes": {
+      "tools/edge_integral.py": "33e3fb5458c34d462911bdaf57db79473f390635ba921004095a8cc888774ae8",
+      "Assets/Shaders/Transport.hlsl": "54a28d26bc59ae1f33c4543502124db2227f53452038f84adae6e38303cd46a3",
+      "Assets/Tests/Editor/WaveFieldMeasurement.cs": "26c11e3e37548eb306cbedbff61d49081e66886cc8ac5362001257c3e97c9fc3"
+    },
+    "diagnostic": [
+      {
+        "family": "barrier",
+        "points": 31,
+        "shadowPoints": 20,
+        "edgeQuadratureRelativeChange": 4.1579041628587756e-07,
+        "connectionQuadratureRelativeChange": 0.0,
+        "refinedSeconds": 10.409746458999507,
+        "methods": [
+          {
+            "method": "direct + first mirror + two edge orders",
+            "complexRelativeL2": 0.019987824508273477,
+            "shadowComplexRelativeL2": 0.06303339812527549,
+            "residualJumpP99": 0.01450620798492219
+          },
+          {
+            "method": "all path classes through second order",
+            "complexRelativeL2": 0.019987824508273477,
+            "shadowComplexRelativeL2": 0.06303339812527549,
+            "residualJumpP99": 0.01450620798492219
+          }
+        ]
+      },
+      {
+        "family": "staggered",
+        "points": 31,
+        "shadowPoints": 20,
+        "edgeQuadratureRelativeChange": 4.5882586620397964e-07,
+        "connectionQuadratureRelativeChange": 2.2760613763372347e-12,
+        "refinedSeconds": 27.166029417001482,
+        "methods": [
+          {
+            "method": "direct + first mirror + two edge orders",
+            "complexRelativeL2": 0.21579263196004506,
+            "shadowComplexRelativeL2": 0.6216749528407735,
+            "residualJumpP99": 0.11397957480834682
+          },
+          {
+            "method": "all path classes through second order",
+            "complexRelativeL2": 0.15422440088235273,
+            "shadowComplexRelativeL2": 0.531375639831371,
+            "residualJumpP99": 0.13499851822664258
+          }
+        ]
+      }
+    ],
+    "trials": [
+      {
+        "family": "barrier",
+        "method": "baseline",
+        "rays": 8,
+        "seeds": 16,
+        "complexRelativeL2": 3.68089597063532,
+        "shadowComplexRelativeL2": 17.429471539672292,
+        "residualJumpP99": 8.648238344009863,
+        "maximumPressure": 6.386406236807666,
+        "silentShadowPoints": 114,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.43175
+      },
+      {
+        "family": "barrier",
+        "method": "baseline",
+        "rays": 128,
+        "seeds": 16,
+        "complexRelativeL2": 1.7594306761259217,
+        "shadowComplexRelativeL2": 6.365281928777859,
+        "residualJumpP99": 2.4253179592254543,
+        "maximumPressure": 5.192627067265548,
+        "silentShadowPoints": 0,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.59345
+      },
+      {
+        "family": "barrier",
+        "method": "joint",
+        "rays": 8,
+        "seeds": 16,
+        "complexRelativeL2": 2.716694913225101,
+        "shadowComplexRelativeL2": 12.285927663982855,
+        "residualJumpP99": 3.676650005225971,
+        "maximumPressure": 4.387457324186403,
+        "silentShadowPoints": 182,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.76285
+      },
+      {
+        "family": "barrier",
+        "method": "joint",
+        "rays": 128,
+        "seeds": 16,
+        "complexRelativeL2": 1.2282164577608525,
+        "shadowComplexRelativeL2": 2.602983836113632,
+        "residualJumpP99": 1.4044513523443496,
+        "maximumPressure": 3.66197628053467,
+        "silentShadowPoints": 0,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.86545
+      },
+      {
+        "family": "barrier",
+        "method": "guided",
+        "rays": 8,
+        "seeds": 16,
+        "complexRelativeL2": 1.81735492621662,
+        "shadowComplexRelativeL2": 9.231181708553784,
+        "residualJumpP99": 2.4063512920873604,
+        "maximumPressure": 4.409026369951654,
+        "silentShadowPoints": 148,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.43810000000000004
+      },
+      {
+        "family": "barrier",
+        "method": "guided",
+        "rays": 128,
+        "seeds": 16,
+        "complexRelativeL2": 0.5978776715379158,
+        "shadowComplexRelativeL2": 2.302664913161189,
+        "residualJumpP99": 0.6499047328421657,
+        "maximumPressure": 1.223989765946905,
+        "silentShadowPoints": 0,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.5022
+      },
+      {
+        "family": "staggered",
+        "method": "baseline",
+        "rays": 8,
+        "seeds": 16,
+        "complexRelativeL2": 48.83886950394442,
+        "shadowComplexRelativeL2": 260.58594206967575,
+        "residualJumpP99": 69.1551991079208,
+        "maximumPressure": 184.13931598043587,
+        "silentShadowPoints": 240,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.7321
+      },
+      {
+        "family": "staggered",
+        "method": "baseline",
+        "rays": 128,
+        "seeds": 16,
+        "complexRelativeL2": 4.219505843356256,
+        "shadowComplexRelativeL2": 19.419912298538513,
+        "residualJumpP99": 8.110716257777204,
+        "maximumPressure": 11.36195073427867,
+        "silentShadowPoints": 0,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.43555
+      },
+      {
+        "family": "staggered",
+        "method": "joint",
+        "rays": 8,
+        "seeds": 16,
+        "complexRelativeL2": 3.349826472240746,
+        "shadowComplexRelativeL2": 15.787810809826691,
+        "residualJumpP99": 3.404102136045192,
+        "maximumPressure": 5.293482777637212,
+        "silentShadowPoints": 133,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.507
+      },
+      {
+        "family": "staggered",
+        "method": "joint",
+        "rays": 128,
+        "seeds": 16,
+        "complexRelativeL2": 3.4082964575312116,
+        "shadowComplexRelativeL2": 14.523208003374442,
+        "residualJumpP99": 5.602458572278621,
+        "maximumPressure": 14.546016959638845,
+        "silentShadowPoints": 0,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.5697
+      },
+      {
+        "family": "staggered",
+        "method": "guided",
+        "rays": 8,
+        "seeds": 16,
+        "complexRelativeL2": 6.810980649334849,
+        "shadowComplexRelativeL2": 33.998754184733976,
+        "residualJumpP99": 12.40190029893132,
+        "maximumPressure": 19.37349868030401,
+        "silentShadowPoints": 134,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.6718
+      },
+      {
+        "family": "staggered",
+        "method": "guided",
+        "rays": 128,
+        "seeds": 16,
+        "complexRelativeL2": 4.73338488969779,
+        "shadowComplexRelativeL2": 22.569299343111066,
+        "residualJumpP99": 5.934912742802312,
+        "maximumPressure": 18.72872190743088,
+        "silentShadowPoints": 0,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.70645
+      },
+      {
+        "family": "staggered",
+        "method": "stable",
+        "rays": 8,
+        "seeds": 16,
+        "complexRelativeL2": 48.83887870399133,
+        "shadowComplexRelativeL2": 260.5859912478338,
+        "residualJumpP99": 69.15519833828351,
+        "maximumPressure": 184.13937717452797,
+        "silentShadowPoints": 240,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.4143
+      },
+      {
+        "family": "staggered",
+        "method": "stable",
+        "rays": 128,
+        "seeds": 16,
+        "complexRelativeL2": 4.219506296606108,
+        "shadowComplexRelativeL2": 19.419915128180246,
+        "residualJumpP99": 8.110717383444,
+        "maximumPressure": 11.361950729844496,
+        "silentShadowPoints": 0,
+        "shadowSampleCount": 320,
+        "medianSolveMs": 0.8477999999999999
+      }
+    ],
+    "measurements": [
+      {
+        "name": "baseline-four",
+        "rows": 80,
+        "csvSha256": "3e6503baac4f92ce89c000316cedf1b976fcc33d421e09358e2ccd4892b78a12",
+        "orderCsvSha256": "6776bbbbaa36b79ad845cb2ecb9b3efd669efe22d863a79c611664c91eccc7fd",
+        "shaderSha256": "8cc5329043c1ce061239a4927855f44d52804244a8d8ebd2504f2bc176ef7c17"
+      },
+      {
+        "name": "baseline-v2",
+        "rows": 80,
+        "csvSha256": "384b3219db7498fb9b8053a24e7757dd25068cc82940bfd68855d7605f1b37d1",
+        "orderCsvSha256": "c2f294bafaa4ad782db2704e0b45f291f283623fa4b9819d8550693909a7e2de",
+        "shaderSha256": "8cc5329043c1ce061239a4927855f44d52804244a8d8ebd2504f2bc176ef7c17"
+      },
+      {
+        "name": "baseline-walk-barrier",
+        "rows": 1984,
+        "csvSha256": "3f556a45666d659f64acfcc7bf017817497e6c764afb3fecac5c477a4f79b1bf",
+        "orderCsvSha256": "711cddf4ae62d186bd61bedb9088a3314072546ef5771c6ad3bd9ddfcea7799c",
+        "shaderSha256": "8cc5329043c1ce061239a4927855f44d52804244a8d8ebd2504f2bc176ef7c17"
+      },
+      {
+        "name": "baseline-walk-staggered",
+        "rows": 1984,
+        "csvSha256": "17ba082260e5d2204ebf54c81e3ce82bb36376c89184a551d3e83663db13ee18",
+        "orderCsvSha256": "694339b4fe00230d548ba51fc4de624bdd125ad625fdb7ee046464092505dad3",
+        "shaderSha256": "8cc5329043c1ce061239a4927855f44d52804244a8d8ebd2504f2bc176ef7c17"
+      },
+      {
+        "name": "guided-walk-barrier",
+        "rows": 1984,
+        "csvSha256": "35c78bf0c57085797d2ea686b48f87add1faa50f3ff9f4a98cedc168ee1fa987",
+        "orderCsvSha256": "bcf5a1b49bed7f754e32250e35719bbea85d712a1970c881f8c6590f60fdfeaf",
+        "shaderSha256": "3467011f59ac0c5fe15eda7381eb61eacf63b004cb2d3f80c0a96d158e5e12aa"
+      },
+      {
+        "name": "guided-walk-staggered",
+        "rows": 1984,
+        "csvSha256": "f3abc6a45fd46f8f3097e15c86c96ab692b5db10dcb095c09a9396d4a8fd1bf4",
+        "orderCsvSha256": "229a07389220849402b498c6d90cd4955e78b991f1759fa1077ffd4938932218",
+        "shaderSha256": "3467011f59ac0c5fe15eda7381eb61eacf63b004cb2d3f80c0a96d158e5e12aa"
+      },
+      {
+        "name": "joint-four",
+        "rows": 80,
+        "csvSha256": "0b25622231091438f78c1be0b7d17b983672a01538db714a56ad45beca0aee02",
+        "orderCsvSha256": "12092a77eaa2d2d9a2c66123dc7ee6baba4fbf3668a1bd14a33a8ed413111a91",
+        "shaderSha256": "ea4eb451543434d9fcbfd1923b4b2ad4e2216fb347e417eb142083e305f6c0e4"
+      },
+      {
+        "name": "joint-walk-barrier",
+        "rows": 1984,
+        "csvSha256": "edcfc68a017e5f47ecafa38e52e09895f27faa5180b5c4e64c860b007cbf1d37",
+        "orderCsvSha256": "f75c11bb77411d0a59921c55b92160683e7e53029ae8cbb145deb9e320f08d72",
+        "shaderSha256": "ea4eb451543434d9fcbfd1923b4b2ad4e2216fb347e417eb142083e305f6c0e4"
+      },
+      {
+        "name": "joint-walk-staggered",
+        "rows": 1984,
+        "csvSha256": "a6ac426def950c33df5bdfc3b86d4a88c65dbf36706e29605d3490a86ba4c935",
+        "orderCsvSha256": "a1653de1718da273a292860a5b320de766d3c79d01ca506cb2a44963eaec84fe",
+        "shaderSha256": "ea4eb451543434d9fcbfd1923b4b2ad4e2216fb347e417eb142083e305f6c0e4"
+      },
+      {
+        "name": "stable-walk-staggered",
+        "rows": 1984,
+        "csvSha256": "b1339e4a624de5675046510da9159137fa4660c69fa2863a988321693528758d",
+        "orderCsvSha256": "e6ca567823e5c7e8878b9b40fac732471fb133b2bc54efe0c55b92b3e87b1536",
+        "shaderSha256": "54a28d26bc59ae1f33c4543502124db2227f53452038f84adae6e38303cd46a3"
+      },
+      {
+        "name": "visible-four-v2",
+        "rows": 80,
+        "csvSha256": "518bf35da4b1b6a017e7c5cf042f1746e887b848b6f900f72e68f434fe1d4789",
+        "orderCsvSha256": "14e118efea76d7bb9a38bd369189ac76a0a00be5259fa7181e7327ba002c0b1a",
+        "shaderSha256": "5b7d6018563a754b3a7ddd68f51767028cefe0bd2f82eaf0fbb5894d76ed7348"
+      }
+    ],
+    "measuredRows": 14208,
+    "rawArtifacts": ".context/edge-audit"
   }
 }

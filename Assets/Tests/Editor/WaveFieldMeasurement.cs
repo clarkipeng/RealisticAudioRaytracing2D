@@ -16,6 +16,7 @@ public partial class TakeChecks
         public int[] rays, seeds;
         public int sampleRate, fftSize, maxBounces;
         public float speedOfSound, maximumDelaySeconds;
+        public bool decompose;
         public float[] triangles;
         public int[] triangleMaterials;
         public AcousticTake.MaterialDefinition[] materials;
@@ -44,7 +45,7 @@ public partial class TakeChecks
             for(int p=2;p<config.points.Length;p+=3)Assert.That(config.points[p],Is.Zero);
         }
         var state=States(1+owners);state[0].position=WaveVector(config.source);
-        if(config.receiverMotion!=null)
+        if(config.receiverMotion?.velocity!=null)
         {state[1].velocity=WaveVector(config.receiverMotion.velocity);state[1].flags|=AcousticTake.StateFlags.VelocityValid;}
         scene.materials=config.materials??new[]{new AcousticTake.MaterialDefinition {name="rigid",frequencies=new[]{0f},
             absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f}}};
@@ -87,6 +88,8 @@ public partial class TakeChecks
         }
         using var csv=new StreamWriter(Path.Combine(output,"renderer.csv"));
         csv.WriteLine("diffraction,rays,seed,point,hz,real,imag,solve_seconds,direct_visible");
+        using var terms=config.decompose?new StreamWriter(Path.Combine(output,"path-orders.csv")):null;
+        terms?.WriteLine("diffraction,rays,seed,point,hz,slot,real,imag,arrivals,maximum_contribution");
         var shader=RequireGpu();var direct=new TakeRender.DirectPath[1];
         foreach(int rays in config.rays)foreach(int seed in config.seeds)foreach(int diffraction in new[]{0,1})
         {
@@ -109,6 +112,20 @@ public partial class TakeChecks
                     var p=EdgeResponse(paths,(int)bin,hz);
                     Assert.That(double.IsFinite(p.Real)&&double.IsFinite(p.Imaginary),Is.True);
                     csv.WriteLine(FormattableString.Invariant($"{diffraction},{rays},{seed},{point},{hz:R},{p.Real:R},{p.Imaginary:R},{seconds:R},{(direct[0].pressureGain!=0?1:0)}"));
+                    if(terms!=null)for(int slot=0;slot<settings.maxBounces+2;slot++)
+                    {
+                        var value=System.Numerics.Complex.Zero;int count=0;double largest=0;
+                        for(int i=0;i<paths.Length;i++)
+                        {
+                            int kind=i<settings.FrequencyBins?0:1+(i-settings.FrequencyBins)%(settings.maxBounces+1);
+                            var path=paths[i];if(kind!=slot||path.frequencyBin!=(int)bin)continue;
+                            var gain=new System.Numerics.Complex(path.pressureGain,path.pressureImag);
+                            if(gain==System.Numerics.Complex.Zero)continue;
+                            value+=gain*System.Numerics.Complex.Exp(new System.Numerics.Complex(0,-2*Math.PI*hz*path.delaySeconds));
+                            count++;largest=Math.Max(largest,gain.Magnitude);
+                        }
+                        terms.WriteLine(FormattableString.Invariant($"{diffraction},{rays},{seed},{point},{hz:R},{slot},{value.Real:R},{value.Imaginary:R},{count},{largest:R}"));
+                    }
                 }
             }
             csv.Flush();Debug.Log($"Wave field: diffraction={diffraction}, rays={rays}, seed={seed}");

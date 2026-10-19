@@ -679,7 +679,8 @@ void TracePaths(uint index, bool is2D)
             Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
             spreadingDistance += distance;
             gain *= inversePdf * DiffractionFactor * EdgeOpacity(edge, frequencyBin) / edgeProbability;
-            edgeSource = edgePoint - incoming * spreadingDistance;
+            // Preserve the previous vertex exactly when this is an edge-to-edge leg.
+            edgeSource = position - incoming * (spreadingDistance - distance);
             edgeDistance = spreadingDistance;
             vertexVelocity = PointVelocity(stateOffset + Edges[edge].ids.x, edgePoint);
             frequencyRatio *= 1 - dot(vertexVelocity, incoming) / speed;
