@@ -8,6 +8,8 @@ Planning update, 2026-10-18: [artifact reduction and sampling](#artifact-reducti
 
 Research update, 2026-10-18: the [planar wave reference](#wave-reference-suite-research-and-implementation-plan) is implemented and benchmarked. The [ray/learned reconstruction experiment](#ray-transport-and-learned-reconstruction-experiment) defines candidate kernels, search ranges, a reproducible scene suite and an aggregate score; the replacement kernels and neural models remain proposed.
 
+**Current direction, 2026-10-19:** use **2D scenes for diffraction development and validation**. Keep heuristics in route/sample allocation; retain signed pressure, physical delay, frequency dependence and the existing wedge kernel. The [complete-route sampling experiment](cleanup-results.md#minimal-planar-diffraction-sampling--2026-10-19) is an offline prototype in the existing diagnostic tool. Earlier finite-3D experiments are historical; further 3D work requires a changed user request. `Planar2D` retains its declared point-source/infinite-extrusion convention, so its matched wave reference remains valid.
+
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
 **Invariant:** the take determines scene and source inputs; the render configuration determines computation. Changing quality never changes the recorded experiment.

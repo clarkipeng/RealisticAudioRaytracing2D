@@ -1,5 +1,76 @@
 # Cleanup validation and measured bottlenecks
 
+## Minimal planar diffraction sampling — 2026-10-19
+
+**Direction: 2D only.** A small offline prototype improves route sampling while retaining the existing signed wedge kernel. It is not installed in the realtime shader, and does not establish artifact-free audio. The current 2D convention remains a point source around infinitely extruded XY walls; the independently solved FEM references use the same convention.
+
+The useful heuristic is **where to spend samples**, not a fitted loudness or delay. Enumerate all geometrically visible edge chains through the requested order, reject routes that cannot fit the physical delay horizon, then sample each complete chain. Knowing the next edge before sampling the current height avoids the earlier mismatch between a listener-guided first height and a subsequently chosen edge. Each conditional proposal mixes angular peaks of the current and preceding interaction. The complete normalized density remains in the pressure weight.
+
+A scrambled Sobol pattern spreads samples through the joint height domain; reuse the same pattern as the receiver moves. Sampling half the symmetric height domain avoids redundant work. No shortest-route-only selection, per-scene gain, pressure clipping, frame averaging, or artificial rolloff is used. Higher orders are configurable; repeated edges after another edge remain possible. This is an experiment in the existing `tools/edge_integral.py`, using its current NumPy/SciPy dependencies and existing mirror-path code. There is no new runtime component, buffer, UI or shader variant.
+
+```text
+for each visible corner chain through configured order:
+    reject if its minimum travel time exceeds the existing delay horizon
+    for each persistent sample in the chain's joint sampling pattern:
+        sample heights using the whole route and preceding angular peaks
+        pressure = signed wedge kernels × spreading / joint proposal density
+        accumulate pressure × exp(-i × 2π × frequency_Hz × physical travel time)
+sum with direct, mirror, and supported mixed mirror/edge paths
+```
+
+This follows the secondary-edge-source path integral already used by the renderer, rather than inventing an amplitude model. [Antani et al.](https://gamma-web.iacs.umd.edu/BTM/FromRegion.pdf) describe visibility culling and multi-edge integration. The prototype uses SciPy's scrambled Sobol implementation with complete power-of-two sample sets, consistent with its [documented balance requirements](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.qmc.Sobol.html). This specific proposal and allocation are our experiment, not an accuracy guarantee from those papers.
+
+### Measured sampling improvement
+
+Matched CPU implementations: same routes, same physical kernel, same two-edge-order limit, same mirror connections, **256 samples per route**, 16 seeds, 31 receiver positions and 250 Hz. Only ordinary random samples versus Sobol samples change. Error is relative complex-pressure L2 against the wave field; jumps are p99 changes in the complex residual along the walk.
+
+| Walk | Random error | Guided Sobol error | Random residual jump | Guided residual jump |
+|---|---:|---:|---:|---:|
+| One thick wall | 5.70% | **3.97%** | 0.0473 | **0.0312** |
+| Two staggered walls | 17.22% | **15.78%** | 0.1878 | **0.1631** |
+
+Shadow-only errors remain **16.90% and 55.12%**, respectively. There were no exactly silent shadow samples in either method. At 64 samples per route the two-wall p99 jump slightly worsens (0.1902 → 0.1924), despite improved field error; more even sampling is not a universal artifact cure. Comparisons to the previous GPU walk are not compute matched: that renderer samples route discovery, uses four bounces, and lacks these general mixed specular connections. Do not describe its much larger errors as a measured GPU speed/quality gain from this prototype.
+
+The 256-sample pure-edge work upper bounds average **1,363 and 3,336 kernel evaluations per point/frequency**, before visibility and mixed connections. The budget is per route, not per source/listener pair. Exhaustive route enumeration grows quickly with geometry and order. CPU wall times are recorded in the ledger; they are Python timings with system-load variation, not realtime GPU predictions.
+
+A paired four-seed ablation uses the same samples and keeps the first two orders unchanged while adding orders three/four. One-wall error improves 4.18% → 3.75%, but two-wall error worsens **15.64% → 17.26%** and residual jumps worsen. The corresponding pure-edge work bounds grow by approximately 11× and 34×. We retain configurable order, but do not promote more bounces as a solution: the experiment still omits mixed reflection/edge classes above total order two.
+
+![Planar route sampling](benchmarks/planar-guided-2026-10-19.png)
+
+### Broader development scenes
+
+All existing grid probes, four seeds, 256 samples per route, two edge orders, 250 Hz. These are separate full-map results, not the walk scores above. No held-out validation/test family was inspected.
+
+| Scene | Probes | Whole-field error | Shadow error |
+|---|---:|---:|---:|
+| Thick wall | 531 | 2.60% | 11.67% |
+| Staggered walls | 487 | 9.17% | 34.34% |
+| Slit | 509 | 3.83% | 18.96% |
+| Open corridor | 461 | 13.83% | 29.16% |
+
+All **7,952 field samples** are finite; none of the **4,072 shadow samples** is exactly silent. The FEM references' last mesh changes range from 0.067% to 0.305%; earlier reference qualifications still apply. This is evidence of a useful candidate, not validation across frequencies, arbitrary materials or enclosed rooms.
+
+### Reference repair and checks
+
+A new near-boundary check exposed a defect in the old deterministic edge diagnostic: it split a narrow angular peak only out to eight peak widths, then jumped to a much wider phase panel. Both low quadrature orders could miss its tail. Geometrically spaced panels now resolve the peak continuously out to the domain boundary. For two probes 2 micrometres apart across the canonical half-plane shadow boundary, the false total-pressure change falls from **0.02346 to 0.0000006663**. This repairs the edge diagnostic; the independent FEM wave reference and live shader were not changed.
+
+**15 numerical controls pass**, including sampled normalization/phase against refined integration, two-edge refinement/reciprocity, mirror distances, and shadow-boundary cancellation. At 65,536 samples per route, the canonical second-order integration error is below 0.18% through 250 Hz; these high-sample controls are not the 256-sample performance setting. A separate 203-position half-plane crossing at 256 samples has 0.86% complex error against the repaired integral. This checks stationary field continuity; it does not test streaming audio, HRTFs, moving-wall Doppler or audible clicks.
+
+The repaired quadrature is also rechecked against both earlier 31-position refined walks. CLI export and protection against overwriting measurements are exercised. No Unity process, game window or speaker output was used.
+
+Reproduce with the existing optional scientific environment and a fresh output stem:
+
+```sh
+OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1 \
+  nice -n 15 .context/wave-planar/venv/bin/python tools/edge_integral.py \
+  .context/route-repeat --scene .context/wave-planar/staggered/scene.json \
+  --points 240 270 300 196 190 --samples 256 --depth 2 --seed 17 --hz 250
+```
+
+Omit `--samples` for refined integration, or use `--validate` with a fresh JSON output path for the controls. NPZ output retains complex pressure by edge order, mirror connection classes, receiver positions and route counts. JSON records configuration, source/scene hashes and a declared pure-edge work bound. Raw repeats, arrays, controls and measurement scripts are under `.context/edge-minimal/`; the existing benchmark ledger contains `guidedPlanarRoutes`.
+
+**Decision:** keep this as the minimal offline candidate. A runtime port should reuse `Edges`, `EdgeKernel` and `RayPath`, with measured bounded route work and the same physical weights. Before replacing the live path, require matched GPU time, dense temporal/broadband checks and better mixed-path completeness in the difficult two-wall shadow. We have not yet demonstrated sufficiently realistic deep-shadow audio or realtime performance.
+
 ## Planar edge estimator audit — 2026-10-19
 
 **The large runtime artifacts are not fixed.** The new deterministic diagnostic separates integration noise from missing physical paths. Three sampling trials were measured and rejected; their shader variants stay under `.context/edge-audit/`. The retained runtime edit preserves the preceding edge vertex directly instead of reconstructing it from a rounded direction and distance. It is a numerical repair, not an audible artifact improvement: the 16-seed walk changes only about `3.5e-7` in relative response norm at 128 rays/bin.

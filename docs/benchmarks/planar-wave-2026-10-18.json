@@ -1070,5 +1070,389 @@
     ],
     "measuredRows": 14208,
     "rawArtifacts": ".context/edge-audit"
+  },
+  "guidedPlanarRoutes": {
+    "date": "2026-10-19",
+    "baselineCommit": "dcccabb",
+    "status": "Offline 2D candidate only; no production shader change.",
+    "physicalScope": "Stationary rigid XY boxes, point-source/infinite extrusion, 250 Hz and 0.1 s support.",
+    "method": "Enumerate visible complete edge chains; conditional angular-peak Cauchy proposals with full mixture PDFs; persistent scrambled Sobol samples; no gain fitting or clipping.",
+    "budget": "Samples per route. Random/Sobol ablation matches paths and sample count, not GPU runtime. Pure edge depth configurable; mixed specular paths stop at total order two.",
+    "sourceSha256": "c2e6a71983ceee18566e8df3714d72bd51dc210349b99e184f6df7bb89899d81",
+    "controls": [
+      {
+        "check": "half-plane",
+        "hz": 0,
+        "absoluteError": 4.636291350834654e-13
+      },
+      {
+        "check": "sampled half-plane",
+        "hz": 0,
+        "relativeError": 1.8470702640356025e-12
+      },
+      {
+        "check": "half-plane",
+        "hz": 250,
+        "absoluteError": 3.8128218909885053e-13
+      },
+      {
+        "check": "sampled half-plane",
+        "hz": 250,
+        "relativeError": 7.029746678075659e-07
+      },
+      {
+        "check": "shadow boundary cancellation",
+        "absoluteChange": 6.663100998143484e-07
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 0,
+        "relativeChange": 1.5271272223813211e-06
+      },
+      {
+        "check": "sampled second order",
+        "hz": 0,
+        "relativeError": 8.990918213703707e-05
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 125,
+        "relativeChange": 1.3778478223857928e-06
+      },
+      {
+        "check": "sampled second order",
+        "hz": 125,
+        "relativeError": 0.00046479874782943997
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 250,
+        "relativeChange": 7.409978192019742e-07
+      },
+      {
+        "check": "sampled second order",
+        "hz": 250,
+        "relativeError": 0.001716290321625014
+      },
+      {
+        "check": "two-edge reciprocity",
+        "relativeError": 4.264441649824746e-08
+      },
+      {
+        "check": "analytic mirror distance",
+        "absoluteError": 0.0
+      },
+      {
+        "check": "analytic two-mirror distance",
+        "absoluteError": 0.0
+      },
+      {
+        "check": "mixed-path reciprocity",
+        "relativeError": 0.0
+      }
+    ],
+    "walks": [
+      {
+        "family": "barrier",
+        "depth": 2,
+        "samplesPerRoute": 64,
+        "method": "random",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.1068669765023117,
+        "shadowComplexRelativeL2": 0.4638303621334159,
+        "residualJumpP99": 0.08709325721133042,
+        "maximumPressure": 0.7733712622312596,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.026256249999278225,
+        "edgeKernelEvaluationUpperBoundPerPoint": 340.64516129032256,
+        "edgeOrders12IntegrationError": 0.35025981828674024
+      },
+      {
+        "family": "barrier",
+        "depth": 2,
+        "samplesPerRoute": 64,
+        "method": "sobol",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.07196654599689856,
+        "shadowComplexRelativeL2": 0.3303874289663507,
+        "residualJumpP99": 0.06291968146869398,
+        "maximumPressure": 0.7381808885781258,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.024245437498393585,
+        "edgeKernelEvaluationUpperBoundPerPoint": 340.64516129032256,
+        "edgeOrders12IntegrationError": 0.22469883159393098
+      },
+      {
+        "family": "barrier",
+        "depth": 2,
+        "samplesPerRoute": 256,
+        "method": "random",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.05697863940039272,
+        "shadowComplexRelativeL2": 0.24621791181330074,
+        "residualJumpP99": 0.047272810095862344,
+        "maximumPressure": 0.7434053296308402,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.026986937000401667,
+        "edgeKernelEvaluationUpperBoundPerPoint": 1362.5806451612902,
+        "edgeOrders12IntegrationError": 0.17650124084498642
+      },
+      {
+        "family": "barrier",
+        "depth": 2,
+        "samplesPerRoute": 256,
+        "method": "sobol",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.03971198719039798,
+        "shadowComplexRelativeL2": 0.16903642640301578,
+        "residualJumpP99": 0.031151744822235695,
+        "maximumPressure": 0.7368656955128932,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.029145020500436658,
+        "edgeKernelEvaluationUpperBoundPerPoint": 1362.5806451612902,
+        "edgeOrders12IntegrationError": 0.10935328551201663
+      },
+      {
+        "family": "barrier",
+        "depth": 4,
+        "samplesPerRoute": 256,
+        "method": "sobol",
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.037526191522109294,
+        "shadowComplexRelativeL2": 0.16832061655724856,
+        "residualJumpP99": 0.02982124928086532,
+        "maximumPressure": 0.7407839806012634,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.1984987080013525,
+        "edgeKernelEvaluationUpperBoundPerPoint": 14625.032258064517,
+        "edgeOrders12IntegrationError": 0.10984048104036265
+      },
+      {
+        "family": "barrier",
+        "method": "same samples: first two orders of four-order run",
+        "depth": 2,
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.041774588682487845,
+        "shadowComplexRelativeL2": 0.18414114238807244,
+        "residualJumpP99": 0.03419718521222349
+      },
+      {
+        "family": "staggered",
+        "depth": 2,
+        "samplesPerRoute": 64,
+        "method": "random",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.20014787651821367,
+        "shadowComplexRelativeL2": 0.7628191477178425,
+        "residualJumpP99": 0.1901706348558978,
+        "maximumPressure": 0.8209836755990696,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.07330868749886577,
+        "edgeKernelEvaluationUpperBoundPerPoint": 834.0645161290323,
+        "edgeOrders12IntegrationError": 0.39177214822200546
+      },
+      {
+        "family": "staggered",
+        "depth": 2,
+        "samplesPerRoute": 64,
+        "method": "sobol",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.17391089809814125,
+        "shadowComplexRelativeL2": 0.6201063687999474,
+        "residualJumpP99": 0.19244482777093969,
+        "maximumPressure": 0.8019942362941062,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.07185391699931643,
+        "edgeKernelEvaluationUpperBoundPerPoint": 834.0645161290323,
+        "edgeOrders12IntegrationError": 0.25572445461900395
+      },
+      {
+        "family": "staggered",
+        "depth": 2,
+        "samplesPerRoute": 256,
+        "method": "random",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.172245354399545,
+        "shadowComplexRelativeL2": 0.6197540158128856,
+        "residualJumpP99": 0.1877561660334645,
+        "maximumPressure": 0.8108824486598059,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.08442483349972463,
+        "edgeKernelEvaluationUpperBoundPerPoint": 3336.2580645161293,
+        "edgeOrders12IntegrationError": 0.19309907387662673
+      },
+      {
+        "family": "staggered",
+        "depth": 2,
+        "samplesPerRoute": 256,
+        "method": "sobol",
+        "seeds": 16,
+        "points": 31,
+        "complexRelativeL2": 0.1577996761190717,
+        "shadowComplexRelativeL2": 0.5511558336274369,
+        "residualJumpP99": 0.1630849777553945,
+        "maximumPressure": 0.7918714686635427,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 0.0857192080020468,
+        "edgeKernelEvaluationUpperBoundPerPoint": 3336.2580645161293,
+        "edgeOrders12IntegrationError": 0.12306294813802472
+      },
+      {
+        "family": "staggered",
+        "depth": 4,
+        "samplesPerRoute": 256,
+        "method": "sobol",
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.17264098613809983,
+        "shadowComplexRelativeL2": 0.6696346106779876,
+        "residualJumpP99": 0.201285695578811,
+        "maximumPressure": 0.7932458855816783,
+        "silentShadowPoints": 0,
+        "medianWalkSeconds": 1.4392395619997842,
+        "edgeKernelEvaluationUpperBoundPerPoint": 112862.96774193548,
+        "edgeOrders12IntegrationError": 0.12123864172864479
+      },
+      {
+        "family": "staggered",
+        "method": "same samples: first two orders of four-order run",
+        "depth": 2,
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.1564215008795341,
+        "shadowComplexRelativeL2": 0.5610222436447677,
+        "residualJumpP99": 0.17348292358098175
+      }
+    ],
+    "maps": [
+      {
+        "family": "barrier",
+        "points": 531,
+        "seeds": 4,
+        "samplesPerRoute": 256,
+        "depth": 2,
+        "complexRelativeL2": 0.025985122332742538,
+        "shadowComplexRelativeL2": 0.11674499532971583,
+        "maximumPressure": 1.8398215010636727,
+        "silentShadowPoints": 0,
+        "shadowSamples": 1020,
+        "medianMapSeconds": 0.5402097709993541,
+        "referenceLastMeshChange": 0.0030547502825150835,
+        "sceneSha256": "f3ac87a0e6bf0381f37bd59965bce026ebe2191ebd500372705d3687c1c59326"
+      },
+      {
+        "family": "staggered",
+        "points": 487,
+        "seeds": 4,
+        "samplesPerRoute": 256,
+        "depth": 2,
+        "complexRelativeL2": 0.09169828223655113,
+        "shadowComplexRelativeL2": 0.34341152751277915,
+        "maximumPressure": 1.8526478637168324,
+        "silentShadowPoints": 0,
+        "shadowSamples": 1164,
+        "medianMapSeconds": 1.3796304789993883,
+        "referenceLastMeshChange": 0.0007100375871766557,
+        "sceneSha256": "fd034343af84b7a674a0b6f23f73f811b6128dc9818905e427b64100560cc5bb"
+      },
+      {
+        "family": "slit",
+        "points": 509,
+        "seeds": 4,
+        "samplesPerRoute": 256,
+        "depth": 2,
+        "complexRelativeL2": 0.038291786898601105,
+        "shadowComplexRelativeL2": 0.18955145536126927,
+        "maximumPressure": 1.6505364455392537,
+        "silentShadowPoints": 0,
+        "shadowSamples": 944,
+        "medianMapSeconds": 2.5918337914972653,
+        "referenceLastMeshChange": 0.0006738664968733494,
+        "sceneSha256": "142709d90d5c3474087010082c9af511b6e277a749853df8d2a16cc533bc1b2a"
+      },
+      {
+        "family": "corridor",
+        "points": 461,
+        "seeds": 4,
+        "samplesPerRoute": 256,
+        "depth": 2,
+        "complexRelativeL2": 0.13832378636401188,
+        "shadowComplexRelativeL2": 0.29163331787346386,
+        "maximumPressure": 1.7796083987233255,
+        "silentShadowPoints": 0,
+        "shadowSamples": 944,
+        "medianMapSeconds": 2.0575122914997337,
+        "referenceLastMeshChange": 0.0012383001269499804,
+        "sceneSha256": "f7132947bf2fcb0dd5155e80f3bde0319fea8ebd6b9bb0bfdb40c58e3eac3d79"
+      }
+    ],
+    "referenceRegression": [
+      {
+        "family": "barrier",
+        "edgeRelativeChange": 3.796374638332355e-07,
+        "connectionRelativeChange": 0.0,
+        "seconds": 8.448675250001543
+      },
+      {
+        "family": "staggered",
+        "edgeRelativeChange": 4.1126410074372345e-07,
+        "connectionRelativeChange": 4.6340661299932965e-14,
+        "seconds": 21.37048891700033
+      }
+    ],
+    "numericalControlsPassed": 15,
+    "cliChecks": [
+      "NPZ/JSON sampled export",
+      "existing output refusal"
+    ],
+    "mapSamples": 7952,
+    "shadowSamples": 4072,
+    "limitations": [
+      "Deep-shadow mismatch persists",
+      "Only 250 Hz field comparison",
+      "No streaming audio or moving-boundary validation",
+      "No GPU performance claim",
+      "No arbitrary-material validation",
+      "Exhaustive chains grow with edge count/order"
+    ],
+    "artifacts": {
+      "walks.npz": "c7495dea331b47bc3d7a6d71dc5a6fa3e6eb4b89c88ec13a4ac483d2c70a7c5c",
+      "maps.npz": "8a871e78c187bf0aa6e0373e20c63dd23ecfe8f81b2f2658234b3ec2ecbbecad",
+      "crossing.npz": "960443a9ea0e50b35b0fd49e003b6f691602b039e22e70a9c613a1c06d6b4857",
+      "measure.py": "003344556baff8b659814ed17c5c24f1e28328250b26bc070c20bc2fd61c87d2",
+      "maps.py": "36dd9ce3a3943134b12ab09a20ff7ff7021d453de885b484677a27e2fb295d23",
+      "check.py": "dd3618098095e62002bc262506a48b45e38cf5feb64c812f567290ebeab94d07"
+    },
+    "rawDirectory": ".context/edge-minimal",
+    "boundaryRepair": {
+      "old": {
+        "absolutePressureChange": 0.023458583774837918,
+        "sourceSha256": "33e3fb5458c34d462911bdaf57db79473f390635ba921004095a8cc888774ae8"
+      },
+      "repaired": {
+        "absolutePressureChange": 6.663100998143484e-07,
+        "sourceSha256": "c2e6a71983ceee18566e8df3714d72bd51dc210349b99e184f6df7bb89899d81"
+      }
+    },
+    "denseHalfplaneCrossing": {
+      "check": "shadow-crossing",
+      "points": 203,
+      "samples": 256,
+      "relative": 0.008613540490661877,
+      "maxError": 0.0018253263050290922,
+      "crossBoundaryChange": 2.2552015261416792e-06,
+      "referenceCrossBoundaryChange": 6.663100998143484e-07
+    }
   }
 }
