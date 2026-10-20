@@ -758,32 +758,37 @@ void TracePaths(uint index, bool is2D)
         canSampleEdge = surfaceScatter > 0;
         uint nextMedium = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
         float nextIor = MediumIor(nextMedium, frequencyBin);
-        float reflectance = 1 - saturate(material.surface.z), cosTheta = abs(dot(direction, n));
-        reflectance += (1 - reflectance) * pow(saturate(1 - cosTheta), 5);
-        if (RandomRay(rng) > reflectance)
+        float transmission = saturate(material.surface.z);
+        float3 transmitted = refract(direction, n, currentIor / nextIor);
+        if (dot(transmitted, transmitted) == 0)
+            transmission = 0; // Total internal reflection leaves no transmitted branch.
+        uint eventKind;
+        if (RandomRay(rng) < transmission)
         {
-            float3 transmitted = refract(direction, n, currentIor / nextIor);
-            if (dot(transmitted, transmitted) > 0)
-            {
-                transmitted = normalize(transmitted);
-                identity = HashRay(identity ^ 0x10000000u);
-                direction = transmitted;
-                medium = nextMedium;
-                canSampleEdge = false;
-                DebugWrite(debugSlot, debugPath, DebugTransmission, Primitives[hit].indices.y, segmentStart,
-                           position, segmentTime, time, gain * weight);
-                continue;
-            }
+            // The legacy contract gives energy fractions. Pressure coefficient / PDF
+            // is sqrt(t)/t, not 1. Complex opaque boundaries take the other branch.
+            gain /= sqrt(transmission);
+            identity = HashRay(identity ^ 0x10000000u);
+            direction = normalize(transmitted);
+            medium = nextMedium;
+            canSampleEdge = false;
+            eventKind = DebugTransmission;
         }
-        float3 diffuse = UnitDirection(rng, is2D);
-        if (dot(diffuse, n) < 0)
-            diffuse = -diffuse;
-        bool scattered = RandomRay(rng) < saturate(material.surface.y);
-        if(material.medium.w!=0)
-            materialWeight=ComplexProduct(materialWeight,ReflectionPressure(material,abs(dot(direction,n))));
-        float3 nextDirection = scattered ? diffuse : reflect(direction, n);
-        DebugWrite(debugSlot, debugPath, scattered ? DebugScatter : DebugReflection,
+        else
+        {
+            gain /= sqrt(1 - transmission);
+            float3 diffuse = UnitDirection(rng, is2D);
+            if (dot(diffuse, n) < 0)
+                diffuse = -diffuse;
+            float scattering = saturate(material.surface.y);
+            bool scattered = RandomRay(rng) < scattering;
+            gain /= sqrt(scattered ? scattering : 1 - scattering);
+            if(material.medium.w!=0)
+                materialWeight=ComplexProduct(materialWeight,ReflectionPressure(material,abs(dot(direction,n))));
+            direction = scattered ? diffuse : reflect(direction, n);
+            eventKind = scattered ? DebugScatter : DebugReflection;
+        }
+        DebugWrite(debugSlot, debugPath, eventKind,
                    Primitives[hit].indices.y, segmentStart, position, segmentTime, time, gain * weight);
-        direction = nextDirection;
     }
 }

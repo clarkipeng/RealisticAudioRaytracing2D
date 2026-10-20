@@ -133,6 +133,37 @@ public partial class TakeChecks
             Assert.That(mirror.pressureImag,Is.EqualTo(expected.Imaginary).Within(1e-6));
         }
     }
+    [TestCase(false), TestCase(true), Category("GPU")]
+    public void SurfaceBranchWeightsPreservePressure(bool planar)
+    {
+        var scene=Scene(2);scene.listeners=new[]{1};scene.objects[2].primitiveCount=1;
+        scene.dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D;
+        scene.materials=new[]{new AcousticTake.MaterialDefinition {frequencies=new[]{0f},
+            absorption=new[]{.25f},transmission=new[]{.25f},scattering=new[]{.4f}}};
+        var state=States(2);state[0].position=new Vector3(-1,0,0);state[1].position=new Vector3(-2,0,0);
+        state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        var geometry=new[]{new AcousticTake.Primitive {objectIndex=2,
+            a=new Vector3(0,-1000,-1000),b=new Vector3(0,1000,-1000),c=new Vector3(0,0,1000)}};
+        var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=4;settings.raysPerBin=8192;
+        settings.maxBounces=1;settings.diffractionFactor=0;settings.airAbsorption=false;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
+        var sums=new double[3];int hits=0;double[] energy={.25,.75*.6,.75*.4};
+        foreach(var segment in solver.CaptureRays(state,0,1))
+        {
+            if(segment.path<2 || segment.path%2!=0)continue; // Exclude separately connected mirrors.
+            int branch=segment.kind==TransportSolver.RayEvent.Transmission?0:
+                segment.kind==TransportSolver.RayEvent.Reflection?1:segment.kind==TransportSolver.RayEvent.Scatter?2:-1;
+            if(branch<0)continue;
+            Assert.That(segment.pressure*settings.raysPerBin,Is.EqualTo(Math.Sqrt(.75/energy[branch])).Within(1e-5),
+                "Surviving pressure is coefficient divided by branch probability.");
+            hits++;sums[branch]+=segment.pressure;
+        }
+        Assert.That(hits,Is.GreaterThan(2000));
+        TestContext.WriteLine($"hits={hits}; pressure T/R/S={sums[0]*settings.raysPerBin/hits}, {sums[1]*settings.raysPerBin/hits}, {sums[2]*settings.raysPerBin/hits}");
+        for(int i=0;i<3;i++)Assert.That(sums[i]*settings.raysPerBin/hits,
+            Is.EqualTo(Math.Sqrt(.75*energy[i])).Within(.035),"Each sampled branch estimates its pressure coefficient.");
+    }
+
     [Test, Category("GPU")]
     public void TransportGeometry()
     {
