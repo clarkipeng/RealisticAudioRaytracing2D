@@ -1,5 +1,46 @@
 # Cleanup validation and measured bottlenecks
 
+## Transport candidate audit — 2026-10-20
+
+Implemented and measured all six candidates at their supported scope. **Only the surface pressure-weight correction is enabled in Unity.** The other methods are opt-in offline experiments. Baseline code remains at `c309d6b`. [Measurements, hashes and rejected variants](benchmarks/transport-candidates-2026-10-20.json).
+
+The runtime divides surviving pressure coefficients by their event probabilities for legacy transmission/reflection/scattering choices. It removes the optical Schlick adjustment to the configured transmission fraction and handles total internal reflection before selecting a branch. Complex opaque impedance coefficients remain unchanged. A common debug-write point restores transmitted segments absent from the previous early-continue capture path. The contract is `integrated-edge-pressure-preview-v9`. Energy-only controls still do not determine physical reflection phase or a validated coherent diffuse law; this correction does not resolve those limitations.
+
+**Verification:** 40/40 silent Metal cases passed: branch weights in 2D/3D, impedance phase, mirrors, propagation through media, diffraction, moving-edge Doppler, debug/audio agreement and CPU/GPU synthesis. Paired rigid-scene arrival arrays were unchanged. A tiny warmed solve/readback benchmark (5 bins, 128 rays/bin, four bounces, 41 alternating calls) measured **0.445 → 0.521 ms** for rigid diffraction and **0.436 → 0.446 ms** for legacy surfaces. This is a correctness fix with measured overhead, not a speedup. An extra opaque-material branch optimization was slower and was reverted. No windows, speakers or microphone were used.
+
+| Candidate | Implementation | Result / disposition |
+|---|---|---|
+| Pressure weights | GPU branch compensation and transmission-debug repair | Retained in runtime. General diffuse normalization remains unvalidated. |
+| Missing mirror/edge connections | Unfold mirror runs between edges and validate every physical segment; includes mirror→edge→mirror and edge→mirror→edge | Reciprocity passes through mixed order 3. Extra paths reduce some spatial jumps but worsen two-wall shadow error and cost much more. Offline only. |
+| Better edge integration | Analytically integrate a Lorentzian angular-peak approximation, sample its signed complex residual; condition the final edge on the preceding sample | Improves the one-wall 256-sample ablation, but not universally at comparable elapsed cost. Opt-in `--control-variate`. |
+| Weak-path termination | Roulette on continuation-weight magnitude with exact survival reweighting and stable sample dimensions | 32-scramble mean checks pass, including combination with residual integration. About 3.6–3.9% fewer edge-kernel evaluations in the walks, without a reliable speed/quality win. Opt-in `--roulette`. |
+| Repeated reflection families | Closed or finite-support sums of four axial image families, including complex reflection loss and endpoint coupling | Matches 512 explicit round trips to `1.18e-14` relative error. Finite lossless support and a source at a modal node pass. This is a 1D plane-wave control, not general room-mode detection. |
+| Local wave scattering | Object-local cylindrical-harmonic scattering operator, reused across source evaluations; longitudinal integration for point-extruded sources | Refined independent 2D FEM differs by 0.0097%. A 17-mode line-source operator differs from the exact series by 0.0127%; point-extruded series/quadrature controls also pass. Isolated rigid cylinders only; arbitrary meshes and multi-object coupling remain unimplemented. |
+
+Walking ablations use 250 Hz, 31 positions/scene, four scrambles and 256 samples **per route**, with pure diffraction through order 2. Mixed-order-3 adds mirror-containing paths, not all third-order paths. The reference is the previously refined FEM point-source/infinite-extrusion field. No amplitude fitting, clipping, temporal smoothing or reference damping is added.
+
+| Method | One-wall complex error | Two-wall complex error | Two-wall shadow error | Two-wall residual-jump p99 |
+|---|---:|---:|---:|---:|
+| Baseline route sampler | 3.71% | 15.30% | 54.15% | 0.1606 |
+| Peak residual integration | 2.88% | 15.13% | 53.08% | 0.1538 |
+| Extra mixed paths | 3.71% | 14.66% | 66.27% | 0.1074 |
+| Roulette, scale 0.2 | 3.72% | 15.32% | 54.12% | 0.1603 |
+
+Equal samples are not equal compute. In a **16-scramble budget sweep**, one-wall residual integration at 256 samples took 29.5 ms/walk with 3.39% error; plain sampling at 512 took 30.7 ms with **2.86%** error. For two walls these were 88.5 ms / 15.73% versus 94.1 ms / 15.79%. At 1,024 plain samples the two-wall error remained 15.52%. Neither residual integration nor extra sampling resolves that model mismatch. At 64 samples the residual estimator slightly worsened two-wall error/jumps. Python timings include geometry/connections and are not GPU predictions or realtime audio measurements.
+
+![Offline transport candidate results](benchmarks/transport-candidates-2026-10-20.png)
+
+`tools/edge_integral.py --validate` runs 24 numerical controls. Defaults are unchanged; select `--samples N --control-variate`, `--roulette SCALE`, and `--mirror-depth 3` independently. It still enumerates routes for diagnosis, not scalable runtime use.
+
+```sh
+python tools/edge_integral.py OUTPUT.json --validate
+python tools/transport_candidates.py axial OUTPUT_STEM
+python tools/transport_candidates.py cylinder OUTPUT_STEM --fem
+python tools/transport_candidates.py edges OUTPUT_STEM --scene SCENE.json --reference REFERENCE.npz --indices 0 1 2 --samples 256
+```
+
+Use fresh output paths and the existing scientific Python environment. The last command requires the matching stationary rigid 250 Hz point-extruded reference and verifies its scene hash. Use `OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 OMP_NUM_THREADS=1` and reduced process priority. Raw controls, ablations, the GPU timing fixture and rejected trials are under `.context/transport-candidates/`. The closed Unity runner is under `.context/gpu-audio/runner/`.
+
 ## Minimal planar diffraction sampling — 2026-10-19
 
 **Direction: 2D only.** A small offline prototype improves route sampling while retaining the existing signed wedge kernel. It is not installed in the realtime shader, and does not establish artifact-free audio. The current 2D convention remains a point source around infinitely extruded XY walls; the independently solved FEM references use the same convention.

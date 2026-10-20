@@ -22,13 +22,15 @@ The [multiplayer capture/training plan](docs/simulation-contracts.md#turning-mul
 
 The current experimental renderer samples surface and edge interactions inside the same GPU path loop. Paths can visit multiple edges within the bounce budget. Each accepted edge sample carries signed pressure, travel time and arrival direction; summing its delayed contribution creates the complex frequency response in the existing audio pipeline. Moving interactions use the incoming and outgoing path directions for Doppler.
 
-**Diffraction Factor** scales edge pressure: **1** uses the experimental rigid-wedge model, **0** disables edge sampling. Edge and surface events share **Rays Per Bin** and **Max Bounces**; there is no separate shortest-route pass or extra edge-arrival block. Frequency bins share random samples. The report contract is `integrated-edge-preview-v7`. The earlier dominant-edge renderer is preserved at `checkpoint/pre-integrated-diffraction-2026-10-07`.
+**Diffraction Factor** scales edge pressure: **1** uses the experimental rigid-wedge model, **0** disables edge sampling. Edge and surface events share **Rays Per Bin** and **Max Bounces**; there is no separate shortest-route pass or extra edge-arrival block. Frequency bins share random samples. The report contract is `integrated-edge-pressure-preview-v9`. The earlier dominant-edge renderer is preserved at `checkpoint/pre-integrated-diffraction-2026-10-07`.
 
 This remains an unvalidated training teacher. Mixed diffuse/surface weights are approximate; exact specular–edge connections, general impedance wedges and vertex corrections are incomplete. More rays reduce sampling noise but do not establish physical accuracy. Planar geometry represents an infinite extrusion perpendicular to XY with spherical point sources. [Model and limitations](docs/simulation-contracts.md#integrated-edge-trial).
 
 For independent pressure maps behind walls, use the [silent wave-reference comparison](docs/cleanup-results.md#independent-wave-pressure-maps--2026-10-18). It compares the actual GPU transport with a 3D Helmholtz boundary-element solution, checks the reference against an analytic sphere, and exports shared-scale maps, route plots, complex pressures and mesh-refinement measurements.
 
 The optional [planar wave lab](docs/cleanup-results.md#planar-wave-reference--2026-10-18) adds cheap 2D analytic controls and a 2.5D FEM reference matched to `Planar2D`: free space, a barrier and staggered walls. The [contracts and next steps](docs/simulation-contracts.md#wave-reference-suite-research-and-implementation-plan) distinguish implemented checks from future material, scene and training coverage.
+
+The [transport candidate audit](docs/cleanup-results.md#transport-candidate-audit--2026-10-20) measures pressure-weight fixes, additional mirror/edge connections, residual integration, weak-path roulette, axial resonance and local wave scattering. Only the pressure-weight/debug fix is enabled in Unity; the other candidates remain opt-in offline experiments.
 
 The [research experiment protocol](docs/simulation-contracts.md#ray-transport-and-learned-reconstruction-experiment) specifies kernel candidates, staged parameter searches and a 25-scene benchmark. `compare_wave_field.py suite` generates its fixtures; `score` reports balanced complex-pressure error with equal scene-family weights.
 

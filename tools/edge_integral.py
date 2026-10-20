@@ -1,6 +1,6 @@
 """Offline planar rigid-box path diagnostic, not a full-wave solver.
 
-Integrates first/second diffraction order and mirror connections in double precision. Same 3D point
+Integrates diffraction and unfolded mirror connections in double precision. Same 3D point
 source, infinite extrusion and delay horizon as Planar2D. Geometry is tested
 independently of Unity. Refined quadrature does not use sampling PDFs;
 --samples tests guided complete edge chains at configurable order.
@@ -11,6 +11,8 @@ import argparse
 import hashlib
 import json
 import time
+from functools import lru_cache
+from itertools import product
 from pathlib import Path
 
 import numpy as np
@@ -187,30 +189,57 @@ def mirror_path(source, receiver, planes, walls):
     return np.r_[images[-1], 0.], np.linalg.norm(images[-1]-receiver[:2])
 
 
-def connections(config, points, hz, order, integrate=first):
-    """Direct, first/second mirrors, reflection-edge and edge-reflection.
+def connections(config, points, hz, order, integrate=first, *, depth=2, integrate_chain=None):
+    """Direct, specular chains and mixed specular/diffracted paths.
 
-    A restricted offline control for missing path classes, not the GPU sampler.
-    Every physical leg is validated; no shortest-route selection or fitted gain.
+    Unfold every mirror run between edges, including mirror-edge-mirror and
+    edge-mirror-edge. Enumeration is an offline control, not a runtime algorithm.
     """
     source, walls = np.array(config['source']), config['walls']
     planes, edges = surfaces(walls), corners(walls)
     k, horizon = 2*np.pi*hz/config['speedOfSound'], config['maximumDelaySeconds']*config['speedOfSound']
+    if depth < 1 or (depth > 3 and integrate_chain is None):
+        raise ValueError('Refined connections support orders 1-3; higher orders require a sampled integrator.')
+    chains = [()] + [ids for n in range(1, depth+1) for ids in product(range(len(planes)), repeat=n)
+                     if all(a != b for a, b in zip(ids, ids[1:]))]
     values = np.zeros((len(points), 4), complex)
     for index, receiver in enumerate(points):
-        direct = np.linalg.norm(receiver-source)
-        if visible(source, receiver, walls) and direct <= horizon:
-            values[index, 0] = np.exp(-1j*k*direct)/direct
-        for plane in planes:
-            for chain, slot in [([plane], 1)]+[([plane, other], 2) for other in planes]:
-                path = mirror_path(source, receiver, chain, walls)
-                if path is not None and path[1] <= horizon:
-                    values[index, slot] += np.exp(-1j*k*path[1])/path[1]
-            for edge in edges:
-                for start, end in [(source, receiver), (receiver, source)]:
-                    path = mirror_path(start, edge[0], [plane], walls)
-                    if path is not None and visible(edge[0], end, walls):
-                        values[index, 3] += integrate(edge, path[0], end, k, horizon, order)
+        endpoints = [edge[0] for edge in edges] + [source[:2], receiver[:2]]
+        @lru_cache(None)
+        def legs(a, b, budget):
+            return [(ids, path[1]) for ids in chains if len(ids) <= budget
+                    if (path := mirror_path(endpoints[a], endpoints[b], [planes[j] for j in ids], walls)) is not None
+                    and path[1] > 1e-10 and path[1] <= horizon]
+        for ids, distance in legs(len(edges), len(edges)+1, depth):
+            values[index, min(len(ids), 2)] += np.exp(-1j*k*distance)/distance
+        for count in range(1, depth):
+            for edge_ids in product(range(len(edges)), repeat=count):
+                route = (len(edges),) + edge_ids + (len(edges)+1,)
+                choices = [legs(a, b, depth-count) for a, b in zip(route, route[1:])]
+                for selected in product(*choices):
+                    mirrors = sum(len(ids) for ids, _ in selected)
+                    if not 1 <= mirrors <= depth-count or sum(d for _, d in selected) >= horizon:
+                        continue
+                    matrix, offset, unfolded, block = np.eye(2), np.zeros(2), [], 0
+                    for i, (ids, _) in enumerate(selected):
+                        for j in ids:
+                            a, b = planes[j]; tangent = (b-a)/np.linalg.norm(b-a)
+                            normal = np.array([-tangent[1], tangent[0]])
+                            offset += matrix @ (2*normal*np.dot(normal, a))
+                            matrix = matrix @ (np.eye(2)-2*np.outer(normal, normal))
+                            block += 1
+                        if i < count:
+                            xy, face, normal, owner, exterior = edges[edge_ids[i]]
+                            unfolded.append((matrix@xy+offset, matrix@face, matrix@normal,
+                                             owner+block*len(walls), exterior))
+                    end = np.r_[matrix@receiver[:2]+offset, 0.]
+                    if integrate_chain is not None:
+                        value = integrate_chain(unfolded, source, end)
+                    elif count == 1:
+                        value = integrate(unfolded[0], source, end, k, horizon, order)
+                    else:
+                        value = second(*unfolded, source, end, k, horizon, order)
+                    values[index, 3] += value
     return values
 
 
@@ -225,7 +254,7 @@ def draw_height(centers, scales, random, low, high):
     return z, pdf
 
 
-def sample_chain(edges, source, receiver, k, horizon, random):
+def sample_chain(edges, source, receiver, k, horizon, random, *, control_variate=False, roulette=0., stats=None):
     """Guide complete routes with outgoing/preceding angular peaks and exact PDFs.
 
     XY endpoints have z=0. Heights obey the remaining path-length ellipse;
@@ -240,7 +269,8 @@ def sample_chain(edges, source, receiver, k, horizon, random):
     if any(len(terms) == 0 for terms in phi):
         return 0j
     count = len(random)
-    heights, density, length = [np.zeros(count)], np.ones(count), np.zeros(count)
+    heights, densities, length = [np.zeros(count)], [], np.zeros(count)
+    density = np.ones(count)
     for i, edge in enumerate(edges):
         rs, rr, previous = radii[i], sum(radii[i+1:]), heights[-1]
         # Minimum remaining length follows the whole XY chain, not a shortcut.
@@ -267,34 +297,81 @@ def sample_chain(edges, source, receiver, k, horizon, random):
             scales = np.concatenate([scales, widths], axis=1)
         z, pdf = draw_height(centers, scales, random[:,i*2:i*2+2], low, high)
         density *= pdf
+        densities.append(density.copy())
         length += np.hypot(rs, z-previous)
         heights.append(z)
     heights.append(np.zeros(count))
     length += np.hypot(radii[-1], heights[-2])
-    gain = np.ones(count)
+    active, gain, reweight = np.arange(count), np.ones(count), np.ones(count)
     for i, edge in enumerate(edges):
-        zs, zr = heights[i]-heights[i+1], heights[i+2]-heights[i+1]
+        if stats is not None:
+            stats['edgeKernels'] = stats.get('edgeKernels', 0) + len(active)
+        zs, zr = (heights[i]-heights[i+1])[active], (heights[i+2]-heights[i+1])[active]
         gain *= kernel(phi[i], radii[i], radii[i+1], zs, zr, np.pi/edge[4])/np.hypot(radii[i], zs)
         if i and edges[i-1][3] == edge[3] and np.any(abs(edges[i-1][0]-edge[0]) < 1e-10):
             gain *= .5
-    gain /= np.hypot(radii[-1], heights[-2])
-    return 2*np.mean(gain*np.exp(-1j*k*length)/density)
+        if roulette > 0 and i+1 < len(edges):
+            survival = np.minimum(1., abs(2*gain/densities[i][active])/roulette)
+            keep = random[active, 2*len(edges)+i] < survival
+            reweight = reweight[keep]/survival[keep]
+            gain, active = gain[keep]/survival[keep], active[keep]
+    gain /= np.hypot(radii[-1], heights[-2][active])
+    value = gain*np.exp(-1j*k*length[active])
+    analytic = 0j
+    if control_variate and len(edges) == 1:
+        # Integrate a Lorentzian approximation to each angular peak exactly;
+        # sample the signed remainder. This changes variance, not the target.
+        rs, rr = radii; nu = np.pi/edges[0][4]; scale = rs*rr/(rs+rr)
+        width = 2*scale*abs(np.sin(phi[0]/2))/nu
+        coefficient = -scale**2*np.sin(phi[0])/(2*np.pi*nu*rs*rr)
+        phase = np.exp(-1j*k*(rs+rr))
+        value -= phase*np.sum(coefficient/(heights[1][active,None]**2+width**2), axis=1)
+        analytic = phase*np.sum(2*coefficient/width*np.arctan(high[0]/width))
+    elif control_variate and len(edges) == 2:
+        # Conditional final-edge peak: integrate z2 analytically at each z1,
+        # retaining the complete phase-bearing residual and its joint PDF.
+        rs, re, rr = radii; z1, z2 = heights[1][active], heights[2][active]
+        center = z1*rr/(re+rr)
+        m, n, l = np.hypot(rs,z1), np.hypot(re,z1-center), np.hypot(rr,center)
+        nu = np.pi/edges[-1][4]; scale = n*l/(n+l)
+        width = 2*scale[:,None]*abs(np.sin(phi[-1]/2))/nu
+        coefficient = -scale[:,None]**2*np.sin(phi[-1])/(2*np.pi*nu*(n*l)[:,None])
+        amplitude = kernel(phi[0],rs,re,-z1,center-z1,np.pi/edges[0][4])/m
+        if edges[0][3] == edges[1][3] and np.any(abs(edges[0][0]-edges[1][0]) < 1e-10):
+            amplitude *= .5
+        phase = amplitude*np.exp(-1j*k*(m+n+l))*reweight
+        value -= phase*np.sum(coefficient/((z2-center)[:,None]**2+width**2),axis=1)
+        integral = phase*np.sum(coefficient/width*(np.arctan((high[active]-center)[:,None]/width)-
+                                                  np.arctan((low[active]-center)[:,None]/width)),axis=1)
+        analytic = 2*np.sum(integral/densities[0][active])/count
+        if stats is not None:
+            stats['edgeKernels'] += len(active)
+    return analytic + 2*np.sum(value/density[active])/count
 
 
-def sampled(config, points, hz, count, seed, depth, *, random=None):
+def sampled(config, points, hz, count, seed, depth, *, random=None, control_variate=False,
+            roulette=0., stats=None, mirror_depth=2):
     """Offline planar experiment. Budget is samples per visible route, not rays/bin.
 
     Reuse a scrambled Sobol net across receiver positions. The edge kernel and
     geometric mirror paths are unchanged. Repeated edges are allowed after a
     different edge; the configured order and physical delay bound the walk.
-    Pure edge chains reach depth; mixed mirror/edge connections remain order 2.
+    Pure edge chains reach depth; mirror_depth selects mixed connection order.
     """
     from scipy.stats import qmc
-    if count < 1 or count & (count-1) or depth < 1:
+    if count < 1 or count & (count-1) or min(depth,mirror_depth) < 1 or not np.isfinite(roulette) or roulette < 0:
         raise ValueError('Samples must be a positive power of two; depth must be positive.')
+    dimensions = max(depth, mirror_depth-1)
     if random is None:
         # Center the finite Sobol grid so no sample lies on an ellipse endpoint.
-        random = qmc.Sobol(2*depth, scramble=True, bits=30, seed=seed).random_base2(count.bit_length()-1) + .5/2**30
+        random = qmc.Sobol((3 if roulette else 2)*dimensions, scramble=True, bits=30, seed=seed).random_base2(count.bit_length()-1) + .5/2**30
+    if (random.ndim != 2 or random.shape[0] != count or random.shape[1] < (3 if roulette else 2)*dimensions or
+            not np.isfinite(random).all() or np.any((random <= 0) | (random >= 1))):
+        raise ValueError('Provide enough finite open-unit-interval sampling dimensions for every path.')
+    def estimate(chain, start, end):
+        draws = random if not roulette else np.c_[random[:,:2*len(chain)], random[:,2*dimensions:2*dimensions+len(chain)]]
+        return sample_chain(chain, start, end, k, horizon, draws,
+                            control_variate=control_variate, roulette=roulette, stats=stats)
     edges, source, walls = corners(config['walls']), np.array(config['source']), config['walls']
     k = 2*np.pi*hz/config['speedOfSound']
     horizon = config['maximumDelaySeconds']*config['speedOfSound']
@@ -306,7 +383,7 @@ def sampled(config, points, hz, count, seed, depth, *, random=None):
         if distance + np.linalg.norm(chain[-1][0]-receiver[:2]) >= horizon:
             return
         if visible(chain[-1][0], receiver, walls):
-            values[index, len(path)-1] += sample_chain(chain, source, receiver, k, horizon, random)
+            values[index, len(path)-1] += estimate(chain, source, receiver)
             routes[index, len(path)-1] += 1
         if len(path) < depth:
             for j in neighbors[path[-1]]:
@@ -315,9 +392,7 @@ def sampled(config, points, hz, count, seed, depth, *, random=None):
         for i, edge in enumerate(edges):
             if visible(source, edge[0], walls):
                 visit([i], receiver, index, np.linalg.norm(source[:2]-edge[0]))
-    def integrate(edge, start, end, k, horizon, order):
-        return sample_chain([edge], start, end, k, horizon, random)
-    connected = connections(config, points, hz, 0, integrate)
+    connected = connections(config, points, hz, 0, depth=mirror_depth, integrate_chain=estimate)
     return values, connected, routes
 
 
@@ -337,6 +412,10 @@ def validate():
         error = abs(estimate-value)/abs(value)
         assert error < 1e-4, ('sampled half-plane', hz, error)
         checks.append(dict(check='sampled half-plane', hz=hz, relativeError=float(error)))
+        corrected = sample_chain([edge], source, receiver, 2*np.pi*hz/343, 34.3, samples, control_variate=True)
+        error = abs(corrected-value)/abs(value)
+        assert error < 1e-4, ('peak control variate', hz, error)
+        checks.append(dict(check='peak control variate', hz=hz, relativeError=float(error)))
     # Near a shadow boundary, separately large GO/edge terms must cancel.
     field = []
     for delta in [-1e-6, 1e-6]:
@@ -361,6 +440,10 @@ def validate():
         error = np.linalg.norm(estimate-fine)/np.linalg.norm(fine)
         assert error < .01, ('sampled second order', hz, error)
         checks.append(dict(check='sampled second order', hz=hz, relativeError=float(error)))
+        corrected, _, _ = sampled(config, np.array([[3., 0, 0]]), hz, 65536, 17, 2, control_variate=True)
+        error = np.linalg.norm(corrected-fine)/np.linalg.norm(fine)
+        assert error < .01, ('conditional peak control variate', hz, error)
+        checks.append(dict(check='conditional peak control variate', hz=hz, relativeError=float(error)))
     config['source'] = [-3., .4, 0]
     receiver = np.array([[3., -.6, 0]])
     forward = evaluate(config, receiver, 250, 16)
@@ -388,6 +471,24 @@ def validate():
     error = np.linalg.norm(forward-reverse)/max(np.linalg.norm(forward), 1e-12)
     assert error < 1e-6, ('mixed-path reciprocity', error)
     checks.append(dict(check='mixed-path reciprocity', relativeError=float(error)))
+    forward = connections(config, receiver, 250, 8, depth=3)
+    config['source'], receiver = receiver[0].tolist(), np.array([config['source']])
+    reverse = connections(config, receiver, 250, 8, depth=3)
+    error = np.linalg.norm(forward-reverse)/np.linalg.norm(forward)
+    assert abs(forward[0,3]) > 1e-4 and error < 1e-5, ('third-order mixed reciprocity', error)
+    checks.append(dict(check='third-order mixed reciprocity', relativeError=float(error)))
+    chain = [corners([dict(center=[0,0,0],half=[1,1,1])])[i] for i in [0,2]]
+    source, receiver = np.array([-3.,.4,0]), np.array([3.,-.6,0]); k = 2*np.pi*250/343
+    target = second(*chain,source,receiver,k,34.3,16)
+    for threshold,cv in [(.2,False),(.2,True),(2.,False)]:
+        estimates=[]
+        for seed in range(32):
+            draws=qmc.Sobol(6,scramble=True,bits=30,seed=seed).random_base2(12)+.5/2**30
+            estimates.append(sample_chain(chain,source,receiver,k,34.3,draws,roulette=threshold,control_variate=cv))
+        error=abs(np.mean(estimates)-target); standard_error=np.std(estimates,ddof=1)/np.sqrt(len(estimates))
+        assert error < 5*standard_error+1e-7, ('roulette mean',threshold,cv,error,standard_error)
+        checks.append(dict(check='roulette mean',threshold=threshold,controlVariate=cv,
+                           absoluteError=float(error),standardError=float(standard_error)))
     return checks
 
 
@@ -402,6 +503,9 @@ def main():
     parser.add_argument('--samples', type=int, help='Use guided samples per visible edge chain instead of refined quadrature.')
     parser.add_argument('--seed', type=int, default=17)
     parser.add_argument('--depth', type=int, default=2, help='Pure edge orders for --samples; mixed paths remain order 2.')
+    parser.add_argument('--mirror-depth', type=int, default=2, help='Total event order of mirror/mixed connections.')
+    parser.add_argument('--control-variate', action='store_true', help='Analytic angular-peak subtraction for one/two-edge paths; sample the remainder.')
+    parser.add_argument('--roulette', type=float, default=0., help='Continuation pressure-weight scale; zero disables stochastic termination.')
     args = parser.parse_args()
     if args.validate:
         if args.output.exists():
@@ -414,6 +518,8 @@ def main():
         return
     if args.scene is None or args.points is None:
         parser.error('Field evaluation requires --scene and --points.')
+    if args.samples is None and (args.control_variate or args.roulette):
+        parser.error('Control variates and roulette require --samples.')
     if any(args.output.with_suffix(suffix).exists() for suffix in ['.npz', '.json']):
         raise FileExistsError('Preserve earlier measurements; choose a fresh output stem.')
     config = json.loads(args.scene.read_text())
@@ -439,21 +545,26 @@ def main():
     started = time.perf_counter()
     if args.samples is None:
         values = evaluate(config, points, args.hz, args.order)
-        connected = connections(config, points, args.hz, args.order)
+        connected = connections(config, points, args.hz, args.order, depth=args.mirror_depth)
         routes = np.empty((len(points), 0), int)
     else:
-        values, connected, routes = sampled(config, points, args.hz, args.samples, args.seed, args.depth)
+        values, connected, routes = sampled(config, points, args.hz, args.samples, args.seed, args.depth,
+            control_variate=args.control_variate, roulette=args.roulette, mirror_depth=args.mirror_depth)
     assert np.isfinite(values).all() and np.isfinite(connected).all()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output.with_suffix('.npz'), pressure=values, connections=connected, points=points, indices=args.points, routes=routes)
     stats = dict(seconds=time.perf_counter()-started, hz=args.hz, quadratureOrder=args.order,
                  orders=list(range(1, values.shape[1]+1)), sceneSha256=hashlib.sha256(args.scene.read_bytes()).hexdigest(),
                  solverSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                 connectionSlots=['direct', 'mirror', 'mirror-mirror', 'mirror-edge + edge-mirror'],
-                 scope='Offline rigid planar paths. Mixed reflections reach order 2; not a full-wave reference.')
+                 connectionSlots=['direct', 'mirror', 'multiple mirrors', 'mixed mirrors/edges'],
+                 mirrorDepth=args.mirror_depth, controlVariate=args.control_variate, roulette=args.roulette,
+                 scope='Offline rigid planar paths, not a full-wave reference or scalable runtime enumerator.')
     if args.samples is not None:
+        evaluations = np.arange(1,args.depth+1)
+        if args.control_variate and args.depth >= 2:
+            evaluations[1] += 1  # Conditional control evaluates the preceding kernel again.
         stats.update(samplesPerRoute=args.samples, seed=args.seed, quadratureOrder=None,
-                     edgeKernelEvaluationUpperBound=int(args.samples*(routes*np.arange(1,args.depth+1)).sum()),
+                     edgeKernelEvaluationUpperBound=int(args.samples*(routes*evaluations).sum()),
                      budgetScope='Pure edge kernel evaluations only; excludes visibility and mixed mirror connections.')
     args.output.with_suffix('.json').write_text(json.dumps(stats, indent=2)+'\n')
     print(stats, flush=True)

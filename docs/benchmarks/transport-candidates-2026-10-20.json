@@ -1,0 +1,675 @@
+{
+  "axial": {
+    "checks": [
+      {
+        "check": "infinite recurrence versus explicit images",
+        "relativeError": 1.1769282174327658e-14
+      },
+      {
+        "check": "finite support, lossless/zero/complex reflection and source node",
+        "passed": true
+      }
+    ],
+    "closedSeconds": 0.00013612500333692878,
+    "explicitSeconds": 0.040791332998196594,
+    "explicitRepeats": 512,
+    "scope": "Axial plane waves only; not a general 2.5D/3D cavity",
+    "sources": {
+      "transport_candidates.py": "5390176c900f8b9fa8a0a1e61a14f6197b677bed750caadc156d3fd8439bb784",
+      "edge_integral.py": "fe6bd333ce36a8eeefbfdcec37f034661cc6ec52052b72877cb66c11e4dc4e5d",
+      "planar_wave.py": "16fb87aeb190612d08ed35617b174691b12d3f9ff1f8b3045845ecaf620d75eb"
+    }
+  },
+  "cylinder": {
+    "modes": [
+      {
+        "terms": 4,
+        "modes": 9,
+        "relativeError": 0.17045675834589497,
+        "buildSeconds": 0.00040058299782685935,
+        "applySeconds": 0.0007971250015543774,
+        "operatorBytes": 13968
+      },
+      {
+        "terms": 8,
+        "modes": 17,
+        "relativeError": 0.00012727087017718705,
+        "buildSeconds": 0.000814209008240141,
+        "applySeconds": 0.00045954099914524704,
+        "operatorBytes": 26384
+      },
+      {
+        "terms": 12,
+        "modes": 25,
+        "relativeError": 5.985677145674778e-09,
+        "buildSeconds": 0.001198791986098513,
+        "applySeconds": 1.879199407994747e-05,
+        "operatorBytes": 38800
+      },
+      {
+        "terms": 16,
+        "modes": 33,
+        "relativeError": 4.200861818316917e-13,
+        "buildSeconds": 0.0016284160083159804,
+        "applySeconds": 2.141699951607734e-05,
+        "operatorBytes": 51216
+      }
+    ],
+    "pointExtruded": [
+      {
+        "terms": 12,
+        "quadrature": 48,
+        "relativeError": 4.669051999858628e-09,
+        "seconds": 0.04449866700451821
+      },
+      {
+        "terms": 24,
+        "quadrature": 48,
+        "relativeError": 3.0102350536605463e-10,
+        "seconds": 0.09612379199825227
+      },
+      {
+        "terms": 24,
+        "quadrature": 64,
+        "relativeError": 2.514319661661775e-16,
+        "seconds": 0.12765125000441913
+      }
+    ],
+    "fem": [
+      {
+        "mesh": 0.4,
+        "relativeError": 0.0005727036231948538,
+        "dofs": 21356,
+        "meshSize": 0.4,
+        "order": 4,
+        "radius": 5.0,
+        "thickness": 3.0,
+        "strength": 2.0,
+        "meshSeconds": 0.08777212499990128,
+        "ngsolveVersion": "6.2.2608"
+      },
+      {
+        "mesh": 0.3,
+        "relativeError": 9.693204339517036e-05,
+        "dofs": 37954,
+        "meshSize": 0.3,
+        "order": 4,
+        "radius": 5.0,
+        "thickness": 3.0,
+        "strength": 2.0,
+        "meshSeconds": 0.12925945900497027,
+        "ngsolveVersion": "6.2.2608"
+      }
+    ],
+    "scope": "Isolated rigid cylinder; no multi-object coupling, fitted residual or runtime integration",
+    "sources": {
+      "transport_candidates.py": "5390176c900f8b9fa8a0a1e61a14f6197b677bed750caadc156d3fd8439bb784",
+      "edge_integral.py": "fe6bd333ce36a8eeefbfdcec37f034661cc6ec52052b72877cb66c11e4dc4e5d",
+      "planar_wave.py": "16fb87aeb190612d08ed35617b174691b12d3f9ff1f8b3045845ecaf620d75eb"
+    }
+  },
+  "edge-controls": {
+    "passed": true,
+    "checks": [
+      {
+        "check": "half-plane",
+        "hz": 0,
+        "absoluteError": 4.636291350834654e-13
+      },
+      {
+        "check": "sampled half-plane",
+        "hz": 0,
+        "relativeError": 1.8470702640356025e-12
+      },
+      {
+        "check": "peak control variate",
+        "hz": 0,
+        "relativeError": 7.858476656497294e-12
+      },
+      {
+        "check": "half-plane",
+        "hz": 250,
+        "absoluteError": 3.8128218909885053e-13
+      },
+      {
+        "check": "sampled half-plane",
+        "hz": 250,
+        "relativeError": 7.029746678075659e-07
+      },
+      {
+        "check": "peak control variate",
+        "hz": 250,
+        "relativeError": 7.029745377553013e-07
+      },
+      {
+        "check": "shadow boundary cancellation",
+        "absoluteChange": 6.663100998143484e-07
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 0,
+        "relativeChange": 1.5271272223813211e-06
+      },
+      {
+        "check": "sampled second order",
+        "hz": 0,
+        "relativeError": 8.990918213703707e-05
+      },
+      {
+        "check": "conditional peak control variate",
+        "hz": 0,
+        "relativeError": 6.680971755310766e-05
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 125,
+        "relativeChange": 1.3778478223857928e-06
+      },
+      {
+        "check": "sampled second order",
+        "hz": 125,
+        "relativeError": 0.00046479874782943997
+      },
+      {
+        "check": "conditional peak control variate",
+        "hz": 125,
+        "relativeError": 0.0002738760537661619
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 250,
+        "relativeChange": 7.409978192019742e-07
+      },
+      {
+        "check": "sampled second order",
+        "hz": 250,
+        "relativeError": 0.001716290321625014
+      },
+      {
+        "check": "conditional peak control variate",
+        "hz": 250,
+        "relativeError": 0.0020895437635753858
+      },
+      {
+        "check": "two-edge reciprocity",
+        "relativeError": 4.264441649824746e-08
+      },
+      {
+        "check": "analytic mirror distance",
+        "absoluteError": 0.0
+      },
+      {
+        "check": "analytic two-mirror distance",
+        "absoluteError": 0.0
+      },
+      {
+        "check": "mixed-path reciprocity",
+        "relativeError": 0.0
+      },
+      {
+        "check": "third-order mixed reciprocity",
+        "relativeError": 1.5989504715173833e-07
+      },
+      {
+        "check": "roulette mean",
+        "threshold": 0.2,
+        "controlVariate": false,
+        "absoluteError": 0.00016189490918539943,
+        "standardError": 0.00011404032041632616
+      },
+      {
+        "check": "roulette mean",
+        "threshold": 0.2,
+        "controlVariate": true,
+        "absoluteError": 0.00013196942896440752,
+        "standardError": 9.676268726261088e-05
+      },
+      {
+        "check": "roulette mean",
+        "threshold": 2.0,
+        "controlVariate": false,
+        "absoluteError": 5.248183266631548e-05,
+        "standardError": 0.00025832028557021676
+      }
+    ],
+    "sources": {
+      "transport_candidates.py": "5390176c900f8b9fa8a0a1e61a14f6197b677bed750caadc156d3fd8439bb784",
+      "edge_integral.py": "fe6bd333ce36a8eeefbfdcec37f034661cc6ec52052b72877cb66c11e4dc4e5d",
+      "planar_wave.py": "16fb87aeb190612d08ed35617b174691b12d3f9ff1f8b3045845ecaf620d75eb"
+    }
+  },
+  "barrier": {
+    "rows": [
+      {
+        "method": "baseline",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.03709419840480293,
+        "shadowRelativeL2": 0.1582326811702441,
+        "residualJumpP99": 0.030323129116112377,
+        "maximumPressure": 0.7388248365893181,
+        "medianSeconds": 0.05783049999445211,
+        "meanEdgeKernelEvaluations": 42240.0
+      },
+      {
+        "method": "control-variate",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.02884162579918522,
+        "shadowRelativeL2": 0.11317212564558635,
+        "residualJumpP99": 0.022855264357010404,
+        "maximumPressure": 0.7376826823277552,
+        "medianSeconds": 0.03369660449970979,
+        "meanEdgeKernelEvaluations": 60928.0
+      },
+      {
+        "method": "mixed-order-3",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.03709419840480293,
+        "shadowRelativeL2": 0.1582326811702441,
+        "residualJumpP99": 0.030323129116112377,
+        "maximumPressure": 0.7388248365893181,
+        "medianSeconds": 0.0787822709971806,
+        "meanEdgeKernelEvaluations": 42240.0
+      },
+      {
+        "method": "roulette",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.03723364522395659,
+        "shadowRelativeL2": 0.15923399487731643,
+        "residualJumpP99": 0.030483217247152066,
+        "maximumPressure": 0.7388483015794447,
+        "medianSeconds": 0.02650724999693921,
+        "meanEdgeKernelEvaluations": 40578.5
+      }
+    ],
+    "sceneSha256": "f3ac87a0e6bf0381f37bd59965bce026ebe2191ebd500372705d3687c1c59326",
+    "referenceSha256": "49d71ddacc455effe020506329b88cec4d82e272633f4147f2085829c77c8216",
+    "seeds": [
+      17,
+      65554,
+      131091,
+      196628
+    ],
+    "scope": "CPU planar route experiment, not GPU rays/bin; elapsed costs include connections",
+    "sources": {
+      "transport_candidates.py": "5390176c900f8b9fa8a0a1e61a14f6197b677bed750caadc156d3fd8439bb784",
+      "edge_integral.py": "fe6bd333ce36a8eeefbfdcec37f034661cc6ec52052b72877cb66c11e4dc4e5d",
+      "planar_wave.py": "16fb87aeb190612d08ed35617b174691b12d3f9ff1f8b3045845ecaf620d75eb"
+    }
+  },
+  "staggered": {
+    "rows": [
+      {
+        "method": "baseline",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.15300298406083432,
+        "shadowRelativeL2": 0.5415103289354631,
+        "residualJumpP99": 0.16063987456561427,
+        "maximumPressure": 0.7806026071776723,
+        "medianSeconds": 0.0813983750049374,
+        "meanEdgeKernelEvaluations": 107520.0
+      },
+      {
+        "method": "control-variate",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.15132332093892056,
+        "shadowRelativeL2": 0.5308445786322366,
+        "residualJumpP99": 0.1538193453777659,
+        "maximumPressure": 0.7795855590109142,
+        "medianSeconds": 0.09305918750760611,
+        "meanEdgeKernelEvaluations": 154368.0
+      },
+      {
+        "method": "mixed-order-3",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.1466295648685656,
+        "shadowRelativeL2": 0.662692292884575,
+        "residualJumpP99": 0.1073801650879911,
+        "maximumPressure": 0.7586795651179179,
+        "medianSeconds": 0.5859576454968192,
+        "meanEdgeKernelEvaluations": 170496.0
+      },
+      {
+        "method": "roulette",
+        "samplesPerRoute": 256,
+        "seeds": 4,
+        "points": 31,
+        "complexRelativeL2": 0.15323848048741887,
+        "shadowRelativeL2": 0.5412326252130418,
+        "residualJumpP99": 0.16025941367727858,
+        "maximumPressure": 0.7808999889689112,
+        "medianSeconds": 0.08171627050614916,
+        "meanEdgeKernelEvaluations": 103683.25
+      }
+    ],
+    "sceneSha256": "fd034343af84b7a674a0b6f23f73f811b6128dc9818905e427b64100560cc5bb",
+    "referenceSha256": "aba020b61056ba3ad2fe6cf765474ce11cc53e69e8aaffb9acac1fbe6b859643",
+    "seeds": [
+      17,
+      65554,
+      131091,
+      196628
+    ],
+    "scope": "CPU planar route experiment, not GPU rays/bin; elapsed costs include connections",
+    "sources": {
+      "transport_candidates.py": "5390176c900f8b9fa8a0a1e61a14f6197b677bed750caadc156d3fd8439bb784",
+      "edge_integral.py": "fe6bd333ce36a8eeefbfdcec37f034661cc6ec52052b72877cb66c11e4dc4e5d",
+      "planar_wave.py": "16fb87aeb190612d08ed35617b174691b12d3f9ff1f8b3045845ecaf620d75eb"
+    }
+  },
+  "budget": {
+    "rows": [
+      {
+        "family": "barrier",
+        "samplesPerRoute": 256,
+        "controlVariate": true,
+        "seeds": 16,
+        "complexRelativeL2": 0.03391004547254577,
+        "shadowRelativeL2": 0.14128221536818023,
+        "residualJumpP99": 0.026499279235349078,
+        "medianSeconds": 0.029474395501893014
+      },
+      {
+        "family": "barrier",
+        "samplesPerRoute": 512,
+        "controlVariate": false,
+        "seeds": 16,
+        "complexRelativeL2": 0.02860244301043029,
+        "shadowRelativeL2": 0.11517670710494789,
+        "residualJumpP99": 0.02160810038428875,
+        "medianSeconds": 0.03065431251161499
+      },
+      {
+        "family": "barrier",
+        "samplesPerRoute": 1024,
+        "controlVariate": false,
+        "seeds": 16,
+        "complexRelativeL2": 0.02411327672076047,
+        "shadowRelativeL2": 0.09038018418852582,
+        "residualJumpP99": 0.018201888773071738,
+        "medianSeconds": 0.04171122950356221
+      },
+      {
+        "family": "staggered",
+        "samplesPerRoute": 256,
+        "controlVariate": true,
+        "seeds": 16,
+        "complexRelativeL2": 0.1572536153508328,
+        "shadowRelativeL2": 0.5501036784682677,
+        "residualJumpP99": 0.16112632737173224,
+        "medianSeconds": 0.08853914598876145
+      },
+      {
+        "family": "staggered",
+        "samplesPerRoute": 512,
+        "controlVariate": false,
+        "seeds": 16,
+        "complexRelativeL2": 0.15790565714252544,
+        "shadowRelativeL2": 0.5556759422952644,
+        "residualJumpP99": 0.1645526281967441,
+        "medianSeconds": 0.0941172710081446
+      },
+      {
+        "family": "staggered",
+        "samplesPerRoute": 1024,
+        "controlVariate": false,
+        "seeds": 16,
+        "complexRelativeL2": 0.15516576222886663,
+        "shadowRelativeL2": 0.5429598144112494,
+        "residualJumpP99": 0.16241638252436344,
+        "medianSeconds": 0.13018435399862938
+      }
+    ],
+    "solverSha256": "f23a36fab6e4f6447b3666c8f5f2a275abc1a48b9fc13ebb0bbbf007a79151b6"
+  },
+  "rouletteDetail": {
+    "rows": [
+      {
+        "roulette": 0,
+        "controlVariate": false,
+        "meanReal": 0.019887642593034188,
+        "meanImag": 0.026727601004350877,
+        "absoluteError": 0.00016154259938450517,
+        "standardError": 0.0001138635436943602,
+        "meanEdgeKernels": 8192.0
+      },
+      {
+        "roulette": 0.2,
+        "controlVariate": false,
+        "meanReal": 0.019887934916056987,
+        "meanImag": 0.026727843462163038,
+        "absoluteError": 0.00016189490918539943,
+        "standardError": 0.00011404032041632616,
+        "meanEdgeKernels": 8114.9375
+      },
+      {
+        "roulette": 0.2,
+        "controlVariate": true,
+        "meanReal": 0.01987787270275319,
+        "meanImag": 0.026699162653083808,
+        "absoluteError": 0.00013196942896440752,
+        "standardError": 9.676268726261088e-05,
+        "meanEdgeKernels": 12133.875
+      },
+      {
+        "roulette": 2,
+        "controlVariate": false,
+        "meanReal": 0.019847487319705266,
+        "meanImag": 0.026547862786050046,
+        "absoluteError": 5.248183266631548e-05,
+        "standardError": 0.00025832028557021676,
+        "meanEdgeKernels": 5869.21875
+      }
+    ],
+    "seeds": 32,
+    "samplesPerSeed": 4096,
+    "reference": [
+      0.019810875158854768,
+      0.026585464547150724
+    ],
+    "solverSha256": "f23a36fab6e4f6447b3666c8f5f2a275abc1a48b9fc13ebb0bbbf007a79151b6"
+  },
+  "pilot64": {
+    "barrier": {
+      "rows": [
+        {
+          "method": "baseline",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.0692541136797989,
+          "shadowRelativeL2": 0.32379098044098575,
+          "residualJumpP99": 0.052432840457189364,
+          "maximumPressure": 0.7433840094323193,
+          "medianSeconds": 0.024073145497823134,
+          "meanEdgeKernelEvaluations": 10560.0
+        },
+        {
+          "method": "control-variate",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.06778547113252191,
+          "shadowRelativeL2": 0.3142711772093506,
+          "residualJumpP99": 0.0454162079592751,
+          "maximumPressure": 0.7400290192432908,
+          "medianSeconds": 0.02659191651036963,
+          "meanEdgeKernelEvaluations": 15232.0
+        },
+        {
+          "method": "mixed-order-3",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.0692541136797989,
+          "shadowRelativeL2": 0.32379098044098575,
+          "residualJumpP99": 0.052432840457189364,
+          "maximumPressure": 0.7433840094323193,
+          "medianSeconds": 0.07856987500417745,
+          "meanEdgeKernelEvaluations": 10560.0
+        },
+        {
+          "method": "roulette",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.0693717204116722,
+          "shadowRelativeL2": 0.324804966260558,
+          "residualJumpP99": 0.05230889489956284,
+          "maximumPressure": 0.7437610631114709,
+          "medianSeconds": 0.021834999999555293,
+          "meanEdgeKernelEvaluations": 10155.25
+        }
+      ],
+      "sceneSha256": "f3ac87a0e6bf0381f37bd59965bce026ebe2191ebd500372705d3687c1c59326",
+      "referenceSha256": "49d71ddacc455effe020506329b88cec4d82e272633f4147f2085829c77c8216",
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "scope": "CPU planar route experiment, not GPU rays/bin; elapsed costs include connections",
+      "sources": {
+        "transport_candidates.py": "06a9e12c48690092bc51999f09847fd6a467dae9610bae82aba9de5fe7ff6143",
+        "edge_integral.py": "d6c31ad07263a52177583aae8062a1342ea708631efefe653f64ab5a9d51dbd5"
+      }
+    },
+    "staggered": {
+      "rows": [
+        {
+          "method": "baseline",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.14519378372639183,
+          "shadowRelativeL2": 0.5634962877045997,
+          "residualJumpP99": 0.1527946503962962,
+          "maximumPressure": 0.7777865565347486,
+          "medianSeconds": 0.06806916699861176,
+          "meanEdgeKernelEvaluations": 26880.0
+        },
+        {
+          "method": "control-variate",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.14714668019695476,
+          "shadowRelativeL2": 0.5674186137398831,
+          "residualJumpP99": 0.15750995287082895,
+          "maximumPressure": 0.7842296151807754,
+          "medianSeconds": 0.0766208330023801,
+          "meanEdgeKernelEvaluations": 38592.0
+        },
+        {
+          "method": "mixed-order-3",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.1770141795987414,
+          "shadowRelativeL2": 0.7361107272420783,
+          "residualJumpP99": 0.14474085671781456,
+          "maximumPressure": 0.8058754539424524,
+          "medianSeconds": 0.6081851875060238,
+          "meanEdgeKernelEvaluations": 42624.0
+        },
+        {
+          "method": "roulette",
+          "samplesPerRoute": 64,
+          "seeds": 4,
+          "points": 31,
+          "complexRelativeL2": 0.1452246930719905,
+          "shadowRelativeL2": 0.5652472998241638,
+          "residualJumpP99": 0.1524758188424683,
+          "maximumPressure": 0.7770548306861426,
+          "medianSeconds": 0.0745208750013262,
+          "meanEdgeKernelEvaluations": 25887.25
+        }
+      ],
+      "sceneSha256": "fd034343af84b7a674a0b6f23f73f811b6128dc9818905e427b64100560cc5bb",
+      "referenceSha256": "aba020b61056ba3ad2fe6cf765474ce11cc53e69e8aaffb9acac1fbe6b859643",
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "scope": "CPU planar route experiment, not GPU rays/bin; elapsed costs include connections",
+      "sources": {
+        "transport_candidates.py": "06a9e12c48690092bc51999f09847fd6a467dae9610bae82aba9de5fe7ff6143",
+        "edge_integral.py": "d6c31ad07263a52177583aae8062a1342ea708631efefe653f64ab5a9d51dbd5"
+      }
+    }
+  },
+  "gpu": {
+    "total": "40",
+    "passed": "40",
+    "failed": "0",
+    "skipped": "0",
+    "duration": "39.6156445",
+    "timings": [
+      {
+        "method": "rigid diffraction",
+        "baselineMs": 0.4454,
+        "changedMs": 0.5209,
+        "rigidMaxDifference": 0.0,
+        "iterations": 41
+      },
+      {
+        "method": "legacy surface",
+        "baselineMs": 0.436,
+        "changedMs": 0.4464,
+        "rigidMaxDifference": 0.0,
+        "iterations": 41
+      }
+    ],
+    "timingScope": "41 alternating warmed solve+readback calls per version, 5 bins, 128 rays/bin, 4 bounces. CPU submission and readback included; no realtime/audio deadline claim.",
+    "rejectedFastBranch": [
+      {
+        "method": "rigid diffraction",
+        "baselineMs": 0.4434,
+        "changedMs": 0.5039,
+        "rigidMaxDifference": 0.0,
+        "iterations": 41
+      },
+      {
+        "method": "legacy surface",
+        "baselineMs": 0.5527000000000001,
+        "changedMs": 0.7054,
+        "rigidMaxDifference": 0.0,
+        "iterations": 41
+      }
+    ],
+    "rejectedFastBranchReason": "Extra opaque-material branches did not improve measured cost; restored the simpler version tested in gpu-final.xml.",
+    "sourceSha256": {
+      "Assets/Shaders/Transport.hlsl": "4c7e449882c5f17ef5f40f5a591ea5de92e89ca424e24142534316e2d1b7e618",
+      "Assets/Scripts/Simulation/Take.cs": "b5a3035d9ad30fb3387143accf9a97d786d1e845ab979371002551080b3090d7",
+      "Assets/Scripts/Simulation/TakeRender.cs": "884465429386168aa23d834f9ca2829d62fdcd834ea906d1fa05a5e0d8420476",
+      "Assets/Tests/Editor/RayTransportChecks.cs": "766398247b9c5a26d9334168f0a2f6adb6a1b4d40e04cabbe7b1f715bd53ec45"
+    },
+    "fixtureSha256": "e6665cfce732c04d2d4a40b552a79bf7914246185c412aac436053c9034ef9c5"
+  },
+  "baselineCommit": "c309d6b",
+  "date": "2026-10-20",
+  "status": "Runtime pressure-branch correction; other candidates remain opt-in offline experiments.",
+  "limits": [
+    "Rigid planar walk references use point sources with infinite extrusion, not true 2D line sources.",
+    "4-seed equal-sample ablations are not equal-compute comparisons; consult the 16-seed budget sweep.",
+    "Mixed order 3 adds mirror-containing paths while pure edge depth stays 2; this is not complete third-order transport.",
+    "No universal sampler win, general cavity model, arbitrary-object wave correction, multiplayer audio or live artifact-free validation is claimed.",
+    "Historical intermediate hashes are retained. Later changes add input/finite-output guards, expanded controls and correct CLI work accounting; estimator equations are unchanged."
+  ]
+}
