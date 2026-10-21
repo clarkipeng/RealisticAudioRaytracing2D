@@ -18,6 +18,8 @@ The existing `TracePaths` already has this loop structure; alternate paths are n
 
 **GPU follow-up, 2026-10-21:** the pure-edge height integration now has an opt-in HLSL implementation with shared CPU route planning, identical sample coordinates, parallel complex reduction and full-grid CPU parity checks. It is an offline stationary planar experiment; direct/mirror/mixed work remains on CPU, and live transport/finite-3D contracts are unchanged. [Measured 2D maps and explicit stage costs](cleanup-results.md#complete-route-gpu-integration--2026-10-21).
 
+**Sampling tuning, 2026-10-21:** a narrower height proposal gives modest improvements at 65,536 samples, with mixed held-out/seed results and little difference at 1,048,576. Keep width scaling opt-in and accept the numerical inverse-CDF correction; do not change the physical kernel or declare the field training truth. [Selection, held-out checks and whole-map results](cleanup-results.md#gpu-sampling-tuning--2026-10-21).
+
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
 **Invariant:** the take determines scene and source inputs; the render configuration determines computation. Changing quality never changes the recorded experiment.

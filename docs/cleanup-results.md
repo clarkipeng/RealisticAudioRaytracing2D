@@ -1,5 +1,74 @@
 # Cleanup validation and measured bottlenecks
 
+## GPU sampling tuning — 2026-10-21
+
+**Narrower height proposals give a modest low-budget improvement.** A quarter-width proposal reduced full-map complex-pressure error from 32.02% to 27.90% for nine boxes and 83.23% to 78.76% for 25 boxes at the same 65,536 samples per receiver. Held-out improvements are smaller, some seed/amplitude results regress, and the difference nearly disappears at 1,048,576 samples. Keep `--proposal-scale .25` optional; the default remains `1`. The live renderer is unchanged.
+
+![Actual 2D fields before and after tuning](benchmarks/gpu-sampling-tuning-2026-10-21.png)
+
+### What changes
+
+```text
+width = existing geometric proposal width × proposalScale
+height ~ truncated Cauchy mixture(width)
+contribution = unchanged signed pressure(height) / exact proposal density(height, width)
+```
+
+Scaling narrows or widens where height samples fall on each selected edge. Every allowed height retains sampling support, and the PDF uses the same width as the draw. Route selection, diffraction coefficients, distance spreading, phase, physical delay support and cached direct/mirror/mixed fields are unchanged. This is sampling tuning, not amplitude fitting or removal of paths.
+
+Narrowing also exposed a float precision problem: interpolating large opposite height endpoints loses precision around a narrow peak. The shader now rotates the nearer endpoint direction and recovers height from the direction ratio. This is the same inverse CDF; it avoids that subtraction. A four-edge per-sample CPU comparison originally failed at 0.36% relative error and now passes the original tolerance. The change improves full-grid CPU/GPU agreement to 0.00018–0.00036% relative L2 at the original width.
+
+Four existing executable files change by **five net lines**. There is one optional proposal-width parameter and a versioned benchmark input header; both prior and new input versions are tested. There are no new runtime components, packages or live quality modes. CPU control variates were screened but not added to the GPU.
+
+### Selection and held-out checks
+
+The screen tested widths **0.125, 0.25, 0.5, 1, 2 and 4**, plus the existing CPU control-variate option at width 1. It used 25/24/24 predetermined tuning positions from the earlier coarse lattices, seeds 17/65554 and 65,536 samples per position. Width 0.25 had the lowest geometric mean of per-scene mean complex error relative to baseline: 0.907. The control variate scored 0.974 while taking 36–41% more CPU wall time in the larger tuning cases. All candidate results are retained.
+
+Width 0.25 was fixed before GPU validation on the remaining **73/72/70 lattice positions**, with seeds 17, 65554, 131091 and 196628. These are positions held out of this sweep in existing scenes, not new scene families. Tables average each seed's error; they do not first average the pressure fields. The final column uses only the two seeds not used in selection.
+
+| Boxes | Held-out positions | Mean complex error: original → quarter | Positions within ±3 dB: original → quarter | Fresh-seed complex error: original → quarter |
+|---:|---:|---:|---:|---:|
+| 1 | 73 | 1.48% → 1.49% | 100.0% → 100.0% | 1.48% → 1.48% |
+| 9 | 72 | 28.53% → 26.98% | 61.8% → 66.7% | 25.70% → 26.46% |
+| 25 | 70 | 58.69% → 56.41% | 38.6% → 37.9% | 57.77% → 56.35% |
+
+The nine-box fresh-seed complex score regresses slightly, and the 25-box amplitude score also declines slightly. Across all four seeds, measured pressure variation falls from 19.22% to 16.25% of reference L2 norm for nine boxes, but stays about 36% for 25 boxes. This evidence does not establish a universally better default or stable moving-listener audio.
+
+### Whole-map accuracy and cost
+
+Full maps contain 1,014/960/880 evaluated receivers, use seed 17 and share the absolute pressure scale shown. Frequencies, wave fields, physical model and cached connection fields match the prior study. These are 2D maps of a point source with infinitely extruded walls, not a line-source wave or finite 3D scene. Complex error includes amplitude and phase; within ±3 dB measures amplitude only.
+
+| Boxes | Complex error at 65,536: original → quarter | Within ±3 dB at 65,536: original → quarter | Complex error at 1,048,576: original → quarter |
+|---:|---:|---:|---:|
+| 1 | 1.85% → 1.85% | 100.0% → 100.0% | 1.83% → 1.83% |
+| 9 | 32.02% → 27.90% | 58.9% → 66.1% | 22.29% → 22.44% |
+| 25 | 83.23% → 78.76% | 31.4% → 33.1% | 62.18% → 62.04% |
+
+Warm median integration/reduction/readback time on Apple M5 / Metal, per position at **one frequency**. Both widths run the corrected inverse CDF and identical sample counts. Similar measured costs support a matched-budget comparison; timing fluctuations are not claimed as an algorithmic speedup. Cold compilation/allocation, initial random upload, CPU preparation and the separate connection stage are excluded from the GPU medians.
+
+| Boxes | 65,536: original → quarter | 1,048,576: original → quarter | Quarter-width CPU preparation, whole 65K map |
+|---:|---:|---:|---:|
+| 1 | 0.226 → 0.227 ms | 1.000 → 0.997 ms | 0.20 s |
+| 9 | 0.243 → 0.235 ms | 1.155 → 1.151 ms | 8.70 s |
+| 25 | 0.255 → 0.237 ms | 1.168 → 1.194 ms | 14.73 s |
+
+The cached CPU direct/mirror/mixed stage separately took 0.36/30.69/213.96 seconds in the prior run. Route geometry/packing remains a CPU cost. The GPU's millisecond figures must not be presented as whole-pipeline or full-band realtime costs.
+
+### Validation, decision and reproduction
+
+**30 CPU checks pass**, including independent DC/250 Hz quadrature for the narrow proposal. **12 GPU numerical cases** cover six conditions at both widths, with captured per-sample parity checks; **36 GPU field measurement cases** and the existing 115-angle numerical control pass. Three Unity invocations report 13/25/13 passed, zero failures or skips. Full original-width maps and seed-17 held-out probes at both widths also pass CPU aggregate parity. Tolerances were not weakened. The existing Metal potential-uninitialized-return warning remains; zero-support controls and finite-value checks pass.
+
+Accept the inverse-CDF precision fix; retain the quarter-width setting as an explicit low-budget experiment. Neither width makes the large-scene field suitable as acoustic training truth. The high-budget residual needs an order-resolved comparison separating sampling noise from pure-edge/mixed-path truncation and physical approximation. This sweep does not prove which dominates, and does not validate other frequencies, materials, moving geometry, DSP or finite 3D.
+
+```sh
+python tools/gpu_routes.py prepare /tmp/quarter-width --scene /path/to/scene.json \
+  --samples 65536 --depth 2 --seed 17 --hz 250 --proposal-scale .25 --cpu
+```
+
+Use the existing isolated Unity measurement runner, then `python tools/gpu_routes.py check /tmp/quarter-width`. Reproduce the sweep from the archived `pilot.py`, `measure.py`, `score.py` and `maps.py`, alongside the preceding GPU-route/spatial-reference archives. Run silently with one low-priority numerical/GPU job, no user-editor interaction or audio playback.
+
+[Ledger](benchmarks/gpu-sampling-tuning-2026-10-21.json) · [Raw candidates, fields, tests and reproduction scripts](benchmarks/gpu-sampling-tuning-2026-10-21.zip). Large request buffers are omitted and reproducible from recorded inputs; hashes are retained. The prior archive retains the old inverse-CDF implementation and original measurements.
+
 ## Complete-route GPU integration — 2026-10-21
 
 **The offline pure-edge integrator is now ported to HLSL.** At 65,536 samples per receiver, its complex-pressure result matches the CPU to 0.00237–0.00244% relative L2 across all 2,854 receiver positions. CPU route planning is shared; it has not been moved to the GPU. Direct/mirror/mixed computation also remains a separate CPU stage. The live renderer is unchanged.

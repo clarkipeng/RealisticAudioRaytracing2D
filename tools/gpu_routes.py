@@ -31,11 +31,12 @@ def steps(chain, source, receiver, horizon):
         if i and chain[i-1][3]==e[3] and np.any(abs(chain[i-1][0]-e[0])<1e-10): shared *= .5
     return result, shared
 
-def prepare(output, scene, count, depth, seed, hz, indices=None, cpu=False, capture=False):
+def prepare(output, scene, count, depth, seed, hz, indices=None, cpu=False, capture=False, *, proposal_scale=1.):
     output.mkdir(parents=True,exist_ok=True)
     if (output/'requests.bin').exists(): raise FileExistsError(output/'requests.bin')
     if count<1 or count&(count-1) or depth<1 or not np.isfinite(hz) or hz<0:
         raise ValueError('Positive power-of-two sample count, positive depth and nonnegative finite frequency required.')
+    if not np.isfinite(proposal_scale) or proposal_scale<=0: raise ValueError('Positive finite proposal scale required.')
     config = json.loads(scene.read_text())
     if config.get('physicalModel','point-extruded')!='point-extruded': raise ValueError('Planar extruded boxes only.')
     allpoints = np.array(config['points']).reshape(-1,3)
@@ -52,12 +53,12 @@ def prepare(output, scene, count, depth, seed, hz, indices=None, cpu=False, capt
                      np.nextafter(np.float32(1),np.float32(0))).astype(float)
     geometry_seconds = time.perf_counter()-started
     horizon, k = config['maximumDelaySeconds']*config['speedOfSound'], 2*np.pi*hz/config['speedOfSound']
-    metadata = dict(samples=count,depth=depth,seed=seed,hz=hz,indices=ids.tolist(),sceneSha256=sha(scene),
+    metadata = dict(samples=count,depth=depth,seed=seed,hz=hz,proposalScale=proposal_scale,indices=ids.tolist(),sceneSha256=sha(scene),
         solverSha256=sha(Path(edge.__file__)),driverSha256=sha(Path(__file__)),geometrySeconds=geometry_seconds,
         scope='Pure-edge integration. CPU route preparation; GPU height sampling, signed kernels, phase and reduction. No direct/mirror/mixed field.',probes=[])
     maxroutes=maxsteps=0; expected=[]; contributions=[]; offsets=[0]
     with (output/'requests.bin').open('wb') as binary:
-        binary.write(bytes(40)); binary.write(random[:,:2*depth].astype('<f4').tobytes())
+        binary.write(bytes(44)); binary.write(random[:,:2*depth].astype('<f4').tobytes())
         for point, receiver in enumerate(points):
             started=time.perf_counter(); jobs=[]; records=[]; end=0; value=0j; cpu_seconds=0.
             for path, selected, weight in edge.route_samples(edges,neighbors,starts,receiver,walls,depth,count,random[:,-1]):
@@ -67,9 +68,9 @@ def prepare(output, scene, count, depth, seed, hz, indices=None, cpu=False, capt
                 records.extend(data)
                 if cpu or capture:
                     before=time.perf_counter()
-                    value+=edge.sample_chain(chain,source,receiver,k,horizon,random[:selected])*weight
+                    value+=edge.sample_chain(chain,source,receiver,k,horizon,random[:selected],proposal_scale=proposal_scale)*weight
                     if capture:
-                        contributions.extend(edge.sample_chain(chain,source,receiver,k,horizon,draw[None,:])*weight/selected
+                        contributions.extend(edge.sample_chain(chain,source,receiver,k,horizon,draw[None,:],proposal_scale=proposal_scale)*weight/selected
                                              for draw in random[:selected])
                     cpu_seconds+=time.perf_counter()-before
             assert end in (0,count)
@@ -80,7 +81,7 @@ def prepare(output, scene, count, depth, seed, hz, indices=None, cpu=False, capt
             metadata['probes'].append(dict(point=point,routes=len(jobs),steps=len(records),
                 preparationSeconds=time.perf_counter()-started-cpu_seconds,cpuIntegrationSeconds=cpu_seconds))
         binary.seek(0)
-        binary.write(struct.pack('<8I2f',0x524d4331,2*depth,count,len(points),maxroutes,maxsteps,count,int(capture),k,horizon))
+        binary.write(struct.pack('<8I3f',0x524d4332,2*depth,count,len(points),maxroutes,maxsteps,count,int(capture),k,horizon,proposal_scale))
     metadata['requestBytes']=(output/'requests.bin').stat().st_size
     metadata['requestSha256']=sha(output/'requests.bin')
     save(output/'metadata.json',metadata);save(output/'scene.json',config)
@@ -94,7 +95,7 @@ def check(output):
     assert sha(output/'requests.bin')==meta['requestSha256']
     np.testing.assert_array_equal(data['point'],np.arange(len(cpu['points'])))
     actual=data['real']+1j*data['imag']; assert np.isfinite(actual).all()
-    report=dict(probes=len(actual),samples=meta['samples'],depth=meta['depth'],hz=meta['hz'],
+    report=dict(probes=len(actual),samples=meta['samples'],depth=meta['depth'],hz=meta['hz'],proposalScale=meta.get('proposalScale',1.),
         medianSolveMs=float(np.median(data['solve_seconds'])*1000),
         p95SolveMs=float(np.quantile(data['solve_seconds'],.95)*1000),gpuBytes=int(data['gpu_bytes'].max()),
         cpuPreparationSeconds=meta['geometrySeconds']+sum(r['preparationSeconds'] for r in meta['probes']),
@@ -122,8 +123,9 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('command',choices=['prepare','check']);parser.add_argument('output',type=Path)
     parser.add_argument('--scene',type=Path);parser.add_argument('--samples',type=int,default=65536);parser.add_argument('--depth',type=int,default=2)
     parser.add_argument('--seed',type=int,default=17);parser.add_argument('--hz',type=float,default=250);parser.add_argument('--points',type=int,nargs='+')
+    parser.add_argument('--proposal-scale',type=float,default=1.,help='Multiply height proposal widths; exact PDFs preserve the physical integral.')
     parser.add_argument('--cpu',action='store_true');parser.add_argument('--capture',action='store_true');args=parser.parse_args()
     if args.command=='check':check(args.output)
     else:
         if args.scene is None:parser.error('--scene is required for prepare')
-        prepare(args.output,args.scene,args.samples,args.depth,args.seed,args.hz,args.points,args.cpu,args.capture)
+        prepare(args.output,args.scene,args.samples,args.depth,args.seed,args.hz,args.points,args.cpu,args.capture,proposal_scale=args.proposal_scale)

@@ -54,10 +54,12 @@ public partial class TakeChecks
         Assert.That(Application.isBatchMode,Is.True);RequireGpu();
         Assert.That(Marshal.SizeOf<RouteJob>(),Is.EqualTo(16));Assert.That(Marshal.SizeOf<RouteStep>(),Is.EqualTo(48));
         using var input=new BinaryReader(File.OpenRead(Path.Combine(directory,"requests.bin")));
-        Assert.That(input.ReadUInt32(),Is.EqualTo(0x524d4331));
+        uint version=input.ReadUInt32();Assert.That(version,Is.EqualTo(0x524d4331).Or.EqualTo(0x524d4332));
         int dimensions=input.ReadInt32(),draws=input.ReadInt32(),probes=input.ReadInt32(),
             maxRoutes=input.ReadInt32(),maxSteps=input.ReadInt32(),maxSamples=input.ReadInt32(),capture=input.ReadInt32();
         float waveNumber=input.ReadSingle(),horizon=input.ReadSingle();
+        float proposalScale=version==0x524d4332?input.ReadSingle():1f;
+        Assert.That(float.IsFinite(proposalScale)&&proposalScale>0,Is.True);
         var shader=UnityEngine.Object.Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Tests/Editor/RouteIntegration.compute"));
         try
         {
@@ -78,6 +80,7 @@ public partial class TakeChecks
             shader.SetBuffer(reduce,"Result",result);
             shader.SetInt("Dimensions",dimensions);shader.SetInt("Capture",capture);
             shader.SetFloat("WaveNumber",waveNumber);shader.SetFloat("Horizon",horizon);
+            shader.SetFloat("ProposalScale",proposalScale);
             using var csv=new StreamWriter(Path.Combine(directory,"gpu.csv"));
             using var debug=capture!=0?new BinaryWriter(File.Create(Path.Combine(directory,"contributions.bin"))):null;
             csv.WriteLine("point,real,imag,input_seconds,upload_seconds,solve_seconds,gpu_bytes");

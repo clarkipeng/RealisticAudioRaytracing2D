@@ -254,7 +254,7 @@ def draw_height(centers, scales, random, low, high):
     return z, pdf
 
 
-def sample_chain(edges, source, receiver, k, horizon, random, *, control_variate=False, roulette=0., stats=None):
+def sample_chain(edges, source, receiver, k, horizon, random, *, control_variate=False, roulette=0., stats=None, proposal_scale=1.):
     """Guide complete routes with outgoing/preceding angular peaks and exact PDFs.
 
     XY endpoints have z=0. Heights obey the remaining path-length ellipse;
@@ -295,7 +295,7 @@ def sample_chain(edges, source, receiver, k, horizon, random, *, control_variate
                                 np.hypot(rs, incoming-previous)[:,None]/(np.pi/edges[i-1][4]))
             centers = np.concatenate([centers, np.broadcast_to(incoming[:,None], widths.shape)], axis=1)
             scales = np.concatenate([scales, widths], axis=1)
-        z, pdf = draw_height(centers, scales, random[:,i*2:i*2+2], low, high)
+        z, pdf = draw_height(centers, scales*proposal_scale, random[:,i*2:i*2+2], low, high)
         density *= pdf
         densities.append(density.copy())
         length += np.hypot(rs, z-previous)

@@ -399,6 +399,8 @@ The offline `tools/edge_integral.py --samples N --route-budget` diagnostic spend
 
 `tools/gpu_routes.py` prepares and checks a matching offline HLSL integrator. Route planning stays shared with the CPU; height sampling, signed pressure/phase and reduction run on the GPU. [2D maps, parity checks, timings and reproduction](docs/cleanup-results.md#complete-route-gpu-integration--2026-10-21) include 65,536 and 1,048,576 samples per receiver. Direct/mirror/mixed computation remains a separate CPU stage; the live renderer is unchanged.
 
+`--proposal-scale .25` tests narrower edge-height sampling with the exact matching PDF. The [tuning report](docs/cleanup-results.md#gpu-sampling-tuning--2026-10-21) compares seven candidates, held-out positions/four seeds and full 2D maps at equal sample budgets. Gains are modest and mixed; the default remains `1`.
+
 The current GPU stores one material spectrum per path group and response bank, shared by both ears. Each bank retains its own head blend for crossfades. Unchanged filters skip both small and large FFT construction. The station benchmark reserves **564 MB versus 916 MB** before this change; matched layout controls have similar wall times. A new `DirectBenchmark.MeasureReciprocity(planar, rays, scattering, seeds)` probe checks source/receiver reversal on a finite wall. The diffuse preview fails this necessary physical check even with 65,536 rays/bin, while the mirror control agrees. More rays are not a fix for this bias. [Measurements and limitations](docs/cleanup-results.md#gpu-response-storage-and-diagnostics--2026-10-07).
 
 ## Checks

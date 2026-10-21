@@ -14,7 +14,7 @@ StructuredBuffer<float2> AngleCases;
 RWStructuredBuffer<float2> Partials, Result, Contributions;
 RWStructuredBuffer<uint> Invalid;
 uint RouteCount, SampleCount, Dimensions, GroupCount, Capture;
-float WaveNumber, Horizon;
+float WaveNumber, Horizon, ProposalScale;
 groupshared float2 Sum[64];
 static const float Pi = 3.14159265358979323846;
 
@@ -89,7 +89,7 @@ float2 Sample(uint index)
         for (uint j = 0; j < own; j++)
         {
             centers[j] = center;
-            scales[j] = max(1e-8,2*abs(s.halfSine[j])*(m*l/(m+l))/nu);
+            scales[j] = ProposalScale*max(1e-8,2*abs(s.halfSine[j])*(m*l/(m+l))/nu);
         }
         if (i > 0)
         {
@@ -97,19 +97,19 @@ float2 Sample(uint index)
             for (uint incomingTerm = own; incomingTerm < count; incomingTerm++)
             {
                 centers[incomingTerm] = incoming;
-                scales[incomingTerm] = max(1e-8,2*abs(prior.halfSine[incomingTerm-own])*
+                scales[incomingTerm] = ProposalScale*max(1e-8,2*abs(prior.halfSine[incomingTerm-own])*
                     length(float2(rs,incoming-previous))/prior.shape.w);
             }
         }
         for (uint term = 0; term < count; term++)
             spans[term] = Span((hi-lo)*scales[term],scales[term]*scales[term]+(lo-centers[term])*(hi-centers[term]));
         uint component = min(count-1,(uint)(Draws[draw*Dimensions+2*i]*count));
-        // Interpolate the endpoint directions instead of subtracting/adding
-        // rounded arctangents near pi/2 and amplifying their error with tan.
+        // Rotate the nearer endpoint direction. Unlike interpolation of heights,
+        // this avoids cancelling large opposite endpoints near a narrow peak.
         float u = Draws[draw*Dimensions+2*i+1];
-        float a = length(float2(lo-centers[component],scales[component]))*sin(u*spans[component]);
-        float b = length(float2(hi-centers[component],scales[component]))*sin((1-u)*spans[component]);
-        float z = (hi*a+lo*b)/(a+b), pdf = 0;
+        float v = (u < .5 ? lo : hi)-centers[component], scale = scales[component];
+        float sn, cs; sincos((u < .5 ? u : u-1)*spans[component],sn,cs);
+        float z = centers[component]+scale*(v*cs+scale*sn)/(scale*cs-v*sn), pdf = 0;
         for (uint mixture = 0; mixture < count; mixture++)
         {
             float delta = z-centers[mixture];
