@@ -1,0 +1,15 @@
+#pragma kernel Sample
+#include "../../Shaders/Geometry.hlsl"
+#include "../../Shaders/Transport.hlsl"
+
+float4 Shape; // center, scale, finite extent, planar
+RWStructuredBuffer<float2> Samples;
+[numthreads(64, 1, 1)]
+void Sample(uint3 id : SV_DispatchThreadID)
+{
+    float span = EdgeHeightSpan(Shape.x, Shape.y, Shape.z, Shape.w != 0).x;
+    float u = id.x == 0 ? 1e-7 : id.x == 63 ? 1 - 1e-7 : (id.x + .5) / 64;
+    float z = EdgeHeight(Shape.x, Shape.y, span, Shape.z, u, Shape.w != 0);
+    float delta = z - Shape.x;
+    Samples[id.x] = float2(z, Shape.y / ((Shape.y * Shape.y + delta * delta) * span));
+}

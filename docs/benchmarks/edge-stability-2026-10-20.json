@@ -1,0 +1,1478 @@
+{
+  "accepted": "Stable finite-edge Cauchy interval and inverse CDF only; route proposals unchanged.",
+  "contract": "integrated-edge-pressure-preview-v10",
+  "full": {
+    "planar-1": {
+      "baseline": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 147.54374815757,
+              "within3dBPercent": 72.48520710059172
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 85.98392908114097,
+              "within3dBPercent": 53.64891518737672
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 781.1643276517569,
+              "within3dBPercent": 46.25246548323471
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 55.514877023382624,
+              "within3dBPercent": 61.34122287968442
+            }
+          ],
+          "complexErrorPercent": 267.55172047846264,
+          "within3dBPercent": 58.4319526627219,
+          "medianQueryMs": 0.42000000000000004
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 156.7235932931087,
+              "within3dBPercent": 71.20315581854044
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 107.20027028001442,
+              "within3dBPercent": 46.35108481262327
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 567.6702636207418,
+              "within3dBPercent": 51.4792899408284
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 52.949344480881656,
+              "within3dBPercent": 64.00394477317555
+            }
+          ],
+          "complexErrorPercent": 221.13586791868667,
+          "within3dBPercent": 58.25936883629191,
+          "medianQueryMs": 0.42000000000000004
+        }
+      },
+      "rejectedIncoming": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 36.39686968336731,
+              "within3dBPercent": 70.11834319526628
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 84.50968182019349,
+              "within3dBPercent": 38.65877712031558
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 47.887336625343714,
+              "within3dBPercent": 60.946745562130175
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 114.44807936360837,
+              "within3dBPercent": 39.743589743589745
+            }
+          ],
+          "complexErrorPercent": 70.81049187312823,
+          "within3dBPercent": 52.366863905325445,
+          "medianQueryMs": 0.4216
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 40.160899589349974,
+              "within3dBPercent": 69.62524654832347
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 81.21763074271607,
+              "within3dBPercent": 38.8560157790927
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 40.81721685786647,
+              "within3dBPercent": 66.76528599605523
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 131.006313797546,
+              "within3dBPercent": 41.71597633136095
+            }
+          ],
+          "complexErrorPercent": 73.30051524686962,
+          "within3dBPercent": 54.24063116370809,
+          "medianQueryMs": 0.4216
+        }
+      }
+    },
+    "planar-9": {
+      "baseline": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 6032.757182732113,
+              "within3dBPercent": 2.083333333333333
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 41193.352772520906,
+              "within3dBPercent": 0.9375
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 44494.46087131452,
+              "within3dBPercent": 0.3125
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 91620.99835630172,
+              "within3dBPercent": 3.3333333333333335
+            }
+          ],
+          "complexErrorPercent": 45835.39229571731,
+          "within3dBPercent": 1.6666666666666665,
+          "medianQueryMs": 0.589
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 5998.435177250903,
+              "within3dBPercent": 1.7708333333333333
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 41374.4578794011,
+              "within3dBPercent": 0.5208333333333333
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 44730.52645522667,
+              "within3dBPercent": 0.7291666666666666
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 75777.64763358077,
+              "within3dBPercent": 3.3333333333333335
+            }
+          ],
+          "complexErrorPercent": 41970.26678636486,
+          "within3dBPercent": 1.5885416666666665,
+          "medianQueryMs": 0.589
+        }
+      },
+      "rejectedIncoming": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 36415.86673924281,
+              "within3dBPercent": 0.10416666666666667
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 66668.8238102866,
+              "within3dBPercent": 0.10416666666666667
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 34929.48223151494,
+              "within3dBPercent": 2.5
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 4783.409098513549,
+              "within3dBPercent": 0.625
+            }
+          ],
+          "complexErrorPercent": 35699.395469889474,
+          "within3dBPercent": 0.8333333333333334,
+          "medianQueryMs": 0.5164
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 36752.48409596122,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 66110.88803807861,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 37117.05243549998,
+              "within3dBPercent": 1.9791666666666665
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 4937.348654963139,
+              "within3dBPercent": 0.10416666666666667
+            }
+          ],
+          "complexErrorPercent": 36229.44330612574,
+          "within3dBPercent": 0.5208333333333333,
+          "medianQueryMs": 0.5164
+        }
+      }
+    },
+    "planar-25": {
+      "baseline": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 191788.89059144113,
+              "within3dBPercent": 2.159090909090909
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1537176.3027630798,
+              "within3dBPercent": 1.1363636363636365
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 11675816.625769373,
+              "within3dBPercent": 7.727272727272727
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 1692074926.7528052,
+              "within3dBPercent": 0.45454545454545453
+            }
+          ],
+          "complexErrorPercent": 426369927.1429823,
+          "within3dBPercent": 2.869318181818182,
+          "medianQueryMs": 0.7474
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 190010.30065209497,
+              "within3dBPercent": 3.0681818181818183
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1523099.4289683888,
+              "within3dBPercent": 0.5681818181818182
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 11559566.51847474,
+              "within3dBPercent": 6.0227272727272725
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 1675354196.2400656,
+              "within3dBPercent": 0.9090909090909091
+            }
+          ],
+          "complexErrorPercent": 422156718.1220402,
+          "within3dBPercent": 2.6420454545454546,
+          "medianQueryMs": 0.7474
+        }
+      },
+      "rejectedIncoming": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 3968.2743086657824,
+              "within3dBPercent": 16.136363636363637
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1847009.4629323506,
+              "within3dBPercent": 0.6818181818181818
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 183178.28782421944,
+              "within3dBPercent": 5.340909090909091
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 60770.44914301209,
+              "within3dBPercent": 4.204545454545454
+            }
+          ],
+          "complexErrorPercent": 523731.61855206196,
+          "within3dBPercent": 6.590909090909091,
+          "medianQueryMs": 0.7481
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 3930.311739188459,
+              "within3dBPercent": 16.704545454545457
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1829249.3775442636,
+              "within3dBPercent": 1.25
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 181347.6407457845,
+              "within3dBPercent": 5.681818181818182
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 60210.27293640026,
+              "within3dBPercent": 5.454545454545454
+            }
+          ],
+          "complexErrorPercent": 518684.4007414092,
+          "within3dBPercent": 7.272727272727273,
+          "medianQueryMs": 0.7481
+        }
+      }
+    },
+    "room-12m-25": {
+      "baseline": {
+        "62.5": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 2413.3124395587115,
+              "within3dBPercent": 17.264150943396224
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 3490.9306704466994,
+              "within3dBPercent": 18.30188679245283
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 52683.33355402871,
+              "within3dBPercent": 5.566037735849057
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 319.79928816496897,
+              "within3dBPercent": 14.245283018867925
+            }
+          ],
+          "complexErrorPercent": 14726.843988049772,
+          "within3dBPercent": 13.844339622641508,
+          "medianQueryMs": 11.0168
+        },
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 2487.974449790907,
+              "within3dBPercent": 17.169811320754715
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 3592.7293499759694,
+              "within3dBPercent": 15.09433962264151
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 54256.8723587382,
+              "within3dBPercent": 4.528301886792453
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 336.5484403729078,
+              "within3dBPercent": 12.452830188679245
+            }
+          ],
+          "complexErrorPercent": 15168.531149719494,
+          "within3dBPercent": 12.31132075471698,
+          "medianQueryMs": 11.0168
+        }
+      },
+      "rejectedIncoming": {
+        "62.5": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 584.5786834356646,
+              "within3dBPercent": 25.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 235.86127525097803,
+              "within3dBPercent": 18.962264150943398
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 10030.297133458305,
+              "within3dBPercent": 5.471698113207547
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 3443.092241133699,
+              "within3dBPercent": 12.075471698113208
+            }
+          ],
+          "complexErrorPercent": 3573.4573333196618,
+          "within3dBPercent": 15.377358490566039,
+          "medianQueryMs": 11.527050000000001
+        },
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 611.1081870324648,
+              "within3dBPercent": 20.754716981132077
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 237.55387239185296,
+              "within3dBPercent": 18.49056603773585
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 10346.050125143101,
+              "within3dBPercent": 6.415094339622642
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 3498.1341690908466,
+              "within3dBPercent": 10.09433962264151
+            }
+          ],
+          "complexErrorPercent": 3673.2115884145664,
+          "within3dBPercent": 13.93867924528302,
+          "medianQueryMs": 11.527050000000001
+        }
+      }
+    }
+  },
+  "diagnostic": {
+    "planar-1": {
+      "before": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 83.20421309025441,
+              "within3dBPercent": 73.68421052631578
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 55.87593816737457,
+              "within3dBPercent": 63.1578947368421
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 2831.349035077755,
+              "within3dBPercent": 31.57894736842105
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 50.41394488367775,
+              "within3dBPercent": 57.89473684210527
+            }
+          ],
+          "complexErrorPercent": 755.2107828047655,
+          "within3dBPercent": 56.57894736842105,
+          "medianQueryMs": 0.428
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 82.24364297248758,
+              "within3dBPercent": 89.47368421052632
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 90.47328740962658,
+              "within3dBPercent": 47.368421052631575
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 3043.540048716348,
+              "within3dBPercent": 47.368421052631575
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 45.60763814828567,
+              "within3dBPercent": 73.68421052631578
+            }
+          ],
+          "complexErrorPercent": 815.466154311687,
+          "within3dBPercent": 64.47368421052632,
+          "medianQueryMs": 0.428
+        }
+      },
+      "weighted": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 17.444265205214027,
+              "within3dBPercent": 89.47368421052632
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 44.968642108156686,
+              "within3dBPercent": 47.368421052631575
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 392.8405906771668,
+              "within3dBPercent": 5.263157894736842
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 31.077460482225263,
+              "within3dBPercent": 84.21052631578947
+            }
+          ],
+          "complexErrorPercent": 121.5827396181907,
+          "within3dBPercent": 56.578947368421055,
+          "medianQueryMs": 0.41595
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 17.811119205588426,
+              "within3dBPercent": 94.73684210526315
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 32.53114642721343,
+              "within3dBPercent": 78.94736842105263
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 437.4894313361325,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 36.94960529194796,
+              "within3dBPercent": 89.47368421052632
+            }
+          ],
+          "complexErrorPercent": 131.19532556522057,
+          "within3dBPercent": 65.78947368421052,
+          "medianQueryMs": 0.41595
+        }
+      },
+      "visible": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 23.538309796801066,
+              "within3dBPercent": 84.21052631578947
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 47.050694451197955,
+              "within3dBPercent": 57.89473684210527
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 90.3656698623849,
+              "within3dBPercent": 47.368421052631575
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 28.5678444484714,
+              "within3dBPercent": 84.21052631578947
+            }
+          ],
+          "complexErrorPercent": 47.380629639713824,
+          "within3dBPercent": 68.42105263157895,
+          "medianQueryMs": 0.57205
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 28.871709714484016,
+              "within3dBPercent": 68.42105263157895
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 41.12507865401426,
+              "within3dBPercent": 63.1578947368421
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 71.15540460541227,
+              "within3dBPercent": 63.1578947368421
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 24.553433427113237,
+              "within3dBPercent": 89.47368421052632
+            }
+          ],
+          "complexErrorPercent": 41.426406600255945,
+          "within3dBPercent": 71.05263157894737,
+          "medianQueryMs": 0.57205
+        }
+      },
+      "incoming": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 53.11344589271009,
+              "within3dBPercent": 84.21052631578947
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 79.27278503088321,
+              "within3dBPercent": 36.84210526315789
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 52.870324248567854,
+              "within3dBPercent": 68.42105263157895
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 97.8590267654475,
+              "within3dBPercent": 52.63157894736842
+            }
+          ],
+          "complexErrorPercent": 70.77889548440216,
+          "within3dBPercent": 60.52631578947368,
+          "medianQueryMs": 0.4354
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 53.87903989742197,
+              "within3dBPercent": 68.42105263157895
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 85.34115005327402,
+              "within3dBPercent": 36.84210526315789
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 42.66187480078853,
+              "within3dBPercent": 73.68421052631578
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 106.29078308313676,
+              "within3dBPercent": 47.368421052631575
+            }
+          ],
+          "complexErrorPercent": 72.04321195865532,
+          "within3dBPercent": 56.57894736842104,
+          "medianQueryMs": 0.4354
+        }
+      }
+    },
+    "planar-9": {
+      "before": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 1430.7483024556707,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 398526.74070552306,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 521726.6688897127,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 1127292.8441905836,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 512244.25052206876,
+          "within3dBPercent": 1.4705882352941175,
+          "medianQueryMs": 0.55845
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 1300.436968752804,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 346056.8144310618,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 451549.8204989181,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 758980.6845860769,
+              "within3dBPercent": 5.88235294117647
+            }
+          ],
+          "complexErrorPercent": 389471.93912120245,
+          "within3dBPercent": 1.4705882352941175,
+          "medianQueryMs": 0.55845
+        }
+      },
+      "weighted": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 26561.824801542913,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 4819.464989768052,
+              "within3dBPercent": 11.76470588235294
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 2237.8017485283676,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 4522699.707072739,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 1139079.6996531445,
+          "within3dBPercent": 4.411764705882352,
+          "medianQueryMs": 0.57095
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 22136.729893391246,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 4159.194886341592,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 2081.8634372318056,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 3928368.753191367,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 989186.6353520829,
+          "within3dBPercent": 1.4705882352941175,
+          "medianQueryMs": 0.57095
+        }
+      },
+      "visible": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 21784.999770318107,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1443028.2411465596,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 308259.21957464085,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 5653.93633651491,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 444681.5992070084,
+          "within3dBPercent": 0.0,
+          "medianQueryMs": 2.3825000000000003
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 16609.93588272316,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 842558.9377209388,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 267099.7051517582,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 5122.741458876649,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 282847.83005357423,
+          "within3dBPercent": 0.0,
+          "medianQueryMs": 2.3825000000000003
+        }
+      },
+      "incoming": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 71248.1077421565,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 41810.89204248121,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 17128.3279962412,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 13538.048337623382,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 35931.34402962557,
+          "within3dBPercent": 0.0,
+          "medianQueryMs": 0.5487999999999998
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 71668.99745786573,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 36557.20593712875,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 12836.043723554834,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 11075.377103392442,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 33034.40605548544,
+          "within3dBPercent": 0.0,
+          "medianQueryMs": 0.5487999999999998
+        }
+      }
+    },
+    "planar-25": {
+      "before": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 23389.383164794413,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1074.9952017992566,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 305.0769557206612,
+              "within3dBPercent": 23.52941176470588
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 4253465921.6232615,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 1063372672.7696459,
+          "within3dBPercent": 7.352941176470588,
+          "medianQueryMs": 0.7437
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 24729.18352566117,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 944.3881256547971,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 354.2526142702346,
+              "within3dBPercent": 23.52941176470588
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 4598332703.974924,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 1149589682.9497974,
+          "within3dBPercent": 7.352941176470588,
+          "medianQueryMs": 0.7437
+        }
+      },
+      "weighted": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 3667.841580581143,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1557.862627603918,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 1145.750706498844,
+              "within3dBPercent": 23.52941176470588
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 25128.582092730805,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 7875.009251853678,
+          "within3dBPercent": 5.88235294117647,
+          "medianQueryMs": 0.75575
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 4384.01009171973,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1740.4626851923265,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 1252.6293910863908,
+              "within3dBPercent": 41.17647058823529
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 12965.70395374878,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 5085.701530436807,
+          "within3dBPercent": 10.294117647058822,
+          "medianQueryMs": 0.75575
+        }
+      },
+      "visible": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 581453.0359120381,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 43327655.57510897,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 201043.13716534333,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 273904.350434245,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 11096014.024655148,
+          "within3dBPercent": 0.0,
+          "medianQueryMs": 8.38485
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 628080.4262460708,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 37908481.43377036,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 245212.65661290562,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 301115.6758978018,
+              "within3dBPercent": 0.0
+            }
+          ],
+          "complexErrorPercent": 9770722.548131783,
+          "within3dBPercent": 0.0,
+          "medianQueryMs": 8.38485
+        }
+      },
+      "incoming": {
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 95.24821183324744,
+              "within3dBPercent": 35.294117647058826
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 436495.21978852316,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 16009.829809018034,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 4486.629711031874,
+              "within3dBPercent": 11.76470588235294
+            }
+          ],
+          "complexErrorPercent": 114271.73188010158,
+          "within3dBPercent": 14.705882352941178,
+          "medianQueryMs": 0.6937499999999999
+        },
+        "250": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 147.29610742929918,
+              "within3dBPercent": 11.76470588235294
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 471510.68229254254,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 17231.375868300373,
+              "within3dBPercent": 5.88235294117647
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 4821.504567478059,
+              "within3dBPercent": 17.647058823529413
+            }
+          ],
+          "complexErrorPercent": 123427.71470893758,
+          "within3dBPercent": 8.823529411764707,
+          "medianQueryMs": 0.6937499999999999
+        }
+      }
+    },
+    "room-12m-25": {
+      "before": {
+        "62.5": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 201.80560635504432,
+              "within3dBPercent": 15.789473684210526
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 479.34930829715626,
+              "within3dBPercent": 36.84210526315789
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 296615.74804691743,
+              "within3dBPercent": 5.263157894736842
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 158.86703082586692,
+              "within3dBPercent": 21.052631578947366
+            }
+          ],
+          "complexErrorPercent": 74363.94249809887,
+          "within3dBPercent": 19.736842105263158,
+          "medianQueryMs": 11.356749999999998
+        },
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 287.38691592936556,
+              "within3dBPercent": 15.789473684210526
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 533.2876077220994,
+              "within3dBPercent": 5.263157894736842
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 345147.60024172545,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 175.20460732224083,
+              "within3dBPercent": 15.789473684210526
+            }
+          ],
+          "complexErrorPercent": 86535.86984317479,
+          "within3dBPercent": 9.210526315789473,
+          "medianQueryMs": 11.356749999999998
+        }
+      },
+      "weighted": {
+        "62.5": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 96.65752432983706,
+              "within3dBPercent": 31.57894736842105
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1491.0152732159154,
+              "within3dBPercent": 21.052631578947366
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 827.9842932420104,
+              "within3dBPercent": 15.789473684210526
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 178.23512296606205,
+              "within3dBPercent": 21.052631578947366
+            }
+          ],
+          "complexErrorPercent": 648.4730534384563,
+          "within3dBPercent": 22.36842105263158,
+          "medianQueryMs": 11.65955
+        },
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 116.23401042175179,
+              "within3dBPercent": 36.84210526315789
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1749.9798783683925,
+              "within3dBPercent": 21.052631578947366
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 983.9285274591143,
+              "within3dBPercent": 26.31578947368421
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 178.27863895809614,
+              "within3dBPercent": 10.526315789473683
+            }
+          ],
+          "complexErrorPercent": 757.1052638018386,
+          "within3dBPercent": 23.684210526315788,
+          "medianQueryMs": 11.65955
+        }
+      },
+      "visible": {
+        "62.5": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 96.65752432983706,
+              "within3dBPercent": 31.57894736842105
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1491.0152732159154,
+              "within3dBPercent": 21.052631578947366
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 827.9842932420104,
+              "within3dBPercent": 15.789473684210526
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 178.23512296606205,
+              "within3dBPercent": 21.052631578947366
+            }
+          ],
+          "complexErrorPercent": 648.4730534384563,
+          "within3dBPercent": 22.36842105263158,
+          "medianQueryMs": 12.127249999999998
+        },
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 116.23401042175179,
+              "within3dBPercent": 36.84210526315789
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 1749.9798783683925,
+              "within3dBPercent": 21.052631578947366
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 983.9285274591143,
+              "within3dBPercent": 26.31578947368421
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 178.27863895809614,
+              "within3dBPercent": 10.526315789473683
+            }
+          ],
+          "complexErrorPercent": 757.1052638018386,
+          "within3dBPercent": 23.684210526315788,
+          "medianQueryMs": 12.127249999999998
+        }
+      },
+      "incoming": {
+        "62.5": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 209.87019548178486,
+              "within3dBPercent": 10.526315789473683
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 114.60002794847884,
+              "within3dBPercent": 10.526315789473683
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 14430.55781730852,
+              "within3dBPercent": 0.0
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 2561.354844462802,
+              "within3dBPercent": 31.57894736842105
+            }
+          ],
+          "complexErrorPercent": 4329.095721300397,
+          "within3dBPercent": 13.157894736842104,
+          "medianQueryMs": 11.43795
+        },
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 310.8694972327113,
+              "within3dBPercent": 15.789473684210526
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 115.16828142570279,
+              "within3dBPercent": 15.789473684210526
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 16634.887496135776,
+              "within3dBPercent": 5.263157894736842
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 2990.288724677075,
+              "within3dBPercent": 10.526315789473683
+            }
+          ],
+          "complexErrorPercent": 5012.803499867816,
+          "within3dBPercent": 11.842105263157894,
+          "medianQueryMs": 11.43795
+        }
+      }
+    }
+  },
+  "final": {
+    "planar-1": {
+      "scope": "Original diagnostic subset",
+      "bitIdenticalPressureAndVisibility": true,
+      "rows": 152
+    },
+    "planar-9": {
+      "scope": "Original diagnostic subset",
+      "bitIdenticalPressureAndVisibility": true,
+      "rows": 136
+    },
+    "planar-25": {
+      "scope": "Original diagnostic subset",
+      "bitIdenticalPressureAndVisibility": true,
+      "rows": 136
+    },
+    "room-12m-25": {
+      "scope": "Full spatial map",
+      "rows": 8480,
+      "metrics": {
+        "62.5": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 2413.3731061760527,
+              "within3dBPercent": 17.547169811320753
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 3490.8619283316134,
+              "within3dBPercent": 18.30188679245283
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 52689.30426648236,
+              "within3dBPercent": 5.660377358490567
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 319.7322789550026,
+              "within3dBPercent": 14.245283018867925
+            }
+          ],
+          "complexErrorPercent": 14728.317894986258,
+          "within3dBPercent": 13.938679245283017,
+          "medianQueryMs": 11.37575
+        },
+        "125": {
+          "seeds": [
+            {
+              "seed": 17,
+              "complexErrorPercent": 2488.028541348867,
+              "within3dBPercent": 16.88679245283019
+            },
+            {
+              "seed": 65554,
+              "complexErrorPercent": 3592.647937534418,
+              "within3dBPercent": 15.09433962264151
+            },
+            {
+              "seed": 131091,
+              "complexErrorPercent": 54263.12436469321,
+              "within3dBPercent": 4.622641509433962
+            },
+            {
+              "seed": 196628,
+              "complexErrorPercent": 336.448807531231,
+              "within3dBPercent": 12.547169811320755
+            }
+          ],
+          "complexErrorPercent": 15170.062412776932,
+          "within3dBPercent": 12.287735849056604,
+          "medianQueryMs": 11.37575
+        }
+      }
+    }
+  },
+  "controls": {
+    "id": "2",
+    "testcasecount": "36",
+    "result": "Passed",
+    "total": "36",
+    "passed": "36",
+    "failed": "0",
+    "inconclusive": "0",
+    "skipped": "0",
+    "asserts": "0",
+    "engine-version": "3.5.0.0",
+    "clr-version": "4.0.30319.42000",
+    "start-time": "2026-10-21 06:00:09Z",
+    "end-time": "2026-10-21 06:01:12Z",
+    "duration": "63.7636866"
+  },
+  "sourceHashes": {
+    "Assets/Shaders/Transport.hlsl": "b36b05db5d5df25ac8a9d8228f9451e92d70852349a2110009b9174f4a517624",
+    "Assets/Tests/Editor/EdgeSampling.compute": "82804a375475e86a0c3a05690fc8c90bff7ace9bd04a355c390d9bf0cad43e37",
+    "Assets/Tests/Editor/RayTransportChecks.cs": "d1cfc74e749c9c25c54efecf02c3acfd69568f21fd1dac3f489e8c65289ec268"
+  },
+  "measurementTestsPassed": 24,
+  "captureTestsPassed": 3,
+  "finiteIntervalExample": {
+    "-100.0": {
+      "oldFloatSpan": 0.0,
+      "referenceDoubleSpan": 9.900989805800009e-09
+    },
+    "100.0": {
+      "oldFloatSpan": 0.0,
+      "referenceDoubleSpan": 1.0101010028407131e-08
+    }
+  }
+}

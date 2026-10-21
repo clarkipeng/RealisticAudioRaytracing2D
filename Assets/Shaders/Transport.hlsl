@@ -316,6 +316,26 @@ float BoundaryWeight(uint hit, uint stateOffset, float3 position, bool is2D)
     }
     return 1;
 }
+// Stable truncated Cauchy CDF: atan(hi)-atan(lo) loses the finite
+// interval when a narrow peak lies far outside an edge.
+float4 EdgeHeightSpan(float center, float4 scale, float extent, bool is2D)
+{
+    if (is2D) return RayPi;
+    float4 y = extent * scale, x = scale * scale + center * (center - extent);
+    float4 ratio = y / abs(x), angle = atan2(y, abs(x));
+    // Preserve relative accuracy in narrow tail intervals.
+    angle = ratio < .01 ? ratio * (1 - ratio * ratio / 3) : angle;
+    return x < 0 ? RayPi - angle : angle;
+}
+float EdgeHeight(float center, float scale, float span, float extent, float u, bool is2D)
+{
+    if (is2D) return center + scale * tan(lerp(-RayPi * .5, RayPi * .5, u));
+    // Interpolate endpoint directions using positive weights. This avoids
+    // subtracting the peak center and keeps every draw on the finite edge.
+    float2 lengths = float2(length(float2(center, scale)), length(float2(extent - center, scale)));
+    float2 weights = lengths * sin(float2(u, 1 - u) * span);
+    return extent * (weights.x / (weights.x + weights.y));
+}
 // A mixture of the current listener-blocking face's edges and all scene edges.
 // The global component keeps every edge reachable, including multi-edge routes.
 // Sampling probability includes both components even when they select the same edge.
@@ -356,13 +376,12 @@ bool SampleEdge(uint stateOffset, float3 source, float3 receiver, bool is2D, ino
     // Cauchy importance sampling resolves narrow zone-boundary contributions.
     // Planar scenes model point sources around infinitely extruded XY geometry.
     float4 scale = max(RayEpsilon, 2 * abs(sin(phi * .5)) * (m * l / (m + l)) / nu);
-    float4 lower = is2D ? -RayPi * .5 : atan(-apex / scale);
-    float4 upper = is2D ? RayPi * .5 : atan((extent - apex) / scale);
+    float4 span = EdgeHeightSpan(apex, scale, extent, is2D);
     uint component = min(3u, (uint)(RandomRay(rng) * 4));
     float u = clamp(RandomRay(rng), 1e-7, 1 - 1e-7);
-    float z = apex + scale[component] * tan(lerp(lower[component], upper[component], u));
+    float z = EdgeHeight(apex, scale[component], span[component], extent, u, is2D);
     float4 delta = z - apex;
-    float4 density = scale / ((scale * scale + delta * delta) * (upper - lower));
+    float4 density = scale / ((scale * scale + delta * delta) * span);
     float pdf = probability * dot(density, float4(.25, .25, .25, .25));
     edgePoint = a + axis * z;
     inversePdf = 1 / pdf;

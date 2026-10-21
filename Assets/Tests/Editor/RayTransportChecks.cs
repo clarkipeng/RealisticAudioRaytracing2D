@@ -672,6 +672,29 @@ public partial class TakeChecks
             value+=new System.Numerics.Complex(p.pressureGain,p.pressureImag)*System.Numerics.Complex.Exp(new System.Numerics.Complex(0,-2*Math.PI*frequency*p.delaySeconds));
         return value;
     }
+    [TestCase(-100f,.0001f,false),TestCase(100f,.0001f,false)]
+    [TestCase(0f,.0001f,false),TestCase(.5f,.1f,false),TestCase(0f,.1f,true),Category("GPU"),Category("Diffraction")]
+    public void EdgeHeightSamplesMatchCauchyDistribution(float center,float scale,bool planar)
+    {
+        RequireGpu();var shader=UnityEditor.AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Tests/Editor/EdgeSampling.compute");
+        using var buffer=new ComputeBuffer(64,8);var samples=new Vector2[64];
+        int kernel=shader.FindKernel("Sample");shader.SetVector("Shape",new Vector4(center,scale,1,planar?1:0));
+        shader.SetBuffer(kernel,"Samples",buffer);shader.Dispatch(kernel,1,1,1);buffer.GetData(samples);
+        // Independent double-precision CDF and normalized density. These far-tail
+        // intervals collapse to zero with float atan(hi)-atan(lo).
+        double lower=planar?-Math.PI/2:Math.Atan(-(double)center/scale);
+        double span=planar?Math.PI:Math.Atan((1d-center)/scale)-lower;
+        for(int i=0;i<samples.Length;i++)
+        {
+            double delta=(double)samples[i].x-center,quantile=(Math.Atan(delta/scale)-lower)/span;
+            double density=scale/(((double)scale*scale+delta*delta)*span);
+            double u=i==0?1e-7f:i==63?1-1e-7f:(i+.5)/samples.Length;
+            Assert.That(quantile,Is.EqualTo(u).Within(1e-4),"CDF quantile "+i);
+            Assert.That(samples[i].y/density,Is.EqualTo(1).Within(1e-4),"Proposal density "+i);
+            if(!planar)Assert.That(samples[i].x,Is.InRange(0f,1f));
+        }
+    }
+
     // Deterministic double-precision quadrature of Svensson et al. (2009),
     // equations 1-6, truncated at the same 0.1-second horizon. These constants
     // include complex phase, not just pressure magnitude or the old ITU fit.

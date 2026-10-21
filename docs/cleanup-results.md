@@ -1,5 +1,54 @@
 # Cleanup validation and measured bottlenecks
 
+## Multi-edge failure diagnosis and a finite-edge numerical fix — 2026-10-20
+
+**The main acoustic accuracy failure remains unresolved.** One numerical sampling bug is fixed; none of the experimental route/height proposals passed the full-map quality review. The runtime patch adds 19 shader lines net, two provenance version updates, and one atomic GPU sampling test family. It does not clamp pressure, reduce bounce depth, disable diffraction or change the edge kernel. The solver contract is now `integrated-edge-pressure-preview-v10`.
+
+### What causes the large spikes
+
+The captured 25-obstacle failure follows seven visible edge interactions. Its Monte Carlo weight reaches billions, and one listener contribution is about 73.8 million. Each hop divides by the probability of the selected edge and height; a rare complete route can therefore dominate a small ray budget. These are estimator weights, not physical amplification or energy carried by a ray. Signed pressure contributions require coherent cancellation. Increasing the number of interactions adds more of these difficult integrals.
+
+![Captured path and probability weights](benchmarks/edge-stability-2026-10-20.png)
+
+The captured planar listener contributions agree with independently evaluated double-precision edge kernels, to roughly 0.05% or better for the inspected paths. This supports a sampling-variance diagnosis for those failures, not a proof that every shader path family is physically correct. The existing CPU complete-route prototype is stable through orders two, four and six at the inspected one-box position. Neither result validates general 3D diffraction or mixed specular/diffraction paths.
+
+### Accepted fix
+
+The finite-edge Cauchy sampler previously computed its probability interval as `atan(upper) - atan(lower)`. For an edge spanning 0–1 m, a peak center at ±100 m and a 0.0001 m width, both float arctangents round to the same number: the computed interval is zero although the true interval is about 1e-8 radians. A valid proposal can then be discarded or badly placed.
+
+The replacement computes the interval with a stable atan2 identity and a small-angle series, then interpolates the two endpoint directions with positive weights. It retains the same truncated Cauchy distribution and its full mixture PDF. Finite draws stay on the edge by construction. Infinite planar-edge arithmetic and the random-number sequence are preserved.
+
+Five deterministic GPU cases check CDF quantiles, normalized density and finite-edge bounds against independent double-precision expressions, including near-endpoint draws. The surrounding diffraction, material, phase, moving-edge and debug-capture controls bring the final regression total to **36 passed, zero failed/skipped**. These are implementation controls, not 36 proofs of physical scene accuracy.
+
+The final matched measurements contain 424 planar diagnostic rows with **bit-identical pressure and direct visibility**, plus 8,480 rows across all 1,060 positions, two frequencies and four seeds in the large 3D room. At 125 Hz, room complex error changes from 15,168.53% to 15,170.06%, positions within ±3 dB from 12.31% to 12.29%, and median warm transport/query time from 11.017 to 11.376 ms. This fix does **not** solve the multi-edge instability or establish a scene-quality/speed improvement.
+
+### Experiments rejected
+
+All trials retain 256 rays/bin, eight interactions, 0.4 s support and the same four seeds. They change proposals and their probability corrections, never fit amplitudes to the reference. Diagnostic subsets deliberately include baseline failures plus a regular spatial sample; they are useful for debugging, not an unbiased benchmark. Full maps are the acceptance check.
+
+- Distance-weighted edge selection plus an incoming-kernel height proposal improved some failures but produced a worse outlier in the nine-obstacle case.
+- Filtering geometrically invisible edges in planar scenes raised the 25-obstacle diagnostic median from 0.744 to 8.385 ms and still left huge errors. Finite 3D edges were not pruned using a single-point visibility test.
+- The height proposal alone looked promising on selected failures at roughly unchanged cost. Its full-map results below reduced extreme complex errors but worsened local amplitude accuracy in two layouts. It was removed from the runtime patch.
+
+| Full map | Complex error before | Experimental error | Positions within ±3 dB before → experiment |
+|---|---:|---:|---:|
+| planar-1 | 221.14% | 73.30% | 58.26% → 54.24% |
+| planar-9 | 41,970.27% | 36,229.44% | 1.59% → 0.52% |
+| planar-25 | 422,156,718.12% | 518,684.40% | 2.64% → 7.27% |
+| room-12m-25 | 15,168.53% | 3,673.21% | 12.31% → 13.94% |
+
+Errors are per-seed complex L2 error against the same refined wave fields, averaged over four seeds; fields are not averaged together first. The experimental column includes the first draft of the stable finite-edge sampler, which subsequently failed three of five new distribution checks and was corrected before the accepted patch. The spatial tradeoff alone was sufficient to reject the proposal. Four seeds and heavy-tailed contributions do not establish statistical convergence.
+
+### Next experiment and acceptance criterion
+
+The next candidate should allocate samples to complete visible diffraction routes and condition the edge-height integrals on the actual preceding/following vertices. The existing CPU prototype supplies an independent control for that experiment. Start in 2D, compare enumerated/stratified low-order routes at matched measured milliseconds, and inspect each interaction order separately. Do not call lowering the order a fix for missing higher-order physics. Complete-route sampling is a hypothesis to test, not a demonstrated cure for route-count growth or signed cancellation.
+
+Promote a GPU candidate only after both amplitude and complex-pressure accuracy improve across whole maps, with per-seed spread, runtime and source hashes retained. Then repeat finite 3D controls and investigate missing mixed mirror/edge contributions. The current GPU output is not qualified as high-fidelity DLSS training ground truth.
+
+All runs used the silent isolated Unity/Metal batch project at low priority, one numerical/GPU job at a time. There were no visible player windows, cursor capture, microphone or speaker playback. The previous study’s reference definitions, mesh uncertainty and three-computed-bin timing limits still apply.
+
+[Measured ledger](benchmarks/edge-stability-2026-10-20.json) · [Raw trials, shader snapshots and reproduction scripts](benchmarks/edge-stability-2026-10-20.zip). Extract beside the existing spatial-accuracy archive; script paths are relative to the repository root. The archived experimental shaders are not installed in the runtime.
+
 ## Larger 2D and finite 3D acoustic accuracy — 2026-10-20
 
 **The current GPU estimator is not a reliable wave-field approximation on this suite.** Exact direct visibility passes, but higher-order acoustic contributions can become extremely large. More rays do not reliably restore accuracy. The earlier low-error planar plots evaluated the separate CPU edge-integral prototype; those results must not be attributed to the live shader. No runtime/shader change was made for this measurement.
