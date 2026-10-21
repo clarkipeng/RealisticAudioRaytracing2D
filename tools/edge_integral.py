@@ -350,26 +350,32 @@ def sample_chain(edges, source, receiver, k, horizon, random, *, control_variate
 
 
 def sampled(config, points, hz, count, seed, depth, *, random=None, control_variate=False,
-            roulette=0., stats=None, mirror_depth=2):
-    """Offline planar experiment. Budget is samples per visible route, not rays/bin.
+            roulette=0., stats=None, mirror_depth=2, route_budget=False):
+    """Offline planar experiment; neither budget is equivalent to GPU rays/bin.
 
     Reuse a scrambled Sobol net across receiver positions. The edge kernel and
     geometric mirror paths are unchanged. Repeated edges are allowed after a
     different edge; the configured order and physical delay bound the walk.
     Pure edge chains reach depth; mirror_depth selects mixed connection order.
+    route_budget spends count samples per probe across feasible pure edge routes.
+    Cover routes when affordable; otherwise sample ranks with exact weights.
+    Mirror connections still enumerate outside this budget.
     """
     from scipy.stats import qmc
     if count < 1 or count & (count-1) or min(depth,mirror_depth) < 1 or not np.isfinite(roulette) or roulette < 0:
         raise ValueError('Samples must be a positive power of two; depth must be positive.')
     dimensions = max(depth, mirror_depth-1)
+    height_dimensions = (3 if roulette else 2)*dimensions
+    total_dimensions = height_dimensions + (1 if route_budget else 0)
     if random is None:
         # Center the finite Sobol grid so no sample lies on an ellipse endpoint.
-        random = qmc.Sobol((3 if roulette else 2)*dimensions, scramble=True, bits=30, seed=seed).random_base2(count.bit_length()-1) + .5/2**30
-    if (random.ndim != 2 or random.shape[0] != count or random.shape[1] < (3 if roulette else 2)*dimensions or
+        random = qmc.Sobol(total_dimensions, scramble=True, bits=30, seed=seed).random_base2(count.bit_length()-1) + .5/2**30
+    if (random.ndim != 2 or random.shape[0] != count or random.shape[1] < total_dimensions or
             not np.isfinite(random).all() or np.any((random <= 0) | (random >= 1))):
         raise ValueError('Provide enough finite open-unit-interval sampling dimensions for every path.')
-    def estimate(chain, start, end):
-        draws = random if not roulette else np.c_[random[:,:2*len(chain)], random[:,2*dimensions:2*dimensions+len(chain)]]
+    def estimate(chain, start, end, draws=random):
+        if roulette:
+            draws = np.c_[draws[:,:2*len(chain)], draws[:,2*dimensions:2*dimensions+len(chain)]]
         return sample_chain(chain, start, end, k, horizon, draws,
                             control_variate=control_variate, roulette=roulette, stats=stats)
     edges, source, walls = corners(config['walls']), np.array(config['source']), config['walls']
@@ -377,6 +383,7 @@ def sampled(config, points, hz, count, seed, depth, *, random=None, control_vari
     horizon = config['maximumDelaySeconds']*config['speedOfSound']
     neighbors = [[j for j, b in enumerate(edges) if i != j and visible(a[0], b[0], walls)]
                  for i, a in enumerate(edges)]
+    starts = [i for i, edge in enumerate(edges) if visible(source, edge[0], walls)]
     values, routes = np.zeros((len(points), depth), complex), np.zeros((len(points), depth), int)
     def visit(path, receiver, index, distance):
         chain = [edges[i] for i in path]
@@ -389,9 +396,42 @@ def sampled(config, points, hz, count, seed, depth, *, random=None, control_vari
             for j in neighbors[path[-1]]:
                 visit(path+[j], receiver, index, distance+np.linalg.norm(chain[-1][0]-edges[j][0]))
     for index, receiver in enumerate(points):
-        for i, edge in enumerate(edges):
-            if visible(source, edge[0], walls):
-                visit([i], receiver, index, np.linalg.norm(source[:2]-edge[0]))
+        if route_budget:
+            # Exact counts let us address a route by integer rank without listing
+            # the whole tree. Python integers keep counts valid at any order.
+            tails = [np.array([int(visible(edge[0], receiver, walls)) for edge in edges], object)]
+            for _ in range(1, depth):
+                tails.append(np.array([sum(tails[-1][j] for j in ids) for ids in neighbors], object))
+            totals = [sum(row[i] for i in starts) for row in tails]
+            total, groups = sum(totals), {}
+            if 0 < total <= count:
+                groups = {rank: count//total + (rank < count%total) for rank in range(total)}
+            elif total:
+                for u in random[:,height_dimensions]:
+                    numerator, denominator = float(u).as_integer_ratio()
+                    rank = numerator*total//denominator
+                    groups[rank] = groups.get(rank, 0)+1
+            for rank, selected in groups.items():
+                order = 1
+                while rank >= totals[order-1]:
+                    rank -= totals[order-1]; order += 1
+                path = []
+                for remaining in range(order, 0, -1):
+                    for i in neighbors[path[-1]] if path else starts:
+                        completions = tails[remaining-1][i]
+                        if rank < completions:
+                            path.append(i); break
+                        rank -= completions
+                # Cover every route when affordable; otherwise correct its PDF.
+                # Height scrambles are independent of ranks and shared across routes.
+                weight = 1 if total <= count else selected*total/count
+                values[index, order-1] += estimate([edges[i] for i in path], source, receiver, random[:selected])*weight
+                routes[index, order-1] += selected
+            if stats is not None:
+                stats['selectedRoutes'] = stats.get('selectedRoutes', 0) + len(groups)
+        else:
+            for i in starts:
+                visit([i], receiver, index, np.linalg.norm(source[:2]-edges[i][0]))
     connected = connections(config, points, hz, 0, depth=mirror_depth, integrate_chain=estimate)
     return values, connected, routes
 
@@ -452,6 +492,28 @@ def validate():
     error = np.linalg.norm(forward-reverse)/np.linalg.norm(forward)
     assert error < 1e-5, ('reciprocity', error)
     checks.append(dict(check='two-edge reciprocity', relativeError=float(error)))
+    probes = np.array([[3.,-.6,0], [-2.4,.7,0], [.2,2.,0]])
+    config['source'] = [-3.,.4,0]
+    target = evaluate(config, probes, 250, 16)
+    estimate, _, completed = sampled(config, probes, 250, 65536, 17, 2, route_budget=True)
+    error = np.linalg.norm(estimate-target)/np.linalg.norm(target)
+    assert error < .01 and completed[0].sum() == 65536, ('route probabilities', error)
+    checks.append(dict(check='fixed-budget routes against quadrature', relativeError=float(error)))
+    draws = np.full((1,5), .37)
+    enumerated, _, available = sampled(config, probes, 250, 1, 17, 2, random=draws[:,:4])
+    for i, probe in enumerate(probes):
+        total, estimates = int(available[i].sum()), []
+        for rank in range(total):
+            draws[0,-1] = (rank+.5)/total
+            estimates.append(sampled(config, [probe], 250, 1, 17, 2, random=draws, route_budget=True)[0][0])
+        assert np.allclose(np.mean(estimates, axis=0), enumerated[i], rtol=1e-12, atol=1e-12)
+    checks.append(dict(check='all route ranks and probability weights', passed=True))
+    empty = dict(config, walls=[])
+    estimate, direct, completed = sampled(empty, probes, 250, 16, 17, 2, route_budget=True)
+    distance = np.linalg.norm(probes-empty['source'], axis=1)
+    assert not estimate.any() and not completed.any()
+    assert np.allclose(direct.sum(axis=1), np.exp(-2j*np.pi*250/343*distance)/distance, rtol=1e-12)
+    checks.append(dict(check='empty-scene fixed-budget termination', passed=True))
     plane = (np.array([-5., 0]), np.array([5., 0]))
     path = mirror_path(np.array([-1., 1, 0]), np.array([1., 1, 0]), [plane], [])
     assert path is not None and abs(path[1]-np.sqrt(8)) < 1e-12
@@ -466,6 +528,10 @@ def validate():
     receiver = np.array([[-2.4, .7, 0]])
     forward = connections(config, receiver, 250, 16)
     assert abs(forward[0, 3]) > .1, 'Reciprocity must exercise nonzero mixed paths.'
+    _, connected, _ = sampled(config, receiver, 250, 65536, 17, 2, route_budget=True)
+    error = abs(connected[0,3]-forward[0,3])/abs(forward[0,3])
+    assert error < .01, ('mixed reflection/diffraction integration', error)
+    checks.append(dict(check='mixed paths against quadrature', relativeError=float(error)))
     config['source'], receiver = receiver[0].tolist(), np.array([config['source']])
     reverse = connections(config, receiver, 250, 16)
     error = np.linalg.norm(forward-reverse)/max(np.linalg.norm(forward), 1e-12)
@@ -501,6 +567,7 @@ def main():
     parser.add_argument('--order', type=int, default=8)
     parser.add_argument('--hz', type=float, default=250)
     parser.add_argument('--samples', type=int, help='Use guided samples per visible edge chain instead of refined quadrature.')
+    parser.add_argument('--route-budget', action='store_true', help='Spend --samples across pure edge routes/orders per probe; mirror connections still enumerate.')
     parser.add_argument('--seed', type=int, default=17)
     parser.add_argument('--depth', type=int, default=2, help='Pure edge orders for --samples; mixed paths remain order 2.')
     parser.add_argument('--mirror-depth', type=int, default=2, help='Total event order of mirror/mixed connections.')
@@ -518,8 +585,8 @@ def main():
         return
     if args.scene is None or args.points is None:
         parser.error('Field evaluation requires --scene and --points.')
-    if args.samples is None and (args.control_variate or args.roulette):
-        parser.error('Control variates and roulette require --samples.')
+    if args.samples is None and (args.control_variate or args.roulette or args.route_budget):
+        parser.error('Sampling options require --samples.')
     if any(args.output.with_suffix(suffix).exists() for suffix in ['.npz', '.json']):
         raise FileExistsError('Preserve earlier measurements; choose a fresh output stem.')
     config = json.loads(args.scene.read_text())
@@ -549,7 +616,8 @@ def main():
         routes = np.empty((len(points), 0), int)
     else:
         values, connected, routes = sampled(config, points, args.hz, args.samples, args.seed, args.depth,
-            control_variate=args.control_variate, roulette=args.roulette, mirror_depth=args.mirror_depth)
+            control_variate=args.control_variate, roulette=args.roulette, mirror_depth=args.mirror_depth,
+            route_budget=args.route_budget)
     assert np.isfinite(values).all() and np.isfinite(connected).all()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output.with_suffix('.npz'), pressure=values, connections=connected, points=points, indices=args.points, routes=routes)
@@ -563,8 +631,11 @@ def main():
         evaluations = np.arange(1,args.depth+1)
         if args.control_variate and args.depth >= 2:
             evaluations[1] += 1  # Conditional control evaluates the preceding kernel again.
-        stats.update(samplesPerRoute=args.samples, seed=args.seed, quadratureOrder=None,
-                     edgeKernelEvaluationUpperBound=int(args.samples*(routes*evaluations).sum()),
+        stats.update({('samplesPerProbe' if args.route_budget else 'samplesPerRoute'): args.samples})
+        stats.update(routeBudget=args.route_budget, seed=args.seed, quadratureOrder=None,
+                     edgeKernelEvaluationUpperBound=int((1 if args.route_budget else args.samples)*(routes*evaluations).sum()),
+                     sampleScope='Per probe across pure edge routes/orders' if args.route_budget else 'Per visible route',
+                     routeCountScope='Allocated height samples per order' if args.route_budget else 'Visible routes per order',
                      budgetScope='Pure edge kernel evaluations only; excludes visibility and mixed mirror connections.')
     args.output.with_suffix('.json').write_text(json.dumps(stats, indent=2)+'\n')
     print(stats, flush=True)

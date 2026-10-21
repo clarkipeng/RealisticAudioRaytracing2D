@@ -1,5 +1,85 @@
 # Cleanup validation and measured bottlenecks
 
+## Bounded complete-route Monte Carlo — 2026-10-21
+
+**Implemented in the offline 2D diagnostic; the Unity/GPU renderer is unchanged.** The new `--route-budget` option spends a fixed total of pure-edge height samples per receiver. It retains the existing signed wedge integrand, physical delay/phase, shared-face factors and visibility rules. Larger scenes still fail high-fidelity accuracy; this is not a qualified training teacher.
+
+### What changed
+
+Previously `--samples N` meant N samples for every visible route, making total work grow with route count. With `--route-budget`, the existing edge visibility lists supply a small table of continuation counts. An integer index identifies a whole route without constructing the complete route tree. Repeated edges after another edge remain allowed.
+
+```text
+count visible continuations for each edge and remaining interaction order
+if all routes fit in the height-sample budget:
+    cover each route; divide the height samples among them
+else:
+    sample complete route indices with a scrambled Sobol sequence
+    correct each sampled contribution for its route probability
+for each selected route:
+    sample edge heights conditioned on the actual route
+    integrate signed pressure and phase using the existing physical kernel
+add the separately evaluated direct, mirror and mixed connections
+```
+
+All selected routes share a height sequence whose scramble is independent of route selection. This can preserve cancellation between routes; it is not a guarantee against motion artifacts. Failed physical-delay tests remain zero contributions, not renormalized successes. No pressure clipping, amplitude fitting, shortest-path replacement or diffraction disable is used.
+
+Only `tools/edge_integral.py` changes executable code: 71 net lines including four additional controls and CLI/provenance handling. No new runtime file, component, buffer or dependency. The default per-route mode remains available and its output is checked against the pre-change implementation.
+
+### Controls and measurement scope
+
+**28 numerical controls pass.** New controls cover fixed-budget integration against refined quadrature, every discrete route index/probability against the independent enumerator, empty-scene termination, and mixed reflection/diffraction against quadrature. These establish implementation checks, not general physical accuracy.
+
+The fields use the existing 12 × 11 m layouts with 1/9/25 rigid boxes, 250 Hz, 0.4 s path support, and one/two-edge orders plus mirror/mixed paths through total order two. Planar2D here means a 3D point source and infinitely extruded walls: each XY corner represents a vertical edge, so height integration is intentional. Finite-3D and moving scenes are not tested. The refined wave fields and their recorded mesh-convergence limits are unchanged.
+
+### Accuracy across whole maps
+
+65,536 total pure-edge height samples per receiver; seed 17. Relative complex-pressure L2 includes both amplitude and phase. No seed averaging or amplitude normalization. Timings are single-thread CPU wall time for the entire map, including geometry setup; the separate connection stage is added explicitly.
+
+| Boxes | Receivers | Complex error | Within ±3 dB | Pure-edge time | Direct/mirror/mixed time |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1014 | 1.85% | 100.0% | 16.65 s | 0.36 s |
+| 9 | 960 | 32.02% | 58.9% | 60.79 s | 30.69 s |
+| 25 | 880 | 83.23% | 31.4% | 79.53 s | 213.96 s |
+
+![Measured fields and positional errors](benchmarks/route-monte-carlo-2026-10-21.png)
+
+All routes fit the budget in these two-order map runs, so every route is covered and only its heights are Monte Carlo sampled. The route-subset branch is exercised by the discrete probability control; these maps do not demonstrate low-variance sampling of a much larger higher-order route space.
+
+### Sampling and cost comparison
+
+Four seeds on fixed 98/96/94-position lattices, chosen before examining errors. All variants add the same direct/mirror/mixed field, integrated with order-eight quadrature. The listener-guided ablation changes only the height proposal: it still knows the complete route for visibility, delay bounds and physical evaluation. It is **not** the production GPU estimator.
+
+| Boxes | Listener-guided, 4,096 total: error / pure time | New, 65,536 total: error / pure time | Existing, 128 per route: error / pure time |
+|---:|---:|---:|---:|
+| 1 | 4.93% / 0.34 s | 1.55% / 1.53 s | 3.64% / 0.08 s |
+| 9 | 145.17% / 4.45 s | 24.07% / 5.88 s | 26.67% / 5.80 s |
+| 25 | 246.47% / 7.23 s | 60.51% / 9.55 s | 57.06% / 12.19 s |
+
+These budgets are deliberately labeled: they are not equal numbers of kernel evaluations, nor precisely matched wall times. NumPy batching makes additional height samples relatively cheap compared with Python route traversal. This is not evidence of the same GPU speed/quality gain. Raw per-seed errors, counts, timings and rejected local-choice/shared-sequence/per-order-allocation variants are retained in the measurement ledger. The initial small-budget variants did not establish a large-scene improvement.
+
+Against the existing CPU enumerator, the nine-box lattice changes from 26.67% to 24.07% error at 5.80 versus 5.88 seconds of pure-edge time. The 25-box lattice is faster (12.19 to 9.55 seconds), but error worsens from 57.06% to 60.51%. The one-box accuracy improvement costs substantially more samples. These are measured tradeoffs, not a universal accuracy win.
+
+### Scaling and remaining limits
+
+For E edges, D requested orders and N height samples, the existing visibility setup remains quadratic in edge pairs (each analytic visibility check also visits boxes). Continuation counting uses O(D E²) additions in the dense case and O(D E) count storage. At most min(route count, N) routes are reconstructed; each reconstruction scans at most D adjacency lists. Pure-edge kernel work is bounded by N × D without control-variate extras. Arbitrary-precision counts avoid route-count overflow; their bit cost grows with depth.
+
+The mirror/mixed stage is still enumerated and lies outside that budget. Finite 3D cannot reuse the planar visibility assumption: visibility can change along an edge. Higher diffraction orders remain configurable, but these field tables truncate at two, so their accuracy does not establish a solution for the unstable higher-order GPU walk. General specular/edge connection support in the GPU also remains outstanding.
+
+**Decision:** keep this as a reproducible offline experiment. Do not replace the GPU walk until a candidate improves full-map amplitude and complex error at matched measured GPU time, including higher orders and finite-3D controls. Do not train a reconstruction model using the current GPU field as ground truth.
+
+### Reproduce
+
+Using the existing NumPy/SciPy environment and a saved planar scene:
+```sh
+python tools/edge_integral.py /tmp/route-checks.json --validate
+python tools/edge_integral.py /tmp/route-field --scene /path/to/scene.json \
+  --points 0 100 200 --hz 250 --samples 65536 --route-budget --depth 2 --mirror-depth 2
+```
+
+Outputs identify the sample scope and distinguish allocated samples from enumerated route counts. Choose fresh output paths; prior measurements are not overwritten. Runs used one low-priority numerical process, no Unity launch, windows, cursor capture or audio devices.
+
+[Measurement ledger](benchmarks/route-monte-carlo-2026-10-21.json) · [Raw fields, scripts, source snapshots and controls](benchmarks/route-monte-carlo-2026-10-21.zip). References are retained in the preceding spatial-accuracy archive. Final control-only edits are checked to leave all numerical functions identical to the measured source snapshot.
+
 ## Multi-edge failure diagnosis and a finite-edge numerical fix — 2026-10-20
 
 **The main acoustic accuracy failure remains unresolved.** One numerical sampling bug is fixed; none of the experimental route/height proposals passed the full-map quality review. The runtime patch adds 19 shader lines net, two provenance version updates, and one atomic GPU sampling test family. It does not clamp pressure, reduce bounce depth, disable diffraction or change the edge kernel. The solver contract is now `integrated-edge-pressure-preview-v10`.

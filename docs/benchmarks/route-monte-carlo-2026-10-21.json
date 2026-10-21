@@ -1,0 +1,2209 @@
+{
+  "date": "2026-10-21",
+  "solverSha256": "badd668ccc16c8872acf822e97c20c52028b30d40119ca857d00757c78494459",
+  "measuredSource": "edge-e9867eaca1e8.py",
+  "numericalImplementationUnchangedAfterMeasurements": true,
+  "controls": [
+    {
+      "check": "half-plane",
+      "hz": 0,
+      "absoluteError": 4.636291350834654e-13
+    },
+    {
+      "check": "sampled half-plane",
+      "hz": 0,
+      "relativeError": 1.8470702640356025e-12
+    },
+    {
+      "check": "peak control variate",
+      "hz": 0,
+      "relativeError": 7.858476656497294e-12
+    },
+    {
+      "check": "half-plane",
+      "hz": 250,
+      "absoluteError": 3.8128218909885053e-13
+    },
+    {
+      "check": "sampled half-plane",
+      "hz": 250,
+      "relativeError": 7.029746678075659e-07
+    },
+    {
+      "check": "peak control variate",
+      "hz": 250,
+      "relativeError": 7.029745377553013e-07
+    },
+    {
+      "check": "shadow boundary cancellation",
+      "absoluteChange": 6.663100998143484e-07
+    },
+    {
+      "check": "two-edge refinement",
+      "hz": 0,
+      "relativeChange": 1.5271272223813211e-06
+    },
+    {
+      "check": "sampled second order",
+      "hz": 0,
+      "relativeError": 8.990918213703707e-05
+    },
+    {
+      "check": "conditional peak control variate",
+      "hz": 0,
+      "relativeError": 6.680971755310766e-05
+    },
+    {
+      "check": "two-edge refinement",
+      "hz": 125,
+      "relativeChange": 1.3778478223857928e-06
+    },
+    {
+      "check": "sampled second order",
+      "hz": 125,
+      "relativeError": 0.00046479874782943997
+    },
+    {
+      "check": "conditional peak control variate",
+      "hz": 125,
+      "relativeError": 0.0002738760537661619
+    },
+    {
+      "check": "two-edge refinement",
+      "hz": 250,
+      "relativeChange": 7.409978192019742e-07
+    },
+    {
+      "check": "sampled second order",
+      "hz": 250,
+      "relativeError": 0.001716290321625014
+    },
+    {
+      "check": "conditional peak control variate",
+      "hz": 250,
+      "relativeError": 0.0020895437635753858
+    },
+    {
+      "check": "two-edge reciprocity",
+      "relativeError": 4.264441649824746e-08
+    },
+    {
+      "check": "fixed-budget routes against quadrature",
+      "relativeError": 0.0023850293043712186
+    },
+    {
+      "check": "all route ranks and probability weights",
+      "passed": true
+    },
+    {
+      "check": "empty-scene fixed-budget termination",
+      "passed": true
+    },
+    {
+      "check": "analytic mirror distance",
+      "absoluteError": 0.0
+    },
+    {
+      "check": "analytic two-mirror distance",
+      "absoluteError": 0.0
+    },
+    {
+      "check": "mixed paths against quadrature",
+      "relativeError": 6.486458878316958e-06
+    },
+    {
+      "check": "mixed-path reciprocity",
+      "relativeError": 0.0
+    },
+    {
+      "check": "third-order mixed reciprocity",
+      "relativeError": 1.5989504715173833e-07
+    },
+    {
+      "check": "roulette mean",
+      "threshold": 0.2,
+      "controlVariate": false,
+      "absoluteError": 0.00016189490918539943,
+      "standardError": 0.00011404032041632616
+    },
+    {
+      "check": "roulette mean",
+      "threshold": 0.2,
+      "controlVariate": true,
+      "absoluteError": 0.00013196942896440752,
+      "standardError": 9.676268726261088e-05
+    },
+    {
+      "check": "roulette mean",
+      "threshold": 2.0,
+      "controlVariate": false,
+      "absoluteError": 5.248183266631548e-05,
+      "standardError": 0.00025832028557021676
+    }
+  ],
+  "rows": [
+    {
+      "file": "planar-1-balanced-n4096-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "balanced",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.01956092148888608,
+          "magnitudeL2": 0.015324628094700555,
+          "shadowComplexL2": 0.06579165040117312,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.14086687855432428,
+          "p95AbsDb": 0.5405441082242575
+        }
+      ],
+      "mean": {
+        "complexL2": 0.01956092148888608,
+        "magnitudeL2": 0.015324628094700555,
+        "shadowComplexL2": 0.06579165040117312,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.14086687855432428,
+        "p95AbsDb": 0.5405441082242575
+      },
+      "medianPureSeconds": 0.7223064590070862,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        602112
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "3f67a1c3733811705d6b3858a622bba52690c03ab46667b4f1fef2070e1b5d35"
+    },
+    {
+      "file": "planar-1-enumerated-n128-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "enumerated",
+      "samples": 128,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.034651480250537894,
+          "magnitudeL2": 0.02388881429928656,
+          "shadowComplexL2": 0.10998151010060363,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.26336037902350784,
+          "p95AbsDb": 1.1278439494858135
+        },
+        {
+          "complexL2": 0.03185877980936719,
+          "magnitudeL2": 0.024826473140454643,
+          "shadowComplexL2": 0.18017463333088668,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.22457557483871954,
+          "p95AbsDb": 1.3650798475410466
+        },
+        {
+          "complexL2": 0.048525487338395706,
+          "magnitudeL2": 0.034986660087898504,
+          "shadowComplexL2": 0.17747785335842936,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.32790158983375706,
+          "p95AbsDb": 1.9538315489040332
+        },
+        {
+          "complexL2": 0.030740484966874686,
+          "magnitudeL2": 0.022074661126157316,
+          "shadowComplexL2": 0.1060004912945111,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.21241415679048947,
+          "p95AbsDb": 1.2171236469518345
+        }
+      ],
+      "mean": {
+        "complexL2": 0.03644405809129387,
+        "magnitudeL2": 0.026444152163449256,
+        "shadowComplexL2": 0.14340862202110768,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.25706292512161844,
+        "p95AbsDb": 1.415969748220682
+      },
+      "medianPureSeconds": 0.08418254149728455,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        132480,
+        132480,
+        132480,
+        132480
+      ],
+      "seedRmsOverReference": 0.031041703830847877,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-1-enumerated-n16-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "enumerated",
+      "samples": 16,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.17368886508046372,
+          "magnitudeL2": 0.13186431661238834,
+          "shadowComplexL2": 0.6455542830766332,
+          "within3dB": 0.7551020408163265,
+          "medianAbsDb": 1.162201867061198,
+          "p95AbsDb": 8.37603159535326
+        },
+        {
+          "complexL2": 0.0971298255433578,
+          "magnitudeL2": 0.06836671543488329,
+          "shadowComplexL2": 0.3828086556654073,
+          "within3dB": 0.9285714285714286,
+          "medianAbsDb": 0.8050334897231195,
+          "p95AbsDb": 3.2861631321644333
+        },
+        {
+          "complexL2": 0.22565392125091094,
+          "magnitudeL2": 0.16151746932350913,
+          "shadowComplexL2": 0.8918846064535919,
+          "within3dB": 0.6428571428571429,
+          "medianAbsDb": 1.1857769236447908,
+          "p95AbsDb": 11.374786622206148
+        },
+        {
+          "complexL2": 0.12522876753958354,
+          "magnitudeL2": 0.09092183414689332,
+          "shadowComplexL2": 0.31768955312659974,
+          "within3dB": 0.8163265306122449,
+          "medianAbsDb": 0.8445490425408724,
+          "p95AbsDb": 5.150122088625707
+        }
+      ],
+      "mean": {
+        "complexL2": 0.155425344853579,
+        "magnitudeL2": 0.11316758387941851,
+        "shadowComplexL2": 0.559484274580558,
+        "within3dB": 0.7857142857142857,
+        "medianAbsDb": 0.9993903307424952,
+        "p95AbsDb": 7.046775859587387
+      },
+      "medianPureSeconds": 0.06547404199955054,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        16560,
+        16560,
+        16560,
+        16560
+      ],
+      "seedRmsOverReference": 0.11151097737020163,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-1-listener-n256-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "listener",
+      "samples": 256,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.1395147356006463,
+          "magnitudeL2": 0.08315478880336939,
+          "shadowComplexL2": 0.24113314904710725,
+          "within3dB": 0.9489795918367347,
+          "medianAbsDb": 0.5134211600227707,
+          "p95AbsDb": 2.798814109930161
+        }
+      ],
+      "mean": {
+        "complexL2": 0.1395147356006463,
+        "magnitudeL2": 0.08315478880336939,
+        "shadowComplexL2": 0.24113314904710725,
+        "within3dB": 0.9489795918367347,
+        "medianAbsDb": 0.5134211600227707,
+        "p95AbsDb": 2.798814109930161
+      },
+      "medianPureSeconds": 0.14289266700507142,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        37632
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "bd10906548f7b477f630bf50f7ef2ada6e61962fcebb780f3180bf8524236747"
+    },
+    {
+      "file": "planar-1-listener-n4096-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "listener",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.051165842967391496,
+          "magnitudeL2": 0.03383277681524133,
+          "shadowComplexL2": 0.19947947343735037,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.345108477012709,
+          "p95AbsDb": 1.896008518669085
+        },
+        {
+          "complexL2": 0.05032499676981562,
+          "magnitudeL2": 0.03483305626484037,
+          "shadowComplexL2": 0.21583739875963112,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.40215590236267895,
+          "p95AbsDb": 1.8683397448269528
+        },
+        {
+          "complexL2": 0.04668157120641908,
+          "magnitudeL2": 0.030269093269348162,
+          "shadowComplexL2": 0.20573621867505307,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.2950552813388203,
+          "p95AbsDb": 1.8075928574098354
+        },
+        {
+          "complexL2": 0.0488846130439752,
+          "magnitudeL2": 0.033417257576431804,
+          "shadowComplexL2": 0.19521297852732675,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.3391947859635411,
+          "p95AbsDb": 1.995461206737328
+        }
+      ],
+      "mean": {
+        "complexL2": 0.049264255996900354,
+        "magnitudeL2": 0.03308804598146542,
+        "shadowComplexL2": 0.20406651734984033,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.34537861166943734,
+        "p95AbsDb": 1.8918505819108002
+      },
+      "medianPureSeconds": 0.34161043749190867,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        602112,
+        602112,
+        602112,
+        602112
+      ],
+      "seedRmsOverReference": 0.018876024394248035,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-1-pooled-n65536-d2-full.json",
+      "name": "planar-1",
+      "scope": "full",
+      "mode": "pooled",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 1014,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.018508717662998112,
+          "magnitudeL2": 0.012718933525581615,
+          "shadowComplexL2": 0.05301731296939217,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.10955185209142393,
+          "p95AbsDb": 0.4156828568138102
+        }
+      ],
+      "mean": {
+        "complexL2": 0.018508717662998112,
+        "magnitudeL2": 0.012718933525581615,
+        "shadowComplexL2": 0.05301731296939217,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.10955185209142393,
+        "p95AbsDb": 0.4156828568138102
+      },
+      "medianPureSeconds": 16.651045165985124,
+      "commonConnectionSeconds": 0.360517749999417,
+      "edgeKernels": [
+        110786383
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "e9867eaca1e842dbf9463e3aa17eb9027d83e7ce7d241d217c4de183b94b82b9"
+    },
+    {
+      "file": "planar-1-pooled-n65536-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "pooled",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.01548145640862155,
+          "magnitudeL2": 0.011817733368721326,
+          "shadowComplexL2": 0.062217946676457705,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.11699920261556304,
+          "p95AbsDb": 0.4536127344719703
+        },
+        {
+          "complexL2": 0.015379415911669938,
+          "magnitudeL2": 0.011669932011010171,
+          "shadowComplexL2": 0.06033898475474243,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.10721678982096947,
+          "p95AbsDb": 0.4699258490129234
+        },
+        {
+          "complexL2": 0.015431612349084153,
+          "magnitudeL2": 0.011731036629781746,
+          "shadowComplexL2": 0.0611045895555873,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.10978814836350037,
+          "p95AbsDb": 0.4614353452871553
+        },
+        {
+          "complexL2": 0.015659344155862565,
+          "magnitudeL2": 0.01206560713286362,
+          "shadowComplexL2": 0.0575883513756522,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.1064249268756427,
+          "p95AbsDb": 0.402916199117086
+        }
+      ],
+      "mean": {
+        "complexL2": 0.015487957206309551,
+        "magnitudeL2": 0.011821077285594216,
+        "shadowComplexL2": 0.060312468090609916,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.1101072669189189,
+        "p95AbsDb": 0.44697253197228376
+      },
+      "medianPureSeconds": 1.5271914375043707,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        10713945,
+        10713945,
+        10713945,
+        10713945
+      ],
+      "seedRmsOverReference": 0.0013178888671842857,
+      "solverSha256": "e9867eaca1e842dbf9463e3aa17eb9027d83e7ce7d241d217c4de183b94b82b9"
+    },
+    {
+      "file": "planar-1-route-n256-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "route",
+      "samples": 256,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.06432877945493264,
+          "magnitudeL2": 0.04691925301582887,
+          "shadowComplexL2": 0.3439422199619592,
+          "within3dB": 0.9897959183673469,
+          "medianAbsDb": 0.46686312734664004,
+          "p95AbsDb": 2.1331175512322034
+        }
+      ],
+      "mean": {
+        "complexL2": 0.06432877945493264,
+        "magnitudeL2": 0.04691925301582887,
+        "shadowComplexL2": 0.3439422199619592,
+        "within3dB": 0.9897959183673469,
+        "medianAbsDb": 0.46686312734664004,
+        "p95AbsDb": 2.1331175512322034
+      },
+      "medianPureSeconds": 0.08574112498899922,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        37632
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "bd10906548f7b477f630bf50f7ef2ada6e61962fcebb780f3180bf8524236747"
+    },
+    {
+      "file": "planar-1-route-n4096-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "route",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.02290327275951747,
+          "magnitudeL2": 0.016631890264609785,
+          "shadowComplexL2": 0.04761871443997156,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.15070611157736302,
+          "p95AbsDb": 0.8792885289818549
+        },
+        {
+          "complexL2": 0.018538119327907006,
+          "magnitudeL2": 0.012174021620672576,
+          "shadowComplexL2": 0.06944971897442406,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.1366709347989805,
+          "p95AbsDb": 0.4350723658669753
+        },
+        {
+          "complexL2": 0.021895018294227096,
+          "magnitudeL2": 0.01576745332208586,
+          "shadowComplexL2": 0.05698388320677793,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.20512827434097847,
+          "p95AbsDb": 0.7321061037079842
+        },
+        {
+          "complexL2": 0.02360639543842901,
+          "magnitudeL2": 0.015878467912219234,
+          "shadowComplexL2": 0.05161363626863309,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.15284836505764388,
+          "p95AbsDb": 0.7109566334803018
+        }
+      ],
+      "mean": {
+        "complexL2": 0.02173570145502015,
+        "magnitudeL2": 0.015112958279896865,
+        "shadowComplexL2": 0.056416488222451655,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.16133842144374147,
+        "p95AbsDb": 0.6893559080092792
+      },
+      "medianPureSeconds": 0.33006483349890914,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        602112,
+        602112,
+        602112,
+        602112
+      ],
+      "seedRmsOverReference": 0.015627108357985496,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-1-shared-n4096-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "shared",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.022860288730120748,
+          "magnitudeL2": 0.017367671947539232,
+          "shadowComplexL2": 0.0986618379750803,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.18724935588193936,
+          "p95AbsDb": 0.7727665662510227
+        },
+        {
+          "complexL2": 0.020243372349918038,
+          "magnitudeL2": 0.015239296490782577,
+          "shadowComplexL2": 0.09195828709622753,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.1509072863669848,
+          "p95AbsDb": 0.6333582986955049
+        },
+        {
+          "complexL2": 0.01760542416565659,
+          "magnitudeL2": 0.012813548723870555,
+          "shadowComplexL2": 0.05794258010241276,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.1518595154393524,
+          "p95AbsDb": 0.5163421168716672
+        },
+        {
+          "complexL2": 0.016641593270503314,
+          "magnitudeL2": 0.012442436196194678,
+          "shadowComplexL2": 0.04877956032153471,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.12362058056389158,
+          "p95AbsDb": 0.5227233697815834
+        }
+      ],
+      "mean": {
+        "complexL2": 0.019337669629049672,
+        "magnitudeL2": 0.014465738339596761,
+        "shadowComplexL2": 0.07433556637381382,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.15340918456304203,
+        "p95AbsDb": 0.6112975878999445
+      },
+      "medianPureSeconds": 0.3204197295126505,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        602112,
+        602112,
+        602112,
+        602112
+      ],
+      "seedRmsOverReference": 0.012796669551709947,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-1-stratified-n4096-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "stratified",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.01649538397744265,
+          "magnitudeL2": 0.012465040585752799,
+          "shadowComplexL2": 0.06929393346141743,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.13498265383228703,
+          "p95AbsDb": 0.5226776703040434
+        },
+        {
+          "complexL2": 0.02042876554962632,
+          "magnitudeL2": 0.015874946148969227,
+          "shadowComplexL2": 0.07524294740208037,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.16405918155808152,
+          "p95AbsDb": 0.6154566062433893
+        },
+        {
+          "complexL2": 0.01865543093074282,
+          "magnitudeL2": 0.01351960794343178,
+          "shadowComplexL2": 0.05976246659953695,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.17997280081095046,
+          "p95AbsDb": 0.6132542752056328
+        },
+        {
+          "complexL2": 0.018712602204664208,
+          "magnitudeL2": 0.013887764190589406,
+          "shadowComplexL2": 0.0495594168450229,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.13881472993262572,
+          "p95AbsDb": 0.5769374378381229
+        }
+      ],
+      "mean": {
+        "complexL2": 0.018573045665619,
+        "magnitudeL2": 0.013936839717185803,
+        "shadowComplexL2": 0.06346469107701441,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.15445734153348617,
+        "p95AbsDb": 0.582081497397797
+      },
+      "medianPureSeconds": 0.15985874999023508,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        602112,
+        602112,
+        602112,
+        602112
+      ],
+      "seedRmsOverReference": 0.00908413668011382,
+      "solverSha256": "eaa6bb201ed4a89bd0b26629e651c00c0d2e398ef5c227cc0f1d52ae3beb5d83"
+    },
+    {
+      "file": "planar-1-stratified-n65536-d2-lattice.json",
+      "name": "planar-1",
+      "scope": "lattice",
+      "mode": "stratified",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 98,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.015432330863054027,
+          "magnitudeL2": 0.011793652964892692,
+          "shadowComplexL2": 0.06362396572580663,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.10499276973146673,
+          "p95AbsDb": 0.4696705120460272
+        },
+        {
+          "complexL2": 0.015149626309105307,
+          "magnitudeL2": 0.011553919938904447,
+          "shadowComplexL2": 0.06019369431554874,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.1029565957596417,
+          "p95AbsDb": 0.4406119769226181
+        },
+        {
+          "complexL2": 0.015569949870216853,
+          "magnitudeL2": 0.011816551199637445,
+          "shadowComplexL2": 0.062438344606866654,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.11319987960104459,
+          "p95AbsDb": 0.4552315538676099
+        },
+        {
+          "complexL2": 0.015529961765851884,
+          "magnitudeL2": 0.012003227814368047,
+          "shadowComplexL2": 0.057583845739809396,
+          "within3dB": 1.0,
+          "medianAbsDb": 0.1114442724123462,
+          "p95AbsDb": 0.4163985279354516
+        }
+      ],
+      "mean": {
+        "complexL2": 0.015420467202057019,
+        "magnitudeL2": 0.011791837979450659,
+        "shadowComplexL2": 0.06095996259700785,
+        "within3dB": 1.0,
+        "medianAbsDb": 0.10814837937612481,
+        "p95AbsDb": 0.44547814269292674
+      },
+      "medianPureSeconds": 1.5693361244921107,
+      "commonConnectionSeconds": 0.058494332974078134,
+      "edgeKernels": [
+        9633792,
+        9633792,
+        9633792,
+        9633792
+      ],
+      "seedRmsOverReference": 0.0016675317102036122,
+      "solverSha256": "37c0c934d06e9c2b0c4ce3d930ade335979e50106201eb85e38538ac2b62919c"
+    },
+    {
+      "file": "planar-25-balanced-n4096-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "balanced",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 1.8216009164604967,
+          "magnitudeL2": 1.5420982601381756,
+          "shadowComplexL2": 5.0889079589950725,
+          "within3dB": 0.07446808510638298,
+          "medianAbsDb": 14.827524357685133,
+          "p95AbsDb": 28.548273954448764
+        }
+      ],
+      "mean": {
+        "complexL2": 1.8216009164604967,
+        "magnitudeL2": 1.5420982601381756,
+        "shadowComplexL2": 5.0889079589950725,
+        "within3dB": 0.07446808510638298,
+        "medianAbsDb": 14.827524357685133,
+        "p95AbsDb": 28.548273954448764
+      },
+      "medianPureSeconds": 7.368480333010666,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        577536
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "3f67a1c3733811705d6b3858a622bba52690c03ab46667b4f1fef2070e1b5d35"
+    },
+    {
+      "file": "planar-25-enumerated-n128-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "enumerated",
+      "samples": 128,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.5705248252020707,
+          "magnitudeL2": 0.3928876912340227,
+          "shadowComplexL2": 1.3812991615575665,
+          "within3dB": 0.425531914893617,
+          "medianAbsDb": 4.078423162400237,
+          "p95AbsDb": 19.90815711145845
+        },
+        {
+          "complexL2": 0.6022713132151597,
+          "magnitudeL2": 0.4081801849642515,
+          "shadowComplexL2": 1.656485814071178,
+          "within3dB": 0.3191489361702128,
+          "medianAbsDb": 5.985596776612264,
+          "p95AbsDb": 20.611995697740927
+        },
+        {
+          "complexL2": 0.5716860370888373,
+          "magnitudeL2": 0.4038557337174845,
+          "shadowComplexL2": 1.5799355986977828,
+          "within3dB": 0.3617021276595745,
+          "medianAbsDb": 4.6085460091625485,
+          "p95AbsDb": 18.414246761400435
+        },
+        {
+          "complexL2": 0.5377652269988312,
+          "magnitudeL2": 0.3935024647105934,
+          "shadowComplexL2": 1.4604210908272608,
+          "within3dB": 0.3404255319148936,
+          "medianAbsDb": 5.301698102425812,
+          "p95AbsDb": 17.4879288631856
+        }
+      ],
+      "mean": {
+        "complexL2": 0.5705618506262248,
+        "magnitudeL2": 0.39960651865658803,
+        "shadowComplexL2": 1.519535416288447,
+        "within3dB": 0.3617021276595745,
+        "medianAbsDb": 4.9935660126502155,
+        "p95AbsDb": 19.105582108446352
+      },
+      "medianPureSeconds": 12.194604582997272,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        13619584,
+        13619584,
+        13619584,
+        13619584
+      ],
+      "seedRmsOverReference": 0.2916578956781071,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-25-enumerated-n16-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "enumerated",
+      "samples": 16,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 1.4495147967027933,
+          "magnitudeL2": 1.1084527068688557,
+          "shadowComplexL2": 3.4492166227098684,
+          "within3dB": 0.1702127659574468,
+          "medianAbsDb": 10.308064535986478,
+          "p95AbsDb": 27.79098249011047
+        },
+        {
+          "complexL2": 1.0525420441602957,
+          "magnitudeL2": 0.8041116384359339,
+          "shadowComplexL2": 2.776584517999775,
+          "within3dB": 0.20212765957446807,
+          "medianAbsDb": 8.807010905030882,
+          "p95AbsDb": 24.940381669644133
+        },
+        {
+          "complexL2": 1.2401293210325393,
+          "magnitudeL2": 1.0209668491762307,
+          "shadowComplexL2": 3.496772185892616,
+          "within3dB": 0.1702127659574468,
+          "medianAbsDb": 11.089476665523776,
+          "p95AbsDb": 28.2660584211368
+        },
+        {
+          "complexL2": 1.0372545991779374,
+          "magnitudeL2": 0.8475245658103864,
+          "shadowComplexL2": 2.9246760932516778,
+          "within3dB": 0.26595744680851063,
+          "medianAbsDb": 9.141480800464251,
+          "p95AbsDb": 26.18735377777424
+        }
+      ],
+      "mean": {
+        "complexL2": 1.1948601902683915,
+        "magnitudeL2": 0.9452639400728516,
+        "shadowComplexL2": 3.1618123549634842,
+        "within3dB": 0.20212765957446807,
+        "medianAbsDb": 9.836508226751347,
+        "p95AbsDb": 26.796194089666415
+      },
+      "medianPureSeconds": 10.254431937501067,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        1702448,
+        1702448,
+        1702448,
+        1702448
+      ],
+      "seedRmsOverReference": 0.9917920722310392,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-25-listener-n256-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "listener",
+      "samples": 256,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 7.6603058402470685,
+          "magnitudeL2": 7.324013698814873,
+          "shadowComplexL2": 22.576354748159012,
+          "within3dB": 0.07446808510638298,
+          "medianAbsDb": 26.59500347461087,
+          "p95AbsDb": 42.409236680557555
+        }
+      ],
+      "mean": {
+        "complexL2": 7.6603058402470685,
+        "magnitudeL2": 7.324013698814873,
+        "shadowComplexL2": 22.576354748159012,
+        "within3dB": 0.07446808510638298,
+        "medianAbsDb": 26.59500347461087,
+        "p95AbsDb": 42.409236680557555
+      },
+      "medianPureSeconds": 1.9923428329930175,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        36096
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-25-listener-n4096-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "listener",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 2.535977821680391,
+          "magnitudeL2": 2.1212776683719428,
+          "shadowComplexL2": 6.36615142741735,
+          "within3dB": 0.05319148936170213,
+          "medianAbsDb": 14.526411688349683,
+          "p95AbsDb": 29.52750493035131
+        },
+        {
+          "complexL2": 2.5799324120336475,
+          "magnitudeL2": 2.3315559675415263,
+          "shadowComplexL2": 5.007362690130591,
+          "within3dB": 0.10638297872340426,
+          "medianAbsDb": 14.262726247154038,
+          "p95AbsDb": 28.182500066350073
+        },
+        {
+          "complexL2": 2.5189151161210503,
+          "magnitudeL2": 2.1711721234323735,
+          "shadowComplexL2": 5.990874013307392,
+          "within3dB": 0.14893617021276595,
+          "medianAbsDb": 11.793472629624734,
+          "p95AbsDb": 33.67058628186794
+        },
+        {
+          "complexL2": 2.2239736009087,
+          "magnitudeL2": 1.9458812787258593,
+          "shadowComplexL2": 6.055088376625907,
+          "within3dB": 0.14893617021276595,
+          "medianAbsDb": 14.477154221758703,
+          "p95AbsDb": 29.749712693204035
+        }
+      ],
+      "mean": {
+        "complexL2": 2.4646997376859474,
+        "magnitudeL2": 2.1424717595179255,
+        "shadowComplexL2": 5.85486912687031,
+        "within3dB": 0.11436170212765957,
+        "medianAbsDb": 13.76494119672179,
+        "p95AbsDb": 30.28257599294334
+      },
+      "medianPureSeconds": 7.225493645499228,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        577536,
+        577536,
+        577536,
+        577536
+      ],
+      "seedRmsOverReference": 2.1699908612405476,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-25-pooled-n65536-d2-full.json",
+      "name": "planar-25",
+      "scope": "full",
+      "mode": "pooled",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 880,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.8323058513730033,
+          "magnitudeL2": 0.6082329740740211,
+          "shadowComplexL2": 1.8793881045278542,
+          "within3dB": 0.31363636363636366,
+          "medianAbsDb": 5.638717740577228,
+          "p95AbsDb": 20.158986632588707
+        }
+      ],
+      "mean": {
+        "complexL2": 0.8323058513730033,
+        "magnitudeL2": 0.6082329740740211,
+        "shadowComplexL2": 1.8793881045278542,
+        "within3dB": 0.31363636363636366,
+        "medianAbsDb": 5.638717740577228,
+        "p95AbsDb": 20.158986632588707
+      },
+      "medianPureSeconds": 79.53450045798672,
+      "commonConnectionSeconds": 213.95734258298762,
+      "edgeKernels": [
+        114011305
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "e9867eaca1e842dbf9463e3aa17eb9027d83e7ce7d241d217c4de183b94b82b9"
+    },
+    {
+      "file": "planar-25-pooled-n65536-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "pooled",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.5962863780365251,
+          "magnitudeL2": 0.44448864319168685,
+          "shadowComplexL2": 1.580629357380634,
+          "within3dB": 0.30851063829787234,
+          "medianAbsDb": 5.51970328224893,
+          "p95AbsDb": 20.008958556017205
+        },
+        {
+          "complexL2": 0.6436426468588434,
+          "magnitudeL2": 0.4445705481681961,
+          "shadowComplexL2": 1.559597810013672,
+          "within3dB": 0.3191489361702128,
+          "medianAbsDb": 5.764790388668773,
+          "p95AbsDb": 19.691955126899323
+        },
+        {
+          "complexL2": 0.5924144538003875,
+          "magnitudeL2": 0.3943726842981542,
+          "shadowComplexL2": 1.503322440895813,
+          "within3dB": 0.40425531914893614,
+          "medianAbsDb": 4.706015630292869,
+          "p95AbsDb": 19.138222352071924
+        },
+        {
+          "complexL2": 0.5879487828743674,
+          "magnitudeL2": 0.413597964108064,
+          "shadowComplexL2": 1.6286028893565212,
+          "within3dB": 0.39361702127659576,
+          "medianAbsDb": 4.637908329206496,
+          "p95AbsDb": 20.22127078564712
+        }
+      ],
+      "mean": {
+        "complexL2": 0.6050730653925308,
+        "magnitudeL2": 0.42425745994152525,
+        "shadowComplexL2": 1.5680381244116601,
+        "within3dB": 0.35638297872340424,
+        "medianAbsDb": 5.157104407604267,
+        "p95AbsDb": 19.765101705158894
+      },
+      "medianPureSeconds": 9.54796064599941,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        12175870,
+        12175870,
+        12175870,
+        12175870
+      ],
+      "seedRmsOverReference": 0.33472097152268165,
+      "solverSha256": "e9867eaca1e842dbf9463e3aa17eb9027d83e7ce7d241d217c4de183b94b82b9"
+    },
+    {
+      "file": "planar-25-route-n256-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "route",
+      "samples": 256,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 11.659183774915762,
+          "magnitudeL2": 11.316736245547483,
+          "shadowComplexL2": 30.28101111259593,
+          "within3dB": 0.0,
+          "medianAbsDb": 28.255846883078917,
+          "p95AbsDb": 46.52990172492117
+        }
+      ],
+      "mean": {
+        "complexL2": 11.659183774915762,
+        "magnitudeL2": 11.316736245547483,
+        "shadowComplexL2": 30.28101111259593,
+        "within3dB": 0.0,
+        "medianAbsDb": 28.255846883078917,
+        "p95AbsDb": 46.52990172492117
+      },
+      "medianPureSeconds": 1.9525307080184575,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        36096
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-25-route-n4096-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "route",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 2.415572099466251,
+          "magnitudeL2": 2.038666145430017,
+          "shadowComplexL2": 6.588177243311725,
+          "within3dB": 0.13829787234042554,
+          "medianAbsDb": 13.689334008508649,
+          "p95AbsDb": 30.354052767169037
+        },
+        {
+          "complexL2": 2.6778833890721367,
+          "magnitudeL2": 2.329718300910773,
+          "shadowComplexL2": 6.978239289196772,
+          "within3dB": 0.10638297872340426,
+          "medianAbsDb": 17.41052459141558,
+          "p95AbsDb": 30.218133101313303
+        },
+        {
+          "complexL2": 2.399474629457646,
+          "magnitudeL2": 2.086291154505313,
+          "shadowComplexL2": 6.163261200724002,
+          "within3dB": 0.10638297872340426,
+          "medianAbsDb": 15.363243409869984,
+          "p95AbsDb": 30.77188086581755
+        },
+        {
+          "complexL2": 2.4279945739714317,
+          "magnitudeL2": 2.076034064596679,
+          "shadowComplexL2": 6.762235065700636,
+          "within3dB": 0.1595744680851064,
+          "medianAbsDb": 15.172278189627058,
+          "p95AbsDb": 31.764475616041985
+        }
+      ],
+      "mean": {
+        "complexL2": 2.4802311729918665,
+        "magnitudeL2": 2.1326774163606954,
+        "shadowComplexL2": 6.622978199733284,
+        "within3dB": 0.12765957446808512,
+        "medianAbsDb": 15.408845049855318,
+        "p95AbsDb": 30.77713558758547
+      },
+      "medianPureSeconds": 7.57132072901004,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        577536,
+        577536,
+        577536,
+        577536
+      ],
+      "seedRmsOverReference": 2.179019089945444,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-25-shared-n4096-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "shared",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 1.7831880139191534,
+          "magnitudeL2": 1.5036027483041063,
+          "shadowComplexL2": 5.249132220947867,
+          "within3dB": 0.14893617021276595,
+          "medianAbsDb": 12.233785272941802,
+          "p95AbsDb": 31.83215758466972
+        },
+        {
+          "complexL2": 2.8697625755507388,
+          "magnitudeL2": 2.576992578446908,
+          "shadowComplexL2": 7.995688051924121,
+          "within3dB": 0.10638297872340426,
+          "medianAbsDb": 16.941712322888943,
+          "p95AbsDb": 33.048005889906996
+        },
+        {
+          "complexL2": 4.155335220108954,
+          "magnitudeL2": 3.7429398816804045,
+          "shadowComplexL2": 10.756478254541259,
+          "within3dB": 0.11702127659574468,
+          "medianAbsDb": 20.265602440609946,
+          "p95AbsDb": 32.103739676098996
+        },
+        {
+          "complexL2": 1.246176613695534,
+          "magnitudeL2": 1.046305051245819,
+          "shadowComplexL2": 3.3246845779685215,
+          "within3dB": 0.20212765957446807,
+          "medianAbsDb": 10.585530461472814,
+          "p95AbsDb": 27.889633926005235
+        }
+      ],
+      "mean": {
+        "complexL2": 2.513615605818595,
+        "magnitudeL2": 2.2174600649193095,
+        "shadowComplexL2": 6.8314957763454425,
+        "within3dB": 0.14361702127659573,
+        "medianAbsDb": 15.006657624478375,
+        "p95AbsDb": 31.218384269170237
+      },
+      "medianPureSeconds": 6.957195645489264,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        577536,
+        577536,
+        577536,
+        577536
+      ],
+      "seedRmsOverReference": 2.3867843327954117,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-25-stratified-n4096-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "stratified",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 1.4098757203924988,
+          "magnitudeL2": 1.2020874369780168,
+          "shadowComplexL2": 3.8179011593212273,
+          "within3dB": 0.1276595744680851,
+          "medianAbsDb": 9.94123692642195,
+          "p95AbsDb": 27.07297255422425
+        },
+        {
+          "complexL2": 3.0155661883936675,
+          "magnitudeL2": 2.6322466762061647,
+          "shadowComplexL2": 7.8216017003460045,
+          "within3dB": 0.1276595744680851,
+          "medianAbsDb": 14.801305914867692,
+          "p95AbsDb": 34.52654504584858
+        },
+        {
+          "complexL2": 3.669184592842295,
+          "magnitudeL2": 3.273413234116954,
+          "shadowComplexL2": 9.68709481731092,
+          "within3dB": 0.11702127659574468,
+          "medianAbsDb": 17.88734622166957,
+          "p95AbsDb": 34.335480250214864
+        },
+        {
+          "complexL2": 1.1902420250945551,
+          "magnitudeL2": 1.0122065061341137,
+          "shadowComplexL2": 3.406935773737667,
+          "within3dB": 0.1595744680851064,
+          "medianAbsDb": 10.198284952778323,
+          "p95AbsDb": 28.294633245046334
+        }
+      ],
+      "mean": {
+        "complexL2": 2.321217131680754,
+        "magnitudeL2": 2.029988463358812,
+        "shadowComplexL2": 6.183383362678955,
+        "within3dB": 0.13297872340425532,
+        "medianAbsDb": 13.207043503934383,
+        "p95AbsDb": 31.057407773833503
+      },
+      "medianPureSeconds": 7.484811708010966,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        577536,
+        577536,
+        577536,
+        577536
+      ],
+      "seedRmsOverReference": 2.1468766160288792,
+      "solverSha256": "eaa6bb201ed4a89bd0b26629e651c00c0d2e398ef5c227cc0f1d52ae3beb5d83"
+    },
+    {
+      "file": "planar-25-stratified-n65536-d2-lattice.json",
+      "name": "planar-25",
+      "scope": "lattice",
+      "mode": "stratified",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 94,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.6623304413809287,
+          "magnitudeL2": 0.4992072111035829,
+          "shadowComplexL2": 1.814744640240631,
+          "within3dB": 0.3723404255319149,
+          "medianAbsDb": 5.996375384724001,
+          "p95AbsDb": 21.70878611944554
+        },
+        {
+          "complexL2": 0.6957603368282141,
+          "magnitudeL2": 0.4899109768410445,
+          "shadowComplexL2": 1.7591289234864351,
+          "within3dB": 0.35106382978723405,
+          "medianAbsDb": 6.28328617123187,
+          "p95AbsDb": 21.807941796744032
+        },
+        {
+          "complexL2": 0.6880157069907583,
+          "magnitudeL2": 0.486050914348856,
+          "shadowComplexL2": 1.7622208564345245,
+          "within3dB": 0.3829787234042553,
+          "medianAbsDb": 5.151288484005033,
+          "p95AbsDb": 21.33006588401553
+        },
+        {
+          "complexL2": 0.7628731946818508,
+          "magnitudeL2": 0.5592898456263259,
+          "shadowComplexL2": 2.0265797977796463,
+          "within3dB": 0.20212765957446807,
+          "medianAbsDb": 7.213750091401561,
+          "p95AbsDb": 20.37262069913801
+        }
+      ],
+      "mean": {
+        "complexL2": 0.7022449199704379,
+        "magnitudeL2": 0.5086147369799523,
+        "shadowComplexL2": 1.8406685544853092,
+        "within3dB": 0.32712765957446804,
+        "medianAbsDb": 6.1611750328406165,
+        "p95AbsDb": 21.30485362483578
+      },
+      "medianPureSeconds": 8.208916083007352,
+      "commonConnectionSeconds": 22.78574000002118,
+      "edgeKernels": [
+        9240576,
+        9240576,
+        9240576,
+        9240576
+      ],
+      "seedRmsOverReference": 0.48715692344686695,
+      "solverSha256": "37c0c934d06e9c2b0c4ce3d930ade335979e50106201eb85e38538ac2b62919c"
+    },
+    {
+      "file": "planar-9-balanced-n4096-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "balanced",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.832831069913171,
+          "magnitudeL2": 0.635632491815286,
+          "shadowComplexL2": 2.847125196445704,
+          "within3dB": 0.25,
+          "medianAbsDb": 5.25648770620759,
+          "p95AbsDb": 19.088710304042387
+        }
+      ],
+      "mean": {
+        "complexL2": 0.832831069913171,
+        "magnitudeL2": 0.635632491815286,
+        "shadowComplexL2": 2.847125196445704,
+        "within3dB": 0.25,
+        "medianAbsDb": 5.25648770620759,
+        "p95AbsDb": 19.088710304042387
+      },
+      "medianPureSeconds": 4.444719041988719,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        589824
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "3f67a1c3733811705d6b3858a622bba52690c03ab46667b4f1fef2070e1b5d35"
+    },
+    {
+      "file": "planar-9-enumerated-n128-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "enumerated",
+      "samples": 128,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.2994581259861502,
+          "magnitudeL2": 0.21238472041788017,
+          "shadowComplexL2": 0.8710754005047482,
+          "within3dB": 0.5208333333333334,
+          "medianAbsDb": 2.761598085079843,
+          "p95AbsDb": 13.098856121269833
+        },
+        {
+          "complexL2": 0.262260183843505,
+          "magnitudeL2": 0.1715975181186255,
+          "shadowComplexL2": 0.8221737561861366,
+          "within3dB": 0.6145833333333334,
+          "medianAbsDb": 2.189935852808623,
+          "p95AbsDb": 11.173632168345009
+        },
+        {
+          "complexL2": 0.2456654653153308,
+          "magnitudeL2": 0.17919412788510572,
+          "shadowComplexL2": 0.7809823626760006,
+          "within3dB": 0.6145833333333334,
+          "medianAbsDb": 1.8978720767069324,
+          "p95AbsDb": 9.82868229749231
+        },
+        {
+          "complexL2": 0.25952490541435846,
+          "magnitudeL2": 0.16952293829704446,
+          "shadowComplexL2": 0.8377117482934867,
+          "within3dB": 0.5625,
+          "medianAbsDb": 2.544469064339032,
+          "p95AbsDb": 8.68663585758071
+        }
+      ],
+      "mean": {
+        "complexL2": 0.2667271701398361,
+        "magnitudeL2": 0.18317482617966396,
+        "shadowComplexL2": 0.8279858169150931,
+        "within3dB": 0.578125,
+        "medianAbsDb": 2.348468769733608,
+        "p95AbsDb": 10.696951611171965
+      },
+      "medianPureSeconds": 5.801016375000472,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        8335488,
+        8335488,
+        8335488,
+        8335488
+      ],
+      "seedRmsOverReference": 0.17598548736176464,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-9-enumerated-n16-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "enumerated",
+      "samples": 16,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.7679729731227403,
+          "magnitudeL2": 0.5710451810810894,
+          "shadowComplexL2": 2.2460019239546143,
+          "within3dB": 0.21875,
+          "medianAbsDb": 5.468296356085974,
+          "p95AbsDb": 17.59948092581562
+        },
+        {
+          "complexL2": 0.5821520686310231,
+          "magnitudeL2": 0.42557303026259385,
+          "shadowComplexL2": 1.6855897016900752,
+          "within3dB": 0.3541666666666667,
+          "medianAbsDb": 4.689709476771396,
+          "p95AbsDb": 15.996786038529887
+        },
+        {
+          "complexL2": 0.6927151380977618,
+          "magnitudeL2": 0.501977559018282,
+          "shadowComplexL2": 2.260521978664645,
+          "within3dB": 0.40625,
+          "medianAbsDb": 5.4039864708634635,
+          "p95AbsDb": 16.55574617890778
+        },
+        {
+          "complexL2": 0.7245119146377533,
+          "magnitudeL2": 0.5097237781959154,
+          "shadowComplexL2": 2.0805874960253714,
+          "within3dB": 0.2916666666666667,
+          "medianAbsDb": 5.580167614192743,
+          "p95AbsDb": 16.988558799155435
+        }
+      ],
+      "mean": {
+        "complexL2": 0.6918380236223196,
+        "magnitudeL2": 0.5020798871394702,
+        "shadowComplexL2": 2.0681752750836764,
+        "within3dB": 0.31770833333333337,
+        "medianAbsDb": 5.285539979478394,
+        "p95AbsDb": 16.785142985602178
+      },
+      "medianPureSeconds": 4.547259687518817,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        1041936,
+        1041936,
+        1041936,
+        1041936
+      ],
+      "seedRmsOverReference": 0.5637678453903148,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-9-listener-n256-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "listener",
+      "samples": 256,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 41.01849127665176,
+          "magnitudeL2": 40.87074194432523,
+          "shadowComplexL2": 8.130304330266238,
+          "within3dB": 0.07291666666666667,
+          "medianAbsDb": 15.93737093348133,
+          "p95AbsDb": 29.046167046740464
+        }
+      ],
+      "mean": {
+        "complexL2": 41.01849127665176,
+        "magnitudeL2": 40.87074194432523,
+        "shadowComplexL2": 8.130304330266238,
+        "within3dB": 0.07291666666666667,
+        "medianAbsDb": 15.93737093348133,
+        "p95AbsDb": 29.046167046740464
+      },
+      "medianPureSeconds": 1.5886307080218103,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        36864
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "bd10906548f7b477f630bf50f7ef2ada6e61962fcebb780f3180bf8524236747"
+    },
+    {
+      "file": "planar-9-listener-n4096-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "listener",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 2.8766277493410377,
+          "magnitudeL2": 2.652841045491508,
+          "shadowComplexL2": 2.916577278910932,
+          "within3dB": 0.21875,
+          "medianAbsDb": 7.147793711369342,
+          "p95AbsDb": 20.02103059947811
+        },
+        {
+          "complexL2": 1.1278715549837859,
+          "magnitudeL2": 0.830211509254568,
+          "shadowComplexL2": 2.5648549498865667,
+          "within3dB": 0.2604166666666667,
+          "medianAbsDb": 6.706287639256564,
+          "p95AbsDb": 17.699306808396845
+        },
+        {
+          "complexL2": 0.9642215133825373,
+          "magnitudeL2": 0.7147551991592712,
+          "shadowComplexL2": 2.7095362762048727,
+          "within3dB": 0.25,
+          "medianAbsDb": 5.576466249254194,
+          "p95AbsDb": 16.077203810928662
+        },
+        {
+          "complexL2": 0.8382222157040219,
+          "magnitudeL2": 0.5553467077266573,
+          "shadowComplexL2": 1.7063040900075432,
+          "within3dB": 0.3020833333333333,
+          "medianAbsDb": 5.731533345680937,
+          "p95AbsDb": 15.10649924585902
+        }
+      ],
+      "mean": {
+        "complexL2": 1.4517357583528459,
+        "magnitudeL2": 1.188288615408001,
+        "shadowComplexL2": 2.4743181487524786,
+        "within3dB": 0.2578125,
+        "medianAbsDb": 6.290520236390259,
+        "p95AbsDb": 17.22601011616566
+      },
+      "medianPureSeconds": 4.445939500001259,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        589824,
+        589824,
+        589824,
+        589824
+      ],
+      "seedRmsOverReference": 1.4205194660430926,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-9-pooled-n65536-d2-full.json",
+      "name": "planar-9",
+      "scope": "full",
+      "mode": "pooled",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 960,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.3202408390452266,
+          "magnitudeL2": 0.2263934700797865,
+          "shadowComplexL2": 0.7921583624705729,
+          "within3dB": 0.5885416666666666,
+          "medianAbsDb": 2.278011891352965,
+          "p95AbsDb": 11.613156361337706
+        }
+      ],
+      "mean": {
+        "complexL2": 0.3202408390452266,
+        "magnitudeL2": 0.2263934700797865,
+        "shadowComplexL2": 0.7921583624705729,
+        "within3dB": 0.5885416666666666,
+        "medianAbsDb": 2.278011891352965,
+        "p95AbsDb": 11.613156361337706
+      },
+      "medianPureSeconds": 60.79327324999031,
+      "commonConnectionSeconds": 30.69054212499759,
+      "edgeKernels": [
+        122874148
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "e9867eaca1e842dbf9463e3aa17eb9027d83e7ce7d241d217c4de183b94b82b9"
+    },
+    {
+      "file": "planar-9-pooled-n65536-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "pooled",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.27812196844716935,
+          "magnitudeL2": 0.20163903002573527,
+          "shadowComplexL2": 0.7607898081654237,
+          "within3dB": 0.5625,
+          "medianAbsDb": 2.5435526523760514,
+          "p95AbsDb": 12.359326741061254
+        },
+        {
+          "complexL2": 0.24143357114084127,
+          "magnitudeL2": 0.15662707578633078,
+          "shadowComplexL2": 0.7408420042563446,
+          "within3dB": 0.6354166666666666,
+          "medianAbsDb": 1.8217041549255373,
+          "p95AbsDb": 9.989106567989722
+        },
+        {
+          "complexL2": 0.21888340462090522,
+          "magnitudeL2": 0.15853369572993115,
+          "shadowComplexL2": 0.6824238306464544,
+          "within3dB": 0.6354166666666666,
+          "medianAbsDb": 2.17342016437248,
+          "p95AbsDb": 9.866867322144746
+        },
+        {
+          "complexL2": 0.22420066218396525,
+          "magnitudeL2": 0.16454377877892643,
+          "shadowComplexL2": 0.7159857619569486,
+          "within3dB": 0.6354166666666666,
+          "medianAbsDb": 1.8882501202516826,
+          "p95AbsDb": 9.180912967189517
+        }
+      ],
+      "mean": {
+        "complexL2": 0.2406599015982203,
+        "magnitudeL2": 0.17033589508023092,
+        "shadowComplexL2": 0.7250103512562928,
+        "within3dB": 0.6171874999999999,
+        "medianAbsDb": 2.106731772981438,
+        "p95AbsDb": 10.349053399596308
+      },
+      "medianPureSeconds": 5.8767104584985645,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        12282747,
+        12282747,
+        12282747,
+        12282747
+      ],
+      "seedRmsOverReference": 0.13766448718235844,
+      "solverSha256": "e9867eaca1e842dbf9463e3aa17eb9027d83e7ce7d241d217c4de183b94b82b9"
+    },
+    {
+      "file": "planar-9-route-n256-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "route",
+      "samples": 256,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17
+      ],
+      "perSeed": [
+        {
+          "complexL2": 4.756916252102796,
+          "magnitudeL2": 4.362370804472533,
+          "shadowComplexL2": 15.32567713760129,
+          "within3dB": 0.03125,
+          "medianAbsDb": 17.557815429395554,
+          "p95AbsDb": 30.85580629728768
+        }
+      ],
+      "mean": {
+        "complexL2": 4.756916252102796,
+        "magnitudeL2": 4.362370804472533,
+        "shadowComplexL2": 15.32567713760129,
+        "within3dB": 0.03125,
+        "medianAbsDb": 17.557815429395554,
+        "p95AbsDb": 30.85580629728768
+      },
+      "medianPureSeconds": 1.5382985829783138,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        36864
+      ],
+      "seedRmsOverReference": 0.0,
+      "solverSha256": "bd10906548f7b477f630bf50f7ef2ada6e61962fcebb780f3180bf8524236747"
+    },
+    {
+      "file": "planar-9-route-n4096-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "route",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 1.0472525786146332,
+          "magnitudeL2": 0.8266970173659288,
+          "shadowComplexL2": 2.5632036942122465,
+          "within3dB": 0.3020833333333333,
+          "medianAbsDb": 6.363555630302098,
+          "p95AbsDb": 19.756114239643292
+        },
+        {
+          "complexL2": 1.1242857395275494,
+          "magnitudeL2": 0.912929989214142,
+          "shadowComplexL2": 2.9361357190153226,
+          "within3dB": 0.20833333333333334,
+          "medianAbsDb": 8.16905134482013,
+          "p95AbsDb": 19.266859394952753
+        },
+        {
+          "complexL2": 0.8939939693300154,
+          "magnitudeL2": 0.6804919592993677,
+          "shadowComplexL2": 2.4823888812471155,
+          "within3dB": 0.2708333333333333,
+          "medianAbsDb": 6.181413114383343,
+          "p95AbsDb": 18.955546449440348
+        },
+        {
+          "complexL2": 0.9079430696711694,
+          "magnitudeL2": 0.6805730774515956,
+          "shadowComplexL2": 2.2048027250646376,
+          "within3dB": 0.2916666666666667,
+          "medianAbsDb": 7.492803000615279,
+          "p95AbsDb": 18.03557484610762
+        }
+      ],
+      "mean": {
+        "complexL2": 0.993368839285842,
+        "magnitudeL2": 0.7751730108327585,
+        "shadowComplexL2": 2.5466327548848304,
+        "within3dB": 0.2682291666666667,
+        "medianAbsDb": 7.051705772530212,
+        "p95AbsDb": 19.003523732536003
+      },
+      "medianPureSeconds": 4.190335499501089,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        589824,
+        589824,
+        589824,
+        589824
+      ],
+      "seedRmsOverReference": 0.8386078611121446,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-9-shared-n4096-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "shared",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.9970560593676483,
+          "magnitudeL2": 0.7758512200151302,
+          "shadowComplexL2": 3.385480995358701,
+          "within3dB": 0.25,
+          "medianAbsDb": 6.366158972445317,
+          "p95AbsDb": 19.50000308590843
+        },
+        {
+          "complexL2": 0.8482002156038204,
+          "magnitudeL2": 0.633681755077312,
+          "shadowComplexL2": 2.3603214147956053,
+          "within3dB": 0.3125,
+          "medianAbsDb": 5.0352157215842395,
+          "p95AbsDb": 18.328134248439234
+        },
+        {
+          "complexL2": 1.5115055960912498,
+          "magnitudeL2": 1.182463053664129,
+          "shadowComplexL2": 4.133779729994394,
+          "within3dB": 0.17708333333333334,
+          "medianAbsDb": 9.649174176607463,
+          "p95AbsDb": 21.750984231737974
+        },
+        {
+          "complexL2": 0.6329622803691651,
+          "magnitudeL2": 0.4806832429880536,
+          "shadowComplexL2": 1.767183619168829,
+          "within3dB": 0.3854166666666667,
+          "medianAbsDb": 5.011367783409112,
+          "p95AbsDb": 16.30254077747238
+        }
+      ],
+      "mean": {
+        "complexL2": 0.9974310378579709,
+        "magnitudeL2": 0.7681698179361562,
+        "shadowComplexL2": 2.9116914398293825,
+        "within3dB": 0.28125,
+        "medianAbsDb": 6.515479163511532,
+        "p95AbsDb": 18.970415585889505
+      },
+      "medianPureSeconds": 4.110646645494853,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        589824,
+        589824,
+        589824,
+        589824
+      ],
+      "seedRmsOverReference": 0.9137425064694271,
+      "solverSha256": "01035a05ab6f980b21118e1ee46f1d7b0da2c7e496c07d331aef360742111686"
+    },
+    {
+      "file": "planar-9-stratified-n4096-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "stratified",
+      "samples": 4096,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.9094330165163722,
+          "magnitudeL2": 0.6867302312628211,
+          "shadowComplexL2": 2.2974394080810976,
+          "within3dB": 0.25,
+          "medianAbsDb": 5.598459582597844,
+          "p95AbsDb": 17.59616644197491
+        },
+        {
+          "complexL2": 0.9879863887170112,
+          "magnitudeL2": 0.7441018892338722,
+          "shadowComplexL2": 2.819750985859502,
+          "within3dB": 0.2708333333333333,
+          "medianAbsDb": 6.213740820264036,
+          "p95AbsDb": 18.311914058436493
+        },
+        {
+          "complexL2": 1.3180747200965568,
+          "magnitudeL2": 1.0283215816740174,
+          "shadowComplexL2": 4.221578731643338,
+          "within3dB": 0.19791666666666666,
+          "medianAbsDb": 7.416418103456978,
+          "p95AbsDb": 21.37910678107688
+        },
+        {
+          "complexL2": 0.5744921445088738,
+          "magnitudeL2": 0.42666042672368804,
+          "shadowComplexL2": 1.633079458777591,
+          "within3dB": 0.40625,
+          "medianAbsDb": 5.078616136770448,
+          "p95AbsDb": 14.033242573714205
+        }
+      ],
+      "mean": {
+        "complexL2": 0.9474965674597036,
+        "magnitudeL2": 0.7214535322235996,
+        "shadowComplexL2": 2.742962146090382,
+        "within3dB": 0.28125,
+        "medianAbsDb": 6.076808660772327,
+        "p95AbsDb": 17.830107463800623
+      },
+      "medianPureSeconds": 4.307559853987186,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        589824,
+        589824,
+        589824,
+        589824
+      ],
+      "seedRmsOverReference": 0.8726474693682137,
+      "solverSha256": "eaa6bb201ed4a89bd0b26629e651c00c0d2e398ef5c227cc0f1d52ae3beb5d83"
+    },
+    {
+      "file": "planar-9-stratified-n65536-d2-lattice.json",
+      "name": "planar-9",
+      "scope": "lattice",
+      "mode": "stratified",
+      "samples": 65536,
+      "depth": 2,
+      "probes": 96,
+      "seeds": [
+        17,
+        65554,
+        131091,
+        196628
+      ],
+      "perSeed": [
+        {
+          "complexL2": 0.3443099318903017,
+          "magnitudeL2": 0.2569202863267233,
+          "shadowComplexL2": 0.9835446070303927,
+          "within3dB": 0.4479166666666667,
+          "medianAbsDb": 3.3434715655191525,
+          "p95AbsDb": 13.283424746913813
+        },
+        {
+          "complexL2": 0.2959556091658108,
+          "magnitudeL2": 0.18533051082417365,
+          "shadowComplexL2": 0.8986524625497915,
+          "within3dB": 0.6145833333333334,
+          "medianAbsDb": 2.3337463092462176,
+          "p95AbsDb": 12.04949742522449
+        },
+        {
+          "complexL2": 0.26584381351211633,
+          "magnitudeL2": 0.17897710768202885,
+          "shadowComplexL2": 0.8318826908688011,
+          "within3dB": 0.625,
+          "medianAbsDb": 2.1850459397642807,
+          "p95AbsDb": 9.748378362268307
+        },
+        {
+          "complexL2": 0.281889422454764,
+          "magnitudeL2": 0.2087364413331874,
+          "shadowComplexL2": 0.7832630953081816,
+          "within3dB": 0.6041666666666666,
+          "medianAbsDb": 2.0472506216828856,
+          "p95AbsDb": 11.659381658056875
+        }
+      ],
+      "mean": {
+        "complexL2": 0.29699969425574824,
+        "magnitudeL2": 0.2074910865415283,
+        "shadowComplexL2": 0.8743357139392918,
+        "within3dB": 0.5729166666666666,
+        "medianAbsDb": 2.477378609053134,
+        "p95AbsDb": 11.68517054811587
+      },
+      "medianPureSeconds": 5.415090854497976,
+      "commonConnectionSeconds": 2.7925316669861786,
+      "edgeKernels": [
+        9437184,
+        9437184,
+        9437184,
+        9437184
+      ],
+      "seedRmsOverReference": 0.20807887780225715,
+      "solverSha256": "37c0c934d06e9c2b0c4ce3d930ade335979e50106201eb85e38538ac2b62919c"
+    }
+  ],
+  "limitations": [
+    "CPU prototype, not the live GPU renderer.",
+    "Rigid stationary XY boxes, point source with infinite extrusion (2.5D).",
+    "250 Hz, pure diffraction and mixed mirror paths truncated at order two in field comparisons.",
+    "Full maps use seed 17; seed variation is measured on fixed coarse lattices.",
+    "Common direct/mirror/mixed field uses order-eight quadrature and is identical across sampling variants.",
+    "Reference mesh refinement is observed convergence, not a certified physical error bound.",
+    "CPU timings include geometry setup. Pure-edge budget excludes the enumerated mirror stage.",
+    "Early n256 pilot hashes were read at write time; loaded numerical source is edge-route-draft.py (bd10906548f7).",
+    "Larger maps remain inaccurate; no GPU, moving-scene, audio-artifact, finite-3D or training qualification."
+  ]
+}

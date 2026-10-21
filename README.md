@@ -395,6 +395,8 @@ Folders group responsibilities; the runtime, editor and test assembly definition
 
 The next transport work is physical validation, reducing GPU path/filter cost and converged ray-budget comparisons. The separate prototype renderer is removed; its previous implementation remains in Git. All five scenes use the current renderer. General reflection training and learned reconstruction are not implemented by these cleanups.
 
+The offline `tools/edge_integral.py --samples N --route-budget` diagnostic spends **N pure-edge height samples per receiver**, using complete-route sampling without enumerating an unbounded route tree. Its mirror/mixed connection stage is measured separately and remains enumerated. This is a stationary, rigid, infinitely extruded 2D research tool; it does not replace the realtime shader. [Algorithm, controls and measured accuracy](docs/cleanup-results.md#bounded-complete-route-monte-carlo--2026-10-21).
+
 The current GPU stores one material spectrum per path group and response bank, shared by both ears. Each bank retains its own head blend for crossfades. Unchanged filters skip both small and large FFT construction. The station benchmark reserves **564 MB versus 916 MB** before this change; matched layout controls have similar wall times. A new `DirectBenchmark.MeasureReciprocity(planar, rays, scattering, seeds)` probe checks source/receiver reversal on a finite wall. The diffuse preview fails this necessary physical check even with 65,536 rays/bin, while the mirror control agrees. More rays are not a fix for this bias. [Measurements and limitations](docs/cleanup-results.md#gpu-response-storage-and-diagnostics--2026-10-07).
 
 ## Checks
