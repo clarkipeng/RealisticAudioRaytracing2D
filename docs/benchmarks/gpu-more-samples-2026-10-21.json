@@ -1,0 +1,1803 @@
+{
+  "date": "2026-10-21",
+  "manifest": {
+    "gitHead": "db295a7a9936ebafb2e6f6f1a99877d9411ed286",
+    "selection": "Every third position of the pre-existing regular lattice, fixed before measuring this sweep.",
+    "hardware": "Apple M5, 16 GiB; Unity 6000.4.1f1, Metal; silent nice-15 batch, one worker.",
+    "scope": "Current GPU walk; not the new offline complete-route sampler. Three computed bins, one pair, eight bounces, 0.4 s support; no DSP.",
+    "timings": "Warm synchronous Solve, including path-buffer GPU-to-CPU readback; excludes CPU complex summation and cold construction.",
+    "cases": {
+      "planar-1": {
+        "probes": 33,
+        "indices": [
+          0,
+          12,
+          24,
+          99,
+          111,
+          123,
+          198,
+          210,
+          222,
+          297,
+          309,
+          321,
+          396,
+          408,
+          420,
+          492,
+          504,
+          517,
+          589,
+          601,
+          613,
+          688,
+          700,
+          712,
+          787,
+          799,
+          811,
+          886,
+          898,
+          910,
+          985,
+          997,
+          1009
+        ],
+        "originalSceneSha256": "d3f5076975ec9902a1c2ee6c542364c2092fcf1c434595d583a3063e807d5452",
+        "references": {
+          "125": "f39e526c6a157a4cbd1a98e9e722e3b73ee6f8d432fb37d6c3cbf28c1cd42dcc",
+          "250": "42e7a8e34d20b106dba47e6b801b6fc22bc21c4787b83d77f6f401144ab3b667"
+        }
+      },
+      "planar-9": {
+        "probes": 32,
+        "indices": [
+          0,
+          12,
+          24,
+          99,
+          109,
+          120,
+          181,
+          193,
+          205,
+          280,
+          292,
+          304,
+          379,
+          391,
+          403,
+          471,
+          482,
+          492,
+          560,
+          572,
+          584,
+          659,
+          671,
+          683,
+          758,
+          770,
+          782,
+          841,
+          854,
+          927,
+          939,
+          951
+        ],
+        "originalSceneSha256": "675779007dc23b40982c3d1fe3161c4d65f12e3e299fc3fb0748933fe1d1b82b",
+        "references": {
+          "125": "407751bcfc00388347a965d855f14e0519a7202ade0e0b8616c1a7f24c66eb94",
+          "250": "09a9c098a98f5294e498d27d71e56e321b723a0842f631052ea75fc9b764fde6"
+        }
+      },
+      "planar-25": {
+        "probes": 32,
+        "indices": [
+          0,
+          12,
+          24,
+          99,
+          107,
+          116,
+          169,
+          181,
+          193,
+          268,
+          277,
+          285,
+          349,
+          361,
+          373,
+          435,
+          444,
+          506,
+          518,
+          530,
+          594,
+          602,
+          611,
+          686,
+          698,
+          710,
+          763,
+          772,
+          780,
+          855,
+          867,
+          879
+        ],
+        "originalSceneSha256": "676788aeffda61f70a7d84c3e7c06aa93f15418c71c7af9016730f332c147f37",
+        "references": {
+          "125": "5d3e776cd9271a7a84bc1090c149fe1b991b6fad0e96fc5c8744a2b1ce2210e4",
+          "250": "ce5255e66104d0edb6fdf2bade485017bace10a63ff24c350abcc8667352ce2e"
+        }
+      }
+    }
+  },
+  "matchedBaselineRows": 776,
+  "validation": "Three measurement cases completed; all expected finite rows present; 256-ray complex values and visibility exactly reproduce previous GPU fields.",
+  "metrics": "Relative complex L2 and amplitude metrics computed per seed then averaged; pressure fields are never seed-averaged before scoring.",
+  "memory": "Path buffer only, per pair and response. Diagnostic holds an equally sized CPU copy. Geometry/material/driver memory excluded.",
+  "limitations": [
+    "Small predetermined lattice subsets, not full maps.",
+    "Three computed bins, not a full-band audio timing; synchronous GPU readback included.",
+    "Eight-interaction production GPU walk, not the two-order offline complete-route sampler.",
+    "Four seeds, with nested ray sequences as count increases; not independent replications across budgets.",
+    "Reference mesh convergence is observed, not a certified total error bound.",
+    "No 3D, moving-scene, perceptual/audio-artifact or training-data qualification."
+  ],
+  "rows": [
+    {
+      "scene": "planar-1",
+      "hz": 125,
+      "raysPerBin": 256,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.8405093341309797,
+          "magnitudeL2": 0.6500864172847812,
+          "within3dB": 0.7272727272727273,
+          "medianAbsDb": 2.07782887100258,
+          "p95AbsDb": 11.868114432316986,
+          "maximumPressureMagnitude": 1.569629919482463
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.43472602802311183,
+          "magnitudeL2": 0.29129937496777925,
+          "within3dB": 0.6363636363636364,
+          "medianAbsDb": 2.376887991023344,
+          "p95AbsDb": 9.948405201810315,
+          "maximumPressureMagnitude": 1.4850872602698029
+        },
+        {
+          "seed": 131091,
+          "complexL2": 3.4746327495235025,
+          "magnitudeL2": 3.332100336018964,
+          "within3dB": 0.5757575757575758,
+          "medianAbsDb": 2.198644044836176,
+          "p95AbsDb": 19.176486185551465,
+          "maximumPressureMagnitude": 7.346542199011774
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.3045099817799729,
+          "magnitudeL2": 0.17621242520349983,
+          "within3dB": 0.7272727272727273,
+          "medianAbsDb": 1.485307321304451,
+          "p95AbsDb": 9.786443635498998,
+          "maximumPressureMagnitude": 1.5717791727094654
+        }
+      ],
+      "mean": {
+        "complexL2": 1.263594523364392,
+        "magnitudeL2": 1.112424638368756,
+        "within3dB": 0.6666666666666667,
+        "medianAbsDb": 2.0346670570416374,
+        "p95AbsDb": 12.694862363794442,
+        "maximumPressureMagnitude": 2.993259637868376
+      },
+      "medianSolveMs": 0.46599999999999997,
+      "p95SolveMs": 0.9890949999999994,
+      "pathBufferBytes": 331920
+    },
+    {
+      "scene": "planar-1",
+      "hz": 125,
+      "raysPerBin": 1024,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 1.2205276066362543,
+          "magnitudeL2": 1.1381350751093422,
+          "within3dB": 0.7272727272727273,
+          "medianAbsDb": 1.1729155033310805,
+          "p95AbsDb": 12.80101654810786,
+          "maximumPressureMagnitude": 2.6461418142088116
+        },
+        {
+          "seed": 65554,
+          "complexL2": 1.4692647578389773,
+          "magnitudeL2": 1.3208370912510092,
+          "within3dB": 0.45454545454545453,
+          "medianAbsDb": 4.003705660748783,
+          "p95AbsDb": 22.22947720354548,
+          "maximumPressureMagnitude": 1.946457452499405
+        },
+        {
+          "seed": 131091,
+          "complexL2": 1.2828576794766962,
+          "magnitudeL2": 1.1413096455769327,
+          "within3dB": 0.48484848484848486,
+          "medianAbsDb": 3.412919642824397,
+          "p95AbsDb": 17.041269907228518,
+          "maximumPressureMagnitude": 2.0854582206554255
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.26681848519917606,
+          "magnitudeL2": 0.1618504020143953,
+          "within3dB": 0.7575757575757576,
+          "medianAbsDb": 1.2909597060694147,
+          "p95AbsDb": 10.148043813135557,
+          "maximumPressureMagnitude": 1.5841162374901754
+        }
+      ],
+      "mean": {
+        "complexL2": 1.059867132287776,
+        "magnitudeL2": 0.9405330534879199,
+        "within3dB": 0.6060606060606061,
+        "medianAbsDb": 2.470125128243419,
+        "p95AbsDb": 15.554951868004354,
+        "maximumPressureMagnitude": 2.065543431213454
+      },
+      "medianSolveMs": 0.4551,
+      "p95SolveMs": 0.5976099999999998,
+      "pathBufferBytes": 1327248
+    },
+    {
+      "scene": "planar-1",
+      "hz": 125,
+      "raysPerBin": 4096,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.4051290470693897,
+          "magnitudeL2": 0.26505682483203136,
+          "within3dB": 0.696969696969697,
+          "medianAbsDb": 1.7005667843627268,
+          "p95AbsDb": 7.663613895324743,
+          "maximumPressureMagnitude": 1.6262364271651886
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.4146639858767311,
+          "magnitudeL2": 0.3021494008481001,
+          "within3dB": 0.696969696969697,
+          "medianAbsDb": 1.560852282455667,
+          "p95AbsDb": 11.060286009451195,
+          "maximumPressureMagnitude": 1.5509665317600063
+        },
+        {
+          "seed": 131091,
+          "complexL2": 0.3444223806903865,
+          "magnitudeL2": 0.23356072782277887,
+          "within3dB": 0.696969696969697,
+          "medianAbsDb": 0.7627189276769109,
+          "p95AbsDb": 7.512106790741458,
+          "maximumPressureMagnitude": 1.5720746971164519
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.2524278445344476,
+          "magnitudeL2": 0.1634848393050493,
+          "within3dB": 0.6363636363636364,
+          "medianAbsDb": 2.2933542276261356,
+          "p95AbsDb": 10.175790774760532,
+          "maximumPressureMagnitude": 1.56834528789216
+        }
+      ],
+      "mean": {
+        "complexL2": 0.35416081454273873,
+        "magnitudeL2": 0.2410629482019899,
+        "within3dB": 0.6818181818181818,
+        "medianAbsDb": 1.57937305553036,
+        "p95AbsDb": 9.102949367569483,
+        "maximumPressureMagnitude": 1.5794057359834517
+      },
+      "medianSolveMs": 1.2681,
+      "p95SolveMs": 1.5953399999999998,
+      "pathBufferBytes": 5308560
+    },
+    {
+      "scene": "planar-1",
+      "hz": 125,
+      "raysPerBin": 16384,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.508149178670976,
+          "magnitudeL2": 0.3676470784537343,
+          "within3dB": 0.5757575757575758,
+          "medianAbsDb": 2.5845689781332313,
+          "p95AbsDb": 11.48693551689142,
+          "maximumPressureMagnitude": 1.5704173604579537
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.35191501290022453,
+          "magnitudeL2": 0.24672995232276934,
+          "within3dB": 0.7575757575757576,
+          "medianAbsDb": 1.2150053633468134,
+          "p95AbsDb": 10.079850092588643,
+          "maximumPressureMagnitude": 1.4957635041169115
+        },
+        {
+          "seed": 131091,
+          "complexL2": 0.45385249503586395,
+          "magnitudeL2": 0.38129429583701463,
+          "within3dB": 0.7575757575757576,
+          "medianAbsDb": 1.1973809330594483,
+          "p95AbsDb": 12.353867735066286,
+          "maximumPressureMagnitude": 1.5546701960488198
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.4263079460669054,
+          "magnitudeL2": 0.2947349616340763,
+          "within3dB": 0.696969696969697,
+          "medianAbsDb": 1.3926955851494704,
+          "p95AbsDb": 11.776279361416844,
+          "maximumPressureMagnitude": 1.577844384407373
+        }
+      ],
+      "mean": {
+        "complexL2": 0.43505615816849247,
+        "magnitudeL2": 0.32260157206189866,
+        "within3dB": 0.696969696969697,
+        "medianAbsDb": 1.5974127149222408,
+        "p95AbsDb": 11.424233176490798,
+        "maximumPressureMagnitude": 1.5496738612577645
+      },
+      "medianSolveMs": 3.0223,
+      "p95SolveMs": 3.521105,
+      "pathBufferBytes": 21233808
+    },
+    {
+      "scene": "planar-1",
+      "hz": 125,
+      "raysPerBin": 65536,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.573634620600818,
+          "magnitudeL2": 0.45091303315347864,
+          "within3dB": 0.5757575757575758,
+          "medianAbsDb": 2.4858430348477114,
+          "p95AbsDb": 8.470185486053516,
+          "maximumPressureMagnitude": 1.6175574955004284
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.24023036972676404,
+          "magnitudeL2": 0.14899022985472146,
+          "within3dB": 0.8181818181818182,
+          "medianAbsDb": 1.2066153035966722,
+          "p95AbsDb": 5.756804790262708,
+          "maximumPressureMagnitude": 1.6174401967119312
+        },
+        {
+          "seed": 131091,
+          "complexL2": 0.2592390449377052,
+          "magnitudeL2": 0.1521243730075772,
+          "within3dB": 0.6666666666666666,
+          "medianAbsDb": 1.1389414556620616,
+          "p95AbsDb": 7.208541570063549,
+          "maximumPressureMagnitude": 1.5751230041205624
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.5277088858891664,
+          "magnitudeL2": 0.3961601630023374,
+          "within3dB": 0.7575757575757576,
+          "medianAbsDb": 1.765123154398625,
+          "p95AbsDb": 14.236928949782136,
+          "maximumPressureMagnitude": 1.5093372767250721
+        }
+      ],
+      "mean": {
+        "complexL2": 0.4002032302886135,
+        "magnitudeL2": 0.28704694975452866,
+        "within3dB": 0.7045454545454546,
+        "medianAbsDb": 1.6491307371262676,
+        "p95AbsDb": 8.918115199040479,
+        "maximumPressureMagnitude": 1.5798644932644983
+      },
+      "medianSolveMs": 4.1335999999999995,
+      "p95SolveMs": 5.8609199999999975,
+      "pathBufferBytes": 84934800
+    },
+    {
+      "scene": "planar-1",
+      "hz": 250,
+      "raysPerBin": 256,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.7630185532537721,
+          "magnitudeL2": 0.5760981972029864,
+          "within3dB": 0.7272727272727273,
+          "medianAbsDb": 1.0661885976725731,
+          "p95AbsDb": 15.936542554705163,
+          "maximumPressureMagnitude": 1.5995079019152683
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.43731656650046796,
+          "magnitudeL2": 0.3440262165148124,
+          "within3dB": 0.45454545454545453,
+          "medianAbsDb": 3.5609593246339704,
+          "p95AbsDb": 10.111334199766725,
+          "maximumPressureMagnitude": 1.5283120078081138
+        },
+        {
+          "seed": 131091,
+          "complexL2": 3.611965990361572,
+          "magnitudeL2": 3.511016973269176,
+          "within3dB": 0.6666666666666666,
+          "medianAbsDb": 1.8548697886106558,
+          "p95AbsDb": 17.42133303520982,
+          "maximumPressureMagnitude": 7.943871576576562
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.3254177692737694,
+          "magnitudeL2": 0.26217570420032416,
+          "within3dB": 0.6666666666666666,
+          "medianAbsDb": 2.3933649756194026,
+          "p95AbsDb": 11.697899340370114,
+          "maximumPressureMagnitude": 1.5934784810850107
+        }
+      ],
+      "mean": {
+        "complexL2": 1.2844297198473953,
+        "magnitudeL2": 1.1733292727968248,
+        "within3dB": 0.6287878787878788,
+        "medianAbsDb": 2.2188456716341505,
+        "p95AbsDb": 13.791777282512955,
+        "maximumPressureMagnitude": 3.1662924918462387
+      },
+      "medianSolveMs": 0.46599999999999997,
+      "p95SolveMs": 0.9890949999999994,
+      "pathBufferBytes": 331920
+    },
+    {
+      "scene": "planar-1",
+      "hz": 250,
+      "raysPerBin": 1024,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 1.2766527954109923,
+          "magnitudeL2": 1.2225107638113382,
+          "within3dB": 0.8484848484848485,
+          "medianAbsDb": 1.3950718415151089,
+          "p95AbsDb": 5.847490285816066,
+          "maximumPressureMagnitude": 2.844002515449119
+        },
+        {
+          "seed": 65554,
+          "complexL2": 1.352045192407437,
+          "magnitudeL2": 1.2379652102433067,
+          "within3dB": 0.5151515151515151,
+          "medianAbsDb": 2.7160521468886767,
+          "p95AbsDb": 20.739692139756507,
+          "maximumPressureMagnitude": 2.1054023752109745
+        },
+        {
+          "seed": 131091,
+          "complexL2": 0.9809101434781388,
+          "magnitudeL2": 0.7740682535979653,
+          "within3dB": 0.45454545454545453,
+          "medianAbsDb": 4.106632662854481,
+          "p95AbsDb": 14.402074905970544,
+          "maximumPressureMagnitude": 1.6022132761768784
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.3097997322346381,
+          "magnitudeL2": 0.21558205503374314,
+          "within3dB": 0.6666666666666666,
+          "medianAbsDb": 2.223019669598353,
+          "p95AbsDb": 10.793434845646162,
+          "maximumPressureMagnitude": 1.598939203770341
+        }
+      ],
+      "mean": {
+        "complexL2": 0.9798519658828017,
+        "magnitudeL2": 0.8625315706715884,
+        "within3dB": 0.6212121212121212,
+        "medianAbsDb": 2.6101940802141548,
+        "p95AbsDb": 12.945673044297319,
+        "maximumPressureMagnitude": 2.0376393426518282
+      },
+      "medianSolveMs": 0.4551,
+      "p95SolveMs": 0.5976099999999998,
+      "pathBufferBytes": 1327248
+    },
+    {
+      "scene": "planar-1",
+      "hz": 250,
+      "raysPerBin": 4096,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.4506637272729317,
+          "magnitudeL2": 0.40020499434976925,
+          "within3dB": 0.7575757575757576,
+          "medianAbsDb": 1.7047733152262388,
+          "p95AbsDb": 11.404191819454928,
+          "maximumPressureMagnitude": 1.6448422772518612
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.3505498100297157,
+          "magnitudeL2": 0.26296085880350806,
+          "within3dB": 0.6666666666666666,
+          "medianAbsDb": 2.182999943301538,
+          "p95AbsDb": 6.97299943642628,
+          "maximumPressureMagnitude": 1.6252035228902797
+        },
+        {
+          "seed": 131091,
+          "complexL2": 0.25722620245590494,
+          "magnitudeL2": 0.14487437410623713,
+          "within3dB": 0.696969696969697,
+          "medianAbsDb": 1.5680990175574498,
+          "p95AbsDb": 5.8188992925200305,
+          "maximumPressureMagnitude": 1.5507066679231634
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.26037134160179964,
+          "magnitudeL2": 0.18459300620239685,
+          "within3dB": 0.6363636363636364,
+          "medianAbsDb": 1.4902125349811444,
+          "p95AbsDb": 7.124510556859398,
+          "maximumPressureMagnitude": 1.5576930964441345
+        }
+      ],
+      "mean": {
+        "complexL2": 0.329702770340088,
+        "magnitudeL2": 0.24815830836547784,
+        "within3dB": 0.6893939393939393,
+        "medianAbsDb": 1.7365212027665928,
+        "p95AbsDb": 7.830150276315159,
+        "maximumPressureMagnitude": 1.5946113911273598
+      },
+      "medianSolveMs": 1.2681,
+      "p95SolveMs": 1.5953399999999998,
+      "pathBufferBytes": 5308560
+    },
+    {
+      "scene": "planar-1",
+      "hz": 250,
+      "raysPerBin": 16384,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.5468026284494251,
+          "magnitudeL2": 0.4579683137811902,
+          "within3dB": 0.45454545454545453,
+          "medianAbsDb": 3.7032057556363744,
+          "p95AbsDb": 12.5891956759081,
+          "maximumPressureMagnitude": 1.6114213285217283
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.2969788304991531,
+          "magnitudeL2": 0.20865291441521885,
+          "within3dB": 0.7272727272727273,
+          "medianAbsDb": 1.3600383259154347,
+          "p95AbsDb": 8.426845670948182,
+          "maximumPressureMagnitude": 1.553240873292937
+        },
+        {
+          "seed": 131091,
+          "complexL2": 0.43395545465585106,
+          "magnitudeL2": 0.3443915032017404,
+          "within3dB": 0.8181818181818182,
+          "medianAbsDb": 1.4002578222772644,
+          "p95AbsDb": 9.729248209150168,
+          "maximumPressureMagnitude": 1.5729170772046015
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.5087453421239742,
+          "magnitudeL2": 0.4095281517181983,
+          "within3dB": 0.6363636363636364,
+          "medianAbsDb": 2.2055607672403172,
+          "p95AbsDb": 15.708133560977577,
+          "maximumPressureMagnitude": 1.5820380652230384
+        }
+      ],
+      "mean": {
+        "complexL2": 0.4466205639321008,
+        "magnitudeL2": 0.35513522077908694,
+        "within3dB": 0.6590909090909091,
+        "medianAbsDb": 2.1672656677673476,
+        "p95AbsDb": 11.613355779246007,
+        "maximumPressureMagnitude": 1.5799043360605762
+      },
+      "medianSolveMs": 3.0223,
+      "p95SolveMs": 3.521105,
+      "pathBufferBytes": 21233808
+    },
+    {
+      "scene": "planar-1",
+      "hz": 250,
+      "raysPerBin": 65536,
+      "probes": 33,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 0.5719317372090511,
+          "magnitudeL2": 0.47004837981922415,
+          "within3dB": 0.5151515151515151,
+          "medianAbsDb": 2.821908388662158,
+          "p95AbsDb": 9.407167104565579,
+          "maximumPressureMagnitude": 1.5717533182704884
+        },
+        {
+          "seed": 65554,
+          "complexL2": 0.1951016018084256,
+          "magnitudeL2": 0.1630824870271551,
+          "within3dB": 0.7878787878787878,
+          "medianAbsDb": 1.0318432388947403,
+          "p95AbsDb": 10.829234996712849,
+          "maximumPressureMagnitude": 1.619995579858816
+        },
+        {
+          "seed": 131091,
+          "complexL2": 0.2665605622242032,
+          "magnitudeL2": 0.1486534115313832,
+          "within3dB": 0.696969696969697,
+          "medianAbsDb": 0.7466757670857881,
+          "p95AbsDb": 6.720649433808107,
+          "maximumPressureMagnitude": 1.594610952586099
+        },
+        {
+          "seed": 196628,
+          "complexL2": 0.5402228341919489,
+          "magnitudeL2": 0.41091047603076963,
+          "within3dB": 0.696969696969697,
+          "medianAbsDb": 1.141824381517522,
+          "p95AbsDb": 14.701142323322761,
+          "maximumPressureMagnitude": 1.651311042944395
+        }
+      ],
+      "mean": {
+        "complexL2": 0.39345418385840725,
+        "magnitudeL2": 0.29817368860213306,
+        "within3dB": 0.6742424242424243,
+        "medianAbsDb": 1.4355629440400521,
+        "p95AbsDb": 10.414548464602325,
+        "maximumPressureMagnitude": 1.6094177234149494
+      },
+      "medianSolveMs": 4.1335999999999995,
+      "p95SolveMs": 5.8609199999999975,
+      "pathBufferBytes": 84934800
+    },
+    {
+      "scene": "planar-9",
+      "hz": 125,
+      "raysPerBin": 256,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 16.29222277718762,
+          "magnitudeL2": 16.02941591163436,
+          "within3dB": 0.03125,
+          "medianAbsDb": 19.663233914432155,
+          "p95AbsDb": 36.42421214233811,
+          "maximumPressureMagnitude": 12.918541068916339
+        },
+        {
+          "seed": 65554,
+          "complexL2": 556.7037518632312,
+          "magnitudeL2": 556.6089753038599,
+          "within3dB": 0.03125,
+          "medianAbsDb": 35.320814513427564,
+          "p95AbsDb": 64.93553331567598,
+          "maximumPressureMagnitude": 673.404391954573
+        },
+        {
+          "seed": 131091,
+          "complexL2": 1713.1599785170445,
+          "magnitudeL2": 1712.7786107294544,
+          "within3dB": 0.03125,
+          "medianAbsDb": 34.46880969375289,
+          "p95AbsDb": 62.21361484669918,
+          "maximumPressureMagnitude": 2189.705874459452
+        },
+        {
+          "seed": 196628,
+          "complexL2": 425.63817879639606,
+          "magnitudeL2": 425.55355575714714,
+          "within3dB": 0.03125,
+          "medianAbsDb": 30.818112252610277,
+          "p95AbsDb": 65.14362403913944,
+          "maximumPressureMagnitude": 525.8435455032877
+        }
+      ],
+      "mean": {
+        "complexL2": 677.9485329884648,
+        "magnitudeL2": 677.7426394255239,
+        "within3dB": 0.03125,
+        "medianAbsDb": 30.06774259355572,
+        "p95AbsDb": 57.17924608596318,
+        "maximumPressureMagnitude": 850.4680882465573
+      },
+      "medianSolveMs": 0.57255,
+      "p95SolveMs": 0.8693,
+      "pathBufferBytes": 331920
+    },
+    {
+      "scene": "planar-9",
+      "hz": 125,
+      "raysPerBin": 1024,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 7454.841860676024,
+          "magnitudeL2": 7454.680884491284,
+          "within3dB": 0.0,
+          "medianAbsDb": 44.79137473655967,
+          "p95AbsDb": 96.06649734820274,
+          "maximumPressureMagnitude": 7380.353005554085
+        },
+        {
+          "seed": 65554,
+          "complexL2": 666.4462000182634,
+          "magnitudeL2": 666.1631408436898,
+          "within3dB": 0.0,
+          "medianAbsDb": 47.1340721315141,
+          "p95AbsDb": 72.6841450616686,
+          "maximumPressureMagnitude": 700.9007557988614
+        },
+        {
+          "seed": 131091,
+          "complexL2": 222050.72967403627,
+          "magnitudeL2": 222050.6494539779,
+          "within3dB": 0.0,
+          "medianAbsDb": 49.3852576955845,
+          "p95AbsDb": 107.52426874595044,
+          "maximumPressureMagnitude": 286476.1001549078
+        },
+        {
+          "seed": 196628,
+          "complexL2": 3612.6358803839416,
+          "magnitudeL2": 3612.388938556038,
+          "within3dB": 0.0,
+          "medianAbsDb": 61.18318336328297,
+          "p95AbsDb": 86.61879584204186,
+          "maximumPressureMagnitude": 3429.319744677664
+        }
+      ],
+      "mean": {
+        "complexL2": 58446.16340377863,
+        "magnitudeL2": 58445.970604467235,
+        "within3dB": 0.0,
+        "medianAbsDb": 50.623471981735314,
+        "p95AbsDb": 90.72342674946592,
+        "maximumPressureMagnitude": 74496.66841523461
+      },
+      "medianSolveMs": 0.62365,
+      "p95SolveMs": 0.81217,
+      "pathBufferBytes": 1327248
+    },
+    {
+      "scene": "planar-9",
+      "hz": 125,
+      "raysPerBin": 4096,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 19291.8755685966,
+          "magnitudeL2": 19291.580618936994,
+          "within3dB": 0.0,
+          "medianAbsDb": 59.33670876824972,
+          "p95AbsDb": 89.59980881962535,
+          "maximumPressureMagnitude": 23919.966359398855
+        },
+        {
+          "seed": 65554,
+          "complexL2": 1609.8352253944736,
+          "magnitudeL2": 1609.6248858168437,
+          "within3dB": 0.0,
+          "medianAbsDb": 55.326593290854724,
+          "p95AbsDb": 79.98299973345475,
+          "maximumPressureMagnitude": 1347.1690165259652
+        },
+        {
+          "seed": 131091,
+          "complexL2": 55541.944960623725,
+          "magnitudeL2": 55541.86241831318,
+          "within3dB": 0.0,
+          "medianAbsDb": 45.927963739397015,
+          "p95AbsDb": 96.25904068324866,
+          "maximumPressureMagnitude": 71626.69045601883
+        },
+        {
+          "seed": 196628,
+          "complexL2": 81093.98308197844,
+          "magnitudeL2": 81093.61052384875,
+          "within3dB": 0.0,
+          "medianAbsDb": 85.32758960318564,
+          "p95AbsDb": 116.2634011718086,
+          "maximumPressureMagnitude": 75625.09240887666
+        }
+      ],
+      "mean": {
+        "complexL2": 39384.40970914831,
+        "magnitudeL2": 39384.16961172894,
+        "within3dB": 0.0,
+        "medianAbsDb": 61.479713850421774,
+        "p95AbsDb": 95.52631260203434,
+        "maximumPressureMagnitude": 43129.72956020507
+      },
+      "medianSolveMs": 1.01975,
+      "p95SolveMs": 2.523965,
+      "pathBufferBytes": 5308560
+    },
+    {
+      "scene": "planar-9",
+      "hz": 125,
+      "raysPerBin": 16384,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 19324.884601496873,
+          "magnitudeL2": 19324.75704011935,
+          "within3dB": 0.0,
+          "medianAbsDb": 62.76161943825418,
+          "p95AbsDb": 98.73275424664102,
+          "maximumPressureMagnitude": 23390.752566957435
+        },
+        {
+          "seed": 65554,
+          "complexL2": 7598.143275572528,
+          "magnitudeL2": 7597.9461222714435,
+          "within3dB": 0.0,
+          "medianAbsDb": 68.66341985866998,
+          "p95AbsDb": 88.43046474609822,
+          "maximumPressureMagnitude": 8530.170231661563
+        },
+        {
+          "seed": 131091,
+          "complexL2": 73745.02423079601,
+          "magnitudeL2": 73744.988773941,
+          "within3dB": 0.0,
+          "medianAbsDb": 64.01038308268143,
+          "p95AbsDb": 98.54196858936757,
+          "maximumPressureMagnitude": 93590.20161246191
+        },
+        {
+          "seed": 196628,
+          "complexL2": 24664.023689748192,
+          "magnitudeL2": 24663.63488379161,
+          "within3dB": 0.0,
+          "medianAbsDb": 86.73977279827106,
+          "p95AbsDb": 109.29178585699361,
+          "maximumPressureMagnitude": 18906.842411782145
+        }
+      ],
+      "mean": {
+        "complexL2": 31333.018949403402,
+        "magnitudeL2": 31332.831705030854,
+        "within3dB": 0.0,
+        "medianAbsDb": 70.54379879446917,
+        "p95AbsDb": 98.74924335977511,
+        "maximumPressureMagnitude": 36104.491705715765
+      },
+      "medianSolveMs": 3.0595,
+      "p95SolveMs": 3.6438349999999993,
+      "pathBufferBytes": 21233808
+    },
+    {
+      "scene": "planar-9",
+      "hz": 125,
+      "raysPerBin": 65536,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 5398.171627879033,
+          "magnitudeL2": 5397.85068796958,
+          "within3dB": 0.0,
+          "medianAbsDb": 66.58999238273886,
+          "p95AbsDb": 88.53941035119352,
+          "maximumPressureMagnitude": 5861.870436051552
+        },
+        {
+          "seed": 65554,
+          "complexL2": 14910.721829871456,
+          "magnitudeL2": 14910.386930366438,
+          "within3dB": 0.0,
+          "medianAbsDb": 76.41163686537377,
+          "p95AbsDb": 101.61825670534026,
+          "maximumPressureMagnitude": 10055.520456416612
+        },
+        {
+          "seed": 131091,
+          "complexL2": 37090.148911925266,
+          "magnitudeL2": 37090.00264225641,
+          "within3dB": 0.0,
+          "medianAbsDb": 81.12881631223999,
+          "p95AbsDb": 103.33605837461793,
+          "maximumPressureMagnitude": 40162.85198985137
+        },
+        {
+          "seed": 196628,
+          "complexL2": 58297.089852834404,
+          "magnitudeL2": 58296.72070357182,
+          "within3dB": 0.0,
+          "medianAbsDb": 79.53781799281741,
+          "p95AbsDb": 104.17147012599632,
+          "maximumPressureMagnitude": 48085.06025166673
+        }
+      ],
+      "mean": {
+        "complexL2": 28924.033055627537,
+        "magnitudeL2": 28923.74024104106,
+        "within3dB": 0.0,
+        "medianAbsDb": 75.91706588829251,
+        "p95AbsDb": 99.41629888928702,
+        "maximumPressureMagnitude": 26041.325783496566
+      },
+      "medianSolveMs": 7.7359,
+      "p95SolveMs": 8.589575,
+      "pathBufferBytes": 84934800
+    },
+    {
+      "scene": "planar-9",
+      "hz": 250,
+      "raysPerBin": 256,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 16.413476435303533,
+          "magnitudeL2": 15.91562014039409,
+          "within3dB": 0.03125,
+          "medianAbsDb": 21.768190461732264,
+          "p95AbsDb": 36.0356859692752,
+          "maximumPressureMagnitude": 13.13515533353099
+        },
+        {
+          "seed": 65554,
+          "complexL2": 557.0940013439468,
+          "magnitudeL2": 557.0247005593793,
+          "within3dB": 0.0,
+          "medianAbsDb": 37.775469488047705,
+          "p95AbsDb": 65.71569377702922,
+          "maximumPressureMagnitude": 673.8977712164183
+        },
+        {
+          "seed": 131091,
+          "complexL2": 1700.1976977597324,
+          "magnitudeL2": 1700.0041302521408,
+          "within3dB": 0.03125,
+          "medianAbsDb": 32.50014954046722,
+          "p95AbsDb": 61.070197645497935,
+          "maximumPressureMagnitude": 2184.1022952745625
+        },
+        {
+          "seed": 196628,
+          "complexL2": 425.95306498667617,
+          "magnitudeL2": 425.8388192876655,
+          "within3dB": 0.09375,
+          "medianAbsDb": 30.93217034482326,
+          "p95AbsDb": 61.633106965127865,
+          "maximumPressureMagnitude": 526.8411848725233
+        }
+      ],
+      "mean": {
+        "complexL2": 674.9145601314148,
+        "magnitudeL2": 674.695817559895,
+        "within3dB": 0.0390625,
+        "medianAbsDb": 30.743994958767612,
+        "p95AbsDb": 56.113671089232554,
+        "maximumPressureMagnitude": 849.4941016742588
+      },
+      "medianSolveMs": 0.57255,
+      "p95SolveMs": 0.8693,
+      "pathBufferBytes": 331920
+    },
+    {
+      "scene": "planar-9",
+      "hz": 250,
+      "raysPerBin": 1024,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 7436.870528067638,
+          "magnitudeL2": 7436.7835532893705,
+          "within3dB": 0.03125,
+          "medianAbsDb": 43.4949665464346,
+          "p95AbsDb": 87.94895023407537,
+          "maximumPressureMagnitude": 7331.5000203052905
+        },
+        {
+          "seed": 65554,
+          "complexL2": 664.4306158199621,
+          "magnitudeL2": 664.1725893963712,
+          "within3dB": 0.0,
+          "medianAbsDb": 46.623788211605614,
+          "p95AbsDb": 75.06859499197353,
+          "maximumPressureMagnitude": 709.8095749661536
+        },
+        {
+          "seed": 131091,
+          "complexL2": 221529.65111509344,
+          "magnitudeL2": 221529.41697791076,
+          "within3dB": 0.0,
+          "medianAbsDb": 49.94422063575,
+          "p95AbsDb": 100.63599499800137,
+          "maximumPressureMagnitude": 286201.8705811245
+        },
+        {
+          "seed": 196628,
+          "complexL2": 3671.219140462672,
+          "magnitudeL2": 3670.9428813440973,
+          "within3dB": 0.0,
+          "medianAbsDb": 65.46788211807691,
+          "p95AbsDb": 86.4833995248474,
+          "maximumPressureMagnitude": 3524.3872697846027
+        }
+      ],
+      "mean": {
+        "complexL2": 58325.542849860925,
+        "magnitudeL2": 58325.32900048515,
+        "within3dB": 0.0078125,
+        "medianAbsDb": 51.382714377966785,
+        "p95AbsDb": 87.53423493722443,
+        "maximumPressureMagnitude": 74441.89186154513
+      },
+      "medianSolveMs": 0.62365,
+      "p95SolveMs": 0.81217,
+      "pathBufferBytes": 1327248
+    },
+    {
+      "scene": "planar-9",
+      "hz": 250,
+      "raysPerBin": 4096,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 14698.660001547845,
+          "magnitudeL2": 14698.334062701779,
+          "within3dB": 0.0,
+          "medianAbsDb": 60.68384237001863,
+          "p95AbsDb": 88.70427308587975,
+          "maximumPressureMagnitude": 17877.102262669832
+        },
+        {
+          "seed": 65554,
+          "complexL2": 1540.1159233498818,
+          "magnitudeL2": 1539.9247622091348,
+          "within3dB": 0.0,
+          "medianAbsDb": 60.55555556459484,
+          "p95AbsDb": 79.89461840737283,
+          "maximumPressureMagnitude": 1324.1674167961382
+        },
+        {
+          "seed": 131091,
+          "complexL2": 55385.69089315819,
+          "magnitudeL2": 55385.457110434385,
+          "within3dB": 0.0,
+          "medianAbsDb": 47.29170955436589,
+          "p95AbsDb": 87.96682688598112,
+          "maximumPressureMagnitude": 71560.60233333228
+        },
+        {
+          "seed": 196628,
+          "complexL2": 83259.32399634393,
+          "magnitudeL2": 83258.98708677715,
+          "within3dB": 0.0,
+          "medianAbsDb": 86.71430609364813,
+          "p95AbsDb": 109.90781678999224,
+          "maximumPressureMagnitude": 75422.87026518222
+        }
+      ],
+      "mean": {
+        "complexL2": 38720.94770359996,
+        "magnitudeL2": 38720.67575553061,
+        "within3dB": 0.0,
+        "medianAbsDb": 63.81135339565687,
+        "p95AbsDb": 91.61838379230649,
+        "maximumPressureMagnitude": 41546.18556949512
+      },
+      "medianSolveMs": 1.01975,
+      "p95SolveMs": 2.523965,
+      "pathBufferBytes": 5308560
+    },
+    {
+      "scene": "planar-9",
+      "hz": 250,
+      "raysPerBin": 16384,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 19332.708173441446,
+          "magnitudeL2": 19332.428010030424,
+          "within3dB": 0.0,
+          "medianAbsDb": 64.54139195363047,
+          "p95AbsDb": 93.27124387914068,
+          "maximumPressureMagnitude": 23807.096394638687
+        },
+        {
+          "seed": 65554,
+          "complexL2": 7786.524049902755,
+          "magnitudeL2": 7786.34605242859,
+          "within3dB": 0.0,
+          "medianAbsDb": 69.71442238188018,
+          "p95AbsDb": 85.63808063766443,
+          "maximumPressureMagnitude": 8819.368143740727
+        },
+        {
+          "seed": 131091,
+          "complexL2": 87238.07532318351,
+          "magnitudeL2": 87237.95754141516,
+          "within3dB": 0.0,
+          "medianAbsDb": 61.971479469638055,
+          "p95AbsDb": 103.64627333575851,
+          "maximumPressureMagnitude": 111467.87941726384
+        },
+        {
+          "seed": 196628,
+          "complexL2": 24899.069114581423,
+          "magnitudeL2": 24898.675242826204,
+          "within3dB": 0.0,
+          "medianAbsDb": 86.39714458320344,
+          "p95AbsDb": 99.8870359875788,
+          "maximumPressureMagnitude": 18866.367214784135
+        }
+      ],
+      "mean": {
+        "complexL2": 34814.09416527728,
+        "magnitudeL2": 34813.851711675095,
+        "within3dB": 0.0,
+        "medianAbsDb": 70.65610959708803,
+        "p95AbsDb": 95.61065846003561,
+        "maximumPressureMagnitude": 40740.177792606846
+      },
+      "medianSolveMs": 3.0595,
+      "p95SolveMs": 3.6438349999999993,
+      "pathBufferBytes": 21233808
+    },
+    {
+      "scene": "planar-9",
+      "hz": 250,
+      "raysPerBin": 65536,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 5339.823192779643,
+          "magnitudeL2": 5339.479514555886,
+          "within3dB": 0.0,
+          "medianAbsDb": 67.61946478176657,
+          "p95AbsDb": 86.41235464351895,
+          "maximumPressureMagnitude": 5956.856187975709
+        },
+        {
+          "seed": 65554,
+          "complexL2": 15031.715151171256,
+          "magnitudeL2": 15031.494290609115,
+          "within3dB": 0.0,
+          "medianAbsDb": 74.65758379877839,
+          "p95AbsDb": 105.32350605213738,
+          "maximumPressureMagnitude": 9866.411588163368
+        },
+        {
+          "seed": 131091,
+          "complexL2": 35629.21625738189,
+          "magnitudeL2": 35629.00016280174,
+          "within3dB": 0.0,
+          "medianAbsDb": 80.0245938793693,
+          "p95AbsDb": 105.06132787673253,
+          "maximumPressureMagnitude": 35126.68236668331
+        },
+        {
+          "seed": 196628,
+          "complexL2": 63052.514167236855,
+          "magnitudeL2": 63052.16392979534,
+          "within3dB": 0.0,
+          "medianAbsDb": 79.89293884563288,
+          "p95AbsDb": 107.31435501168035,
+          "maximumPressureMagnitude": 51486.875430953936
+        }
+      ],
+      "mean": {
+        "complexL2": 29763.317192142415,
+        "magnitudeL2": 29763.03447444052,
+        "within3dB": 0.0,
+        "medianAbsDb": 75.54864532638679,
+        "p95AbsDb": 101.0278858960173,
+        "maximumPressureMagnitude": 25609.20639344408
+      },
+      "medianSolveMs": 7.7359,
+      "p95SolveMs": 8.589575,
+      "pathBufferBytes": 84934800
+    },
+    {
+      "scene": "planar-25",
+      "hz": 125,
+      "raysPerBin": 256,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 253.51848142950777,
+          "magnitudeL2": 253.0804891903078,
+          "within3dB": 0.0,
+          "medianAbsDb": 25.818187667150298,
+          "p95AbsDb": 60.991124682090756,
+          "maximumPressureMagnitude": 239.38316236445442
+        },
+        {
+          "seed": 65554,
+          "complexL2": 9008.094332301498,
+          "magnitudeL2": 9008.048146117842,
+          "within3dB": 0.0625,
+          "medianAbsDb": 34.388872651076625,
+          "p95AbsDb": 62.20220868299487,
+          "maximumPressureMagnitude": 10592.990453301138
+        },
+        {
+          "seed": 131091,
+          "complexL2": 10009.26332424702,
+          "magnitudeL2": 10009.21377233328,
+          "within3dB": 0.0625,
+          "medianAbsDb": 18.65462156461757,
+          "p95AbsDb": 50.15451396134143,
+          "maximumPressureMagnitude": 11770.991859170697
+        },
+        {
+          "seed": 196628,
+          "complexL2": 7842865.63055426,
+          "magnitudeL2": 7842865.625285282,
+          "within3dB": 0.0,
+          "medianAbsDb": 34.2236984467075,
+          "p95AbsDb": 89.31106695585538,
+          "maximumPressureMagnitude": 9224483.060472101
+        }
+      ],
+      "mean": {
+        "complexL2": 1965534.1266730595,
+        "magnitudeL2": 1965533.9919232307,
+        "within3dB": 0.03125,
+        "medianAbsDb": 28.271345082388,
+        "p95AbsDb": 65.66472857057062,
+        "maximumPressureMagnitude": 2311771.6064867345
+      },
+      "medianSolveMs": 0.73385,
+      "p95SolveMs": 0.93409,
+      "pathBufferBytes": 331920
+    },
+    {
+      "scene": "planar-25",
+      "hz": 125,
+      "raysPerBin": 1024,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 999.3217150433932,
+          "magnitudeL2": 999.1110204615119,
+          "within3dB": 0.0,
+          "medianAbsDb": 33.12495680325884,
+          "p95AbsDb": 69.17208911090563,
+          "maximumPressureMagnitude": 781.918044755009
+        },
+        {
+          "seed": 65554,
+          "complexL2": 3251760.6774059213,
+          "magnitudeL2": 3251760.0840884987,
+          "within3dB": 0.0,
+          "medianAbsDb": 43.48429944125958,
+          "p95AbsDb": 130.9526089051462,
+          "maximumPressureMagnitude": 3682688.0859415657
+        },
+        {
+          "seed": 131091,
+          "complexL2": 2658.36577102249,
+          "magnitudeL2": 2658.2940020029673,
+          "within3dB": 0.0,
+          "medianAbsDb": 37.01418481454017,
+          "p95AbsDb": 77.07706965005433,
+          "maximumPressureMagnitude": 2942.2732998594665
+        },
+        {
+          "seed": 196628,
+          "complexL2": 2038336.3420024721,
+          "magnitudeL2": 2038336.3059833678,
+          "within3dB": 0.03125,
+          "medianAbsDb": 49.468412422412044,
+          "p95AbsDb": 119.76556870365683,
+          "maximumPressureMagnitude": 2306900.572756231
+        }
+      ],
+      "mean": {
+        "complexL2": 1323438.6767236148,
+        "magnitudeL2": 1323438.448773583,
+        "within3dB": 0.0078125,
+        "medianAbsDb": 40.77296337036766,
+        "p95AbsDb": 99.24183409244074,
+        "maximumPressureMagnitude": 1498328.2125106028
+      },
+      "medianSolveMs": 0.833,
+      "p95SolveMs": 0.989065,
+      "pathBufferBytes": 1327248
+    },
+    {
+      "scene": "planar-25",
+      "hz": 125,
+      "raysPerBin": 4096,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 145867.3240744308,
+          "magnitudeL2": 145866.98963512233,
+          "within3dB": 0.0,
+          "medianAbsDb": 45.452881311667795,
+          "p95AbsDb": 116.37086023445066,
+          "maximumPressureMagnitude": 138015.45795558655
+        },
+        {
+          "seed": 65554,
+          "complexL2": 3048366.0362694,
+          "magnitudeL2": 3048365.846362446,
+          "within3dB": 0.0,
+          "medianAbsDb": 68.63275390256243,
+          "p95AbsDb": 124.8158415583402,
+          "maximumPressureMagnitude": 3449205.7373387725
+        },
+        {
+          "seed": 131091,
+          "complexL2": 109592.05685683101,
+          "magnitudeL2": 109591.88388217882,
+          "within3dB": 0.0,
+          "medianAbsDb": 60.579222581104204,
+          "p95AbsDb": 100.50065674999682,
+          "maximumPressureMagnitude": 128651.76660961416
+        },
+        {
+          "seed": 196628,
+          "complexL2": 511498.4879462374,
+          "magnitudeL2": 511498.44820117595,
+          "within3dB": 0.0,
+          "medianAbsDb": 52.04167143809582,
+          "p95AbsDb": 124.48979176316209,
+          "maximumPressureMagnitude": 576677.2027313971
+        }
+      ],
+      "mean": {
+        "complexL2": 953830.9762867248,
+        "magnitudeL2": 953830.7920202308,
+        "within3dB": 0.0,
+        "medianAbsDb": 56.67663230835756,
+        "p95AbsDb": 116.54428757648745,
+        "maximumPressureMagnitude": 1073137.5411588426
+      },
+      "medianSolveMs": 1.3894,
+      "p95SolveMs": 1.623615,
+      "pathBufferBytes": 5308560
+    },
+    {
+      "scene": "planar-25",
+      "hz": 125,
+      "raysPerBin": 16384,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 40990.28567164775,
+          "magnitudeL2": 40989.91887805345,
+          "within3dB": 0.0,
+          "medianAbsDb": 59.44337184195743,
+          "p95AbsDb": 106.00060142546229,
+          "maximumPressureMagnitude": 34744.88082053845
+        },
+        {
+          "seed": 65554,
+          "complexL2": 796015.510848335,
+          "magnitudeL2": 796015.3026730587,
+          "within3dB": 0.0,
+          "medianAbsDb": 85.36179291315008,
+          "p95AbsDb": 130.38632434151415,
+          "maximumPressureMagnitude": 862380.41503332
+        },
+        {
+          "seed": 131091,
+          "complexL2": 28648.25787360919,
+          "magnitudeL2": 28648.047847435053,
+          "within3dB": 0.0,
+          "medianAbsDb": 61.09428153048695,
+          "p95AbsDb": 99.00385713891475,
+          "maximumPressureMagnitude": 32149.520924834924
+        },
+        {
+          "seed": 196628,
+          "complexL2": 127604.08843487954,
+          "magnitudeL2": 127604.03535321826,
+          "within3dB": 0.0,
+          "medianAbsDb": 64.92777463289016,
+          "p95AbsDb": 112.4639493118943,
+          "maximumPressureMagnitude": 143669.7420864288
+        }
+      ],
+      "mean": {
+        "complexL2": 248314.53570711787,
+        "magnitudeL2": 248314.32618794136,
+        "within3dB": 0.0,
+        "medianAbsDb": 67.70680522962115,
+        "p95AbsDb": 111.96368305444638,
+        "maximumPressureMagnitude": 268236.1397162805
+      },
+      "medianSolveMs": 3.79255,
+      "p95SolveMs": 4.3919049999999995,
+      "pathBufferBytes": 21233808
+    },
+    {
+      "scene": "planar-25",
+      "hz": 125,
+      "raysPerBin": 65536,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 87218.71821835451,
+          "magnitudeL2": 87218.56794922349,
+          "within3dB": 0.0,
+          "medianAbsDb": 83.82388326270018,
+          "p95AbsDb": 114.7682778682853,
+          "maximumPressureMagnitude": 79068.48906009595
+        },
+        {
+          "seed": 65554,
+          "complexL2": 285717.00139952573,
+          "magnitudeL2": 285716.75198851444,
+          "within3dB": 0.0,
+          "medianAbsDb": 83.36869929547834,
+          "p95AbsDb": 122.84160783094762,
+          "maximumPressureMagnitude": 216266.11659952244
+        },
+        {
+          "seed": 131091,
+          "complexL2": 28916.32238123128,
+          "magnitudeL2": 28916.075202023956,
+          "within3dB": 0.0,
+          "medianAbsDb": 76.53000873445207,
+          "p95AbsDb": 104.23251323833477,
+          "maximumPressureMagnitude": 23761.868459501322
+        },
+        {
+          "seed": 196628,
+          "complexL2": 3408642.684655946,
+          "magnitudeL2": 3408642.6526071723,
+          "within3dB": 0.0,
+          "medianAbsDb": 77.65526496248162,
+          "p95AbsDb": 118.57513475594436,
+          "maximumPressureMagnitude": 3723187.4495832855
+        }
+      ],
+      "mean": {
+        "complexL2": 952623.6816637644,
+        "magnitudeL2": 952623.5119367335,
+        "within3dB": 0.0,
+        "medianAbsDb": 80.34446406377805,
+        "p95AbsDb": 115.10438342337801,
+        "maximumPressureMagnitude": 1010570.9809256013
+      },
+      "medianSolveMs": 12.284049999999999,
+      "p95SolveMs": 14.033255,
+      "pathBufferBytes": 84934800
+    },
+    {
+      "scene": "planar-25",
+      "hz": 250,
+      "raysPerBin": 256,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 210.21971523113362,
+          "magnitudeL2": 210.01695587719757,
+          "within3dB": 0.0625,
+          "medianAbsDb": 25.575727936874316,
+          "p95AbsDb": 56.617512476977055,
+          "maximumPressureMagnitude": 238.74505951857702
+        },
+        {
+          "seed": 65554,
+          "complexL2": 7395.957032487853,
+          "magnitudeL2": 7395.859733056228,
+          "within3dB": 0.0,
+          "medianAbsDb": 35.986561371414055,
+          "p95AbsDb": 63.295865793895885,
+          "maximumPressureMagnitude": 10592.267702702862
+        },
+        {
+          "seed": 131091,
+          "complexL2": 3898.092017050731,
+          "magnitudeL2": 3898.0612758211964,
+          "within3dB": 0.09375,
+          "medianAbsDb": 17.611255979659745,
+          "p95AbsDb": 49.12331259414636,
+          "maximumPressureMagnitude": 5580.442386562779
+        },
+        {
+          "seed": 196628,
+          "complexL2": 6221057.092332434,
+          "magnitudeL2": 6221056.942233679,
+          "within3dB": 0.0,
+          "medianAbsDb": 35.79244931880294,
+          "p95AbsDb": 87.66283604514189,
+          "maximumPressureMagnitude": 8911429.647837397
+        }
+      ],
+      "mean": {
+        "complexL2": 1558140.340274301,
+        "magnitudeL2": 1558140.2200496083,
+        "within3dB": 0.0390625,
+        "medianAbsDb": 28.741498651687763,
+        "p95AbsDb": 64.1748817275403,
+        "maximumPressureMagnitude": 2231960.2757465453
+      },
+      "medianSolveMs": 0.73385,
+      "p95SolveMs": 0.93409,
+      "pathBufferBytes": 331920
+    },
+    {
+      "scene": "planar-25",
+      "hz": 250,
+      "raysPerBin": 1024,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 2284.16697991468,
+          "magnitudeL2": 2284.1267158385276,
+          "within3dB": 0.03125,
+          "medianAbsDb": 36.11867675053861,
+          "p95AbsDb": 70.37205493508044,
+          "maximumPressureMagnitude": 3120.1105674055616
+        },
+        {
+          "seed": 65554,
+          "complexL2": 2670544.041596493,
+          "magnitudeL2": 2670543.999386372,
+          "within3dB": 0.03125,
+          "medianAbsDb": 39.996389786760474,
+          "p95AbsDb": 134.31460111741993,
+          "maximumPressureMagnitude": 3682687.616664245
+        },
+        {
+          "seed": 131091,
+          "complexL2": 1222.1398358832628,
+          "magnitudeL2": 1222.053272264611,
+          "within3dB": 0.03125,
+          "medianAbsDb": 40.24794577438807,
+          "p95AbsDb": 82.74512925554212,
+          "maximumPressureMagnitude": 1394.522116507422
+        },
+        {
+          "seed": 196628,
+          "complexL2": 1621203.8161066333,
+          "magnitudeL2": 1621203.6164285697,
+          "within3dB": 0.03125,
+          "medianAbsDb": 52.227514377168674,
+          "p95AbsDb": 117.07111650950102,
+          "maximumPressureMagnitude": 2228637.4221400605
+        }
+      ],
+      "mean": {
+        "complexL2": 1073813.541129731,
+        "magnitudeL2": 1073813.4489507612,
+        "within3dB": 0.03125,
+        "medianAbsDb": 42.14763167221396,
+        "p95AbsDb": 101.12572545438587,
+        "maximumPressureMagnitude": 1478959.9178720545
+      },
+      "medianSolveMs": 0.833,
+      "p95SolveMs": 0.989065,
+      "pathBufferBytes": 1327248
+    },
+    {
+      "scene": "planar-25",
+      "hz": 250,
+      "raysPerBin": 4096,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 119071.41680991364,
+          "magnitudeL2": 119071.30516589237,
+          "within3dB": 0.0,
+          "medianAbsDb": 44.190914666508206,
+          "p95AbsDb": 115.08853512307526,
+          "maximumPressureMagnitude": 138002.63248215214
+        },
+        {
+          "seed": 65554,
+          "complexL2": 2512381.083836254,
+          "magnitudeL2": 2512380.9395417357,
+          "within3dB": 0.0,
+          "medianAbsDb": 74.80948535229865,
+          "p95AbsDb": 125.6767863322731,
+          "maximumPressureMagnitude": 3462847.4945621295
+        },
+        {
+          "seed": 131091,
+          "complexL2": 90646.09577706008,
+          "magnitudeL2": 90646.08391704582,
+          "within3dB": 0.0,
+          "medianAbsDb": 58.333762610673816,
+          "p95AbsDb": 109.74997689941291,
+          "maximumPressureMagnitude": 129448.01518924932
+        },
+        {
+          "seed": 196628,
+          "complexL2": 406510.0157316085,
+          "magnitudeL2": 406509.8140399956,
+          "within3dB": 0.0,
+          "medianAbsDb": 52.67721490647088,
+          "p95AbsDb": 124.58995956417127,
+          "maximumPressureMagnitude": 557197.4263081105
+        }
+      ],
+      "mean": {
+        "complexL2": 782152.1530387091,
+        "magnitudeL2": 782152.0356661674,
+        "within3dB": 0.0,
+        "medianAbsDb": 57.502844383987885,
+        "p95AbsDb": 118.77631447973314,
+        "maximumPressureMagnitude": 1071873.8921354103
+      },
+      "medianSolveMs": 1.3894,
+      "p95SolveMs": 1.623615,
+      "pathBufferBytes": 5308560
+    },
+    {
+      "scene": "planar-25",
+      "hz": 250,
+      "raysPerBin": 16384,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 32921.757243975415,
+          "magnitudeL2": 32921.650195247865,
+          "within3dB": 0.0,
+          "medianAbsDb": 61.59143270591396,
+          "p95AbsDb": 108.24317451782902,
+          "maximumPressureMagnitude": 34684.30119597613
+        },
+        {
+          "seed": 65554,
+          "complexL2": 655839.2387175806,
+          "magnitudeL2": 655839.0961131828,
+          "within3dB": 0.0,
+          "medianAbsDb": 85.62025238863728,
+          "p95AbsDb": 126.41591805360143,
+          "maximumPressureMagnitude": 865736.4809893492
+        },
+        {
+          "seed": 131091,
+          "complexL2": 23699.3069412972,
+          "magnitudeL2": 23699.252744588604,
+          "within3dB": 0.0,
+          "medianAbsDb": 64.70826440525299,
+          "p95AbsDb": 104.77568390014731,
+          "maximumPressureMagnitude": 32363.018225338285
+        },
+        {
+          "seed": 196628,
+          "complexL2": 101821.38866688583,
+          "magnitudeL2": 101821.17431952411,
+          "within3dB": 0.0,
+          "medianAbsDb": 62.064721477778605,
+          "p95AbsDb": 112.55987579711093,
+          "maximumPressureMagnitude": 139419.53144645673
+        }
+      ],
+      "mean": {
+        "complexL2": 203570.42289243476,
+        "magnitudeL2": 203570.29334313585,
+        "within3dB": 0.0,
+        "medianAbsDb": 68.4961677443957,
+        "p95AbsDb": 112.99866306717217,
+        "maximumPressureMagnitude": 268050.8329642801
+      },
+      "medianSolveMs": 3.79255,
+      "p95SolveMs": 4.3919049999999995,
+      "pathBufferBytes": 21233808
+    },
+    {
+      "scene": "planar-25",
+      "hz": 250,
+      "raysPerBin": 65536,
+      "probes": 32,
+      "perSeed": [
+        {
+          "seed": 17,
+          "complexL2": 70212.3994592101,
+          "magnitudeL2": 70212.21934537102,
+          "within3dB": 0.0,
+          "medianAbsDb": 86.17792794618859,
+          "p95AbsDb": 119.52657418863572,
+          "maximumPressureMagnitude": 78846.95163080766
+        },
+        {
+          "seed": 65554,
+          "complexL2": 231868.2019354223,
+          "magnitudeL2": 231868.036631494,
+          "within3dB": 0.0,
+          "medianAbsDb": 88.58217159596563,
+          "p95AbsDb": 128.59038635009927,
+          "maximumPressureMagnitude": 217239.05256300487
+        },
+        {
+          "seed": 131091,
+          "complexL2": 24472.566432933498,
+          "magnitudeL2": 24472.425786995533,
+          "within3dB": 0.0,
+          "medianAbsDb": 81.12639894945062,
+          "p95AbsDb": 104.47911110916425,
+          "maximumPressureMagnitude": 23677.668275847424
+        },
+        {
+          "seed": 196628,
+          "complexL2": 7535421.236531377,
+          "magnitudeL2": 7535421.07864235,
+          "within3dB": 0.0,
+          "medianAbsDb": 80.79896141841598,
+          "p95AbsDb": 119.99216694306814,
+          "maximumPressureMagnitude": 10691196.672870189
+        }
+      ],
+      "mean": {
+        "complexL2": 1965493.6010897357,
+        "magnitudeL2": 1965493.4401015525,
+        "within3dB": 0.0,
+        "medianAbsDb": 84.1713649775052,
+        "p95AbsDb": 118.14705964774184,
+        "maximumPressureMagnitude": 2752740.0863349624
+      },
+      "medianSolveMs": 12.284049999999999,
+      "p95SolveMs": 14.033255,
+      "pathBufferBytes": 84934800
+    }
+  ]
+}

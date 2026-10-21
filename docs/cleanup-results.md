@@ -1,5 +1,51 @@
 # Cleanup validation and measured bottlenecks
 
+## More GPU samples — 2026-10-21
+
+**Measured the unchanged production GPU walk up to 65,536 rays per frequency bin. More samples alone do not stabilize its larger-scene fields.** This is not a GPU port of the offline complete-route experiment below. No runtime code or quality defaults changed.
+
+The existing silent Metal runner tested 256 / 1,024 / 4,096 / 16,384 / 65,536 rays, with eight interactions, 0.4 s support and four seeds. Each layout uses every third point of the pre-existing regular lattice: 33 / 32 / 32 probes, selected before this sweep. The same cached refined wave references are used. These are stationary point-source/extruded-wall planar scenes; no finite-3D or audio/artifact test is implied.
+
+### Measured accuracy and cost
+
+Relative complex-pressure L2 includes amplitude and phase; each seed is scored separately and errors are then averaged. Fields are not averaged before scoring. Within ±3 dB measures local amplitude agreement. The table shows 250 Hz; raw results also include 125 Hz.
+
+| Boxes | Rays/bin | Complex error | Within ±3 dB | Median solve + readback (ms) |
+|---:|---:|---:|---:|---:|
+| 1 | 256 | 128.44% | 62.9% | 0.466 |
+| 1 | 1,024 | 97.99% | 62.1% | 0.455 |
+| 1 | 4,096 | 32.97% | 68.9% | 1.268 |
+| 1 | 16,384 | 44.66% | 65.9% | 3.022 |
+| 1 | 65,536 | 39.35% | 67.4% | 4.134 |
+| 9 | 256 | 67,491.46% | 3.9% | 0.573 |
+| 9 | 1,024 | 5,832,554.28% | 0.8% | 0.624 |
+| 9 | 4,096 | 3,872,094.77% | 0.0% | 1.020 |
+| 9 | 16,384 | 3,481,409.42% | 0.0% | 3.059 |
+| 9 | 65,536 | 2,976,331.72% | 0.0% | 7.736 |
+| 25 | 256 | 155,814,034.03% | 3.9% | 0.734 |
+| 25 | 1,024 | 107,381,354.11% | 3.1% | 0.833 |
+| 25 | 4,096 | 78,215,215.30% | 0.0% | 1.389 |
+| 25 | 16,384 | 20,357,042.29% | 0.0% | 3.793 |
+| 25 | 65,536 | 196,549,360.11% | 0.0% | 12.284 |
+
+![GPU sample-count scaling](benchmarks/gpu-more-samples-2026-10-21.png)
+
+Timings are warm synchronous solver wall time on Apple M5 / Metal, **three computed FFT bins**, one source/listener pair, including GPU-to-CPU path-buffer readback. They exclude cold construction, CPU complex summation and audio DSP; these are neither GPU timestamp measurements nor full-band real-time costs. Four seeds and this small spatial subset cannot establish statistical convergence. Ray sequences are nested across budgets. The 256-ray complex pressure and direct visibility exactly reproduce **776 prior baseline rows**. All three measurement cases completed in 20.82 s; startup/compilation is outside that duration. Passing these cases means the measurements completed with finite values, not that acoustic accuracy passed.
+
+### Why a larger budget is insufficient here
+
+The one-box mean error improves from 128.44% to 39.35%, but is not monotonic; 4,096 rays gave 32.97% on these probes. The larger layouts remain severely inaccurate, including at the highest budget. This is consistent with the previously captured large inverse-probability weights on multi-edge routes. Additional rays can discover new extreme contributions. This sweep does not prove convergence, or separate every source of model bias from sampling variance.
+
+There is also a concrete memory limit in the present path layout. Per pair and response, path storage is `48 × frequencyBins × (1 + raysPerBin × (maxBounces + 1))` bytes. At eight interactions and three bins, the five budgets use 0.32 / 1.27 / 5.06 / 20.25 / 81.00 MiB. This diagnostic holds an equally sized CPU copy. With a 1,024-point FFT (513 bins), 65,536 rays would require **13.53 GiB for the GPU path buffer alone**, before other data or additional pairs/responses. This full-band allocation was calculated, not run.
+
+### Next implementation decision
+
+GPU acceleration remains appropriate. The next candidate is a separately validated GPU implementation of complete-route sampling, using the CPU implementation as a numerical control and the wave solver as the physical reference. For stationary field measurements, bounded sample batches and on-GPU complex-pressure reduction would avoid storing/readback of every path. The live renderer also needs delay, direction and motion information, so a scalar-field reduction is not a drop-in replacement for its response format. The CPU prototype still has larger-scene errors and an enumerated mixed-path stage; porting it is an experiment, not a proven accuracy fix.
+
+Keep the current quality defaults unchanged. Require a measured accuracy gain at matched time before promoting a GPU candidate; simply setting a much higher ray count is not supported by these results.
+
+[Ledger](benchmarks/gpu-more-samples-2026-10-21.json) · [Raw rows, reference subsets, configuration, source hashes and scripts](benchmarks/gpu-more-samples-2026-10-21.zip). Reproduction starts from commit `db295a7` and the earlier spatial-study runner; the archive includes its exact snapshot. No visible windows, cursor capture, microphone or speaker playback were used.
+
 ## Bounded complete-route Monte Carlo — 2026-10-21
 
 **Implemented in the offline 2D diagnostic; the Unity/GPU renderer is unchanged.** The new `--route-budget` option spends a fixed total of pure-edge height samples per receiver. It retains the existing signed wedge integrand, physical delay/phase, shared-face factors and visibility rules. Larger scenes still fail high-fidelity accuracy; this is not a qualified training teacher.
