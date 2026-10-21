@@ -1,5 +1,71 @@
 # Cleanup validation and measured bottlenecks
 
+## Complete-route GPU integration — 2026-10-21
+
+**The offline pure-edge integrator is now ported to HLSL.** At 65,536 samples per receiver, its complex-pressure result matches the CPU to 0.00237–0.00244% relative L2 across all 2,854 receiver positions. CPU route planning is shared; it has not been moved to the GPU. Direct/mirror/mixed computation also remains a separate CPU stage. The live renderer is unchanged.
+
+![Full 2D maps of the GPU port at two budgets](benchmarks/gpu-route-integration-2026-10-21.png)
+
+### What runs where
+
+```text
+CPU: count visible continuations; choose complete routes and their weights
+CPU: prepare route geometry and shared Sobol sample coordinates
+GPU: each thread samples heights along one already-selected complete route
+     evaluate signed edge kernels, distance spreading, delay/phase and PDF weight
+GPU: parallel reduction to one complex pressure value per receiver/frequency
+CPU: add the separate direct, mirror and mixed-path field for these map comparisons
+```
+
+`tools/edge_integral.py` extracts its existing route-allocation block into one shared generator; four before/after comparisons remain bit-identical. `tools/gpu_routes.py` prepares binary inputs and checks results. The editor-only `RouteIntegration.compute` and `RouteIntegrationChecks.cs` implement the numerical GPU stage and its opt-in runner. No additional package, live component or runtime mode is introduced. The port does not implement the optional CPU control-variate/roulette modes.
+
+The shader uses two dispatches, deterministic tree reduction and no floating-point atomics. It does not store every arrival: normal readback is eight bytes of complex pressure plus a four-byte numerical-error flag per position. Height draws are shared across routes, as in the CPU implementation. Route depth is supplied in the descriptors, not fixed to two by the shader; full fields here use depth two and numerical controls exercise depth four.
+
+### Physical accuracy with more samples
+
+Same existing 12 × 11 m point-source/extruded-wall layouts, rigid boxes, 250 Hz, 0.4 s support and seed 17. All routes fit these two-order field budgets, so every route is covered and its heights are sampled. No amplitude fitting, pressure clipping, shortest-path replacement or diffraction disable. CPU and GPU receive the same float-representable Sobol coordinates for parity; these differ slightly from the earlier all-double experiment. All candidate fields add the identical cached order-eight-quadrature direct/mirror/mixed field from the CPU study.
+
+| Boxes | Receivers | Complex error, 65,536 | Complex error, 1,048,576 | Within ±3 dB: low → high |
+|---:|---:|---:|---:|---:|
+| 1 | 1014 | 1.85% | 1.83% | 100.0% → 100.0% |
+| 9 | 960 | 32.02% | 22.29% | 58.9% → 68.4% |
+| 25 | 880 | 83.23% | 62.18% | 31.4% → 41.2% |
+
+More samples improve the larger layouts in this run, but they remain far from high-fidelity references. The one-box result nearly plateaus. These are one-seed full-map measurements, not a convergence proof. Two-order truncation and the unchanged physical/mixed-path approximation still limit accuracy; increasing samples cannot establish their correctness. Finite 3D, motion, broadband audio and training-data qualification remain untested.
+
+### Performance, with the CPU costs visible
+
+Apple M5 / Metal, Unity 6000.4.1f1, one low-priority worker, no windows or audio. Median warm GPU integration/reduction plus readback is **0.228–0.230 ms** at 65,536 samples and **0.976–1.172 ms** at 1,048,576 samples, per position at one frequency. These are synchronous wall-clock timings, not GPU timestamps or full-band real-time costs. Buffer allocations total 1.01–1.11 MiB at the lower budget and 16.13–16.23 MiB at the higher budget, including uploaded random draws and route geometry, excluding driver memory.
+
+The following seconds cover each whole map. Prepared GPU stage includes input decoding, uploads, integration, reduction and readback. Cold compilation, allocation and the one-time random upload are outside its warm timings. CPU integration is `sample_chain` work with its per-route setup, excluding the separately timed route preparation. It is not an end-to-end speedup claim.
+
+| Boxes | CPU preparation, 65,536 | CPU integration, 65,536 | Prepared GPU stage, 65,536 | Prepared GPU stage, 1,048,576 | Separate CPU direct/mirror/mixed |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.357 | 16.092 | 0.317 | 1.127 | 0.361 |
+| 9 | 10.492 | 58.212 | 0.280 | 2.124 | 30.691 |
+| 25 | 20.877 | 87.325 | 0.664 | 1.195 | 213.957 |
+
+The last column was measured in the preceding CPU study and cached for these comparisons; it was not recomputed inside the GPU timings. CPU route preparation and the mixed-path stage now dominate larger-scene total cost. The numerical port makes additional height samples inexpensive, but does not make the entire pipeline real-time. CPU integration was not rerun at the million-sample budget.
+
+### Validation and numerical changes
+
+**13 final Unity cases pass, zero failed/skipped:** six prepared numerical controls, six full-field measurements and an atomic CDF-angle control with 115 arguments. Separate Python checks verify every captured sample in the six controls and all 2,854 CPU/GPU field values at 65,536 samples. Controls cover empty scenes, exhausted physical support, first-order transport, DC, four-interaction routes and route-subset probability weights. The existing **28 CPU numerical controls** and four bit-identical refactor comparisons also pass.
+
+The initial float port failed the longer-route sample comparison. The accepted implementation uses a factored ellipse intersection, positive-weight endpoint interpolation for the truncated Cauchy draw, and a more accurate angular-span evaluation. The span reduces atan's argument twice before a 19th-order series (less than 2e-9 rad truncation error before float rounding). The independent GPU angle check measures maximum absolute errors of 1.15e-5 rad for native `atan2` and 2.44e-7 rad for the replacement on these arguments. Final per-control aggregate parity error is at most 0.00393%. This is a numerical reformulation of the same sampling distribution, not pressure clipping or a changed physical kernel.
+
+Metal still emits a potential-uninitialized-return warning at the zero-depth early return; the empty/exhausted-support cases return exact zeros, and all measured samples pass finite-value checks. The raw compiler/test evidence is retained through the final test XML. No suppression or weakened parity tolerance was used to pass the controls.
+
+### Reproduce
+
+Prepare a case with NumPy/SciPy, using a fresh output directory:
+```sh
+python tools/gpu_routes.py prepare /tmp/route-case --scene /path/to/scene.json \
+  --samples 65536 --depth 2 --seed 17 --hz 250 --cpu
+```
+Put `/tmp/route-case` on a line in a case-list file. In an isolated copy of the Unity project, set `ACOUSTIC_ROUTE_CASES` to that file and run EditMode tests filtered to `TakeChecks.MeasureCompleteRoutes;TakeChecks.RouteAnglesMatchReference`, using `-batchmode -force-metal -disable-audio -job-worker-count 1`. Then run `python tools/gpu_routes.py check /tmp/route-case`. `--capture` additionally records individual sample contributions for small numerical controls.
+
+[Measurement ledger](benchmarks/gpu-route-integration-2026-10-21.json) · [Raw fields, control inputs, tests, source snapshots and reproduction scripts](benchmarks/gpu-route-integration-2026-10-21.zip). Large full-grid request buffers are reproducible from the retained scene/seed/configuration and are omitted from the archive; their hashes are retained. Earlier spatial/CPU archives supply the unchanged wave and connection references. Prefer these spatial maps when presenting subsequent results.
+
 ## Full 2D maps of the GPU sample sweep — 2026-10-21
 
 Show spatial pressure maps first when presenting acoustic results; a scaling chart alone does not show where the field is wrong.

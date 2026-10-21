@@ -1,0 +1,440 @@
+{
+  "scope": "Stationary rigid planar boxes, 250 Hz, seed 17, pure edges through order two. GPU integration plus identical cached CPU direct/mirror/mixed fields.",
+  "limitations": [
+    "CPU route selection/preparation and direct/mirror/mixed computation remain outside the GPU kernel.",
+    "One frequency, no DSP, binaural, dynamic geometry or finite-3D qualification.",
+    "One seed on full maps; more rays do not remove model truncation or guarantee convergence.",
+    "Wave reference has previously measured mesh convergence, not a certified physical error bound."
+  ],
+  "cases": [
+    {
+      "scene": "planar-1",
+      "probes": 1014,
+      "sharedCpuConnectionSeconds": 0.360517749999417,
+      "budgets": [
+        {
+          "probes": 1014,
+          "samples": 65536,
+          "depth": 2,
+          "hz": 250,
+          "medianSolveMs": 0.22890000000000002,
+          "p95SolveMs": 0.4412499999999999,
+          "gpuBytes": 1057476,
+          "cpuPreparationSeconds": 0.35697558138053864,
+          "gpuSolveSeconds": 0.3013374,
+          "uploadSeconds": 0.0109456,
+          "inputSeconds": 0.005066599999999999,
+          "cpuIntegrationSeconds": 16.091696178133134,
+          "cpuGpuRelativeL2": 2.442714498596998e-05,
+          "maximumAbsoluteDifference": 6.711477893252734e-06,
+          "quality": {
+            "complexL2": 0.01850901939751406,
+            "within3dB": 1.0,
+            "medianAbsDb": 0.10953315924463672
+          },
+          "cpuQuality": {
+            "complexL2": 0.01850871430001721,
+            "within3dB": 1.0,
+            "medianAbsDb": 0.10955303175700279
+          },
+          "preparedGpuStageSeconds": 0.31734959999999995,
+          "plannedGpuStageSeconds": 0.6743251813805387
+        },
+        {
+          "probes": 1014,
+          "samples": 1048576,
+          "depth": 2,
+          "hz": 250,
+          "medianSolveMs": 0.9763499999999999,
+          "p95SolveMs": 1.1870999999999996,
+          "gpuBytes": 16908996,
+          "cpuPreparationSeconds": 0.2045028799038846,
+          "gpuSolveSeconds": 1.1077721,
+          "uploadSeconds": 0.0128574,
+          "inputSeconds": 0.0064028999999999996,
+          "cpuIntegrationSeconds": 0.0,
+          "quality": {
+            "complexL2": 0.018293308208364733,
+            "within3dB": 1.0,
+            "medianAbsDb": 0.10234606790242282
+          },
+          "preparedGpuStageSeconds": 1.1270324,
+          "plannedGpuStageSeconds": 1.3315352799038846
+        }
+      ]
+    },
+    {
+      "scene": "planar-9",
+      "probes": 960,
+      "sharedCpuConnectionSeconds": 30.69054212499759,
+      "budgets": [
+        {
+          "probes": 960,
+          "samples": 65536,
+          "depth": 2,
+          "hz": 250,
+          "medianSolveMs": 0.22785,
+          "p95SolveMs": 0.32386,
+          "gpuBytes": 1104900,
+          "cpuPreparationSeconds": 10.492394784261705,
+          "gpuSolveSeconds": 0.2351107,
+          "uploadSeconds": 0.015916800000000002,
+          "inputSeconds": 0.0289769,
+          "cpuIntegrationSeconds": 58.21176558636944,
+          "cpuGpuRelativeL2": 2.405893018731449e-05,
+          "maximumAbsoluteDifference": 2.475308846923914e-05,
+          "quality": {
+            "complexL2": 0.3202448280411527,
+            "within3dB": 0.5885416666666666,
+            "medianAbsDb": 2.27800921146038
+          },
+          "cpuQuality": {
+            "complexL2": 0.3202408422787804,
+            "within3dB": 0.5885416666666666,
+            "medianAbsDb": 2.278007862280636
+          },
+          "preparedGpuStageSeconds": 0.28000440000000004,
+          "plannedGpuStageSeconds": 10.772399184261705
+        },
+        {
+          "probes": 960,
+          "samples": 1048576,
+          "depth": 2,
+          "hz": 250,
+          "medianSolveMs": 1.17245,
+          "p95SolveMs": 1.9224099999999993,
+          "gpuBytes": 16956420,
+          "cpuPreparationSeconds": 10.595375934790354,
+          "gpuSolveSeconds": 1.7882259,
+          "uploadSeconds": 0.0299885,
+          "inputSeconds": 0.3061186,
+          "cpuIntegrationSeconds": 0.0,
+          "quality": {
+            "complexL2": 0.22288903487668266,
+            "within3dB": 0.684375,
+            "medianAbsDb": 1.5174274899395452
+          },
+          "preparedGpuStageSeconds": 2.124333,
+          "plannedGpuStageSeconds": 12.719708934790354
+        }
+      ]
+    },
+    {
+      "scene": "planar-25",
+      "probes": 880,
+      "sharedCpuConnectionSeconds": 213.95734258298762,
+      "budgets": [
+        {
+          "probes": 880,
+          "samples": 65536,
+          "depth": 2,
+          "hz": 250,
+          "medianSolveMs": 0.22949999999999998,
+          "p95SolveMs": 0.34476999999999997,
+          "gpuBytes": 1167316,
+          "cpuPreparationSeconds": 20.876948094693944,
+          "gpuSolveSeconds": 0.53192,
+          "uploadSeconds": 0.020547700000000002,
+          "inputSeconds": 0.11137319999999999,
+          "cpuIntegrationSeconds": 87.32518993431586,
+          "cpuGpuRelativeL2": 2.370279895812973e-05,
+          "maximumAbsoluteDifference": 4.7906588635846885e-05,
+          "quality": {
+            "complexL2": 0.8323122366843286,
+            "within3dB": 0.31363636363636366,
+            "medianAbsDb": 5.6390753129469156
+          },
+          "cpuQuality": {
+            "complexL2": 0.8323057591216485,
+            "within3dB": 0.31363636363636366,
+            "medianAbsDb": 5.638733786174082
+          },
+          "preparedGpuStageSeconds": 0.6638409,
+          "plannedGpuStageSeconds": 21.540788994693944
+        },
+        {
+          "probes": 880,
+          "samples": 1048576,
+          "depth": 2,
+          "hz": 250,
+          "medianSolveMs": 1.1621000000000001,
+          "p95SolveMs": 1.406535,
+          "gpuBytes": 17018836,
+          "cpuPreparationSeconds": 17.937446998083033,
+          "gpuSolveSeconds": 1.1186088,
+          "uploadSeconds": 0.0251297,
+          "inputSeconds": 0.0516061,
+          "cpuIntegrationSeconds": 0.0,
+          "quality": {
+            "complexL2": 0.621816277396193,
+            "within3dB": 0.4125,
+            "medianAbsDb": 4.204873829439299
+          },
+          "preparedGpuStageSeconds": 1.1953446,
+          "plannedGpuStageSeconds": 19.13279159808303
+        }
+      ]
+    }
+  ],
+  "controls": {
+    "empty": {
+      "probes": 3,
+      "samples": 32,
+      "depth": 4,
+      "hz": 250,
+      "medianSolveMs": 0.13219999999999998,
+      "p95SolveMs": 0.19322,
+      "gpuBytes": 1364,
+      "cpuPreparationSeconds": 0.0005229580274317414,
+      "gpuSolveSeconds": 0.0004569,
+      "uploadSeconds": 4.7e-06,
+      "inputSeconds": 0.0001924,
+      "cpuIntegrationSeconds": 0.0,
+      "cpuGpuRelativeL2": 0.0,
+      "maximumAbsoluteDifference": 0.0,
+      "perSampleParity": true
+    },
+    "no-support": {
+      "probes": 3,
+      "samples": 32,
+      "depth": 2,
+      "hz": 250,
+      "medianSolveMs": 0.17809999999999998,
+      "p95SolveMs": 0.18872,
+      "gpuBytes": 948,
+      "cpuPreparationSeconds": 0.00045108384802006185,
+      "gpuSolveSeconds": 0.0005227,
+      "uploadSeconds": 9.93e-05,
+      "inputSeconds": 2.48e-05,
+      "cpuIntegrationSeconds": 0.0003446251212153584,
+      "cpuGpuRelativeL2": 0.0,
+      "maximumAbsoluteDifference": 0.0,
+      "perSampleParity": true
+    },
+    "first-order": {
+      "probes": 3,
+      "samples": 256,
+      "depth": 1,
+      "hz": 250,
+      "medianSolveMs": 0.177,
+      "p95SolveMs": 0.20283,
+      "gpuBytes": 4332,
+      "cpuPreparationSeconds": 0.00036512603401206434,
+      "gpuSolveSeconds": 0.0005118,
+      "uploadSeconds": 3.09e-05,
+      "inputSeconds": 1.0800000000000002e-05,
+      "cpuIntegrationSeconds": 0.04310620794421993,
+      "cpuGpuRelativeL2": 1.6123258250075418e-06,
+      "maximumAbsoluteDifference": 1.6642195295108286e-07,
+      "perSampleParity": true
+    },
+    "dc": {
+      "probes": 3,
+      "samples": 256,
+      "depth": 2,
+      "hz": 0,
+      "medianSolveMs": 0.1762,
+      "p95SolveMs": 0.17728000000000002,
+      "gpuBytes": 6828,
+      "cpuPreparationSeconds": 0.000828546064440161,
+      "gpuSolveSeconds": 0.0005271,
+      "uploadSeconds": 2.8800000000000002e-05,
+      "inputSeconds": 9.100000000000001e-06,
+      "cpuIntegrationSeconds": 0.06812570401234552,
+      "cpuGpuRelativeL2": 1.028215674060396e-06,
+      "maximumAbsoluteDifference": 1.5178793216774622e-07,
+      "perSampleParity": true
+    },
+    "four-edges": {
+      "probes": 3,
+      "samples": 256,
+      "depth": 4,
+      "hz": 250,
+      "medianSolveMs": 0.1922,
+      "p95SolveMs": 0.194,
+      "gpuBytes": 15852,
+      "cpuPreparationSeconds": 0.004216665925923735,
+      "gpuSolveSeconds": 0.0005637,
+      "uploadSeconds": 4.14e-05,
+      "inputSeconds": 0.0001222,
+      "cpuIntegrationSeconds": 0.14373579210950993,
+      "cpuGpuRelativeL2": 1.0689334989885942e-05,
+      "maximumAbsoluteDifference": 1.870725355650697e-06,
+      "perSampleParity": true
+    },
+    "route-subset": {
+      "probes": 3,
+      "samples": 64,
+      "depth": 4,
+      "hz": 250,
+      "medianSolveMs": 0.196,
+      "p95SolveMs": 0.20761,
+      "gpuBytes": 15700,
+      "cpuPreparationSeconds": 0.02029821276664734,
+      "gpuSolveSeconds": 0.000535,
+      "uploadSeconds": 5.3299999999999995e-05,
+      "inputSeconds": 0.0019511999999999997,
+      "cpuIntegrationSeconds": 0.07808087120065466,
+      "cpuGpuRelativeL2": 3.924583299748467e-05,
+      "maximumAbsoluteDifference": 8.848256073455145e-05,
+      "perSampleParity": true
+    }
+  },
+  "date": "2026-10-21",
+  "sourceFiles": {
+    "tools/edge_integral.py": "88e548c5106c0a68da99ddf1f27dea5f89e95c51207813e416c7c721d8e0a6ab",
+    "tools/gpu_routes.py": "69fc74f695f66c2db63feb9d76392c7b08bbc6a69d24ca4021f50e21f02ed3d5",
+    "Assets/Tests/Editor/RouteIntegration.compute": "df463caf1e2122ea8ffcf4e92712d2d021bc305d6d31e59ed8d0e21b384a0cf6",
+    "Assets/Tests/Editor/RouteIntegrationChecks.cs": "48a538503d7de9a9742b5bbead66bccc5b525b8b4ad993e4d81abf826468def3"
+  },
+  "unityValidation": {
+    "passed": 13,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 6.7405941,
+    "file": "gpu-144538.xml"
+  },
+  "cpuControls": {
+    "checks": [
+      {
+        "check": "half-plane",
+        "hz": 0,
+        "absoluteError": 4.636291350834654e-13
+      },
+      {
+        "check": "sampled half-plane",
+        "hz": 0,
+        "relativeError": 1.8470702640356025e-12
+      },
+      {
+        "check": "peak control variate",
+        "hz": 0,
+        "relativeError": 7.858476656497294e-12
+      },
+      {
+        "check": "half-plane",
+        "hz": 250,
+        "absoluteError": 3.8128218909885053e-13
+      },
+      {
+        "check": "sampled half-plane",
+        "hz": 250,
+        "relativeError": 7.029746678075659e-07
+      },
+      {
+        "check": "peak control variate",
+        "hz": 250,
+        "relativeError": 7.029745377553013e-07
+      },
+      {
+        "check": "shadow boundary cancellation",
+        "absoluteChange": 6.663100998143484e-07
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 0,
+        "relativeChange": 1.5271272223813211e-06
+      },
+      {
+        "check": "sampled second order",
+        "hz": 0,
+        "relativeError": 8.990918213703707e-05
+      },
+      {
+        "check": "conditional peak control variate",
+        "hz": 0,
+        "relativeError": 6.680971755310766e-05
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 125,
+        "relativeChange": 1.3778478223857928e-06
+      },
+      {
+        "check": "sampled second order",
+        "hz": 125,
+        "relativeError": 0.00046479874782943997
+      },
+      {
+        "check": "conditional peak control variate",
+        "hz": 125,
+        "relativeError": 0.0002738760537661619
+      },
+      {
+        "check": "two-edge refinement",
+        "hz": 250,
+        "relativeChange": 7.409978192019742e-07
+      },
+      {
+        "check": "sampled second order",
+        "hz": 250,
+        "relativeError": 0.001716290321625014
+      },
+      {
+        "check": "conditional peak control variate",
+        "hz": 250,
+        "relativeError": 0.0020895437635753858
+      },
+      {
+        "check": "two-edge reciprocity",
+        "relativeError": 4.264441649824746e-08
+      },
+      {
+        "check": "fixed-budget routes against quadrature",
+        "relativeError": 0.0023850293043712186
+      },
+      {
+        "check": "all route ranks and probability weights",
+        "passed": true
+      },
+      {
+        "check": "empty-scene fixed-budget termination",
+        "passed": true
+      },
+      {
+        "check": "analytic mirror distance",
+        "absoluteError": 0.0
+      },
+      {
+        "check": "analytic two-mirror distance",
+        "absoluteError": 0.0
+      },
+      {
+        "check": "mixed paths against quadrature",
+        "relativeError": 6.486458878316958e-06
+      },
+      {
+        "check": "mixed-path reciprocity",
+        "relativeError": 0.0
+      },
+      {
+        "check": "third-order mixed reciprocity",
+        "relativeError": 1.5989504715173833e-07
+      },
+      {
+        "check": "roulette mean",
+        "threshold": 0.2,
+        "controlVariate": false,
+        "absoluteError": 0.00016189490918539943,
+        "standardError": 0.00011404032041632616
+      },
+      {
+        "check": "roulette mean",
+        "threshold": 0.2,
+        "controlVariate": true,
+        "absoluteError": 0.00013196942896440752,
+        "standardError": 9.676268726261088e-05
+      },
+      {
+        "check": "roulette mean",
+        "threshold": 2.0,
+        "controlVariate": false,
+        "absoluteError": 5.248183266631548e-05,
+        "standardError": 0.00025832028557021676
+      }
+    ],
+    "refactorBitExactCases": 4,
+    "sourceSha256": "88e548c5106c0a68da99ddf1f27dea5f89e95c51207813e416c7c721d8e0a6ab"
+  },
+  "numericalNote": "CDF angular span uses a bounded atan series after two half-angle reductions; final 115-case GPU check: native atan2 max absolute error 1.1465947491906547e-5 rad, stable span 2.4438101942081403e-7 rad."
+}

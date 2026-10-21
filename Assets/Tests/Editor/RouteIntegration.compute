@@ -1,0 +1,158 @@
+#pragma kernel Integrate
+#pragma kernel Reduce
+#pragma kernel CheckAngles
+
+// Offline port of edge_integral.sample_chain, without CV/roulette. Geometry,
+// complete-route probabilities and shared-face factors are prepared on the CPU.
+// Four angular terms belong to the wedge formula, not acoustic frequency bands.
+struct Route { uint first, depth, end; float weight; };
+struct Step { float4 shape, sine, halfSine; }; // rs, next XY distance, remaining XY length, nu
+StructuredBuffer<Route> Routes;
+StructuredBuffer<Step> Steps;
+StructuredBuffer<float> Draws;
+StructuredBuffer<float2> AngleCases;
+RWStructuredBuffer<float2> Partials, Result, Contributions;
+RWStructuredBuffer<uint> Invalid;
+uint RouteCount, SampleCount, Dimensions, GroupCount, Capture;
+float WaveNumber, Horizon;
+groupshared float2 Sum[64];
+static const float Pi = 3.14159265358979323846;
+
+float Span(float y, float x)
+{
+    // Two half-angle reductions put atan's argument in [0,tan(pi/8)].
+    // The 19th-order series has <2e-9 rad truncation error for the full angle;
+    // it avoids backend atan2 approximations amplified by long sampled paths.
+    float t = y/(length(float2(x,y))+abs(x));
+    t /= sqrt(1+t*t)+1;
+    float squared=t*t, polynomial=-1.0/19;
+    [unroll] for (int n=8;n>=1;n--)
+        polynomial=(n%2==0?1.0:-1.0)/(2*n+1)+squared*polynomial;
+    float angle=4*t*(1+squared*polynomial);
+    return x<0?Pi-angle:angle;
+}
+[numthreads(1,1,1)]
+void CheckAngles(uint3 id : SV_DispatchThreadID)
+{
+    float2 v=AngleCases[id.x];Contributions[id.x]=float2(Span(v.x,v.y),atan2(v.x,v.y));
+}
+
+uint Terms(Step s)
+{
+    uint count = 0;
+    for (uint i = 0; i < 4; i++) count += s.halfSine[i] != 0;
+    return count;
+}
+float Kernel(Step s, float zs, float zr)
+{
+    float rs = s.shape.x, rr = s.shape.y, nu = s.shape.w;
+    float m = length(float2(rs, zs)), l = length(float2(rr, zr));
+    // Stable equivalent of sinh(nu*(asinh(zs/rs)+asinh(zr/rr))/2).
+    float x = abs(rs*zr + rr*zs) / sqrt(2*rs*rr*(m*l + rs*rr - zs*zr));
+    float sh = x < .01 ? nu*x*(1+(nu*nu-1)*x*x/6) : sinh(nu*log(x+sqrt(1+x*x)));
+    float beta = 0;
+    for (uint i = 0; i < 4; i++)
+        if (s.halfSine[i] != 0)
+            beta += s.sine[i] / (2*(sh*sh+s.halfSine[i]*s.halfSine[i]));
+    return -nu*beta/(4*Pi);
+}
+float2 Sample(uint index)
+{
+    uint lowRoute = 0, highRoute = RouteCount;
+    while (lowRoute < highRoute)
+    {
+        uint mid = (lowRoute+highRoute)/2;
+        if (index < Routes[mid].end) highRoute = mid;
+        else lowRoute = mid+1;
+    }
+    Route route = Routes[lowRoute];
+    if (route.depth == 0) return 0; // Zero physical support; retain allocated sample weight.
+    uint draw = index - (lowRoute == 0 ? 0 : Routes[lowRoute-1].end);
+    float previous = 0, before = 0, travelled = 0, density = 1, gain = 1;
+    Step prior = (Step)0;
+    for (uint i = 0; i < route.depth; i++)
+    {
+        Step s = Steps[route.first+i];
+        float rs = s.shape.x, rr = s.shape.z, nu = s.shape.w;
+        float budget = Horizon-travelled, focal = length(float2(rs+rr,previous));
+        float horizontal = (budget-previous)*(budget+previous);
+        // Factored ellipse intersection avoids subtracting large quadratic terms
+        // when the remaining physical path support becomes narrow.
+        float middle = previous*(horizontal-(rs-rr)*(rs+rr))/(2*horizontal);
+        float radius = budget*sqrt(max(0,(budget-focal)*(budget+focal)*
+                                   (horizontal-(rs-rr)*(rs-rr))))/(2*horizontal);
+        float lo = i == 0 ? 0 : middle-radius, hi = middle+radius;
+        float center = previous*rr/(rs+rr);
+        float m = length(float2(rs,previous-center)), l = length(float2(rr,center));
+        uint own = Terms(s), count = own+(i == 0 ? 0 : Terms(prior));
+        float centers[8] = {0,0,0,0,0,0,0,0}, scales[8] = {0,0,0,0,0,0,0,0}, spans[8] = {0,0,0,0,0,0,0,0};
+        for (uint j = 0; j < own; j++)
+        {
+            centers[j] = center;
+            scales[j] = max(1e-8,2*abs(s.halfSine[j])*(m*l/(m+l))/nu);
+        }
+        if (i > 0)
+        {
+            float incoming = previous+(previous-before)*rs/prior.shape.x;
+            for (uint incomingTerm = own; incomingTerm < count; incomingTerm++)
+            {
+                centers[incomingTerm] = incoming;
+                scales[incomingTerm] = max(1e-8,2*abs(prior.halfSine[incomingTerm-own])*
+                    length(float2(rs,incoming-previous))/prior.shape.w);
+            }
+        }
+        for (uint term = 0; term < count; term++)
+            spans[term] = Span((hi-lo)*scales[term],scales[term]*scales[term]+(lo-centers[term])*(hi-centers[term]));
+        uint component = min(count-1,(uint)(Draws[draw*Dimensions+2*i]*count));
+        // Interpolate the endpoint directions instead of subtracting/adding
+        // rounded arctangents near pi/2 and amplifying their error with tan.
+        float u = Draws[draw*Dimensions+2*i+1];
+        float a = length(float2(lo-centers[component],scales[component]))*sin(u*spans[component]);
+        float b = length(float2(hi-centers[component],scales[component]))*sin((1-u)*spans[component]);
+        float z = (hi*a+lo*b)/(a+b), pdf = 0;
+        for (uint mixture = 0; mixture < count; mixture++)
+        {
+            float delta = z-centers[mixture];
+            pdf += scales[mixture]/((scales[mixture]*scales[mixture]+delta*delta)*spans[mixture]);
+        }
+        density *= pdf/count;
+        travelled += length(float2(rs,z-previous));
+        if (i > 0) gain *= Kernel(prior,before-previous,z-previous)/length(float2(prior.shape.x,before-previous));
+        before = previous; previous = z; prior = s;
+    }
+    float last = length(float2(prior.shape.y,previous));
+    travelled += last;
+    gain *= Kernel(prior,before-previous,-previous)/length(float2(prior.shape.x,before-previous))/last;
+    float2 phase = 0; sincos(-WaveNumber*travelled,phase.y,phase.x);
+    float2 value = phase*(gain/density*route.weight);
+    if (!all(isfinite(value)) || !isfinite(density) || density <= 0) { InterlockedAdd(Invalid[0],1); return 0; }
+    return value;
+}
+[numthreads(64,1,1)]
+void Integrate(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID, uint lane : SV_GroupIndex)
+{
+    float2 value = id.x < SampleCount ? Sample(id.x) : 0;
+    if (Capture != 0 && id.x < SampleCount) Contributions[id.x] = value;
+    Sum[lane] = value;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32; stride > 0; stride >>= 1)
+    {
+        if (lane < stride) Sum[lane] += Sum[lane+stride];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane == 0) Partials[group.x] = Sum[0];
+}
+[numthreads(64,1,1)]
+void Reduce(uint lane : SV_GroupIndex)
+{
+    float2 value = 0;
+    for (uint i = lane; i < GroupCount; i += 64) value += Partials[i];
+    Sum[lane] = value;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32; stride > 0; stride >>= 1)
+    {
+        if (lane < stride) Sum[lane] += Sum[lane+stride];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane == 0) Result[0] = Sum[0];
+}

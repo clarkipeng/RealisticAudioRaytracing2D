@@ -349,6 +349,38 @@ def sample_chain(edges, source, receiver, k, horizon, random, *, control_variate
     return analytic + 2*np.sum(value/density[active])/count
 
 
+def route_samples(edges, neighbors, starts, receiver, walls, depth, count, ranks):
+    """Yield complete route IDs, height-sample counts and probability weights.
+
+    Shared by the CPU integrator and offline GPU preparation. Integer counts
+    address routes without constructing their full tree or losing count precision.
+    """
+    tails = [np.array([int(visible(edge[0], receiver, walls)) for edge in edges], object)]
+    for _ in range(1, depth):
+        tails.append(np.array([sum(tails[-1][j] for j in ids) for ids in neighbors], object))
+    totals = [sum(row[i] for i in starts) for row in tails]
+    total, groups = sum(totals), {}
+    if 0 < total <= count:
+        groups = {rank: count//total + (rank < count%total) for rank in range(total)}
+    elif total:
+        for u in ranks:
+            numerator, denominator = float(u).as_integer_ratio()
+            rank = numerator*total//denominator
+            groups[rank] = groups.get(rank, 0)+1
+    for rank, selected in groups.items():
+        order = 1
+        while rank >= totals[order-1]:
+            rank -= totals[order-1]; order += 1
+        path = []
+        for remaining in range(order, 0, -1):
+            for i in neighbors[path[-1]] if path else starts:
+                completions = tails[remaining-1][i]
+                if rank < completions:
+                    path.append(i); break
+                rank -= completions
+        yield path, selected, 1 if total <= count else selected*total/count
+
+
 def sampled(config, points, hz, count, seed, depth, *, random=None, control_variate=False,
             roulette=0., stats=None, mirror_depth=2, route_budget=False):
     """Offline planar experiment; neither budget is equivalent to GPU rays/bin.
@@ -397,38 +429,16 @@ def sampled(config, points, hz, count, seed, depth, *, random=None, control_vari
                 visit(path+[j], receiver, index, distance+np.linalg.norm(chain[-1][0]-edges[j][0]))
     for index, receiver in enumerate(points):
         if route_budget:
-            # Exact counts let us address a route by integer rank without listing
-            # the whole tree. Python integers keep counts valid at any order.
-            tails = [np.array([int(visible(edge[0], receiver, walls)) for edge in edges], object)]
-            for _ in range(1, depth):
-                tails.append(np.array([sum(tails[-1][j] for j in ids) for ids in neighbors], object))
-            totals = [sum(row[i] for i in starts) for row in tails]
-            total, groups = sum(totals), {}
-            if 0 < total <= count:
-                groups = {rank: count//total + (rank < count%total) for rank in range(total)}
-            elif total:
-                for u in random[:,height_dimensions]:
-                    numerator, denominator = float(u).as_integer_ratio()
-                    rank = numerator*total//denominator
-                    groups[rank] = groups.get(rank, 0)+1
-            for rank, selected in groups.items():
-                order = 1
-                while rank >= totals[order-1]:
-                    rank -= totals[order-1]; order += 1
-                path = []
-                for remaining in range(order, 0, -1):
-                    for i in neighbors[path[-1]] if path else starts:
-                        completions = tails[remaining-1][i]
-                        if rank < completions:
-                            path.append(i); break
-                        rank -= completions
+            if stats is not None:
+                stats.setdefault('selectedRoutes', 0)
+            for path, selected, weight in route_samples(edges, neighbors, starts, receiver, walls,
+                                                       depth, count, random[:,height_dimensions]):
                 # Cover every route when affordable; otherwise correct its PDF.
                 # Height scrambles are independent of ranks and shared across routes.
-                weight = 1 if total <= count else selected*total/count
-                values[index, order-1] += estimate([edges[i] for i in path], source, receiver, random[:selected])*weight
-                routes[index, order-1] += selected
-            if stats is not None:
-                stats['selectedRoutes'] = stats.get('selectedRoutes', 0) + len(groups)
+                values[index, len(path)-1] += estimate([edges[i] for i in path], source, receiver, random[:selected])*weight
+                routes[index, len(path)-1] += selected
+                if stats is not None:
+                    stats['selectedRoutes'] = stats.get('selectedRoutes', 0) + 1
         else:
             for i in starts:
                 visit([i], receiver, index, np.linalg.norm(source[:2]-edges[i][0]))
