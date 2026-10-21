@@ -1,5 +1,147 @@
 # Cleanup validation and measured bottlenecks
 
+## Larger 2D and finite 3D acoustic accuracy — 2026-10-20
+
+**The current GPU estimator is not a reliable wave-field approximation on this suite.** Exact direct visibility passes, but higher-order acoustic contributions can become extremely large. More rays do not reliably restore accuracy. The earlier low-error planar plots evaluated the separate CPU edge-integral prototype; those results must not be attributed to the live shader. No runtime/shader change was made for this measurement.
+
+### What was actually measured
+
+Apple M5, 16 GiB, macOS 26.5.1, Unity 6000.4.1f1 / Metal. Silent isolated batch runner, one worker, low priority. Numerical references use NGSolve 6.2.2608 with one CPU thread. One source, stationary geometry and receivers, complex scalar pressure; no HRTF, headphones/speakers, binaural localization test, source audio or DSP. These are controlled synthetic acoustic scenes, not the visual church asset.
+
+- Planar layouts: a 12 × 11 m receiver map with 1, 9 or 25 rigid 0.6 m square obstacles. Geometry is infinitely extruded; the wave solver integrates 2D Helmholtz solutions over longitudinal wavenumber to reproduce a **3D point source**, matching our planar acoustic convention. This is 2.5D acoustics, not a 2D line-source wave.
+- Finite rooms: 6 × 4 × 3 m and 12 × 8 × 6 m with four floor-to-ceiling pillars; another 12 × 8 × 6 m room has 25 obstacles of varying heights. Walls/floor/ceiling have dimensionless real admittance 0.2, pillars are rigid. These are actual 3D FEM solves, sampled on three XY height planes.
+- GPU: BVH on, diffraction on, air absorption off, 16/64/256 rays per frequency bin, eight interactions and 0.4 s path support. Four seeds: 17, 65554, 131091, 196628. All runs calculate three FFT bins; frequencies scored are 125/250 Hz in planar cases and 62.5/125 Hz in rooms. No amplitude fitting, normalization to the reference, clipping of recorded fields or averaging of seeds in displayed maps.
+
+### Accuracy by receiver position
+
+The percentage error below is **complex pressure L2 error**, `100 * ||ray - wave|| / ||wave||`, averaged over individual seed runs. It includes amplitude and phase: zero output would score 100% error, and error can exceed 100%. “Within ±3 dB” is the fraction of receiver positions with approximately correct local amplitude; it does not establish correct phase. Neither is a binaural angle error.
+
+| Scene | Hz | Probes | Complex error | Positions within ±3 dB | Median query ms |
+|---|---:|---:|---:|---:|---:|
+| planar-1 | 250 | 1014 | 221.14% | 58.3% | 0.420 |
+| planar-9 | 250 | 960 | 41,970.27% | 1.6% | 0.589 |
+| planar-25 | 250 | 880 | 4.22e+08% | 2.6% | 0.747 |
+| room-6m-4 | 125 | 1145 | 1,913.38% | 13.0% | 5.720 |
+| room-12m-4 | 125 | 1145 | 1,851.89% | 16.6% | 5.803 |
+| room-12m-25 | 125 | 1060 | 15,168.53% | 12.3% | 11.017 |
+
+Timing includes warm transport submission, GPU completion/readback and solver bookkeeping for one receiver query and **three computed bins**. It excludes cold compilation, solver/BVH construction, CSV writing, CPU complex summation and audio synthesis. It is neither GPU-only timing nor a full-band real-time audio benchmark.
+
+![Larger planar pressure maps](benchmarks/larger-2d-maps.png)
+
+![Finite 3D rooms and positional maps](benchmarks/larger-3d-maps.png)
+
+Same pressure color scale on reference/GPU plots. Level-difference colors saturate at ±15 dB; each panel states the fraction beyond that range. Numerical metrics retain all outliers. Every shown cell is an evaluated position, with no smoothing or seed averaging. Solid grey marks obstacles; cyan stars mark the source. The three height planes are static spatial samples, not a simulated walk.
+
+![Three heights in the larger 3D room](benchmarks/room-3d-height-slices.png)
+
+![Three-dimensional sampled pressure field](benchmarks/room-3d-positional-field.png)
+
+### Measured scaling
+
+| Scene | 16 rays/bin ms | 64 rays/bin ms | 256 rays/bin ms | 16 → 256 complex error |
+|---|---:|---:|---:|---|
+| planar-1 | 0.423 | 0.414 | 0.420 | 677.42% → 221.14% |
+| planar-9 | 0.519 | 0.543 | 0.589 | 1.59e+05% → 41,970.27% |
+| planar-25 | 0.647 | 0.734 | 0.747 | 6.7e+09% → 4.22e+08% |
+| room-6m-4 | 4.602 | 5.395 | 5.720 | 417.59% → 1,913.38% |
+| room-12m-4 | 4.667 | 5.485 | 5.803 | 406.98% → 1,851.89% |
+| room-12m-25 | 9.360 | 10.329 | 11.017 | 676.15% → 15,168.53% |
+
+These small GPU jobs have a substantial dispatch/readback floor, so a 16× ray increase is not a 16× latency increase. It does increase attempted path work. Object count also changes occlusion, available edge paths and termination; these timings are measurements, not a proof of logarithmic BVH cost.
+
+![Accuracy and timing versus ray budget](benchmarks/spatial-accuracy-scaling.png)
+
+### Independent wave reference and its uncertainty
+
+| Scene | Hz | Fine mesh h (m) | Unknowns | Last mesh change | Wave solve + map s | GPU transport map s at 256 |
+|---|---:|---:|---:|---:|---:|---:|
+| planar-1 | 125 | 0.35 | 65974 | 0.132% | 15.064 | 0.471 |
+| planar-1 | 250 | 0.35 | 65974 | 0.242% | 15.258 | 0.471 |
+| planar-9 | 125 | 0.35 | 61870 | 0.339% | 14.069 | 0.586 |
+| planar-9 | 250 | 0.35 | 61870 | 0.578% | 13.874 | 0.586 |
+| planar-25 | 125 | 0.35 | 62878 | 0.578% | 13.946 | 0.671 |
+| planar-25 | 250 | 0.35 | 62878 | 0.655% | 13.669 | 0.671 |
+| room-6m-4 | 62.5 | 0.45 | 68429 | 0.121% | 8.761 | 6.577 |
+| room-6m-4 | 125 | 0.45 | 68429 | 0.134% | 8.174 | 6.577 |
+| room-12m-4 | 62.5 | 0.9 | 67825 | 0.135% | 8.015 | 6.686 |
+| room-12m-4 | 125 | 0.9 | 67825 | 0.488% | 8.364 | 6.686 |
+| room-12m-25 | 62.5 | 0.9 | 80033 | 0.080% | 8.625 | 11.936 |
+| room-12m-25 | 125 | 0.9 | 80033 | 0.260% | 8.021 | 11.936 |
+
+Wave times are CPU assembly/factorization/evaluation for **one frequency and all probes**, with meshing excluded. GPU map time is the sum of measured transport queries for one seed; it computes three bins together. The implementations, frequency counts and scopes differ, so these columns are not a clean algorithmic speedup ratio. Timings are individual low-priority wave runs versus medians of many GPU queries, not precision hardware benchmarks.
+
+Planar reference meshes h = 0.7, 0.5 and 0.35 m use polynomial order four, a 9 m physical radius and a 3 m absorbing layer, plus 48 longitudinal quadrature nodes. Finite 3D rooms use order four and two spatial refinements, h = 0.65/0.45 m for the small room and 1.3/0.9 m for the larger rooms. The observed last mesh change is **not a certified total error bound**. References solve steady-state waves; the ray path depth/support are finite, so the renderer error includes truncation as well as estimator/model error. Materials and the exp(+iωt), exp(-ikr)/r source convention match. No measured real-world truth or broadband accuracy is claimed.
+
+A separate **fixed-resolution** size comparison holds h = 0.9 m, order four and 125 Hz constant: increasing the room from 72 to 576 m³ changes unknowns from 19,185 to 67,825 and wave solve/map time from 0.634 to 8.364 s (13.2×). Two sizes do not establish an asymptotic exponent. Main-table fine meshes use different h, so their similar times alone cannot imply size-independent wave cost.
+
+At fixed wavelength resolution, the number of volume unknowns grows roughly with area in a 2D solve and volume in 3D; sparse factorization adds fill-in and memory costs. The planar point-source reference repeats solves across longitudinal quadrature nodes. The ray loop instead spends work on source–receiver pairs × bins × ray budget × path depth, with visibility traversal, edge proposals and divergence inside each step. Scene size in metres alone is not its cost parameter. The route-enumerating CPU prototype has combinatorial path growth with edge/mirror count and depth.
+
+### Controls and depth/support sensitivity
+
+Empty 3D space agrees with analytic exp(-ikr)/r to 0.000117% complex error. Across the main maps, direct-visibility disagreements with independent analytic pillar/box occlusion total **0**. These controls do not validate the higher-order acoustic estimator.
+
+| Scene subset | Interactions | Support s | Complex error at 256 rays/bin | Query ms |
+|---|---:|---:|---:|---:|
+| planar-1, 60 probes | 2 | 0.4 | 53.05% | 0.399 |
+| planar-1, 60 probes | 4 | 0.4 | 178.49% | 0.405 |
+| planar-1, 60 probes | 8 | 0.4 | 251.00% | 0.384 |
+| planar-1, 60 probes | 16 | 0.4 | 251.00% | 0.421 |
+| planar-1, 60 probes | 8 | 0.8 | 251.01% | 0.414 |
+| room-12m-25, 63 probes | 2 | 0.4 | 579.13% | 6.546 |
+| room-12m-25, 63 probes | 4 | 0.4 | 21,709.34% | 8.297 |
+| room-12m-25, 63 probes | 8 | 0.4 | 21,709.38% | 11.743 |
+| room-12m-25, 63 probes | 16 | 0.4 | 21,709.38% | 18.771 |
+| room-12m-25, 63 probes | 8 | 0.8 | 21,709.38% | 11.821 |
+
+Subsets use every seventeenth point, selected without looking at errors. Four identical seed IDs and a fixed 256 rays/bin budget are used; changing support changes the sampling distribution, so differences include sampling noise. This is a diagnostic, not a tuned production preset or proof that two interactions are physically sufficient.
+
+In these two subsets the large errors appear by four interactions; increasing depth further or doubling support from 0.4 to 0.8 seconds does not fix them. This makes insufficient late-path support an inadequate explanation for the observed blow-ups. Two-interaction output still has substantial error.
+
+### The slower planar prototype
+
+This is the unchanged Python/double-precision coherent edge-integral experiment: enumerate visible routes, integrate one/two-edge diffraction with guided Sobol samples, and add unfolded mirror/mixed connections through order two. It has **not been implemented for finite 3D**. Samples are per visible route, not a global rays/bin budget; comparing equal numeric budgets to GPU rays would be misleading. A fixed coarse receiver lattice is chosen before inspecting results.
+
+| Layout | Probes | Samples per route | Seeds | Complex error | Shadow error | CPU seconds for subset |
+|---|---:|---:|---:|---:|---:|---:|
+| planar-1 | 98 | 32 | 1 | 9.49% | 17.58% | 0.107 |
+| planar-1 | 98 | 128 | 4 | 3.64% | 14.34% | 0.114 |
+| planar-1 | 98 | 512 | 1 | 1.94% | 5.93% | 0.174 |
+| planar-9 | 96 | 32 | 1 | 46.56% | 132.22% | 7.126 |
+| planar-9 | 96 | 128 | 4 | 26.74% | 82.95% | 8.225 |
+| planar-9 | 96 | 512 | 1 | 20.91% | 69.27% | 12.202 |
+| planar-25 | 94 | 32 | 1 | 96.08% | 228.97% | 31.782 |
+| planar-25 | 94 | 128 | 4 | 57.24% | 152.37% | 34.547 |
+| planar-25 | 94 | 512 | 1 | 53.80% | 137.90% | 40.613 |
+
+32/512-sample rows use seed 17 as budget checks; 128-sample rows use all four seeds. These sparse-probe errors cannot be directly ranked against full-map GPU errors. The raw archive retains probe indices for matching comparisons. No interpolation of the sparse prototype samples is treated as a dense acoustic field.
+
+Matched-position check at 250 Hz, four seeds, prototype 128 samples/route versus GPU 256 rays/bin. Time is for the same receiver subset; the GPU calculates three bins and the CPU prototype one frequency, so this is not compute matching.
+
+| Layout | Prototype error | GPU subset error | Prototype s | GPU transport s |
+|---|---:|---:|---:|---:|
+| planar-1 | 3.64% | 177.71% | 0.114 | 0.046 |
+| planar-9 | 26.74% | 53,449.78% | 8.225 | 0.059 |
+| planar-25 | 57.24% | 3.46e+08% | 34.547 | 0.071 |
+
+### Consequence for the implementation
+
+1. Do not use the current larger-scene GPU output as a high-fidelity training target. More rays or an audio upscaler cannot establish that its expected pressure is correct.
+2. Keep the exact BVH intersection path. The measured geometry/visibility controls pass; changing to SDF would not address these pressure errors.
+3. Isolate one-edge, two-edge, reflection/edge and repeated-edge contributions against the existing coherent reference before increasing path depth. Check probability compensation, singular angular terms and cancellation at shadow boundaries. The present measurements locate the failure in acoustic estimation but do not prove one exact faulty line.
+4. Require larger-scene stability and agreement in matched planar fixtures before transferring the coherent prototype to finite 3D. Retain phase, finite edge extent, material reflection and an honest path-support convergence check.
+
+### Evidence and reproduction
+
+[Raw measurements and benchmark scripts](benchmarks/spatial-accuracy-2026-10-20.zip) · [Unrounded result ledger](benchmarks/spatial-accuracy-2026-10-20.json).
+
+The original combined batch wrote all 149,028 pressure rows and completion markers, then Unity marked it failed for exceeding its 180-second test timeout. That XML is retained. A follow-up with **17 separate tests passed**; 1,736 pressure values at fixed spatial subsets reproduced exactly, and every full map passed row-count, finite-value and point-order checks. The failed wrapper is not reported as a passed test.
+
+Measured runtime commit `1d847f9fe0be7857031668624c476f173f0784fd`. Production shader/source hashes are in the GPU provenance files. The only temporary fixture change selects diffraction-on measurements; it calls the existing transport solver. Temporary Unity fixtures are removed after each batch. All raw files live in `.context/spatial-accuracy/`: scene JSON, wave NPZ/metadata, GPU CSV/XML/log/provenance, support runs, prototype fields and timings, and plotting/report scripts. `summary.json` stores unrounded metrics; the tracked benchmark ledger includes those metrics plus controls/support results.
+
+Reproduce in a fresh output directory using the supplied `run.py` preparation/reference/GPU stages, then `prototype.py`, `analyze.py` and `plot.py`. The isolated runner must match the current runtime byte-for-byte and be closed. Scripts refuse to overwrite key measurement outputs. Numerical libraries are optional offline dependencies, not Unity/runtime dependencies.
+
+
 ## SDF versus BVH: measured 2D GPU geometry queries — 2026-10-20
 
 **Keep the existing intersection approach for now.** The straightforward analytic and cached-grid SDF versions were slower on the larger cases and failed some geometry checks. Direct analytic box intersections are a promising simpler candidate for authored boxes; this test does not establish their performance on general meshes or rotated/moving objects.
