@@ -1,5 +1,27 @@
 # Cleanup validation and measured bottlenecks
 
+## Full 2D maps of the GPU sample sweep — 2026-10-21
+
+Show spatial pressure maps first when presenting acoustic results; a scaling chart alone does not show where the field is wrong.
+
+![Wave reference versus 256 and 65,536 GPU rays per bin](benchmarks/gpu-full-2d-maps-2026-10-21.png)
+
+Columns are the wave reference, current GPU at 256 rays/bin, and current GPU at 65,536 rays/bin. Rows contain 1, 9 and 25 rigid boxes. All panels use the same absolute pressure scale. Turquoise explicitly denotes levels above +5 dB; it is a display overflow colour, not evidence that pressure is spatially uniform. The largest high-budget peaks are +95.0 and +148.7 dB re unit pressure in the nine- and 25-box layouts. No raw pressures are clipped or normalized to the reference.
+
+These are the full existing grids (1,014 / 960 / 880 receivers), measured at 250 Hz with seed 17, eight interactions and 0.4 s support. Every coloured cell has an actual sampled receiver; missing cells near obstacles are not interpolated. The cached wave fields and the original 256-ray measurements are reused with verified hashes. The high-budget fields exactly reproduce all **97 overlapping seed-17 positions** from the preceding sparse sweep. All three full-map measurement cases passed; passing means complete, finite measurements, not physically accurate fields.
+
+| Boxes | Receivers | Within ±3 dB: 256 → 65,536 | Complex error: 256 → 65,536 | High-budget median solve + readback (ms) |
+|---:|---:|---:|---:|---:|
+| 1 | 1014 | 71.2% → 50.7% | 156.72% → 123.98% | 4.140 |
+| 9 | 960 | 1.8% → 0.0% | 5,998.44% → 1,241,060.91% | 8.013 |
+| 25 | 880 | 3.1% → 0.0% | 190,010.30% → 591,800,084.32% | 12.671 |
+
+The one-box full map also shows a tradeoff: increasing samples lowers complex L2 error but reduces the fraction of positions with accurate amplitude. The earlier four-seed sparse-grid averages must not be treated as full-map results. Larger layouts remain severely inaccurate. This is still the current GPU walk, not a GPU port of the CPU complete-route sampler.
+
+Timing covers three computed frequency bins, synchronous path readback and one pair, excluding cold setup, CPU pressure summation and DSP. This silent low-priority follow-up used no windows or audio. Reference convergence qualifications and planar point-source/extrusion conventions are unchanged.
+
+[Full-map ledger](benchmarks/gpu-full-2d-maps-2026-10-21.json) · [Raw results, pressure arrays, configurations, provenance and plotting scripts](benchmarks/gpu-full-2d-maps-2026-10-21.zip). No runtime code or default settings changed.
+
 ## More GPU samples — 2026-10-21
 
 **Measured the unchanged production GPU walk up to 65,536 rays per frequency bin. More samples alone do not stabilize its larger-scene fields.** This is not a GPU port of the offline complete-route experiment below. No runtime code or quality defaults changed.

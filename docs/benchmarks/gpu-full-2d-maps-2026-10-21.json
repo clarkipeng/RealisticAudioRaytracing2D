@@ -1,0 +1,136 @@
+{
+  "manifest": {
+    "gitHead": "8ade051e4dba4178711f14e8d956692a3076cdf4",
+    "scope": "Full existing receiver grids, seed 17, 250 Hz, 65,536 GPU rays per bin; eight interactions, 0.4 s support. Three computed bins.",
+    "cases": {
+      "planar-1": {
+        "probes": 1014,
+        "originalSceneSha256": "d3f5076975ec9902a1c2ee6c542364c2092fcf1c434595d583a3063e807d5452",
+        "referenceSha256": "42e7a8e34d20b106dba47e6b801b6fc22bc21c4787b83d77f6f401144ab3b667",
+        "baselineSha256": "a1472ad58033ef419021decbdd85774dc39fb0a9651f409c99cdfa35eb086f6b"
+      },
+      "planar-9": {
+        "probes": 960,
+        "originalSceneSha256": "675779007dc23b40982c3d1fe3161c4d65f12e3e299fc3fb0748933fe1d1b82b",
+        "referenceSha256": "09a9c098a98f5294e498d27d71e56e321b723a0842f631052ea75fc9b764fde6",
+        "baselineSha256": "23fe881239d2f38b7aaf97a5cefb19373a2b3ca2651344a4ff1960e42b04736f"
+      },
+      "planar-25": {
+        "probes": 880,
+        "originalSceneSha256": "676788aeffda61f70a7d84c3e7c06aa93f15418c71c7af9016730f332c147f37",
+        "referenceSha256": "ce5255e66104d0edb6fdf2bade485017bace10a63ff24c350abcc8667352ce2e",
+        "baselineSha256": "9d46fe42dee49f969ee4a2980c8342ff335d31891b571668a199a4f619816265"
+      }
+    }
+  },
+  "comparison": "Full maps, seed 17, 250 Hz. Earlier four-seed sweep used smaller lattice subsets.",
+  "scope": "Current production GPU walk, eight interactions; not the CPU complete-route prototype.",
+  "plotting": "Identical -40 to +5 dB scale on every field; turquoise explicitly marks values above +5 dB. No amplitude fitting or interpolation.",
+  "matchedHighSampleSubsetRows": 97,
+  "measurementCasesPassed": 3,
+  "measurementSeconds": 68.7647982,
+  "cases": [
+    {
+      "scene": "planar-1",
+      "probes": 1014,
+      "fields": [
+        {
+          "method": "wave-reference",
+          "complexL2": 0.0,
+          "within3dB": 1.0,
+          "maximumLevelDb": 6.0788985872166315,
+          "minimumLevelDb": -25.922396906035704,
+          "fractionAboveScale": 0.0009861932938856016
+        },
+        {
+          "method": "gpu-256",
+          "complexL2": 1.567235932931087,
+          "within3dB": 0.7120315581854043,
+          "maximumLevelDb": 12.568155735162595,
+          "minimumLevelDb": -39.71155610126403,
+          "fractionAboveScale": 0.009861932938856016,
+          "medianSolveMs": 0.40925,
+          "p95SolveMs": 0.557435
+        },
+        {
+          "method": "gpu-65536",
+          "complexL2": 1.2397882494047492,
+          "within3dB": 0.5069033530571992,
+          "maximumLevelDb": 10.091663086487264,
+          "minimumLevelDb": -42.953414755349456,
+          "fractionAboveScale": 0.004930966469428008,
+          "medianSolveMs": 4.139850000000001,
+          "p95SolveMs": 5.06678
+        }
+      ]
+    },
+    {
+      "scene": "planar-9",
+      "probes": 960,
+      "fields": [
+        {
+          "method": "wave-reference",
+          "complexL2": 0.0,
+          "within3dB": 1.0,
+          "maximumLevelDb": 5.457137572496574,
+          "minimumLevelDb": -45.64721975343357,
+          "fractionAboveScale": 0.0010416666666666667
+        },
+        {
+          "method": "gpu-256",
+          "complexL2": 59.98435177250902,
+          "within3dB": 0.017708333333333333,
+          "maximumLevelDb": 45.79557570664185,
+          "minimumLevelDb": -26.19729646983957,
+          "fractionAboveScale": 0.44479166666666664,
+          "medianSolveMs": 0.57025,
+          "p95SolveMs": 0.71093
+        },
+        {
+          "method": "gpu-65536",
+          "complexL2": 12410.60914392821,
+          "within3dB": 0.0,
+          "maximumLevelDb": 95.01952127498483,
+          "minimumLevelDb": 3.763860762889383,
+          "fractionAboveScale": 0.9989583333333333,
+          "medianSolveMs": 8.0129,
+          "p95SolveMs": 9.959124999999997
+        }
+      ]
+    },
+    {
+      "scene": "planar-25",
+      "probes": 880,
+      "fields": [
+        {
+          "method": "wave-reference",
+          "complexL2": 0.0,
+          "within3dB": 1.0,
+          "maximumLevelDb": 5.879768871089656,
+          "minimumLevelDb": -55.552553524021576,
+          "fractionAboveScale": 0.0011363636363636363
+        },
+        {
+          "method": "gpu-256",
+          "complexL2": 1900.1030065209497,
+          "within3dB": 0.03068181818181818,
+          "maximumLevelDb": 74.00613992106331,
+          "minimumLevelDb": -131.8677340935791,
+          "fractionAboveScale": 0.5568181818181818,
+          "medianSolveMs": 0.7347499999999999,
+          "p95SolveMs": 0.8745849999999998
+        },
+        {
+          "method": "gpu-65536",
+          "complexL2": 5918000.843234487,
+          "within3dB": 0.0,
+          "maximumLevelDb": 148.66419964482427,
+          "minimumLevelDb": 15.038068054716035,
+          "fractionAboveScale": 1.0,
+          "medianSolveMs": 12.671350000000002,
+          "p95SolveMs": 14.617769999999998
+        }
+      ]
+    }
+  ]
+}
