@@ -1,5 +1,88 @@
 # Cleanup validation and measured bottlenecks
 
+## SDF versus BVH: measured 2D GPU geometry queries — 2026-10-20
+
+**Keep the existing intersection approach for now.** The straightforward analytic and cached-grid SDF versions were slower on the larger cases and failed some geometry checks. Direct analytic box intersections are a promising simpler candidate for authored boxes; this test does not establish their performance on general meshes or rotated/moving objects.
+
+These are **geometry-query measurements on the Apple M5 GPU using Metal**, separate from the earlier CPU diffraction maps. No wave transport, diffraction sampling, materials, frequency bins, audio synthesis or readback of acoustic responses is included. No runtime code was changed. Unity ran in the isolated batch runner with audio disabled and one worker; each final test suite took only seconds of benchmark execution.
+
+All methods receive identical XY rays and axis-aligned box geometry. The segment and BVH kernels use the current production `Geometry.hlsl` and BLAS/TLAS construction. The independent oracle intersects boxes in double precision. A 0.1 mm closest-hit distance error is recorded as a failure. Closest-hit and any-hit occlusion queries are measured separately.
+
+### Original environments
+
+Median milliseconds for **4,096 closest-hit queries**. Each timing is submission plus GPU completion and a one-element readback, divided by eight dispatches. Seven batches are interleaved across methods after warmup. These are not isolated GPU timestamps. The write-only timing control is about 0.016–0.037 ms in these original/scaling rows; differences near that floor are not reliable speed rankings.
+
+| Scene | Segments | Existing BVH | Direct boxes | Analytic SDF | Grid SDF + fallback |
+|---|---:|---:|---:|---:|---:|
+| One wall | 0.022 | 0.026 | 0.022 | 0.042 | 0.060 |
+| Staggered | 0.024 | 0.029 | 0.022 | 0.101 | 0.164 |
+| Slit | 0.019 | 0.031 | 0.025 | 0.036 | 0.047 |
+| Corridor | 0.028 | 0.022 | 0.017 | 0.056 | 0.090 |
+
+### Object-count scaling
+
+The world stays 32 × 32 m for ray origins, boxes stay 0.36 × 0.70 m, and the same ray set is used throughout. Object sets are nested subsets of a shuffled 16 × 16 layout. Increasing object count also changes occlusion and how soon rays stop; this is measured scene scaling, not a fitted asymptotic complexity proof. Values are milliseconds for 4,096 closest-hit queries.
+
+| Boxes | Segments | Existing BVH | Direct boxes | Analytic SDF | Grid SDF + fallback |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.026 | 0.029 | 0.026 | 0.031 | 0.034 |
+| 4 | 0.021 | 0.030 | 0.023 | 0.036 | 0.049 |
+| 16 | 0.044 | 0.042 | 0.016 | 0.099 | 0.111 |
+| 64 | 0.103 | 0.067 | 0.031 | 1.825 | 1.952 |
+| 256 | 0.336 | 0.117 | 0.056 | 33.334 | 34.384 |
+
+At 256 boxes, analytic SDF took **285× the existing BVH time** in this implementation. Direct box tests used **48% of the BVH elapsed time**, but use a simpler shape representation and do not support arbitrary meshes. These are query-level ratios, not whole-renderer speedups.
+
+### Ray-count scaling and occlusion
+
+At 256 boxes, using nested prefixes of the same ray set:
+
+| Rays | Segments | Existing BVH | Direct boxes | Analytic SDF | Grid SDF + fallback |
+|---:|---:|---:|---:|---:|---:|
+| 256 | 0.338 | 0.120 | 0.052 | 2.637 | 2.837 |
+| 1024 | 0.338 | 0.114 | 0.055 | 4.089 | 4.339 |
+| 4096 | 0.336 | 0.117 | 0.056 | 33.334 | 34.384 |
+
+At 256 boxes / 4,096 rays, the corresponding **occlusion** times are: Segments 0.338 ms, Existing BVH 0.067 ms, Direct boxes 0.054 ms, Analytic SDF 33.238 ms, Grid + exact fallback 34.475 ms. The BVH can terminate on any obstruction.
+
+More rays do not produce a clean linear timing curve here: small jobs approach the synchronization floor and GPU parallelism, while larger random-ray sets expose longer SDF walks. At 256 boxes / 4,096 rays, analytic SDF averaged about 22 distance evaluations but the longest ray needed 2,825. At 64 boxes the maximum was 607. Those long walks are consistent with the large timing increase; we did not collect hardware counters to assign an exact fraction to divergence versus memory or arithmetic.
+
+### Correctness and grazing rays
+
+The three exact-intersection controls passed all **87,808 query checks per method**, including reused query prefixes. Both SDF variants produced 7 false hits among the original corridor's 4,096 queries, plus one false hit in the 256-box ray set. They also exceeded the 0.1 mm hit-distance threshold on some grazing hits (up to about 0.98 mm). These are candidate failures; the benchmark harness passing does not mean the SDF implementations passed geometry equivalence.
+
+A separate control travels 20 m parallel to one wall; 256 identical rays are used to isolate the distance-to-wall effect. Every correct answer is a miss. The hit tolerance is 10 micrometres and the explicit safety limit is 4,096 steps. Reaching that limit returns **unresolved**, never a fabricated miss.
+
+| Wall clearance | Analytic SDF steps | Analytic SDF time | Grid SDF time | Result |
+|---|---:|---:|---:|---|
+| 1 m | 20 | 0.027 ms | 0.026 ms | Correct misses |
+| 5 cm | 401 | 0.068 ms | 0.112 ms | Correct misses |
+| 5 mm | 4,001 | 0.408 ms | 0.866 ms | Correct misses |
+| 0.5 mm | 4,096 | 0.420 ms | 0.879 ms | 256/256 unresolved |
+| 5 micrometres | 1 | 0.022 ms | 0.017 ms | 256/256 false hits |
+
+The 0.5 mm result is censored at the safety limit, not the time needed to finish the march. A smaller hit tolerance alone also does not fix long near-parallel walks. The exact intersection controls remain around the timing floor on this control.
+
+### What was implemented and how it scales
+
+- **Segments:** test the four wall segments per box using the current shader. Worst-case work grows with rays × objects, before any-hit early exits.
+- **Existing BVH:** use the production object hierarchy and local mesh trees to skip primitives. Cost depends on traversal/overlap and primitive tests; logarithmic timing is not guaranteed.
+- **Direct boxes:** solve the entry/exit intervals along X and Y directly. Still a linear object scan, but one compact analytic test per box. This is an experimental comparator, not a production replacement.
+- **Analytic SDF:** at every march step, evaluate the exact box-distance formula for every object and advance by the minimum. Work grows with rays × distance evaluations × objects, with GPU latency sensitive to long walks.
+- **Cached grid SDF:** bake a 512 × 512 float field over a 128 × 128 m domain (0.25 m cells, **1 MiB**). A sampled distance minus the distance to its cell center gives a conservative mathematical lower bound. Within one cell width, or outside the grid, fall back to exact analytic distances. This preserves the same geometry rather than silently rounding walls to the grid. Empty-space steps avoid the object loop; near-wall steps retain it, which explains why this cache does not remove the difficult cases. Float precision and the same hit tolerance still apply.
+
+Grid bake/synchronization is measured separately in the raw ledger and excluded from query times; it ranged from 0.221 ms to 14.401 ms including first-use setup. Use the final ledger for exact per-case bake times. Shape storage for direct boxes/analytic SDF is 16 bytes per box; the grid adds 1 MiB. At 256 boxes that is 4 KiB of shape data before the grid. Mesh/BVH buffer sizes and CPU build timings are also recorded; this run does not measure moving-object updates, sparse grids, hierarchical SDF sampling, or an SDF nearest-distance BVH.
+
+**Decision:** pursue the simple bounded acoustic ray loop using precise geometry intersections. An analytic box leaf inside the existing hierarchy is a reasonable next isolated experiment, since it could reduce primitive-test work without replacing diffraction or scene semantics. It has not been integrated or benchmarked in the full renderer. These results reject promoting the two tested SDF prototypes; they do not establish that every optimized SDF approach is slower.
+
+### Evidence and reproduction
+
+[Committed measurements and hashes](benchmarks/sdf-scaling-2026-10-20.json). Raw final data are `.context/sdf-bench/run03/results.json`, with 43 fixtures, seven timing samples per method, correctness counts, failure examples and step distributions. `run03/manifest.json` records hashes of the fixture, compute shader and reused production geometry/BVH files. `run03/tests.xml` records the successful harness execution. The earlier `run01` is the initial analytic-only comparison; `run02` is superseded because instrumentation lost miss-step counts. A common output write and explicit minimum-step/known-distance checks validate the final counters. Earlier runs remain available and are not pooled into the headline timings.
+
+Reproduce with `.context/sdf-bench/run.py NEW_OUTPUT_NAME` from the main repo; it refuses to overwrite a run, stages only the temporary fixture/shader in the closed runner, disables audio, and removes staged files afterward. The current renderer and shaders remain unchanged.
+
+![SDF and intersection scaling](benchmarks/sdf-scaling-2026-10-20.png)
+
 ## Transport candidate audit — 2026-10-20
 
 Implemented and measured all six candidates at their supported scope. **Only the surface pressure-weight correction is enabled in Unity.** The other methods are opt-in offline experiments. Baseline code remains at `c309d6b`. [Measurements, hashes and rejected variants](benchmarks/transport-candidates-2026-10-20.json).
