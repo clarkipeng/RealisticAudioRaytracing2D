@@ -1,8 +1,72 @@
 # Acoustic experiments: history, 2D maps and GPU route generation
 
-The latest experiment removes CPU route construction from the **pure-diffraction stage**. On the existing 9- and 25-box maps, that stage takes **0.27 and 0.26 seconds instead of 8.41 and 14.96 seconds**, with less than **0.001% difference in complex pressure**. This is an offline prototype, not a change to live Unity playback. It improves speed; it does not repair the remaining physical approximation.
+The latest offline experiment also moves **direct/reflected and mixed reflection–diffraction calculations onto the GPU** and reuses route geometry. At one million samples, the 9-box map improves from **32.0% to 22.3% complex-pressure error**, with measured component time falling from **30.95 to 1.51 seconds**. The 25-box map improves from **83.2% to 62.2%**, with **214.23 to 3.66 seconds**. The remaining dense-scene error is still unacceptable for a high-fidelity reference.
 
-All new measurements ran silently on the Apple M5, using the isolated Unity 6000.4.1f1 Metal batch runner, disabled audio, one worker and reduced priority. No scene window, microphone or speakers were used. The existing renderer is preserved at `8e3391d`; the new experiment's source and measurements are in the [reproduction archive](benchmarks/gpu-route-generation-2026-10-21.zip). No runtime files or dependencies were added.
+These are complete **single-frequency spatial-field component totals**, not live audio or full-process timings. The previous totals combine this session's GPU measurements with previously measured CPU common-field costs. Small scenes need far fewer samples; one million is slower without a useful accuracy gain there. No runtime files or dependencies changed. All new work ran silently in the isolated Unity Metal batch runner with audio disabled, one worker and reduced priority.
+
+**Latest experiment: geometry reuse and GPU reflection/mixed paths — 21 October**
+
+![Larger 2D pressure maps](benchmarks/gpu-reuse-large-2026-10-21.png)
+
+![Original smaller 2D scenes](benchmarks/gpu-reuse-small-2026-10-21.png)
+
+Each map uses seed 17, width 1, a two-interaction limit and 250 Hz. It represents a point source and infinitely extruded rigid boxes: an XY/2.5D benchmark, not finite 3D or strictly cylindrical 2D propagation. Columns share an absolute scale. “Error” is `100 × norm(complex pressure − wave reference) / norm(wave reference)` and includes phase; the ±3 dB metric measures amplitude agreement. Neither is a listening-artifact score. The independent wave solutions retain their earlier refinement qualifications; they are numerical references, not exact truth.
+
+| Scene | Previous 65K error | Previous map time | All GPU 65K time | All GPU 1M error | All GPU 1M time |
+|---|---:|---:|---:|---:|---:|
+| 1 box | 1.85% | 0.619 s | 0.294 s | 1.83% | 1.652 s |
+| 9 boxes | 32.02% | 30.954 s | 0.563 s | 22.29% | 1.510 s |
+| 25 boxes | 83.23% | 214.227 s | 2.535 s | 62.23% | 3.664 s |
+| Thick wall | 1.46% | 0.322 s | 0.165 s | 1.46% | 0.649 s |
+| Staggered walls | 8.69% | 0.822 s | 0.154 s | 8.69% | 0.613 s |
+| Slit | 2.37% | 0.808 s | 0.155 s | 2.42% | 0.630 s |
+| Corridor | 13.51% | 0.868 s | 0.139 s | 13.41% | 0.582 s |
+
+At the same 65K budget, all-GPU errors are 1.85/32.10/83.69/1.46/8.69/2.36/13.52% in table order: moving the mixed integral from CPU quadrature into the shared Monte Carlo budget slightly changes variance, and does **not** improve accuracy by itself. The time saved permits more samples. For nine boxes, **262K gives 24.03% in 0.754 s**; for 25 boxes, **262K gives 62.56% in 2.844 s**, close to the 1M result. These are useful operating points, not a claim that 1M should become a universal default.
+
+What changed, measured separately:
+
+1. **Geometry reuse:** prepare each pure route's distances and wedge terms once per receiver; every height sample reads them. Modes 0 and 1 produce bit-for-bit identical pressure in the measured cases. At 65K, extra dispatch cost offsets the saving: old/new median solve/readback speed ratios are 0.997–1.010× across the three larger maps. At 1M, the old/new median-time ratio is **1.17× / 1.20× / 1.22×**. Reuse is helpful when enough height samples amortize preparation.
+2. **GPU reflections and mixed paths:** GPU image-source geometry enumerates direct, one- and two-face reflections, plus one-reflection/one-edge paths. Pure and mixed diffraction routes share the fixed height-sample budget. No cached CPU acoustic field is added to the new result; the CPU only adds the two returned complex component sums. This removes the large CPU common-field calculation. The final reduction/readback could be combined later.
+3. **Spend the saving on samples:** compare 65,536 / 262,144 / 1,048,576 samples without changing proposal width, gain, horizon or covered path orders. Large-scene noise decreases, while several small-scene errors plateau. No amplitude fitting, smoothing, extra physical gains or rejection of inconvenient large contributions is used.
+
+```text
+GPU, scene/source setup:
+    build edge visibility graph
+GPU, each receiver:
+    count visible one-edge and two-edge routes
+    prepare each route's distances and wedge terms once
+    find valid mirror→edge and edge→mirror routes; prepare and compact them
+    find valid direct / one-mirror / two-mirror distances
+    distribute fixed N height samples across pure + mixed edge routes
+    for each sample, in parallel:
+        read its prepared geometry
+        sample heights with the existing complete-route Cauchy mixture
+        add signed pressure × physical phase / sampling probability
+    sum sampled pressure and analytic mirror pressure
+CPU:
+    read back the two component sums and add them
+```
+
+This still contains an explicit two-interaction route/face enumeration. It is not a general-depth GPU ray walk. With E edges/faces and W boxes, graph construction and brute-force mirror/mixed visibility cost **O(E²W)**, with **O(E²)** persistent storage. Pure-route preparation is O(E²) candidate/count work plus the valid descriptors; sampling is O(N) bounded-depth integration with prefix-search overhead. Mixed compaction is a serial O(E²) scan. Geometry reuse removes repeated per-sample distance/angle work; it does not remove the dense visibility cost. The 25-box all-GPU 65K solve is slower per receiver than the pure-edge stage because it now includes that work. A scene BVH, sparse visibility and general-depth sampling remain separate future experiments.
+
+**Cost accounting and repeatability**
+
+Totals sum Python input packing, C# file read/buffer allocation/initial upload submission, warmed scene-graph work, receiver input submission, all receiver dispatches, blocking readbacks and finite-value checks. Previous methods additionally include the CPU direct/mirror/mixed calculation: archived 0.3605/30.6905/213.9573 s for the three larger maps, freshly measured 0.1785/0.6891/0.6738/0.7500 s for the four small maps. The large CPU costs were reused instead of rerunning several minutes of identical quadrature; the totals are **sums of measured components from different runs**, not one stopwatch around the old process. Shared fixture allocations include buffers unused by modes 0/1. Results are host-observed solve/readback times, not GPU hardware timestamps.
+
+Unity startup, initial shader compilation/warmup, reference solving, diagnostic exports, plots, broadband bins, time-domain synthesis and networking are excluded. The static graph is timed once per case; receiver-dependent geometry is rebuilt at every map position. Modes rotate execution order per receiver. This is one final map pass, not a statistical hardware speed guarantee. Final Unity test execution took 46 seconds for the whole suite, separate from per-method field costs.
+
+Four seeds were compared on the same 25 evenly spaced receiver IDs in each scene, including seed 17 from the full maps. No proposal tuning was performed on these results. In the nine-box subset, all-GPU mean error changes **31.94% → 23.49%**, and seed-to-seed RMS variation **17.04% → 2.73%** of reference RMS. For 25 boxes, subset mean error changes **108.55% → 87.22%**, and variation **59.12% → 10.68%**. Subset error is higher than full-map error because these are different receiver distributions; it must not be substituted for the full-map score. The much larger remaining discrepancy suggests sampling noise alone is insufficient to explain it, but this experiment does not identify or prove the missing physical contribution. More complete path coverage needs its own controlled comparison.
+
+**Verification and limits**
+
+The final suite passes **70 Unity tests**: 21 full-map cases, 42 additional-seed cases, six geometry/sampling controls and the 115-value angle-control test. All 4,842 spatial cells are evaluated at all three budgets. Independent Python checks verify visibility, mirror lengths, mixed-route eligibility and Monte Carlo pressure at 22 control positions, including empty geometry, short delay support and more routes than samples. Maximum aggregate control discrepancy is **0.00125%** relative norm. Geometry reuse is bit-for-bit identical over the entire measured suite. Across the full maps, GPU direct/mirror pressure matches independent CPU image-source pressure within the declared tolerance (max absolute difference recorded in the ledger).
+
+The controls caught two implementation problems before the final suite: too many read/write buffer bindings on Metal, fixed by declaring integration inputs read-only; and reflections numerically landing at a face endpoint, fixed by rejecting contacts within the precision of the intersection operands. This numerical endpoint margin is not qualified for arbitrary scales or near-degenerate geometry. Initial failed runs remain in the evidence but are not counted as passing. Existing compiler warnings remain; passing tests establish only the tested numerical cases.
+
+Keep this as a reproducible **offline prototype**, not a production renderer or DLSS teacher. It covers static rigid rectangles, source/listener z=0, 250 Hz and at most two interactions; moving geometry, other frequencies/materials, finite 3D and audible temporal continuity are unqualified. Pilot-guided allocation and reuse of sampled paths across frequency bins were **not implemented or benchmarked** in this experiment. The result supports removing the CPU common-field bottleneck and amortizing geometry at larger budgets; it does not yet support claiming realistic dense-scene audio.
+
+[Full metrics and provenance](benchmarks/gpu-route-reuse-2026-10-21.json) · [Source, raw results, controls and pressure arrays](benchmarks/gpu-route-reuse-2026-10-21.zip). The live renderer is unchanged from the previous checkpoint; the prior offline experiment is preserved at `cb0fef8`.
 
 **The history, in order**
 
@@ -22,7 +86,8 @@ All new measurements ran silently on the Apple M5, using the isolated Unity 6000
 | `8ade051`, `5f25246`, 21 Oct | Give the old GPU walk many more samples | Failed as a remedy. The 9- and 25-box fields still contained enormous outliers at 65,536 rays/bin. These depth-8 runs are not compute-matched to the depth-2 complete-route prototype. |
 | `e100724`, 21 Oct | Port complete-route height integration to GPU | Closely matched the CPU estimator and greatly reduced integration time. CPU route preparation and mirror/mixed fields remained. |
 | `8e3391d`, 21 Oct | Tune height-proposal widths; stabilize inverse-CDF sampling | Quarter-width guidance improved some full-map results, but held-out gains were mixed. Kept width 1 as default; quarter width remains an experiment. Increasing to 1,048,576 samples improved these maps but did not remove model error. |
-| This experiment, 21 Oct | Build visibility/counts and generate complete routes on GPU | Removed CPU route lists while retaining complete-route height guidance. Full-map equivalence passes; the measured diffraction stage is much faster. Restricted to one/two-edge rigid planar paths for this experiment. |
+| `cb0fef8`, 21 Oct | Build visibility/counts and generate complete routes on GPU | Removed CPU route lists while retaining complete-route height guidance. Full-map equivalence passes; the measured diffraction stage is much faster. Restricted to one/two-edge rigid planar paths for this experiment. |
+| Latest experiment, 21 Oct | Reuse route descriptors; compute mirror/mixed fields on GPU; sweep total sample budget | Removes the CPU common-field bottleneck. More samples improve larger maps, but errors plateau and dense-scene fidelity remains poor. Detailed comparisons above. |
 
 The chronology is a record of accepted and rejected experiments, not a claim that each step improved the renderer. In particular, source/listener/bidirectional sampling was tested on a restricted integral before independent wave references existed. Its earlier “error” cannot be read as error against real-world acoustics. To inspect historical code without switching your Unity checkout, use `git show REVISION:path/to/file`.
 
@@ -60,7 +125,7 @@ Read each figure left-to-right, then top-to-bottom. The bottom-left CPU complete
 
 The old GPU walk uses eight interactions; the complete-route maps use two and include additional cached mirror/mixed classes. Historical comparisons therefore change more than sampling. The new route-generation comparison is narrower: same two-edge estimator, routes, height samples, frequency, seed, delay horizon and cached common field. It is the controlled speed experiment.
 
-**What changed in the new GPU experiment**
+**Earlier experiment at cb0fef8: GPU route generation**
 
 Previously:
 

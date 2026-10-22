@@ -1,5 +1,9 @@
 # Cleanup validation and measured bottlenecks
 
+## GPU geometry reuse and full reflection/mixed calculation — 2026-10-21
+
+[Updated consolidated report and all seven 2D maps](acoustic-experiment-history.md). The offline prototype moves the previously cached CPU reflection/mixed field onto the GPU. At 1M samples, nine boxes improve from 32.02% to 22.29% complex-pressure error with component totals 30.95 → 1.51 s; 25 boxes improve from 83.23% to 62.23%, 214.23 → 3.66 s. Old totals include archived CPU measurements, not a new end-to-end stopwatch. Small scenes need fewer samples. Geometry reuse alone is bit-for-bit identical; at 1M it provides 1.17–1.22× median solve/readback speed ratios on the larger maps, but little benefit at 65K. Final 70-test suite and independent CPU controls pass. Dense-scene accuracy, moving audio and finite 3D remain unqualified; no live runtime change. [Source/data archive](benchmarks/gpu-route-reuse-2026-10-21.zip).
+
 ## GPU route generation and experiment history — 2026-10-21
 
 [Consolidated history, pseudocode, timings and all seven 2D scene maps](acoustic-experiment-history.md). The offline GPU route-generation trial reproduces the prepared-route estimator within 0.001% over 2,854 cells. Including CPU preparation, the measured diffraction stage changes from 8.41 to 0.27 seconds for nine boxes and 14.96 to 0.26 seconds for 25 boxes. Cached CPU direct/mirror/mixed calculations remain outside both totals; physical error is unchanged. Final suites pass 25 Unity test executions plus independent CPU comparisons. The [source/data archive](benchmarks/gpu-route-generation-2026-10-21.zip) preserves the experiment without adding live shader variants.
