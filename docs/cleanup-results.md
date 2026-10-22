@@ -1,5 +1,9 @@
 # Cleanup validation and measured bottlenecks
 
+## Bounded GPU paths and BVH scaling — 2026-10-22
+
+[Consolidated report, seven 2D maps and scaling plot](acoustic-experiment-history.md). The offline prototype removes quadratic path buffers and bounds candidate work. At 100 boxes, old/new median solve+readback is 68.04 → 5.80 ms with effectively identical pressure; at 2,500 boxes, 15.45 ms and 10.15 MB of GPU buffers. Full-map old/new pressure differs by at most 0.0222%; BVH/linear output is bitwise equal. Large-scene wave accuracy is unqualified, an O(E) per-receiver scan remains, and small-scene timing regressions are reported. Final suites: 67 + 4 + 19 test executions; independent CPU controls pass. No runtime changes. [Source/data archive](benchmarks/gpu-scalable-2026-10-22.zip).
+
 ## GPU geometry reuse and full reflection/mixed calculation — 2026-10-21
 
 [Updated consolidated report and all seven 2D maps](acoustic-experiment-history.md). The offline prototype moves the previously cached CPU reflection/mixed field onto the GPU. At 1M samples, nine boxes improve from 32.02% to 22.29% complex-pressure error with component totals 30.95 → 1.51 s; 25 boxes improve from 83.23% to 62.23%, 214.23 → 3.66 s. Old totals include archived CPU measurements, not a new end-to-end stopwatch. Small scenes need fewer samples. Geometry reuse alone is bit-for-bit identical; at 1M it provides 1.17–1.22× median solve/readback speed ratios on the larger maps, but little benefit at 65K. Final 70-test suite and independent CPU controls pass. Dense-scene accuracy, moving audio and finite 3D remain unqualified; no live runtime change. [Source/data archive](benchmarks/gpu-route-reuse-2026-10-21.zip).

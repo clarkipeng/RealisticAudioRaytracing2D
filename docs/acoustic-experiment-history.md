@@ -1,10 +1,107 @@
-# Acoustic experiments: history, 2D maps and GPU route generation
+# Acoustic experiments: history, 2D maps and GPU scaling
 
-The latest offline experiment also moves **direct/reflected and mixed reflection–diffraction calculations onto the GPU** and reuses route geometry. At one million samples, the 9-box map improves from **32.0% to 22.3% complex-pressure error**, with measured component time falling from **30.95 to 1.51 seconds**. The 25-box map improves from **83.2% to 62.2%**, with **214.23 to 3.66 seconds**. The remaining dense-scene error is still unacceptable for a high-fidelity reference.
+The latest offline prototype removes the **quadratic edge-pair buffers and unbounded pair enumeration**. It retains the complete-path diffraction integrator, bounds candidate work, and uses a box BVH for visibility. In the 100-box control, median solve/readback falls from **68.04 to 5.80 ms (11.7×)** with effectively identical pressure. The 2,500-box run completes in **15.45 ms per receiver using 10.15 MB of GPU buffers**. The old descriptor allocation alone would need 33.6 GB there; that allocation is calculated, not a successful old run.
 
-These are complete **single-frequency spatial-field component totals**, not live audio or full-process timings. The previous totals combine this session's GPU measurements with previously measured CPU common-field costs. Small scenes need far fewer samples; one million is slower without a useful accuracy gain there. No runtime files or dependencies changed. All new work ran silently in the isolated Unity Metal batch runner with audio disabled, one worker and reduced priority.
+This is a scaling improvement for the **offline two-interaction prototype**, not a production renderer change or proof of ray-tracer scaling at fixed accuracy. There is still linear edge-list preparation per receiver. All seven existing wave-reference maps retain their earlier accuracy; the dense-scene physical error remains large. Some small-scene timings regress. Tests ran silently in the isolated Unity Metal batch runner with audio disabled, one worker and reduced priority.
 
-**Latest experiment: geometry reuse and GPU reflection/mixed paths — 21 October**
+**Bounded path sampling and BVH visibility — 22 October**
+
+![Three larger 2D pressure maps](benchmarks/gpu-scalable-large-2026-10-22.png)
+
+![Four original 2D scenes](benchmarks/gpu-scalable-small-2026-10-22.png)
+
+These are XY maps at 250 Hz of a point source and infinitely extruded rigid boxes, with source/listener z=0. This is a 2.5D benchmark, not finite 3D or cylindrical 2D propagation. Both methods use the same signed integrand, path orders, phase, width 1, seed 17, horizon and height-sample budget. No smoothing, gain fitting or amplitude clipping. The numerical wave references retain their earlier refinement qualifications; they are not exact truth.
+
+| Scene | 65K old → new map time | 262K old → new map time | 262K old → new complex-pressure error |
+|---|---:|---:|---:|
+| 1 box | 0.371 → 0.469 s | 0.569 → 0.546 s | 1.84% → 1.84% |
+| 9 boxes | 0.971 → 0.510 s | 1.389 → 1.191 s | 24.03% → 24.03% |
+| 25 boxes | 3.557 → 1.314 s | 2.461 → 1.449 s | 62.56% → 62.56% |
+| Thick wall | 0.257 → 0.372 s | 0.302 → 0.345 s | 1.46% → 1.46% |
+| Staggered walls | 0.238 → 0.164 s | 0.630 → 0.424 s | 8.69% → 8.69% |
+| Slit | 0.254 → 0.213 s | 0.299 → 0.735 s | 2.42% → 2.42% |
+| Corridor | 0.172 → 0.159 s | 0.369 → 0.267 s | 13.41% → 13.41% |
+
+Across the seven maps (4,842 cells) at both budgets, the largest per-map old/new relative complex-pressure L2 difference is **0.0222%** (25 boxes, 65K). BVH and linear visibility produce **bit-for-bit identical pressure** in every measured comparison. Four seeds on 25 fixed receiver positions per scene are archived; they do not establish high fidelity at larger scales.
+
+These totals include input packing, buffer setup, source/scene preparation, all receiver submissions, GPU dispatches and blocking readbacks. Old and new are freshly measured here: **neither adds archived CPU acoustic-field costs**. New totals also include building the BVH and extra sampling draws. They exclude Unity startup, first compile/warmup, wave solving, capture/CSV export, plotting and audio/DSP. They are component sums and host-observed times, not GPU hardware timestamps. The baseline runs before new variants within each case; new BVH/linear variants rotate order per receiver. One complete map pass is not a statistical performance guarantee.
+
+Full-map timings include small-scene regressions: one box and thick wall at 65K, thick wall and slit at 262K. Three additional 25-probe runs investigated those scenes. Median-of-run median solve times improve by 3–11% in five of six scene/budget combinations, but the 262K slit changes **0.536 → 0.597 ms**, an 11% slowdown by that aggregate. Its individual runs vary substantially (one new run has 1.644 ms median). All raw runs are retained. This does **not** justify a universal “no performance loss” claim or replacing the full-map totals with favorable repeats.
+
+**What changed**
+
+```text
+Once per static scene, CPU:
+    build a flat box BVH; upload geometry and scrambled sample sequences
+
+For each receiver, GPU:
+    mark source-visible / receiver-visible edges and facing faces
+    compact into five linear lists
+    describe the possible path families by their counts, without a pair table
+    if candidate count <= requested path budget S:
+        visit every candidate once
+    else:
+        sample S candidates; retain inverse selection probability
+    check the sampled segments through the BVH
+    prepare distances and wedge terms for those candidates
+    discard candidates that have zero contribution for every height
+    distribute N height samples across the remaining candidates
+    integrate signed pressure using the existing complete-path height proposal
+    add direct and first-order mirror paths
+    enumerate second-order mirrors if they fit N; otherwise sample N pairs
+    reduce to one complex pressure value and read it back
+```
+
+Compaction rejects occluded, degenerate or out-of-horizon paths with zero support. It never discards small or inconvenient pressure values. The code writes the accepted indices into a bounded list.
+
+Four diffraction families remain: one edge, two edges, mirror→edge and edge→mirror. First and second mirror-only paths remain too. At large candidate counts, family selection is proportional to its count, then the two IDs are selected independently. No nearest-edge restriction or shortest-path substitution is introduced.
+
+Let R be the conceptual candidate count and S the selected count. When sampling is needed, each candidate carries **R/S**. Removing zero-support candidates does not renormalize that factor. Each retained candidate gets an average of its height samples, multiplied by its original selection weight and the existing symmetry factor. Candidate draws and height draws are separately scrambled. This preserves the estimator for the covered path model in ideal arithmetic; it does not guarantee low variance, complete physics or exact floating-point probabilities at arbitrary scale. Repeated sampled candidates are retained.
+
+The first implementation integrated a fixed height tile for every candidate, wasting most samples on invalid geometry. It was rejected. The final version validates bounded candidates first and spends the height budget only on supported paths. A 16K path budget preserved the original seven scenes but differed by about **100% relative norm** from the 100-box enumeration estimate. Raising S to 65,536 covers that control's 35–41K candidates and restores agreement. This is an exposed compute/variance budget, not a physical scene cap or a universal optimum.
+
+**Actual scaling**
+
+![Measured runtime and buffer scaling](benchmarks/gpu-scalable-scaling-2026-10-22.png)
+
+| Boxes / corners | Old enumeration ms | Bounded + linear visibility ms | Bounded + BVH ms | New GPU MB | Candidate count range | Accepted sampled paths |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 / 4 | 0.65 | 0.65 | 0.65 | 1.32 | 14–23 | 4–6 |
+| 9 / 36 | 1.99 | 1.31 | 1.33 | 1.66 | 1,059–1,248 | 235–296 |
+| 25 / 100 | 2.81 | 0.83 | 0.81 | 3.90 | 4,451–5,508 | 487–770 |
+| 100 / 400 | 68.04 | 6.04 | 5.80 | 9.73 | 35,154–40,977 | 1,116–2,746 |
+| 400 / 1,600 | not run | 14.56 | 12.52 | 9.78 | 245,396–280,415 | 554–2,245 |
+| 1,600 / 6,400 | not run | 26.21 | 12.63 | 9.99 | 1,806,656–2,142,681 | 128–866 |
+| 2,500 / 10,000 | not run | 36.36 | 15.45 | 10.15 | 3,470,786–4,147,871 | 65–510 |
+
+Five probes per layout, 65,536 height samples and up to 65,536 candidate paths. GPU buffer bytes include inputs, BVH, descriptors, counters, scratch, reduction and outputs; they exclude Unity/driver memory. The 100-box allocation falls from **58.29 to 9.73 MB**. At 2,500 boxes, BVH visibility is **2.35× faster** than the new sampler with linear visibility, with bitwise-identical output. The old quadratic implementation was not run above 100 boxes to avoid huge allocations.
+
+Scene extent grows at fixed box density and fixed delay horizon. Visibility, rejection and accepted path counts change, so the runtime curve is not a formal scaling law. BVH/draw input preparation takes approximately 4.7 ms at 100 boxes and 70.5 ms at 2,500 boxes, separate from the per-receiver timings in the table and amortizable over a static scene. The current harness rebuilds it once per case. Static source-visible lists are still recomputed at every receiver.
+
+Only the original seven scenes have wave-reference comparisons. The larger scaling layouts establish finite output, runtime/memory and BVH/linear parity, **not acoustic accuracy**. At 2,500 boxes only 65–510 of 65,536 candidates survive at these five probes. This identifies a remaining sampling-efficiency problem: bounded uniform candidate sampling is scalable in work but can be noisy. The 100-box enumeration result itself is an approximate two-interaction estimate, not independent truth.
+
+Write E for corners/faces, W for boxes, N for height samples, S for candidate budget, M for the second-reflection candidate count, and Q(W) for the actual visibility-query cost:
+
+- Previous geometry preparation: O(E²W) brute-force visibility and O(E²) persistent descriptors.
+- New receiver work: **O((E + min(S,R) + min(N,M))·Q(W) + N)** at fixed interaction depth, including a linear number of first reflections and bounded second-reflection samples.
+- New persistent storage: **O(W + E + S + N)**. Small scenes allocate only the possible candidate capacity, not the entire requested budget.
+- An ideal fixed-N, bounded-depth BVH ray walk is approximately O(N·Q(W)); this prototype still has the extra E term. BVH queries are often efficient but can degrade toward O(W); there is no unconditional logarithmic guarantee.
+
+The serial list/accepted-path compactions are linear in E and bounded S respectively. The prototype does not yet use a parallel prefix scan, source-list reuse, instanced BLAS/TLAS, dynamic BVH refits, or multiple-frequency reuse. Avoid adding those until their cost is measured. The next scaling target is the full per-receiver edge scan and low candidate acceptance; replacing it needs a proposal that retains support and demonstrably reduces variance. Adding samples alone cannot recover unrepresented higher-order paths.
+
+**Verification, code size and checkpoint**
+
+Final suites pass **67 + 4 + 19 Unity test executions**: full maps/additional seeds/controls/small scaling, large scaling, and timing repeats. Each suite also includes the angle control. Independent Python visibility/count/pressure checks cover 22 control positions, including empty scenes, no support, fewer samples than routes, sampled mirror pairs and multiple candidate budgets. Maximum per-case aggregate CPU/GPU discrepancy is **0.00215%**. Existing shader compiler warnings remain; the tests qualify the archived cases, not arbitrary geometry scales. A launch attempt failed during Unity licensing/package-manager initialization before tests ran; its log is retained and excluded from passing results.
+
+The final composed shader is **356 lines versus 385** in the previous prototype; the C# measurement fixture is **74 versus 96**. This is a comparison of those two files only, not a claim that the whole experiment adds no code. The integrand is reused by the build script; plotting, controls and raw evidence stay in the experiment archive. No runtime dependency or live shader variant was added.
+
+The prior implementation is preserved at `5da651f`. This experiment remains offline: rigid extruded rectangles, one frequency and at most two interactions. Arbitrary meshes/materials, higher orders, finite 3D, moving audio, audible artifact behavior and DLSS teacher quality are not validated. The high dense-scene error remains a blocker to calling this a high-fidelity reference.
+
+[Complete numerical ledger](benchmarks/gpu-scalable-2026-10-22.json) · [Source, reproducible inputs, raw results and controls](benchmarks/gpu-scalable-2026-10-22.zip).
+
+---
+
+**Previous experiment: geometry reuse and GPU reflection/mixed paths — 21 October**
 
 ![Larger 2D pressure maps](benchmarks/gpu-reuse-large-2026-10-21.png)
 
@@ -87,7 +184,8 @@ Keep this as a reproducible **offline prototype**, not a production renderer or 
 | `e100724`, 21 Oct | Port complete-route height integration to GPU | Closely matched the CPU estimator and greatly reduced integration time. CPU route preparation and mirror/mixed fields remained. |
 | `8e3391d`, 21 Oct | Tune height-proposal widths; stabilize inverse-CDF sampling | Quarter-width guidance improved some full-map results, but held-out gains were mixed. Kept width 1 as default; quarter width remains an experiment. Increasing to 1,048,576 samples improved these maps but did not remove model error. |
 | `cb0fef8`, 21 Oct | Build visibility/counts and generate complete routes on GPU | Removed CPU route lists while retaining complete-route height guidance. Full-map equivalence passes; the measured diffraction stage is much faster. Restricted to one/two-edge rigid planar paths for this experiment. |
-| Latest experiment, 21 Oct | Reuse route descriptors; compute mirror/mixed fields on GPU; sweep total sample budget | Removes the CPU common-field bottleneck. More samples improve larger maps, but errors plateau and dense-scene fidelity remains poor. Detailed comparisons above. |
+| `5da651f`, 21 Oct | Reuse route descriptors; compute mirror/mixed fields on GPU; sweep total sample budget | Removes the CPU common-field bottleneck. More samples improve larger maps, but errors plateau and dense-scene fidelity remains poor. Detailed comparisons above. |
+| Latest experiment, 22 Oct | Bounded candidate paths, GPU compaction and BVH visibility | Removes quadratic descriptors; 100-box control is 11.7× faster. Original maps retain accuracy; large-scene accuracy and small-scene regressions remain unresolved. |
 
 The chronology is a record of accepted and rejected experiments, not a claim that each step improved the renderer. In particular, source/listener/bidirectional sampling was tested on a restricted integral before independent wave references existed. Its earlier “error” cannot be read as error against real-world acoustics. To inspect historical code without switching your Unity checkout, use `git show REVISION:path/to/file`.
 

@@ -1,0 +1,1323 @@
+{
+  "baseCommit": "5da651fa5c57d543bea6eaa72029d20a30733ee3",
+  "scope": "Offline, static rigid extruded rectangles, equal source/receiver z=0, 250 Hz, width 1, at most two interactions. No live renderer change.",
+  "environment": {
+    "python": "3.13.12",
+    "numpy": "2.5.4",
+    "scipy": "1.18.1",
+    "matplotlib": "3.11.2",
+    "unity": "6000.4.1f1",
+    "gpu": "Apple M5 / Metal",
+    "mode": "Batch, audio disabled, nice 15, one worker, BLAS threads limited"
+  },
+  "method": "Linear endpoint-visibility/facing lists, bounded candidate preparation and zero-support compaction, probability-corrected complete-path height integration, BVH visibility, bounded second-reflection sampling, GPU sum.",
+  "timing": "Fresh old/new component sums: input packing, buffer setup, warm geometry work, receiver submission, dispatch and blocking readback. New includes BVH/extra draw preparation. Excludes process startup, compile/warmup, diagnostics exports, reference solving, DSP/audio. Baseline runs first per case; new configurations rotate per receiver. Not GPU timestamps or a statistical speed guarantee.",
+  "results": {
+    "maps": [
+      {
+        "scene": "1",
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 1014,
+        "old": {
+          "errorPercent": 1.8508636026037752,
+          "within3dBPercent": 100.0
+        },
+        "new": {
+          "errorPercent": 1.8508633632812972,
+          "within3dBPercent": 100.0
+        },
+        "oldSeconds": 0.3705359500160728,
+        "linearSeconds": 0.500194175030376,
+        "newSeconds": 0.46925897503037595,
+        "oldMedianMs": 0.3298,
+        "newMedianMs": 0.3297,
+        "linearMedianMs": 0.34415,
+        "oldGpuBytes": 1324744,
+        "newGpuBytes": 1323748,
+        "pressureRelativeDifference": 1.4424188588996154e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 24.0,
+        "maxAccepted": 7,
+        "preparationSeconds": 0.011701750016072765,
+        "bvhAndRouteDrawPreparationSeconds": 0.001286125014303252,
+        "oldSetupSeconds": 0.0024718,
+        "newSetupSeconds": 0.0020188,
+        "timeRatio": 0.7896193141369057
+      },
+      {
+        "scene": "1",
+        "samples": 262144,
+        "pathBudget": 65536,
+        "receivers": 1014,
+        "old": {
+          "errorPercent": 1.8350666516224579,
+          "within3dBPercent": 100.0
+        },
+        "new": {
+          "errorPercent": 1.83506664748749,
+          "within3dBPercent": 100.0
+        },
+        "oldSeconds": 0.5694176919971421,
+        "linearSeconds": 0.5905005920009438,
+        "newSeconds": 0.5464437920009438,
+        "oldMedianMs": 0.5204,
+        "newMedianMs": 0.50285,
+        "linearMedianMs": 0.5117999999999999,
+        "oldGpuBytes": 5281480,
+        "newGpuBytes": 5280484,
+        "pressureRelativeDifference": 1.9760731920227731e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 24.0,
+        "maxAccepted": 7,
+        "preparationSeconds": 0.015781791997142136,
+        "bvhAndRouteDrawPreparationSeconds": 0.0027945000038016587,
+        "oldSetupSeconds": 0.0039763,
+        "newSetupSeconds": 0.0049915,
+        "timeRatio": 1.0420425674744578
+      },
+      {
+        "scene": "9",
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 960,
+        "old": {
+          "errorPercent": 32.10158962923061,
+          "within3dBPercent": 58.854166666666664
+        },
+        "new": {
+          "errorPercent": 32.101589361402844,
+          "within3dBPercent": 58.854166666666664
+        },
+        "oldSeconds": 0.970565449986887,
+        "linearSeconds": 0.45434596697864976,
+        "newSeconds": 0.5101585669786498,
+        "oldMedianMs": 0.66265,
+        "newMedianMs": 0.47815,
+        "linearMedianMs": 0.4602,
+        "oldGpuBytes": 1781192,
+        "newGpuBytes": 1656932,
+        "pressureRelativeDifference": 1.3567737956070548e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 1636.0,
+        "maxAccepted": 448,
+        "preparationSeconds": 0.003201249986886978,
+        "bvhAndRouteDrawPreparationSeconds": 0.001696416991762817,
+        "oldSetupSeconds": 0.0021579,
+        "newSetupSeconds": 0.0029396,
+        "timeRatio": 1.902477999604984
+      },
+      {
+        "scene": "9",
+        "samples": 262144,
+        "pathBudget": 65536,
+        "receivers": 960,
+        "old": {
+          "errorPercent": 24.02952891951344,
+          "within3dBPercent": 68.22916666666666
+        },
+        "new": {
+          "errorPercent": 24.029528953520547,
+          "within3dBPercent": 68.22916666666666
+        },
+        "oldSeconds": 1.3892859409732814,
+        "linearSeconds": 1.1319233159809592,
+        "newSeconds": 1.1910188159809594,
+        "oldMedianMs": 1.4331,
+        "newMedianMs": 1.1978499999999999,
+        "linearMedianMs": 1.15725,
+        "oldGpuBytes": 5737928,
+        "newGpuBytes": 5613668,
+        "pressureRelativeDifference": 2.2913247291814839e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 1636.0,
+        "maxAccepted": 448,
+        "preparationSeconds": 0.010613540973281488,
+        "bvhAndRouteDrawPreparationSeconds": 0.0028408750076778233,
+        "oldSetupSeconds": 0.003801,
+        "newSetupSeconds": 0.0115805,
+        "timeRatio": 1.1664685077447943
+      },
+      {
+        "scene": "25",
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 880,
+        "old": {
+          "errorPercent": 83.69092129347061,
+          "within3dBPercent": 30.681818181818183
+        },
+        "new": {
+          "errorPercent": 83.6902824377871,
+          "within3dBPercent": 30.681818181818183
+        },
+        "oldSeconds": 3.557317416003734,
+        "linearSeconds": 1.2570741910095846,
+        "newSeconds": 1.3144058910095844,
+        "oldMedianMs": 4.08005,
+        "newMedianMs": 1.46845,
+        "linearMedianMs": 1.431,
+        "oldGpuBytes": 4881352,
+        "newGpuBytes": 3896164,
+        "pressureRelativeDifference": 0.00022172966761172322,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 6339.0,
+        "maxAccepted": 1031,
+        "preparationSeconds": 0.0036459160037338734,
+        "bvhAndRouteDrawPreparationSeconds": 0.0024163750058505684,
+        "oldSetupSeconds": 0.001892,
+        "newSetupSeconds": 0.0031768,
+        "timeRatio": 2.706407085007347
+      },
+      {
+        "scene": "25",
+        "samples": 262144,
+        "pathBudget": 65536,
+        "receivers": 880,
+        "old": {
+          "errorPercent": 62.5587629864334,
+          "within3dBPercent": 38.75
+        },
+        "new": {
+          "errorPercent": 62.55838160479944,
+          "within3dBPercent": 38.75
+        },
+        "oldSeconds": 2.4607154670147944,
+        "linearSeconds": 1.396039467008804,
+        "newSeconds": 1.4494457670088043,
+        "oldMedianMs": 2.7447,
+        "newMedianMs": 1.6155,
+        "linearMedianMs": 1.5557499999999997,
+        "oldGpuBytes": 8838088,
+        "newGpuBytes": 7852900,
+        "pressureRelativeDifference": 6.123173838351524e-05,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 6339.0,
+        "maxAccepted": 1031,
+        "preparationSeconds": 0.007895167014794424,
+        "bvhAndRouteDrawPreparationSeconds": 0.002980499994009733,
+        "oldSetupSeconds": 0.0116858,
+        "newSetupSeconds": 0.0138493,
+        "timeRatio": 1.6976940586697007
+      },
+      {
+        "scene": "barrier",
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 531,
+        "old": {
+          "errorPercent": 1.4632824300265845,
+          "within3dBPercent": 100.0
+        },
+        "new": {
+          "errorPercent": 1.4632828220712588,
+          "within3dBPercent": 100.0
+        },
+        "oldSeconds": 0.25729956698964496,
+        "linearSeconds": 0.3833810010132529,
+        "newSeconds": 0.3723962010132529,
+        "oldMedianMs": 0.3925,
+        "newMedianMs": 0.6711,
+        "linearMedianMs": 0.6698000000000001,
+        "oldGpuBytes": 1324744,
+        "newGpuBytes": 1323748,
+        "pressureRelativeDifference": 1.364522503065125e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 15.0,
+        "maxAccepted": 5,
+        "preparationSeconds": 0.0020286669896449894,
+        "bvhAndRouteDrawPreparationSeconds": 0.0010933340236078948,
+        "oldSetupSeconds": 0.0026304,
+        "newSetupSeconds": 0.0025605,
+        "timeRatio": 0.6909296235825138
+      },
+      {
+        "scene": "barrier",
+        "samples": 262144,
+        "pathBudget": 65536,
+        "receivers": 531,
+        "old": {
+          "errorPercent": 1.4583109572866382,
+          "within3dBPercent": 100.0
+        },
+        "new": {
+          "errorPercent": 1.4583128643701342,
+          "within3dBPercent": 100.0
+        },
+        "oldSeconds": 0.3023550839885436,
+        "linearSeconds": 0.37328520897365175,
+        "newSeconds": 0.3452123089736518,
+        "oldMedianMs": 0.5212,
+        "newMedianMs": 0.6062,
+        "linearMedianMs": 0.6138,
+        "oldGpuBytes": 5281480,
+        "newGpuBytes": 5280484,
+        "pressureRelativeDifference": 2.1962618885641948e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 15.0,
+        "maxAccepted": 5,
+        "preparationSeconds": 0.0060995839885436,
+        "bvhAndRouteDrawPreparationSeconds": 0.002650624985108152,
+        "oldSetupSeconds": 0.0046753,
+        "newSetupSeconds": 0.0072321,
+        "timeRatio": 0.8758525583501738
+      },
+      {
+        "scene": "staggered",
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 487,
+        "old": {
+          "errorPercent": 8.68736450504616,
+          "within3dBPercent": 88.7063655030801
+        },
+        "new": {
+          "errorPercent": 8.687364115562115,
+          "within3dBPercent": 88.7063655030801
+        },
+        "oldSeconds": 0.23843042498891168,
+        "linearSeconds": 0.17541807498638967,
+        "newSeconds": 0.16391157498638967,
+        "oldMedianMs": 0.3543,
+        "newMedianMs": 0.322,
+        "linearMedianMs": 0.32239999999999996,
+        "oldGpuBytes": 1341928,
+        "newGpuBytes": 1336724,
+        "pressureRelativeDifference": 1.4032100729703786e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 51.0,
+        "maxAccepted": 13,
+        "preparationSeconds": 0.0019096249889116734,
+        "bvhAndRouteDrawPreparationSeconds": 0.0019107499974779785,
+        "oldSetupSeconds": 0.048169,
+        "newSetupSeconds": 0.0019887,
+        "timeRatio": 1.4546283568363592
+      },
+      {
+        "scene": "staggered",
+        "samples": 262144,
+        "pathBudget": 65536,
+        "receivers": 487,
+        "old": {
+          "errorPercent": 8.693128990635701,
+          "within3dBPercent": 88.50102669404517
+        },
+        "new": {
+          "errorPercent": 8.693128229189117,
+          "within3dBPercent": 88.50102669404517
+        },
+        "oldSeconds": 0.6304564670067645,
+        "linearSeconds": 0.43888928402567173,
+        "newSeconds": 0.4238206840256717,
+        "oldMedianMs": 1.5126,
+        "newMedianMs": 0.5228,
+        "linearMedianMs": 0.5297000000000001,
+        "oldGpuBytes": 5298664,
+        "newGpuBytes": 5293460,
+        "pressureRelativeDifference": 2.1539540610335564e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 51.0,
+        "maxAccepted": 13,
+        "preparationSeconds": 0.007248167006764561,
+        "bvhAndRouteDrawPreparationSeconds": 0.0022924170189071447,
+        "oldSetupSeconds": 0.0059595,
+        "newSetupSeconds": 0.0101635,
+        "timeRatio": 1.4875547389956467
+      },
+      {
+        "scene": "slit",
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 509,
+        "old": {
+          "errorPercent": 2.357967620648203,
+          "within3dBPercent": 99.01768172888016
+        },
+        "new": {
+          "errorPercent": 2.357967999142416,
+          "within3dBPercent": 99.01768172888016
+        },
+        "oldSeconds": 0.2542576330003917,
+        "linearSeconds": 0.19638495001511352,
+        "newSeconds": 0.2134275500151135,
+        "oldMedianMs": 0.3586,
+        "newMedianMs": 0.3253,
+        "linearMedianMs": 0.31589999999999996,
+        "oldGpuBytes": 1341928,
+        "newGpuBytes": 1336724,
+        "pressureRelativeDifference": 1.246590134752891e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 73.0,
+        "maxAccepted": 25,
+        "preparationSeconds": 0.0031108330003917217,
+        "bvhAndRouteDrawPreparationSeconds": 0.001248417014721781,
+        "oldSetupSeconds": 0.0019093,
+        "newSetupSeconds": 0.0020846,
+        "timeRatio": 1.1913065252465622
+      },
+      {
+        "scene": "slit",
+        "samples": 262144,
+        "pathBudget": 65536,
+        "receivers": 509,
+        "old": {
+          "errorPercent": 2.4230786311026726,
+          "within3dBPercent": 99.01768172888016
+        },
+        "new": {
+          "errorPercent": 2.4230782810761937,
+          "within3dBPercent": 99.01768172888016
+        },
+        "oldSeconds": 0.2985329339778148,
+        "linearSeconds": 0.7078696839621424,
+        "newSeconds": 0.7348092839621424,
+        "oldMedianMs": 0.5296,
+        "newMedianMs": 1.5487000000000002,
+        "linearMedianMs": 1.5246000000000002,
+        "oldGpuBytes": 5298664,
+        "newGpuBytes": 5293460,
+        "pressureRelativeDifference": 2.2182027143134111e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 73.0,
+        "maxAccepted": 25,
+        "preparationSeconds": 0.007298333977814764,
+        "bvhAndRouteDrawPreparationSeconds": 0.0016032499843277037,
+        "oldSetupSeconds": 0.0044718,
+        "newSetupSeconds": 0.0060619,
+        "timeRatio": 0.406272675772555
+      },
+      {
+        "scene": "corridor",
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 461,
+        "old": {
+          "errorPercent": 13.516794363651409,
+          "within3dBPercent": 86.76789587852495
+        },
+        "new": {
+          "errorPercent": 13.516793564802871,
+          "within3dBPercent": 86.76789587852495
+        },
+        "oldSeconds": 0.17169220799141005,
+        "linearSeconds": 0.1447201669791732,
+        "newSeconds": 0.15915336697917323,
+        "oldMedianMs": 0.34850000000000003,
+        "newMedianMs": 0.30410000000000004,
+        "linearMedianMs": 0.2984,
+        "oldGpuBytes": 1341928,
+        "newGpuBytes": 1336724,
+        "pressureRelativeDifference": 1.3236542742121654e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 90.0,
+        "maxAccepted": 32,
+        "preparationSeconds": 0.002463707991410047,
+        "bvhAndRouteDrawPreparationSeconds": 0.0011459589877631515,
+        "oldSetupSeconds": 0.0021703,
+        "newSetupSeconds": 0.0021515,
+        "timeRatio": 1.078784641822109
+      },
+      {
+        "scene": "corridor",
+        "samples": 262144,
+        "pathBudget": 65536,
+        "receivers": 461,
+        "old": {
+          "errorPercent": 13.405143656284102,
+          "within3dBPercent": 86.98481561822126
+        },
+        "new": {
+          "errorPercent": 13.405143856198444,
+          "within3dBPercent": 86.98481561822126
+        },
+        "oldSeconds": 0.3689072839988068,
+        "linearSeconds": 0.25175026698529757,
+        "newSeconds": 0.2674993669852975,
+        "oldMedianMs": 0.5559999999999999,
+        "newMedianMs": 0.5172,
+        "linearMedianMs": 0.5055,
+        "oldGpuBytes": 5298664,
+        "newGpuBytes": 5293460,
+        "pressureRelativeDifference": 2.345652683306848e-07,
+        "bvhBitwiseParity": true,
+        "maxCandidates": 90.0,
+        "maxAccepted": 32,
+        "preparationSeconds": 0.009869583998806775,
+        "bvhAndRouteDrawPreparationSeconds": 0.001828582986490801,
+        "oldSetupSeconds": 0.0049845,
+        "newSetupSeconds": 0.0066195,
+        "timeRatio": 1.3790959139693326
+      }
+    ],
+    "seeds": [
+      {
+        "scene": "1",
+        "samples": 65536,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            2.118391939325644,
+            2.0615549922242224,
+            2.077464777706286,
+            2.1063868637418515
+          ],
+          "meanErrorPercent": 2.090949643249501,
+          "repeatVariationPercent": 0.15661234780178393
+        },
+        "new": {
+          "errors": [
+            2.118389521930515,
+            2.061551410834739,
+            2.0774640244395135,
+            2.1063836601134054
+          ],
+          "meanErrorPercent": 2.0909471543295433,
+          "repeatVariationPercent": 0.15661220495097067
+        }
+      },
+      {
+        "scene": "1",
+        "samples": 262144,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            2.082823817970201,
+            2.081685640475225,
+            2.0815030407522137,
+            2.074137568212976
+          ],
+          "meanErrorPercent": 2.080037516852654,
+          "repeatVariationPercent": 0.0491162913652291
+        },
+        "new": {
+          "errors": [
+            2.0828249654698565,
+            2.08168984076658,
+            2.0815058828133286,
+            2.074136183324201
+          ],
+          "meanErrorPercent": 2.0800392180934915,
+          "repeatVariationPercent": 0.04911575561311835
+        }
+      },
+      {
+        "scene": "9",
+        "samples": 65536,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            35.84447471683487,
+            31.92492876957669,
+            34.34872851977867,
+            25.64123045963374
+          ],
+          "meanErrorPercent": 31.93984061645599,
+          "repeatVariationPercent": 17.043433777036558
+        },
+        "new": {
+          "errors": [
+            35.84447951655229,
+            31.92493070501826,
+            34.34873342070757,
+            25.64123187712796
+          ],
+          "meanErrorPercent": 31.93984387985152,
+          "repeatVariationPercent": 17.043435581860262
+        }
+      },
+      {
+        "scene": "9",
+        "samples": 262144,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            25.910055708419076,
+            24.474847013125306,
+            25.366711369231634,
+            22.876160317116856
+          ],
+          "meanErrorPercent": 24.656943601973218,
+          "repeatVariationPercent": 7.460515926058375
+        },
+        "new": {
+          "errors": [
+            25.910058818235207,
+            24.474846984872663,
+            25.3667124830564,
+            22.87616057165403
+          ],
+          "meanErrorPercent": 24.656944714454575,
+          "repeatVariationPercent": 7.460515241091165
+        }
+      },
+      {
+        "scene": "25",
+        "samples": 65536,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            117.96213822721565,
+            111.6360785332346,
+            93.44111862031895,
+            111.14918065021752
+          ],
+          "meanErrorPercent": 108.54712900774669,
+          "repeatVariationPercent": 59.11654823210245
+        },
+        "new": {
+          "errors": [
+            117.96214129033167,
+            111.63607614535873,
+            93.44111826883196,
+            111.14918409080349
+          ],
+          "meanErrorPercent": 108.54712994883147,
+          "repeatVariationPercent": 59.11654552061696
+        }
+      },
+      {
+        "scene": "25",
+        "samples": 262144,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            88.00573311679615,
+            86.84849020630877,
+            87.7279549912074,
+            88.59638360076306
+          ],
+          "meanErrorPercent": 87.79464047876886,
+          "repeatVariationPercent": 26.688218352847663
+        },
+        "new": {
+          "errors": [
+            88.00573697810518,
+            86.84848666646326,
+            87.72796186684455,
+            88.59638205863658
+          ],
+          "meanErrorPercent": 87.7946418925124,
+          "repeatVariationPercent": 26.688216714521996
+        }
+      },
+      {
+        "scene": "barrier",
+        "samples": 65536,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            0.9107369361756658,
+            0.9091370652323614,
+            0.9102725037851706,
+            0.8878212255626361
+          ],
+          "meanErrorPercent": 0.9044919326889584,
+          "repeatVariationPercent": 0.072079581350928
+        },
+        "new": {
+          "errors": [
+            0.9107356147804179,
+            0.9091405801578749,
+            0.9102720964714153,
+            0.8878258593697606
+          ],
+          "meanErrorPercent": 0.9044935376948672,
+          "repeatVariationPercent": 0.07207976988912516
+        }
+      },
+      {
+        "scene": "barrier",
+        "samples": 262144,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            0.9109694248240902,
+            0.9116404185211647,
+            0.9066646718990568,
+            0.9108008352745846
+          ],
+          "meanErrorPercent": 0.910018837629724,
+          "repeatVariationPercent": 0.015341075096539392
+        },
+        "new": {
+          "errors": [
+            0.9109732160444617,
+            0.9116356082850893,
+            0.906659779902645,
+            0.9107996510802664
+          ],
+          "meanErrorPercent": 0.9100170638281156,
+          "repeatVariationPercent": 0.015340314461903821
+        }
+      },
+      {
+        "scene": "staggered",
+        "samples": 65536,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            16.211459972393158,
+            16.204818422945674,
+            16.396930443146594,
+            16.51484072437643
+          ],
+          "meanErrorPercent": 16.332012390715466,
+          "repeatVariationPercent": 0.4007229929859498
+        },
+        "new": {
+          "errors": [
+            16.21145965345953,
+            16.204818604911416,
+            16.39693079103022,
+            16.514839269860158
+          ],
+          "meanErrorPercent": 16.332012079815332,
+          "repeatVariationPercent": 0.4007223641956971
+        }
+      },
+      {
+        "scene": "staggered",
+        "samples": 262144,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            16.30193621468971,
+            16.291695967949583,
+            16.287631607201583,
+            16.263530018103005
+          ],
+          "meanErrorPercent": 16.28619845198597,
+          "repeatVariationPercent": 0.11424387825574152
+        },
+        "new": {
+          "errors": [
+            16.301936044761902,
+            16.29170097783621,
+            16.287635273446966,
+            16.26353106091867
+          ],
+          "meanErrorPercent": 16.286200839240937,
+          "repeatVariationPercent": 0.11424397521215972
+        }
+      },
+      {
+        "scene": "slit",
+        "samples": 65536,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            2.3723121015947526,
+            2.2670881395057063,
+            2.4479718737423255,
+            2.3817318976921187
+          ],
+          "meanErrorPercent": 2.3672760031337257,
+          "repeatVariationPercent": 0.5603160072542196
+        },
+        "new": {
+          "errors": [
+            2.372311269688115,
+            2.2670872904750734,
+            2.447969046824292,
+            2.3817300109313924
+          ],
+          "meanErrorPercent": 2.3672744044797183,
+          "repeatVariationPercent": 0.560316158531435
+        }
+      },
+      {
+        "scene": "slit",
+        "samples": 262144,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            2.253686975007689,
+            2.2324513894986464,
+            2.3325187666641742,
+            2.305374421526161
+          ],
+          "meanErrorPercent": 2.2810078881741678,
+          "repeatVariationPercent": 0.2294265904070907
+        },
+        "new": {
+          "errors": [
+            2.253695239482527,
+            2.2324552902477186,
+            2.332521581170221,
+            2.3053694770039543
+          ],
+          "meanErrorPercent": 2.2810103969761055,
+          "repeatVariationPercent": 0.2294268708807462
+        }
+      },
+      {
+        "scene": "corridor",
+        "samples": 65536,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            11.260789065300917,
+            11.222204797536795,
+            11.103230039536122,
+            10.98881440121889
+          ],
+          "meanErrorPercent": 11.14375957589818,
+          "repeatVariationPercent": 0.5003763379693135
+        },
+        "new": {
+          "errors": [
+            11.260791781170184,
+            11.222205808563935,
+            11.10322924709061,
+            10.988812083591496
+          ],
+          "meanErrorPercent": 11.143759730104057,
+          "repeatVariationPercent": 0.5003776617046374
+        }
+      },
+      {
+        "scene": "corridor",
+        "samples": 262144,
+        "receivers": 25,
+        "seeds": [
+          17,
+          65554,
+          131091,
+          196628
+        ],
+        "old": {
+          "errors": [
+            11.121510233471632,
+            11.20602170448454,
+            11.19076120811425,
+            11.076594318850054
+          ],
+          "meanErrorPercent": 11.148721866230119,
+          "repeatVariationPercent": 0.21165554648866586
+        },
+        "new": {
+          "errors": [
+            11.121507021889794,
+            11.206023644924134,
+            11.19077005097129,
+            11.076596804392553
+          ],
+          "meanErrorPercent": 11.148724380544442,
+          "repeatVariationPercent": 0.211652593377281
+        }
+      }
+    ],
+    "scaling": [
+      {
+        "boxes": 1,
+        "edges": 4,
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 5,
+        "newMedianMs": 0.6452,
+        "newMinMs": 0.6344000000000001,
+        "newMaxMs": 0.6725,
+        "linearMedianMs": 0.6503,
+        "gpuBytes": 1323748,
+        "totalSeconds": 0.015451058990557119,
+        "bvhAndDrawPreparationSeconds": 0.0013110419968143106,
+        "bvhBitwiseParity": true,
+        "minCandidates": 14.0,
+        "maxCandidates": 23.0,
+        "minAccepted": 4,
+        "maxAccepted": 6,
+        "oldMedianMs": 0.6527,
+        "oldGpuBytes": 1324744,
+        "relativeDifferenceToEnumeration": 6.643596163603502e-08
+      },
+      {
+        "boxes": 9,
+        "edges": 36,
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 5,
+        "newMedianMs": 1.3297,
+        "newMinMs": 1.2219,
+        "newMaxMs": 1.6525999999999998,
+        "linearMedianMs": 1.3066,
+        "gpuBytes": 1656932,
+        "totalSeconds": 0.01607085797546208,
+        "bvhAndDrawPreparationSeconds": 0.0013357079878915101,
+        "bvhBitwiseParity": true,
+        "minCandidates": 1059.0,
+        "maxCandidates": 1248.0,
+        "minAccepted": 235,
+        "maxAccepted": 296,
+        "oldMedianMs": 1.9853,
+        "oldGpuBytes": 1781192,
+        "relativeDifferenceToEnumeration": 4.583775689734764e-08
+      },
+      {
+        "boxes": 25,
+        "edges": 100,
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 5,
+        "newMedianMs": 0.8125,
+        "newMinMs": 0.7978,
+        "newMaxMs": 0.9039,
+        "linearMedianMs": 0.8261,
+        "gpuBytes": 3896164,
+        "totalSeconds": 0.010289399978747218,
+        "bvhAndDrawPreparationSeconds": 0.002381874975981191,
+        "bvhBitwiseParity": true,
+        "minCandidates": 4451.0,
+        "maxCandidates": 5508.0,
+        "minAccepted": 487,
+        "maxAccepted": 770,
+        "oldMedianMs": 2.8091,
+        "oldGpuBytes": 4881352,
+        "relativeDifferenceToEnumeration": 3.8671056251709546e-08
+      },
+      {
+        "boxes": 100,
+        "edges": 400,
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 5,
+        "newMedianMs": 5.8045,
+        "newMinMs": 5.5291999999999994,
+        "newMaxMs": 6.8153,
+        "linearMedianMs": 6.043,
+        "gpuBytes": 9725172,
+        "totalSeconds": 0.03923060899048261,
+        "bvhAndDrawPreparationSeconds": 0.004656916979001835,
+        "bvhBitwiseParity": true,
+        "minCandidates": 35154.0,
+        "maxCandidates": 40977.0,
+        "minAccepted": 1116,
+        "maxAccepted": 2746,
+        "oldMedianMs": 68.0407,
+        "oldGpuBytes": 58288552,
+        "relativeDifferenceToEnumeration": 2.906995343893303e-08
+      },
+      {
+        "boxes": 400,
+        "edges": 1600,
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 5,
+        "newMedianMs": 12.5151,
+        "newMinMs": 10.7591,
+        "newMaxMs": 13.3057,
+        "linearMedianMs": 14.5572,
+        "gpuBytes": 9777972,
+        "totalSeconds": 0.08827554099088161,
+        "bvhAndDrawPreparationSeconds": 0.013290832983329892,
+        "bvhBitwiseParity": true,
+        "minCandidates": 245396.0,
+        "maxCandidates": 280415.0,
+        "minAccepted": 554,
+        "maxAccepted": 2245
+      },
+      {
+        "boxes": 1600,
+        "edges": 6400,
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 5,
+        "newMedianMs": 12.6348,
+        "newMinMs": 12.2393,
+        "newMaxMs": 25.7116,
+        "linearMedianMs": 26.2128,
+        "gpuBytes": 9989172,
+        "totalSeconds": 0.13486615800509863,
+        "bvhAndDrawPreparationSeconds": 0.04464633300085552,
+        "bvhBitwiseParity": true,
+        "minCandidates": 1806656.0,
+        "maxCandidates": 2142681.0,
+        "minAccepted": 128,
+        "maxAccepted": 866
+      },
+      {
+        "boxes": 2500,
+        "edges": 10000,
+        "samples": 65536,
+        "pathBudget": 65536,
+        "receivers": 5,
+        "newMedianMs": 15.446299999999999,
+        "newMinMs": 13.033299999999999,
+        "newMaxMs": 15.791,
+        "linearMedianMs": 36.3617,
+        "gpuBytes": 10147572,
+        "totalSeconds": 0.16222004201434925,
+        "bvhAndDrawPreparationSeconds": 0.0705186249979306,
+        "bvhBitwiseParity": true,
+        "minCandidates": 3470786.0,
+        "maxCandidates": 4147871.0,
+        "minAccepted": 65,
+        "maxAccepted": 510
+      }
+    ]
+  },
+  "controls": [
+    {
+      "case": "control-1",
+      "cpuRelativeDifference": 9.967187581211073e-07,
+      "bvhLinearParity": true,
+      "countsParity": true
+    },
+    {
+      "case": "control-9",
+      "cpuRelativeDifference": 5.7162636754317414e-06,
+      "bvhLinearParity": true,
+      "countsParity": true
+    },
+    {
+      "case": "control-25",
+      "cpuRelativeDifference": 5.956510400983489e-06,
+      "bvhLinearParity": true,
+      "countsParity": true
+    },
+    {
+      "case": "empty",
+      "cpuRelativeDifference": 1.6775710724562936e-06,
+      "bvhLinearParity": true,
+      "countsParity": true
+    },
+    {
+      "case": "subset",
+      "cpuRelativeDifference": 2.1496562136949767e-05,
+      "bvhLinearParity": true,
+      "countsParity": true
+    },
+    {
+      "case": "no-support",
+      "cpuRelativeDifference": 0.0,
+      "bvhLinearParity": true,
+      "countsParity": true
+    }
+  ],
+  "smallSceneRepeats": [
+    {
+      "scene": "1",
+      "samples": 65536,
+      "receivers": 25,
+      "runs": [
+        {
+          "oldMedianMs": 0.3251,
+          "newMedianMs": 0.2935,
+          "oldTotalMs": 8.1323,
+          "newTotalMs": 7.3895
+        },
+        {
+          "oldMedianMs": 0.3431,
+          "newMedianMs": 0.2899,
+          "oldTotalMs": 11.641300000000001,
+          "newTotalMs": 7.368800000000001
+        },
+        {
+          "oldMedianMs": 0.32220000000000004,
+          "newMedianMs": 0.299,
+          "oldTotalMs": 7.995,
+          "newTotalMs": 7.500900000000001
+        }
+      ],
+      "oldMedianMs": 0.3251,
+      "newMedianMs": 0.2935,
+      "ratio": 1.1076660988074958
+    },
+    {
+      "scene": "1",
+      "samples": 262144,
+      "receivers": 25,
+      "runs": [
+        {
+          "oldMedianMs": 0.5,
+          "newMedianMs": 0.4854,
+          "oldTotalMs": 15.575500000000002,
+          "newTotalMs": 12.715
+        },
+        {
+          "oldMedianMs": 1.5284,
+          "newMedianMs": 0.79,
+          "oldTotalMs": 58.626400000000004,
+          "newTotalMs": 25.4285
+        },
+        {
+          "oldMedianMs": 0.5,
+          "newMedianMs": 0.4652,
+          "oldTotalMs": 15.4624,
+          "newTotalMs": 12.217600000000001
+        }
+      ],
+      "oldMedianMs": 0.5,
+      "newMedianMs": 0.4854,
+      "ratio": 1.0300782859497322
+    },
+    {
+      "scene": "barrier",
+      "samples": 65536,
+      "receivers": 25,
+      "runs": [
+        {
+          "oldMedianMs": 0.3254,
+          "newMedianMs": 0.2927,
+          "oldTotalMs": 8.1502,
+          "newTotalMs": 7.334999999999999
+        },
+        {
+          "oldMedianMs": 0.3452,
+          "newMedianMs": 0.31579999999999997,
+          "oldTotalMs": 12.3637,
+          "newTotalMs": 7.838999999999999
+        },
+        {
+          "oldMedianMs": 0.3369,
+          "newMedianMs": 0.31070000000000003,
+          "oldTotalMs": 11.401200000000001,
+          "newTotalMs": 7.7411
+        }
+      ],
+      "oldMedianMs": 0.3369,
+      "newMedianMs": 0.31070000000000003,
+      "ratio": 1.0843257161248792
+    },
+    {
+      "scene": "barrier",
+      "samples": 262144,
+      "receivers": 25,
+      "runs": [
+        {
+          "oldMedianMs": 0.5015,
+          "newMedianMs": 0.45740000000000003,
+          "oldTotalMs": 15.3376,
+          "newTotalMs": 11.732999999999999
+        },
+        {
+          "oldMedianMs": 0.49260000000000004,
+          "newMedianMs": 0.4704,
+          "oldTotalMs": 12.8839,
+          "newTotalMs": 14.8827
+        },
+        {
+          "oldMedianMs": 0.49589999999999995,
+          "newMedianMs": 0.4642,
+          "oldTotalMs": 16.2205,
+          "newTotalMs": 11.639300000000002
+        }
+      ],
+      "oldMedianMs": 0.49589999999999995,
+      "newMedianMs": 0.4642,
+      "ratio": 1.0682895303748383
+    },
+    {
+      "scene": "slit",
+      "samples": 65536,
+      "receivers": 25,
+      "runs": [
+        {
+          "oldMedianMs": 0.3433,
+          "newMedianMs": 0.315,
+          "oldTotalMs": 8.6061,
+          "newTotalMs": 7.9094999999999995
+        },
+        {
+          "oldMedianMs": 0.3524,
+          "newMedianMs": 0.3189,
+          "oldTotalMs": 12.015,
+          "newTotalMs": 7.9602
+        },
+        {
+          "oldMedianMs": 0.7385,
+          "newMedianMs": 0.6799,
+          "oldTotalMs": 18.446399999999997,
+          "newTotalMs": 14.4888
+        }
+      ],
+      "oldMedianMs": 0.3524,
+      "newMedianMs": 0.3189,
+      "ratio": 1.1050486045782375
+    },
+    {
+      "scene": "slit",
+      "samples": 262144,
+      "receivers": 25,
+      "runs": [
+        {
+          "oldMedianMs": 0.536,
+          "newMedianMs": 0.5025000000000001,
+          "oldTotalMs": 16.7886,
+          "newTotalMs": 12.595799999999999
+        },
+        {
+          "oldMedianMs": 0.5275,
+          "newMedianMs": 1.6440000000000001,
+          "oldTotalMs": 13.4043,
+          "newTotalMs": 146.0525
+        },
+        {
+          "oldMedianMs": 1.0546,
+          "newMedianMs": 0.5966,
+          "oldTotalMs": 30.5524,
+          "newTotalMs": 15.2064
+        }
+      ],
+      "oldMedianMs": 0.536,
+      "newMedianMs": 0.5966,
+      "ratio": 0.8984244049614483
+    }
+  ],
+  "finalSuites": [
+    {
+      "file": ".context/gpu-scalable/gpu-142450.xml",
+      "sha256": "5c66f7edf3572692765ee395e71f6077c531060e633d7e58f827ff3b952695cf",
+      "id": "2",
+      "testcasecount": "67",
+      "result": "Passed",
+      "total": "67",
+      "passed": "67",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-22 21:25:05Z",
+      "end-time": "2026-10-22 21:25:58Z",
+      "duration": "53.0003754"
+    },
+    {
+      "file": ".context/gpu-scalable/gpu-142604.xml",
+      "sha256": "ebcd465c9fa8b040f70b92230ef59443558c2d8c58505b1e0ccf821d2bf6e4f0",
+      "id": "2",
+      "testcasecount": "4",
+      "result": "Passed",
+      "total": "4",
+      "passed": "4",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-22 21:26:14Z",
+      "end-time": "2026-10-22 21:26:15Z",
+      "duration": "0.9784704"
+    },
+    {
+      "file": ".context/gpu-scalable/gpu-142653.xml",
+      "sha256": "17a10e255ad3ea04bb0790c38977e258cfb06daa97388c658d179d8bdffeca64",
+      "id": "2",
+      "testcasecount": "19",
+      "result": "Passed",
+      "total": "19",
+      "passed": "19",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-22 21:27:04Z",
+      "end-time": "2026-10-22 21:27:07Z",
+      "duration": "2.6278454"
+    }
+  ],
+  "complexity": {
+    "previous": "O(E^2 W) visibility, O(E^2) storage",
+    "new": "O((E + min(S,R) + min(N,M)) Q(W) + N) receiver work; O(W+E+S+N) storage. R candidate paths, M mirror pairs, Q actual visibility-query cost. Fixed depth."
+  },
+  "archive": {
+    "file": "gpu-scalable-2026-10-22.zip",
+    "sha256": "b0e0c7c3a51190b77b3e06c8c728bcd9812dcd2ad3af420ea0d6c45d3eca46da",
+    "bytes": 21889768,
+    "files": 1026
+  },
+  "images": {
+    "gpu-scalable-large-2026-10-22.png": "578c100e51d06d169c792012c143d0c49eb07525265deffeb46b1dfcdec8e3e6",
+    "gpu-scalable-scaling-2026-10-22.png": "1391891ed67f6751e51fb293502353539bc6de236243d292849ba663d6fa4fc1",
+    "gpu-scalable-small-2026-10-22.png": "bf03396c8b8e71e22fb39b8357c8a471b8f0ef5be69fae0b7da8916719865e0e"
+  },
+  "limitations": [
+    "Full per-receiver edge scan and serial linear/bounded compactions remain; not fixed-ray-count scaling.",
+    "The 16K path budget failed 100-box parity; final 65K covers that control. Above 100 boxes accuracy is unqualified.",
+    "Large-layout candidate acceptance falls markedly; fixed compute does not guarantee fixed error.",
+    "Dense-scene wave-reference error remains large; no DLSS teacher/live audio qualification.",
+    "Small-scene timing regressions and large host variation are retained; no no-slowdown guarantee.",
+    "No finite 3D, arbitrary material/mesh, moving, higher-order or broadband validation. Existing shader compiler warnings remain."
+  ]
+}
