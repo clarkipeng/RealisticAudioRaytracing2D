@@ -305,8 +305,45 @@ public partial class TakeChecks
             Check(audible>0,"Interior reflection fixture exercised actual rays");
         }
     }
-    [Test, Category("GPU")]
-    public void TransportNativeVolumes()
+    [TestCase(false),TestCase(true),Category("GPU")]
+    public void MediumBvhParity(bool planar)
+    {
+        var shader=RequireGpu();var scene=Scene(4);scene.dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D;scene.listeners=new[]{1};
+        scene.materials=new[]{
+            new AcousticTake.MaterialDefinition {frequencies=new[]{0f},transmission=new[]{1f},ior=new[]{.5f},damping=new[]{.1f}},
+            new AcousticTake.MaterialDefinition {frequencies=new[]{0f},transmission=new[]{1f},ior=new[]{2f},damping=new[]{.3f}}};
+        var geometry=new List<AcousticTake.Primitive>();var state=States(4);
+        for(int owner=2;owner<=4;owner++)
+        {
+            var box=TransportBox(scene.dimension,owner,owner==2?0:1,owner==4?.7f:2);
+            scene.objects[owner].primitiveStart=geometry.Count;scene.objects[owner].primitiveCount=box.Length;
+            foreach(var triangle in box){var t=triangle;if(owner==3)(t.a,t.b)=(t.b,t.a);geometry.Add(t);}
+            state[owner].position=Vector3.zero;state[owner].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        }
+        TakeRender.Settings Settings(bool accelerated)
+        {var s=EdgeSettings();s.fftSize=4;s.spectralHop=2;s.raysPerBin=4;s.maxBounces=2;s.diffractionFactor=0;s.airAbsorption=false;s.useBvh=accelerated;return s;}
+        using var linear=new TransportSolver(scene,geometry.ToArray(),Settings(false),shader,3,sampleRate:500);
+        using var bvh=new TransportSolver(scene,geometry.ToArray(),Settings(true),shader,3,sampleRate:500);
+        var frames=new AcousticTake.State[3*state.Length];var a=new TakeRender.DirectPath[3];var b=new TakeRender.DirectPath[3];
+        for(int frame=0;frame<12;frame++)
+        {
+            state[0].position=new Vector3(-3.5f+frame*.4f,.1f,0);state[1].position=new Vector3(3,.3f,planar?0:.2f);
+            state[2].rotation=Quaternion.Euler(planar?0:frame*3,planar?0:frame*5,frame*7);
+            state[3].position=new Vector3(.4f,frame%3==0?5:0,0);state[3].rotation=Quaternion.Euler(0,0,-frame*11);
+            state[4].flags=frame%4==0?0:AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+            Array.Copy(state,0,frames,(frame%3)*state.Length,state.Length);
+            if(frame%3!=2)continue;
+            linear.BeginSolve(frames,3);bvh.BeginSolve(frames,3);Assert.That(linear.TryComplete(a,true)&&bvh.TryComplete(b,true),Is.True);
+            var expected=linear.RayPaths;var actual=bvh.RayPaths;Assert.That(actual.Length,Is.EqualTo(expected.Length));
+            for(int i=0;i<actual.Length;i++)
+            {
+                Near(actual[i].delaySeconds,expected[i].delaySeconds,"BVH medium query preserves delay through moving nested/overlapping solids",1e-6f);
+                Near(actual[i].pressureGain,expected[i].pressureGain,"BVH medium query preserves attenuation and equal-volume owner priority",1e-5f);
+            }
+        }
+    }
+    [TestCase(false),TestCase(true),Category("GPU")]
+    public void TransportNativeVolumes(bool bvh)
     {
         var shader=RequireGpu();
         var material=ScriptableObject.CreateInstance<AudioMaterial>();
@@ -330,7 +367,7 @@ public partial class TakeChecks
                             transmission=new[]{1f,1f},ior=new[]{.5f,1.5f},damping=new[]{.1f,.1f}}};
                         var state=States(2);state[0].position=Vector3.down*.1f;state[1].position=Vector3.up*.1f;state[2].position=Vector3.zero;
                         state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
-                        var settings=SpectralSettings();settings.speedOfSound=1000;
+                        var settings=SpectralSettings();settings.speedOfSound=1000;settings.useBvh=bvh;
                         using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
                         solver.Solve(state,new TakeRender.DirectPath[1]);var paths=solver.RayPaths;
                         foreach(int bin in new[]{0,16,32,64})

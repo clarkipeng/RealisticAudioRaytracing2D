@@ -136,42 +136,59 @@ static const uint AirMedium = 0xffffffff;
 // Containment uses the nearest oriented boundary of each closed object. Choosing
 // the smallest containing volume restores the parent medium in nested solids, and
 // also initializes sources/listeners that start inside one. No fixed medium stack.
+// Volumes are sorted by owner. Reuse the scene's TLAS for candidate owners,
+// then its BLAS for the exact oriented-boundary test; no second spatial index.
+void ConsiderMedium(uint v, uint root, uint stateOffset, float3 location, bool is2D,
+                    inout uint selected, inout float smallest)
+{
+    Volume volume = Volumes[v];
+    State pose = States[stateOffset + volume.ids.z];
+    if ((pose.flags.x & 3) != 3 || volume.maximum.w > smallest ||
+        (volume.maximum.w == smallest && v >= selected)) return;
+    float4 inverse = pose.rotation; inverse.xyz = -inverse.xyz;
+    float3 local = Rotate(inverse, location - pose.position.xyz);
+    if (any(local.xy < volume.minimum.xy) || any(local.xy > volume.maximum.xy) ||
+        (!is2D && (local.z < volume.minimum.z || local.z > volume.maximum.z))) return;
+    float3 probe = is2D ? normalize(float3(.819, .573, 0)) : normalize(float3(.819, .573, .371));
+    float nearest = 1e30; float3 normal = 0;
+#ifdef USE_BVH
+    uint hit = 0xffffffff;
+    TraceMesh(root, pose, stateOffset, location, probe, RayEpsilon, is2D, false, hit, nearest, normal);
+#else
+    for (uint i = 0; i < volume.ids.y; i++)
+    {
+        float3 n; float distance = PrimitiveDistance(volume.ids.x + i, stateOffset, location, probe, is2D, n);
+        if (distance < nearest) { nearest = distance; normal = n; }
+    }
+#endif
+    if (nearest < 1e30 && dot(normal, probe) * volume.minimum.w > 0)
+    { smallest = volume.maximum.w; selected = v; }
+}
 uint MediumAt(uint stateOffset, float3 location, bool is2D)
 {
-    uint medium = AirMedium;
-    float smallest = 1e30;
-    float3 probe = is2D ? normalize(float3(.819, .573, 0)) : normalize(float3(.819, .573, .371));
-    for (uint v = 0; v < VolumeCount; v++)
+    if (VolumeCount == 0) return AirMedium;
+    uint selected = AirMedium; float smallest = 1e30;
+#ifdef USE_BVH
+    uint stack[32], depth = 0, index = 0;
+    while (index < BvhNodeCount)
     {
-        Volume volume = Volumes[v];
-        State pose = States[stateOffset + volume.ids.z];
-        if ((pose.flags.x & 3) != 3)
-            continue;
-        float4 inverse = pose.rotation;
-        inverse.xyz = -inverse.xyz;
-        float3 local = Rotate(inverse, location - pose.position.xyz);
-        if (any(local.xy < volume.minimum.xy) || any(local.xy > volume.maximum.xy) ||
-            (!is2D && (local.z < volume.minimum.z || local.z > volume.maximum.z)))
-            continue;
-        float nearest = 1e30;
-        float3 normal = 0;
-        for (uint i = 0; i < volume.ids.y; i++)
+        BvhNode node = BvhNodes[index];
+        if (all(location.xy >= node.boundsMin.xy) && all(location.xy <= node.boundsMax.xy) &&
+            (is2D || (location.z >= node.boundsMin.z && location.z <= node.boundsMax.z)))
         {
-            float3 n;
-            float distance = PrimitiveDistance(volume.ids.x + i, stateOffset, location, probe, is2D, n);
-            if (distance < nearest)
-            {
-                nearest = distance;
-                normal = n;
-            }
+            if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
+            uint lo = 0, hi = VolumeCount;
+            while (lo < hi) { uint mid = lo + (hi-lo)/2; if (Volumes[mid].ids.z < node.links.z) lo = mid+1; else hi = mid; }
+            if (lo < VolumeCount) if (Volumes[lo].ids.z == node.links.z)
+                ConsiderMedium(lo, node.links.x, stateOffset, location, is2D, selected, smallest);
         }
-        if (volume.maximum.w < smallest && nearest < 1e30 && dot(normal, probe) * volume.minimum.w > 0)
-        {
-            smallest = volume.maximum.w;
-            medium = volume.ids.w;
-        }
+        if (depth == 0) break;
+        index = stack[--depth];
     }
-    return medium;
+#else
+    for (uint v = 0; v < VolumeCount; v++) ConsiderMedium(v, 0, stateOffset, location, is2D, selected, smallest);
+#endif
+    return selected == AirMedium ? AirMedium : Volumes[selected].ids.w;
 }
 float MediumIor(uint medium, uint frequencyBin)
 {
