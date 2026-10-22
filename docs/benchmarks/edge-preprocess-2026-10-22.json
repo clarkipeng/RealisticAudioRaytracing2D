@@ -1,0 +1,701 @@
+{
+  "date": "2026-10-22",
+  "baseCommit": "47e4fd7",
+  "status": "offline experiment, not applied to production",
+  "hardware": "Apple M5 / Unity 6000.4.1f1 / Metal / silent batch, nice15, one worker",
+  "settings": {
+    "sampleRate": 1000,
+    "fftSize": 4,
+    "frequencyBins": [
+      0,
+      250,
+      500
+    ],
+    "bounces": 2,
+    "horizonSeconds": 0.1,
+    "raysPerBin": [
+      1024,
+      16384
+    ],
+    "seeds": [
+      17,
+      29,
+      71,
+      113
+    ]
+  },
+  "limitations": [
+    "Comparison against same sampler on unsplit geometry is not independent wave accuracy.",
+    "Reported seed variation uses nearby RNG offsets whose ray sequences overlap; not independent replicates or confidence bounds.",
+    "Timing includes path readback and CPU double-precision pressure sum is outside solve timing. One map pass per variant; sequential stages on shared hardware.",
+    "One finite cube pressure map; topology controls also cover sheets, gaps, bends and material breaks. Arbitrary imported meshes unvalidated.",
+    "No runtime changes applied; exact-equality merging conservatively skips nonidentical local wedge representations."
+  ],
+  "tests": [
+    {
+      "file": "gpu-153512.xml",
+      "passed": 1,
+      "seconds": 0.9705509
+    },
+    {
+      "file": "gpu-153547.xml",
+      "passed": 1,
+      "seconds": 0.4944756
+    },
+    {
+      "file": "gpu-153648.xml",
+      "passed": 1,
+      "seconds": 5.0882669
+    },
+    {
+      "file": "gpu-153717.xml",
+      "passed": 1,
+      "seconds": 5.0247961
+    }
+  ],
+  "measurements": {
+    "topology": [
+      {
+        "shape": "bent",
+        "level": 0,
+        "triangles": 4,
+        "oldEdges": 7,
+        "newEdges": 7,
+        "oldGpuBytes": 444028,
+        "newGpuBytes": 444028,
+        "oldSetupMs": 2.4419,
+        "newSetupMs": 1.4819,
+        "oldQueryMedianMs": 0.47,
+        "newQueryMedianMs": 0.4779
+      },
+      {
+        "shape": "bent",
+        "level": 1,
+        "triangles": 16,
+        "oldEdges": 14,
+        "newEdges": 7,
+        "oldGpuBytes": 445820,
+        "newGpuBytes": 445260,
+        "oldSetupMs": 1.6057000000000001,
+        "newSetupMs": 1.453,
+        "oldQueryMedianMs": 0.4709,
+        "newQueryMedianMs": 0.4861
+      },
+      {
+        "shape": "bent",
+        "level": 2,
+        "triangles": 64,
+        "oldEdges": 28,
+        "newEdges": 7,
+        "oldGpuBytes": 451804,
+        "newGpuBytes": 450124,
+        "oldSetupMs": 1.9002999999999999,
+        "newSetupMs": 1.8117,
+        "oldQueryMedianMs": 0.5628,
+        "newQueryMedianMs": 0.6022
+      },
+      {
+        "shape": "bent",
+        "level": 3,
+        "triangles": 256,
+        "oldEdges": 56,
+        "newEdges": 7,
+        "oldGpuBytes": 473372,
+        "newGpuBytes": 469452,
+        "oldSetupMs": 2.2635,
+        "newSetupMs": 2.0446,
+        "oldQueryMedianMs": 0.6809999999999999,
+        "newQueryMedianMs": 0.7161
+      },
+      {
+        "shape": "bent",
+        "level": 4,
+        "triangles": 1024,
+        "oldEdges": 112,
+        "newEdges": 7,
+        "oldGpuBytes": 554908,
+        "newGpuBytes": 546508,
+        "oldSetupMs": 4.1083,
+        "newSetupMs": 3.8596,
+        "oldQueryMedianMs": 0.8225,
+        "newQueryMedianMs": 0.8151
+      },
+      {
+        "shape": "box",
+        "level": 0,
+        "triangles": 12,
+        "oldEdges": 12,
+        "newEdges": 12,
+        "oldGpuBytes": 445388,
+        "newGpuBytes": 445388,
+        "oldSetupMs": 135.74720000000002,
+        "newSetupMs": 19.3785,
+        "oldQueryMedianMs": 0.7611,
+        "newQueryMedianMs": 0.6692
+      },
+      {
+        "shape": "box",
+        "level": 1,
+        "triangles": 48,
+        "oldEdges": 24,
+        "newEdges": 12,
+        "oldGpuBytes": 450332,
+        "newGpuBytes": 449372,
+        "oldSetupMs": 151.3407,
+        "newSetupMs": 5.4979,
+        "oldQueryMedianMs": 0.7038,
+        "newQueryMedianMs": 0.9728
+      },
+      {
+        "shape": "box",
+        "level": 2,
+        "triangles": 192,
+        "oldEdges": 48,
+        "newEdges": 12,
+        "oldGpuBytes": 467996,
+        "newGpuBytes": 465116,
+        "oldSetupMs": 28.8108,
+        "newSetupMs": 3.3007,
+        "oldQueryMedianMs": 2.3757,
+        "newQueryMedianMs": 1.5437
+      },
+      {
+        "shape": "box",
+        "level": 3,
+        "triangles": 768,
+        "oldEdges": 96,
+        "newEdges": 12,
+        "oldGpuBytes": 534428,
+        "newGpuBytes": 527708,
+        "oldSetupMs": 3.8466,
+        "newSetupMs": 4.0594,
+        "oldQueryMedianMs": 1.1563999999999999,
+        "newQueryMedianMs": 1.9651999999999998
+      },
+      {
+        "shape": "box",
+        "level": 4,
+        "triangles": 3072,
+        "oldEdges": 192,
+        "newEdges": 12,
+        "oldGpuBytes": 791708,
+        "newGpuBytes": 777308,
+        "oldSetupMs": 9.7469,
+        "newSetupMs": 39.2495,
+        "oldQueryMedianMs": 1.4327999999999999,
+        "newQueryMedianMs": 1.9703
+      },
+      {
+        "shape": "gap",
+        "level": 0,
+        "triangles": 4,
+        "oldEdges": 8,
+        "newEdges": 8,
+        "oldGpuBytes": 444108,
+        "newGpuBytes": 444108,
+        "oldSetupMs": 2.6519999999999997,
+        "newSetupMs": 1.3829,
+        "oldQueryMedianMs": 0.4358,
+        "newQueryMedianMs": 0.4151
+      },
+      {
+        "shape": "gap",
+        "level": 1,
+        "triangles": 16,
+        "oldEdges": 16,
+        "newEdges": 8,
+        "oldGpuBytes": 445980,
+        "newGpuBytes": 445340,
+        "oldSetupMs": 1.6795,
+        "newSetupMs": 1.3975000000000002,
+        "oldQueryMedianMs": 0.5306,
+        "newQueryMedianMs": 0.5795
+      },
+      {
+        "shape": "gap",
+        "level": 2,
+        "triangles": 64,
+        "oldEdges": 32,
+        "newEdges": 8,
+        "oldGpuBytes": 452124,
+        "newGpuBytes": 450204,
+        "oldSetupMs": 1.7164000000000001,
+        "newSetupMs": 1.6525999999999998,
+        "oldQueryMedianMs": 0.521,
+        "newQueryMedianMs": 0.5342
+      },
+      {
+        "shape": "gap",
+        "level": 3,
+        "triangles": 256,
+        "oldEdges": 64,
+        "newEdges": 8,
+        "oldGpuBytes": 474012,
+        "newGpuBytes": 469532,
+        "oldSetupMs": 2.2038,
+        "newSetupMs": 2.0416000000000003,
+        "oldQueryMedianMs": 0.6424,
+        "newQueryMedianMs": 0.638
+      },
+      {
+        "shape": "gap",
+        "level": 4,
+        "triangles": 1024,
+        "oldEdges": 128,
+        "newEdges": 8,
+        "oldGpuBytes": 556188,
+        "newGpuBytes": 546588,
+        "oldSetupMs": 4.1335,
+        "newSetupMs": 3.8162000000000003,
+        "oldQueryMedianMs": 0.7757000000000001,
+        "newQueryMedianMs": 0.7850999999999999
+      },
+      {
+        "shape": "materials",
+        "level": 0,
+        "triangles": 12,
+        "oldEdges": 12,
+        "newEdges": 12,
+        "oldGpuBytes": 445388,
+        "newGpuBytes": 445388,
+        "oldSetupMs": 1.7519,
+        "newSetupMs": 1.7965,
+        "oldQueryMedianMs": 0.5308999999999999,
+        "newQueryMedianMs": 0.4897
+      },
+      {
+        "shape": "materials",
+        "level": 1,
+        "triangles": 48,
+        "oldEdges": 24,
+        "newEdges": 16,
+        "oldGpuBytes": 450332,
+        "newGpuBytes": 449692,
+        "oldSetupMs": 2.2715,
+        "newSetupMs": 1.6436,
+        "oldQueryMedianMs": 0.8206,
+        "newQueryMedianMs": 0.727
+      },
+      {
+        "shape": "materials",
+        "level": 2,
+        "triangles": 192,
+        "oldEdges": 48,
+        "newEdges": 16,
+        "oldGpuBytes": 467996,
+        "newGpuBytes": 465436,
+        "oldSetupMs": 2.5829999999999997,
+        "newSetupMs": 2.2314000000000003,
+        "oldQueryMedianMs": 1.1156,
+        "newQueryMedianMs": 1.0317
+      },
+      {
+        "shape": "materials",
+        "level": 3,
+        "triangles": 768,
+        "oldEdges": 96,
+        "newEdges": 16,
+        "oldGpuBytes": 534428,
+        "newGpuBytes": 528028,
+        "oldSetupMs": 3.5881,
+        "newSetupMs": 3.1698999999999997,
+        "oldQueryMedianMs": 1.4065,
+        "newQueryMedianMs": 1.2982
+      },
+      {
+        "shape": "materials",
+        "level": 4,
+        "triangles": 3072,
+        "oldEdges": 192,
+        "newEdges": 16,
+        "oldGpuBytes": 791708,
+        "newGpuBytes": 777628,
+        "oldSetupMs": 10.262,
+        "newSetupMs": 9.252,
+        "oldQueryMedianMs": 1.5877000000000001,
+        "newQueryMedianMs": 1.3867
+      },
+      {
+        "shape": "sheet",
+        "level": 0,
+        "triangles": 2,
+        "oldEdges": 4,
+        "newEdges": 4,
+        "oldGpuBytes": 443620,
+        "newGpuBytes": 443620,
+        "oldSetupMs": 1.7753999999999999,
+        "newSetupMs": 1.5798999999999999,
+        "oldQueryMedianMs": 0.40030000000000004,
+        "newQueryMedianMs": 0.4823
+      },
+      {
+        "shape": "sheet",
+        "level": 1,
+        "triangles": 8,
+        "oldEdges": 8,
+        "newEdges": 4,
+        "oldGpuBytes": 444508,
+        "newGpuBytes": 444188,
+        "oldSetupMs": 2.2433,
+        "newSetupMs": 1.4079,
+        "oldQueryMedianMs": 0.42260000000000003,
+        "newQueryMedianMs": 0.45580000000000004
+      },
+      {
+        "shape": "sheet",
+        "level": 2,
+        "triangles": 32,
+        "oldEdges": 16,
+        "newEdges": 4,
+        "oldGpuBytes": 447580,
+        "newGpuBytes": 446620,
+        "oldSetupMs": 2.4011,
+        "newSetupMs": 1.4551,
+        "oldQueryMedianMs": 0.4925,
+        "newQueryMedianMs": 0.5062000000000001
+      },
+      {
+        "shape": "sheet",
+        "level": 3,
+        "triangles": 128,
+        "oldEdges": 32,
+        "newEdges": 4,
+        "oldGpuBytes": 458524,
+        "newGpuBytes": 456284,
+        "oldSetupMs": 1.8414,
+        "newSetupMs": 1.6312,
+        "oldQueryMedianMs": 0.6135999999999999,
+        "newQueryMedianMs": 0.6132000000000001
+      },
+      {
+        "shape": "sheet",
+        "level": 4,
+        "triangles": 512,
+        "oldEdges": 64,
+        "newEdges": 4,
+        "oldGpuBytes": 499612,
+        "newGpuBytes": 494812,
+        "oldSetupMs": 2.8568000000000002,
+        "newSetupMs": 2.5082,
+        "oldQueryMedianMs": 0.7058,
+        "newQueryMedianMs": 0.7010000000000001
+      }
+    ],
+    "fields": [
+      {
+        "rays": 1024,
+        "points": 195,
+        "coarse": {
+          "medianQueryMs": 0.7029,
+          "mapQuerySeconds": 0.1432754,
+          "relativeDifferenceFromCoarse": 0.0,
+          "seedVariationRelativeToOwnMean": 0.014520490633719085,
+          "subsetPoints": 25
+        },
+        "split": {
+          "medianQueryMs": 1.625,
+          "mapQuerySeconds": 0.36017489999999996,
+          "relativeDifferenceFromCoarse": 0.5182803903745885,
+          "seedVariationRelativeToOwnMean": 0.41581483049298007,
+          "subsetPoints": 25
+        },
+        "merged": {
+          "medianQueryMs": 1.1081,
+          "mapQuerySeconds": 0.2850547,
+          "relativeDifferenceFromCoarse": 0.5188534516623958,
+          "seedVariationRelativeToOwnMean": 0.4170540182168736,
+          "subsetPoints": 25
+        }
+      },
+      {
+        "rays": 16384,
+        "points": 195,
+        "coarse": {
+          "medianQueryMs": 2.2361999999999997,
+          "mapQuerySeconds": 0.435373,
+          "relativeDifferenceFromCoarse": 0.0,
+          "seedVariationRelativeToOwnMean": 0.0007892659039822593,
+          "subsetPoints": 25
+        },
+        "split": {
+          "medianQueryMs": 5.9661,
+          "mapQuerySeconds": 1.1331281,
+          "relativeDifferenceFromCoarse": 0.06832423400399752,
+          "seedVariationRelativeToOwnMean": 0.02668503885485049,
+          "subsetPoints": 25
+        },
+        "merged": {
+          "medianQueryMs": 5.9271,
+          "mapQuerySeconds": 1.1307647,
+          "relativeDifferenceFromCoarse": 0.04718673423881945,
+          "seedVariationRelativeToOwnMean": 0.026798417925703796,
+          "subsetPoints": 25
+        }
+      }
+    ],
+    "dcControl": [
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 1024,
+        "seed": 17,
+        "value": 0.16070264342124574,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 1024,
+        "seed": 29,
+        "value": 0.16159569079172798,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 1024,
+        "seed": 71,
+        "value": 0.1589687273663003,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 1024,
+        "seed": 113,
+        "value": 0.17267917984281667,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 16384,
+        "seed": 17,
+        "value": 0.16004120408524614,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 16384,
+        "seed": 29,
+        "value": 0.16004120408524614,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 16384,
+        "seed": 71,
+        "value": 0.1600539826313252,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 0,
+        "rays": 16384,
+        "seed": 113,
+        "value": 0.16028608287797397,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 1024,
+        "seed": 17,
+        "value": 0.10895843617618084,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 1024,
+        "seed": 29,
+        "value": 0.10895843617618084,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 1024,
+        "seed": 71,
+        "value": 0.10895843617618084,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 1024,
+        "seed": 113,
+        "value": 0.10039147734642029,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 16384,
+        "seed": 17,
+        "value": 0.20401162429334363,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 16384,
+        "seed": 29,
+        "value": 0.20401162429334363,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 16384,
+        "seed": 71,
+        "value": 0.20401162429334363,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "baseline",
+        "level": 4,
+        "rays": 16384,
+        "seed": 113,
+        "value": 0.2034761893664836,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 1024,
+        "seed": 17,
+        "value": 0.16070264342124574,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 1024,
+        "seed": 29,
+        "value": 0.16159569079172798,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 1024,
+        "seed": 71,
+        "value": 0.1589687273663003,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 1024,
+        "seed": 113,
+        "value": 0.17267917984281667,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 16384,
+        "seed": 17,
+        "value": 0.16004120408524614,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 16384,
+        "seed": 29,
+        "value": 0.16004120408524614,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 16384,
+        "seed": 71,
+        "value": 0.1600539826313252,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 0,
+        "rays": 16384,
+        "seed": 113,
+        "value": 0.16028608287797397,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 1024,
+        "seed": 17,
+        "value": 0.11132974596694112,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 1024,
+        "seed": 29,
+        "value": 0.11132974596694112,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 1024,
+        "seed": 71,
+        "value": 0.11132974596694112,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 1024,
+        "seed": 113,
+        "value": 0.10145924100652337,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 16384,
+        "seed": 17,
+        "value": 0.17424865596694872,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 16384,
+        "seed": 29,
+        "value": 0.17424865596694872,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 16384,
+        "seed": 71,
+        "value": 0.17424865596694872,
+        "reference": 0.16099047638
+      },
+      {
+        "variant": "merged",
+        "level": 4,
+        "rays": 16384,
+        "seed": 113,
+        "value": 0.1736317494069226,
+        "reference": 0.16099047638
+      }
+    ],
+    "decision": "Keep offline: edge-count reduction works but clear speed/variance benefit and general mesh acoustic accuracy are not established."
+  },
+  "archive": {
+    "file": "edge-preprocess-2026-10-22.zip",
+    "sha256": "9a67e1c8d4f0a329bb0e9e7577b0f3c3c3b5de4769aab4879e3686c01fe2f27b",
+    "bytes": 310777
+  }
+}

@@ -8,6 +8,39 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**Conservative edge preprocessing experiment — 22 October**
+
+Tried merging redundant collinear edge segments without changing any triangles. The prototype keeps owner, wedge orientation, material pair and open/solid status, merges only degree-two joints, and remaps every original triangle's edge links. Five geometry controls preserve gaps, bends and material breaks. It is **kept offline**, with no extra production code.
+
+| Highest-detail fixture | Triangles | Original edge segments | Merged edges |
+|---|---:|---:|---:|
+| Cube | 3,072 | 192 | 12 |
+| Cube with material breaks | 3,072 | 192 | 16 |
+| Flat sheet | 512 | 64 | 4 |
+| Two sheets with a gap | 1,024 | 128 | 8 |
+| Bent sheet | 1,024 | 112 | 7 |
+
+The cube saves 14,400 GPU-buffer bytes, but surface triangles and their BVH remain. Topology-run solve medians vary: cube 1.43 → 1.97 ms, material cube 1.59 → 1.39 ms, other shapes roughly unchanged. This is not a reliable universal performance improvement.
+
+![2D pressure maps for edge preprocessing](benchmarks/edge-preprocess-fields-2026-10-22.png)
+
+These are actual XY receiver positions through a finite cube at z=0, not infinite-height 2D geometry. Seed 17, 250 Hz, two interactions and a 0.1 s horizon; each query computes three bins. The left column is the **same renderer on a simpler triangulation**, not independent acoustic truth. Shared absolute scale, no fitting/smoothing. Four measurement runs passed; exact sources, controls, raw data and source hashes are archived.
+
+| Rays/bin | 12-triangle cube map | Tessellated cube map | Tessellated + merged edges map | Split / merged complex difference from simple cube |
+|---|---:|---:|---:|---:|
+| 1,024 | 0.143 s | 0.360 s | 0.285 s | 51.83% / 51.89% |
+| 16,384 | 0.435 s | 1.133 s | 1.131 s | 6.83% / 4.72% |
+
+Each map has 195 sampled cells. Timings sum warmed solves including GPU path readback, excluding CPU complex summation, setup and plotting. Stages were sequential on shared hardware; no timing repeats or equal-accuracy speed claim. Nearby seeds 17/29/71/113 were also sampled at 25 fixed probes. Their ray sequences overlap under the current seed construction, so archived variation is not an independent-replicate uncertainty estimate.
+
+**Finding:** shrinking the edge list alone does not remove the renderer's dependence on visual tessellation. The first-reflection estimator samples triangle IDs; the local diffraction proposal sees the blocking triangle's edges. Interior triangles can have no local edge candidates. The shader also scans sibling triangles during first-reflection visibility. These mechanisms remain after edge merging. This audit identifies causes worth isolating, not a proof that they explain every observed discrepancy.
+
+The practical next step is a dedicated acoustic proxy that removes redundant *surface* tessellation while retaining openings, material regions, winding and physical wedges. Keep visual meshes/styles separate from that proxy. Do not add the merger to production based only on a smaller edge count, and do not confuse this experiment with fixing the older 3D sampler's wave-reference error.
+
+[Numerical ledger](benchmarks/edge-preprocess-2026-10-22.json) · [Source, raw results, controls and figure generator](benchmarks/edge-preprocess-2026-10-22.zip).
+
+---
+
 **Finite 3D scaling: material lookup and unchanged bounds — 22 October**
 
 The existing production 3D renderer now reuses its BLAS/TLAS to identify the material containing a ray vertex, and skips rebuilding world bounds for unchanged instance poses. The 442,440-triangle static test falls from **339.41 → 58.47 → 12.86 ms** across the original, material-lookup-only and pose-cache stages. This is **26.39× faster in this measured workload**, with unchanged physics to floating-point precision. Runtime changes total **30 net lines across two existing files**; no runtime dependency or new runtime file was added.
@@ -21,7 +54,7 @@ The scale series contains 15–36,870 closed solids: posts, shelves, rotated cra
 **Two changes, measured separately**
 
 1. **Material containment:** surface rays already used BLAS/TLAS, but `MediumAt` still visited every closed volume and scanned its triangles. It now descends the existing TLAS around the query point, finds each candidate in the owner-sorted volume array, and uses the existing BLAS for the oriented boundary test. Nested media, winding and equal-volume owner priority are retained. No extra spatial index or GPU buffer. The linear fallback remains for correctness checks. GPU change checkpoint: `2d9f3fb`.
-2. **Unchanged instance bounds:** after the first change, CPU pose/bounds preparation dominated the largest case. Cache the exact position/quaternion for every owner in every frame of the submitted batch; only changed owners need world-bound transforms. Any changed bounds still trigger a full TLAS refit. This accompanying checkpoint preserves both this change and all three measured stages.
+2. **Unchanged instance bounds:** after the first change, CPU pose/bounds preparation dominated the largest case. Cache the exact position/quaternion for every owner in every frame of the submitted batch; only changed owners need world-bound transforms. Any changed bounds still trigger a full TLAS refit. Bounds-cache checkpoint `47e4fd7` preserves this change and all three measured stages.
 
 ```text
 Before, each solve:
@@ -270,7 +303,8 @@ Keep this as a reproducible **offline prototype**, not a production renderer or 
 | `cb0fef8`, 21 Oct | Build visibility/counts and generate complete routes on GPU | Removed CPU route lists while retaining complete-route height guidance. Full-map equivalence passes; the measured diffraction stage is much faster. Restricted to one/two-edge rigid planar paths for this experiment. |
 | `5da651f`, 21 Oct | Reuse route descriptors; compute mirror/mixed fields on GPU; sweep total sample budget | Removes the CPU common-field bottleneck. More samples improve larger maps, but errors plateau and dense-scene fidelity remains poor. Detailed comparisons above. |
 | `a24de93`, 22 Oct | Bounded candidate paths, GPU compaction and BVH visibility | Removes quadratic descriptors; 100-box control is 11.7× faster. Original maps retain accuracy; large-scene accuracy and small-scene regressions remain unresolved. |
-| `2d9f3fb` and this checkpoint, 22 Oct | Finite 3D material BVH queries and cached unchanged instance bounds | Largest static geometry workload is 26.39× faster; nearby-probe control 31.40×. Preserves the older 3D sampler, whose ~720% room error remains unacceptable. Three stages, code, raw data and plots archived above. |
+| `2d9f3fb`, `47e4fd7`, 22 Oct | Finite 3D material BVH queries and cached unchanged instance bounds | Largest static geometry workload is 26.39× faster; nearby-probe control 31.40×. Preserves the older 3D sampler, whose ~720% room error remains unacceptable. Three stages, code, raw data and plots archived above. |
+| This edge-preprocessing checkpoint, 22 Oct | Merge collinear wedges while preserving materials, gaps and face links | Edge counts fall up to 16×; query speed and sampling robustness do not consistently improve. Kept offline. Surface tessellation remains the next proxy/sampling target. |
 
 The chronology is a record of accepted and rejected experiments, not a claim that each step improved the renderer. In particular, source/listener/bidirectional sampling was tested on a restricted integral before independent wave references existed. Its earlier “error” cannot be read as error against real-world acoustics. To inspect historical code without switching your Unity checkout, use `git show REVISION:path/to/file`.
 
