@@ -1,5 +1,16 @@
 # Cleanup validation and measured bottlenecks
 
+## Finite 3D material queries and unchanged instance bounds — 2026-10-22
+
+[Consolidated report and 2D height-slice maps](acoustic-experiment-history.md) · [Numerical ledger](benchmarks/finite3d-scaling-2026-10-22.json) · [Reproduction archive](benchmarks/finite3d-scaling-2026-10-22.zip).
+
+- Reuse existing BLAS/TLAS for material containment; retain linear fallback, winding and equal-volume priority. Cache exact per-frame poses to avoid unchanged world-bound transforms. Net 30 runtime lines in two existing files; no new runtime dependency.
+- 36,870 solids / 442,440 triangles, 1,024 rays/bin, three bins, eight bounces: static median **339.41 → 58.47 → 12.86 ms**; one-crate movement **323.29 → 78.47 → 32.26 ms**. GPU buffers 94.54 MB unchanged; CPU pose cache adds 1.03 MB. Offline host timings, not broadband realtime figures.
+- Nearby-receiver control (4–8 m) avoids the scale series' fixed-horizon limitation: static **314.95 → 10.03 ms**, moving **310.92 → 17.86 ms**, bitwise identical pressure. Raw less-favorable runs remain archived.
+- Final 14 integrated Unity cases pass. Main old/new pressure discrepancy ≤0.0000233%; pose cache bitwise preserves material-only output. Compiler warnings remain.
+- **No physical accuracy improvement:** existing finite-3D sampler still has 719.89% complex-pressure error at 125 Hz in the reference room. The newer bounded complete-route prototype remains 2.5D. Preprocessing/simplifying acoustic meshes is documented as a next experiment, not implemented or claimed to solve that error.
+- Journal now explicitly checkpoints each completed experiment and preserves failed attempts, settings, raw evidence and plots for a future process video. Git alone does not capture ignored scratch data or gameplay footage.
+
 ## Bounded GPU paths and BVH scaling — 2026-10-22
 
 [Consolidated report, seven 2D maps and scaling plot](acoustic-experiment-history.md). The offline prototype removes quadratic path buffers and bounds candidate work. At 100 boxes, old/new median solve+readback is 68.04 → 5.80 ms with effectively identical pressure; at 2,500 boxes, 15.45 ms and 10.15 MB of GPU buffers. Full-map old/new pressure differs by at most 0.0222%; BVH/linear output is bitwise equal. Large-scene wave accuracy is unqualified, an O(E) per-receiver scan remains, and small-scene timing regressions are reported. Final suites: 67 + 4 + 19 test executions; independent CPU controls pass. No runtime changes. [Source/data archive](benchmarks/gpu-scalable-2026-10-22.zip).

@@ -1,0 +1,1534 @@
+{
+  "experiment": "finite3d-material-bvh-and-pose-cache",
+  "date": "2026-10-22",
+  "baseCommit": "a24de93340ff6c52b08021029ea252e4ab7e6444",
+  "materialQueryCommit": "2d9f3fb",
+  "productionHashes": {
+    "Assets/Shaders/Transport.hlsl": "36a2d41ab9d7d5ece2b20161f8a31b15e78febdb4f087583f08bdc6dcbfcc82c",
+    "Assets/Shaders/Geometry.hlsl": "88dd35cac9d786da3e3101d25d1867d8087aae63894489f7c623a5bbc9b39433",
+    "Assets/Scripts/Simulation/DirectBvh.cs": "0c57c404809f08deaf785eddaafefa58907c1859f95ffb4b1748d1693930f8d2",
+    "Assets/Tests/Editor/RayTransportChecks.cs": "113a01946c42b6330fc86d362a22b1eb9b5b048890d5e3ba2c11a9c71f761075"
+  },
+  "hardware": {
+    "chip": "Apple M5",
+    "memoryGB": 16,
+    "unity": "6000.4.1f1",
+    "backend": "Metal",
+    "jobWorkers": 1,
+    "nice": 15,
+    "audioDisabled": true
+  },
+  "parameters": {
+    "raysPerBin": [
+      256,
+      1024
+    ],
+    "frequencyBins": 3,
+    "maxBounces": 8,
+    "seed": 17,
+    "maximumDelaySeconds": 0.4,
+    "warehouseHz": [
+      0,
+      125,
+      250
+    ],
+    "roomHz": [
+      0,
+      62.5,
+      125
+    ],
+    "warehouseProbeCount": 5,
+    "warehouseRepeats": 3,
+    "roomProbeCount": 1060
+  },
+  "interpretation": {
+    "renderer": "Existing finite-3D production path sampler; bounded complete-route 2.5D prototype not ported.",
+    "timing": "Host-observed warmed state submission + trace + GPU reduction + blocking readback + finite checks. Setup/cold dispatch, Unity startup, audio/DSP excluded. Two frequency rows share one query time.",
+    "memory": "Allocated GPU buffers and accounted CPU numeric buffers; excludes general managed scene data and Unity/driver memory.",
+    "horizon": "Scale-series extent grows at fixed delay horizon; nearby-probe control keeps all source/receiver distances 4\u20138 m.",
+    "motion": "One crate alternates position between queries; not continuous moving-boundary acoustic accuracy.",
+    "accuracy": "~720% room complex-pressure error at 125 Hz / 1024 rays. Geometry acceleration preserves the result; not high-fidelity or DLSS-teacher validation.",
+    "waveReference": "Reused order-4 finite-room FEM, 80033 DOFs; two refinements. Observed convergence is not certified error.",
+    "tests": "Passing suites overlap; do not sum as unique coverage. Existing compiler warnings retained in logs.",
+    "preprocessing": "Acoustic mesh/edge simplification proposed in report, not implemented."
+  },
+  "tests": [
+    {
+      "file": "gpu-145426.xml",
+      "passed": 3,
+      "durationSeconds": 2.4312092,
+      "startUtc": "2026-10-22 21:54:50Z"
+    },
+    {
+      "file": "gpu-145534.xml",
+      "passed": 4,
+      "durationSeconds": 91.7128537,
+      "startUtc": "2026-10-22 21:55:44Z"
+    },
+    {
+      "file": "gpu-145750.xml",
+      "passed": 10,
+      "durationSeconds": 61.9967946,
+      "startUtc": "2026-10-22 21:58:07Z"
+    },
+    {
+      "file": "gpu-145959.xml",
+      "passed": 17,
+      "durationSeconds": 111.8260481,
+      "startUtc": "2026-10-22 22:00:14Z"
+    },
+    {
+      "file": "gpu-151812.xml",
+      "passed": 13,
+      "durationSeconds": 28.3315694,
+      "startUtc": "2026-10-22 22:18:30Z"
+    },
+    {
+      "file": "gpu-152250.xml",
+      "passed": 1,
+      "durationSeconds": 11.8241175,
+      "startUtc": "2026-10-22 22:23:07Z"
+    },
+    {
+      "file": "gpu-152405.xml",
+      "passed": 1,
+      "durationSeconds": 2.7741582,
+      "startUtc": "2026-10-22 22:24:18Z"
+    },
+    {
+      "file": "production-152056.xml",
+      "passed": 14,
+      "durationSeconds": 1.1058622,
+      "startUtc": "2026-10-22 22:21:14Z"
+    }
+  ],
+  "measurements": {
+    "scaling": [
+      {
+        "scene": "hall-1",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 180,
+        "objects": 15,
+        "pressureRelativeDifference": 7.788162824788704e-09,
+        "old": {
+          "medianMs": 5.0105,
+          "p95Ms": 25.171839999999936,
+          "totalSeconds": 0.13709280000000001,
+          "uploadMedianMs": 0.09989999999999999,
+          "bvhUpdateMedianMs": 0.015200000000000003,
+          "gpuBytes": 370332,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0507567,
+          "coldSeconds": 0.5857607,
+          "bvhBuildSeconds": 0.0021406
+        },
+        "media": {
+          "medianMs": 2.1407000000000003,
+          "p95Ms": 3.5978499999999984,
+          "totalSeconds": 0.03547420000000001,
+          "uploadMedianMs": 0.03620000000000001,
+          "bvhUpdateMedianMs": 0.010599999999999986,
+          "gpuBytes": 370332,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0096831,
+          "coldSeconds": 0.0111259,
+          "bvhBuildSeconds": 0.0001667
+        },
+        "new": {
+          "medianMs": 4.9302,
+          "p95Ms": 5.30068,
+          "totalSeconds": 0.07436690000000001,
+          "uploadMedianMs": 0.028200000000000034,
+          "bvhUpdateMedianMs": 0.0011999999999999986,
+          "gpuBytes": 370332,
+          "cpuNumericBytes": 13721,
+          "setupSeconds": 0.0199823,
+          "coldSeconds": 0.0474808,
+          "bvhBuildSeconds": 0.0002202
+        },
+        "speedRatio": 1.0162873717090586
+      },
+      {
+        "scene": "hall-1",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 180,
+        "objects": 15,
+        "pressureRelativeDifference": 7.788162824788704e-09,
+        "old": {
+          "medianMs": 4.2548,
+          "p95Ms": 5.41366,
+          "totalSeconds": 0.06674870000000002,
+          "uploadMedianMs": 0.09889999999999985,
+          "bvhUpdateMedianMs": 0.01929999999999998,
+          "gpuBytes": 370332,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0507567,
+          "coldSeconds": 0.5857607,
+          "bvhBuildSeconds": 0.0021406
+        },
+        "media": {
+          "medianMs": 2.1459,
+          "p95Ms": 2.20837,
+          "totalSeconds": 0.032075,
+          "uploadMedianMs": 0.04819999999999998,
+          "bvhUpdateMedianMs": 0.015299999999999992,
+          "gpuBytes": 370332,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0096831,
+          "coldSeconds": 0.0111259,
+          "bvhBuildSeconds": 0.0001667
+        },
+        "new": {
+          "medianMs": 3.8909000000000002,
+          "p95Ms": 5.302049999999999,
+          "totalSeconds": 0.061908899999999996,
+          "uploadMedianMs": 0.03309999999999999,
+          "bvhUpdateMedianMs": 0.007199999999999999,
+          "gpuBytes": 370332,
+          "cpuNumericBytes": 13721,
+          "setupSeconds": 0.0199823,
+          "coldSeconds": 0.0474808,
+          "bvhBuildSeconds": 0.0002202
+        },
+        "speedRatio": 1.0935259194530829
+      },
+      {
+        "scene": "hall-1",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 180,
+        "objects": 15,
+        "pressureRelativeDifference": 7.788162824788704e-09,
+        "old": {
+          "medianMs": 4.988700000000001,
+          "p95Ms": 5.502369999999999,
+          "totalSeconds": 0.0753484,
+          "uploadMedianMs": 0.06309999999999996,
+          "bvhUpdateMedianMs": 0.0131,
+          "gpuBytes": 1366236,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0045715,
+          "coldSeconds": 0.0063709,
+          "bvhBuildSeconds": 0.00023730000000000002
+        },
+        "media": {
+          "medianMs": 2.4775,
+          "p95Ms": 2.7386299999999997,
+          "totalSeconds": 0.03777570000000001,
+          "uploadMedianMs": 0.04100000000000002,
+          "bvhUpdateMedianMs": 0.010700000000000003,
+          "gpuBytes": 1366236,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0038365,
+          "coldSeconds": 0.0024947,
+          "bvhBuildSeconds": 0.0001786
+        },
+        "new": {
+          "medianMs": 4.4371,
+          "p95Ms": 39.74454,
+          "totalSeconds": 0.15468239999999997,
+          "uploadMedianMs": 0.0401,
+          "bvhUpdateMedianMs": 0.0014999999999999992,
+          "gpuBytes": 1366236,
+          "cpuNumericBytes": 13721,
+          "setupSeconds": 0.0046723,
+          "coldSeconds": 0.0045543,
+          "bvhBuildSeconds": 0.0003641
+        },
+        "speedRatio": 1.1243154312501409
+      },
+      {
+        "scene": "hall-1",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 180,
+        "objects": 15,
+        "pressureRelativeDifference": 7.788162824788704e-09,
+        "old": {
+          "medianMs": 4.4897,
+          "p95Ms": 5.99725,
+          "totalSeconds": 0.0676352,
+          "uploadMedianMs": 0.09770000000000004,
+          "bvhUpdateMedianMs": 0.020300000000000006,
+          "gpuBytes": 1366236,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0045715,
+          "coldSeconds": 0.0063709,
+          "bvhBuildSeconds": 0.00023730000000000002
+        },
+        "media": {
+          "medianMs": 2.7599,
+          "p95Ms": 3.4119599999999997,
+          "totalSeconds": 0.0424527,
+          "uploadMedianMs": 0.0733000000000001,
+          "bvhUpdateMedianMs": 0.02149999999999998,
+          "gpuBytes": 1366236,
+          "cpuNumericBytes": 13301,
+          "setupSeconds": 0.0038365,
+          "coldSeconds": 0.0024947,
+          "bvhBuildSeconds": 0.0001786
+        },
+        "new": {
+          "medianMs": 4.3058000000000005,
+          "p95Ms": 28.53984999999993,
+          "totalSeconds": 0.13923819999999998,
+          "uploadMedianMs": 0.043900000000000036,
+          "bvhUpdateMedianMs": 0.008000000000000005,
+          "gpuBytes": 1366236,
+          "cpuNumericBytes": 13721,
+          "setupSeconds": 0.0046723,
+          "coldSeconds": 0.0045543,
+          "bvhBuildSeconds": 0.0003641
+        },
+        "speedRatio": 1.0427098332481768
+      },
+      {
+        "scene": "hall-4",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 1800,
+        "objects": 150,
+        "pressureRelativeDifference": 9.481478785503259e-08,
+        "old": {
+          "medianMs": 7.4243,
+          "p95Ms": 9.357399999999998,
+          "totalSeconds": 0.11346839999999998,
+          "uploadMedianMs": 0.18249999999999994,
+          "bvhUpdateMedianMs": 0.11359999999999994,
+          "gpuBytes": 711612,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0138583,
+          "coldSeconds": 0.0098444,
+          "bvhBuildSeconds": 0.0023267
+        },
+        "media": {
+          "medianMs": 4.579599999999999,
+          "p95Ms": 5.31448,
+          "totalSeconds": 0.06935339999999998,
+          "uploadMedianMs": 0.2144,
+          "bvhUpdateMedianMs": 0.12600000000000003,
+          "gpuBytes": 711612,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0229826,
+          "coldSeconds": 0.0069363,
+          "bvhBuildSeconds": 0.003739
+        },
+        "new": {
+          "medianMs": 6.9838000000000005,
+          "p95Ms": 8.144639999999999,
+          "totalSeconds": 0.1025454,
+          "uploadMedianMs": 0.053000000000000096,
+          "bvhUpdateMedianMs": 0.007699999999999998,
+          "gpuBytes": 711612,
+          "cpuNumericBytes": 130901,
+          "setupSeconds": 0.0223563,
+          "coldSeconds": 0.0088635,
+          "bvhBuildSeconds": 0.005280699999999999
+        },
+        "speedRatio": 1.0630745439445572
+      },
+      {
+        "scene": "hall-4",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 1800,
+        "objects": 150,
+        "pressureRelativeDifference": 9.481478785503259e-08,
+        "old": {
+          "medianMs": 6.0095,
+          "p95Ms": 7.50024,
+          "totalSeconds": 0.0931711,
+          "uploadMedianMs": 0.22959999999999994,
+          "bvhUpdateMedianMs": 0.14590000000000003,
+          "gpuBytes": 711612,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0138583,
+          "coldSeconds": 0.0098444,
+          "bvhBuildSeconds": 0.0023267
+        },
+        "media": {
+          "medianMs": 4.4904,
+          "p95Ms": 5.59803,
+          "totalSeconds": 0.06974599999999999,
+          "uploadMedianMs": 0.27209999999999995,
+          "bvhUpdateMedianMs": 0.1619000000000004,
+          "gpuBytes": 711612,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0229826,
+          "coldSeconds": 0.0069363,
+          "bvhBuildSeconds": 0.003739
+        },
+        "new": {
+          "medianMs": 5.4288,
+          "p95Ms": 6.533729999999999,
+          "totalSeconds": 0.0836045,
+          "uploadMedianMs": 0.12610000000000007,
+          "bvhUpdateMedianMs": 0.05659999999999997,
+          "gpuBytes": 711612,
+          "cpuNumericBytes": 130901,
+          "setupSeconds": 0.0223563,
+          "coldSeconds": 0.0088635,
+          "bvhBuildSeconds": 0.005280699999999999
+        },
+        "speedRatio": 1.1069665487768936
+      },
+      {
+        "scene": "hall-4",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 1800,
+        "objects": 150,
+        "pressureRelativeDifference": 9.481478785503259e-08,
+        "old": {
+          "medianMs": 5.9662999999999995,
+          "p95Ms": 6.95524,
+          "totalSeconds": 0.08986869999999998,
+          "uploadMedianMs": 0.13330000000000003,
+          "bvhUpdateMedianMs": 0.09770000000000001,
+          "gpuBytes": 1707516,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0146707,
+          "coldSeconds": 0.0068022,
+          "bvhBuildSeconds": 0.0023522
+        },
+        "media": {
+          "medianMs": 5.938,
+          "p95Ms": 6.6823999999999995,
+          "totalSeconds": 0.0883678,
+          "uploadMedianMs": 0.25529999999999997,
+          "bvhUpdateMedianMs": 0.1617,
+          "gpuBytes": 1707516,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0174229,
+          "coldSeconds": 0.0070934,
+          "bvhBuildSeconds": 0.0020013
+        },
+        "new": {
+          "medianMs": 5.5203999999999995,
+          "p95Ms": 6.09941,
+          "totalSeconds": 0.08256350000000001,
+          "uploadMedianMs": 0.046900000000000004,
+          "bvhUpdateMedianMs": 0.007499999999999993,
+          "gpuBytes": 1707516,
+          "cpuNumericBytes": 130901,
+          "setupSeconds": 0.009926,
+          "coldSeconds": 0.0060732,
+          "bvhBuildSeconds": 0.0012649
+        },
+        "speedRatio": 1.0807731323817116
+      },
+      {
+        "scene": "hall-4",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 1800,
+        "objects": 150,
+        "pressureRelativeDifference": 9.481478785503259e-08,
+        "old": {
+          "medianMs": 5.2924,
+          "p95Ms": 6.1566399999999994,
+          "totalSeconds": 0.0816486,
+          "uploadMedianMs": 0.24370000000000033,
+          "bvhUpdateMedianMs": 0.1439000000000002,
+          "gpuBytes": 1707516,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0146707,
+          "coldSeconds": 0.0068022,
+          "bvhBuildSeconds": 0.0023522
+        },
+        "media": {
+          "medianMs": 6.6057,
+          "p95Ms": 7.6783399999999995,
+          "totalSeconds": 0.10058810000000001,
+          "uploadMedianMs": 0.3912000000000004,
+          "bvhUpdateMedianMs": 0.20739999999999995,
+          "gpuBytes": 1707516,
+          "cpuNumericBytes": 126701,
+          "setupSeconds": 0.0174229,
+          "coldSeconds": 0.0070934,
+          "bvhBuildSeconds": 0.0020013
+        },
+        "new": {
+          "medianMs": 4.7568,
+          "p95Ms": 5.52074,
+          "totalSeconds": 0.0744419,
+          "uploadMedianMs": 0.10819999999999992,
+          "bvhUpdateMedianMs": 0.05529999999999999,
+          "gpuBytes": 1707516,
+          "cpuNumericBytes": 130901,
+          "setupSeconds": 0.009926,
+          "coldSeconds": 0.0060732,
+          "bvhBuildSeconds": 0.0012649
+        },
+        "speedRatio": 1.1125967036663302
+      },
+      {
+        "scene": "hall-8",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 6984,
+        "objects": 582,
+        "pressureRelativeDifference": 1.0233975422980467e-08,
+        "old": {
+          "medianMs": 7.1898,
+          "p95Ms": 24.173749999999952,
+          "totalSeconds": 0.16216609999999998,
+          "uploadMedianMs": 0.5672000000000004,
+          "bvhUpdateMedianMs": 0.43710000000000016,
+          "gpuBytes": 1803708,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0478803,
+          "coldSeconds": 0.0105427,
+          "bvhBuildSeconds": 0.009894
+        },
+        "media": {
+          "medianMs": 6.3743,
+          "p95Ms": 7.845019999999999,
+          "totalSeconds": 0.1012185,
+          "uploadMedianMs": 0.4638000000000003,
+          "bvhUpdateMedianMs": 0.3687,
+          "gpuBytes": 1803708,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0719906,
+          "coldSeconds": 0.0107441,
+          "bvhBuildSeconds": 0.0428325
+        },
+        "new": {
+          "medianMs": 4.6086,
+          "p95Ms": 5.67979,
+          "totalSeconds": 0.0737052,
+          "uploadMedianMs": 0.11509999999999992,
+          "bvhUpdateMedianMs": 0.026599999999999995,
+          "gpuBytes": 1803708,
+          "cpuNumericBytes": 505877,
+          "setupSeconds": 0.0372991,
+          "coldSeconds": 0.0075647,
+          "bvhBuildSeconds": 0.0075891
+        },
+        "speedRatio": 1.5600833224840516
+      },
+      {
+        "scene": "hall-8",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 6984,
+        "objects": 582,
+        "pressureRelativeDifference": 1.0233975422980467e-08,
+        "old": {
+          "medianMs": 7.1671000000000005,
+          "p95Ms": 9.148480000000001,
+          "totalSeconds": 0.11288419999999999,
+          "uploadMedianMs": 0.7611000000000007,
+          "bvhUpdateMedianMs": 0.6131999999999995,
+          "gpuBytes": 1803708,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0478803,
+          "coldSeconds": 0.0105427,
+          "bvhBuildSeconds": 0.009894
+        },
+        "media": {
+          "medianMs": 6.3626000000000005,
+          "p95Ms": 7.94283,
+          "totalSeconds": 0.10104939999999998,
+          "uploadMedianMs": 0.6867000000000002,
+          "bvhUpdateMedianMs": 0.5409000000000004,
+          "gpuBytes": 1803708,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0719906,
+          "coldSeconds": 0.0107441,
+          "bvhBuildSeconds": 0.0428325
+        },
+        "new": {
+          "medianMs": 4.7628,
+          "p95Ms": 5.972060000000001,
+          "totalSeconds": 0.0766173,
+          "uploadMedianMs": 0.3223999999999996,
+          "bvhUpdateMedianMs": 0.2017999999999998,
+          "gpuBytes": 1803708,
+          "cpuNumericBytes": 505877,
+          "setupSeconds": 0.0372991,
+          "coldSeconds": 0.0075647,
+          "bvhBuildSeconds": 0.0075891
+        },
+        "speedRatio": 1.5048080960779373
+      },
+      {
+        "scene": "hall-8",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 6984,
+        "objects": 582,
+        "pressureRelativeDifference": 1.0233975422980467e-08,
+        "old": {
+          "medianMs": 9.0946,
+          "p95Ms": 11.446629999999999,
+          "totalSeconds": 0.14462960000000002,
+          "uploadMedianMs": 0.5289999999999999,
+          "bvhUpdateMedianMs": 0.42200000000000004,
+          "gpuBytes": 2799612,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0312745,
+          "coldSeconds": 0.0093745,
+          "bvhBuildSeconds": 0.0051497
+        },
+        "media": {
+          "medianMs": 9.2055,
+          "p95Ms": 11.289379999999998,
+          "totalSeconds": 0.1413817,
+          "uploadMedianMs": 0.5041999999999998,
+          "bvhUpdateMedianMs": 0.3779,
+          "gpuBytes": 2799612,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0658787,
+          "coldSeconds": 0.0132967,
+          "bvhBuildSeconds": 0.0366183
+        },
+        "new": {
+          "medianMs": 6.3799,
+          "p95Ms": 7.766469999999999,
+          "totalSeconds": 0.10008169999999998,
+          "uploadMedianMs": 0.1053,
+          "bvhUpdateMedianMs": 0.026399999999999993,
+          "gpuBytes": 2799612,
+          "cpuNumericBytes": 505877,
+          "setupSeconds": 0.0388247,
+          "coldSeconds": 0.0083255,
+          "bvhBuildSeconds": 0.0075063
+        },
+        "speedRatio": 1.4255082368062195
+      },
+      {
+        "scene": "hall-8",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 6984,
+        "objects": 582,
+        "pressureRelativeDifference": 1.0233975422980467e-08,
+        "old": {
+          "medianMs": 10.1051,
+          "p95Ms": 12.211780000000001,
+          "totalSeconds": 0.15618880000000002,
+          "uploadMedianMs": 1.0739999999999985,
+          "bvhUpdateMedianMs": 0.8149000000000004,
+          "gpuBytes": 2799612,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0312745,
+          "coldSeconds": 0.0093745,
+          "bvhBuildSeconds": 0.0051497
+        },
+        "media": {
+          "medianMs": 9.511500000000002,
+          "p95Ms": 10.25455,
+          "totalSeconds": 0.1417428,
+          "uploadMedianMs": 0.843400000000001,
+          "bvhUpdateMedianMs": 0.6113000000000004,
+          "gpuBytes": 2799612,
+          "cpuNumericBytes": 489581,
+          "setupSeconds": 0.0658787,
+          "coldSeconds": 0.0132967,
+          "bvhBuildSeconds": 0.0366183
+        },
+        "new": {
+          "medianMs": 7.3514,
+          "p95Ms": 8.277459999999998,
+          "totalSeconds": 0.1083925,
+          "uploadMedianMs": 0.35400000000000015,
+          "bvhUpdateMedianMs": 0.20419999999999988,
+          "gpuBytes": 2799612,
+          "cpuNumericBytes": 505877,
+          "setupSeconds": 0.0388247,
+          "coldSeconds": 0.0083255,
+          "bvhBuildSeconds": 0.0075063
+        },
+        "speedRatio": 1.3745817123269037
+      },
+      {
+        "scene": "hall-16",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 27720,
+        "objects": 2310,
+        "pressureRelativeDifference": 1.158105252759406e-07,
+        "old": {
+          "medianMs": 23.9682,
+          "p95Ms": 35.31985999999999,
+          "totalSeconds": 0.3800931,
+          "uploadMedianMs": 1.9061000000000008,
+          "bvhUpdateMedianMs": 1.6407999999999996,
+          "gpuBytes": 6172092,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1505355,
+          "coldSeconds": 0.1239274,
+          "bvhBuildSeconds": 0.0262612
+        },
+        "media": {
+          "medianMs": 7.5985000000000005,
+          "p95Ms": 10.3065,
+          "totalSeconds": 0.12199229999999998,
+          "uploadMedianMs": 1.7000000000000002,
+          "bvhUpdateMedianMs": 1.4555999999999996,
+          "gpuBytes": 6172092,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1438588,
+          "coldSeconds": 0.0251097,
+          "bvhBuildSeconds": 0.0317101
+        },
+        "new": {
+          "medianMs": 5.822500000000001,
+          "p95Ms": 8.16585,
+          "totalSeconds": 0.098061,
+          "uploadMedianMs": 0.32139999999999946,
+          "bvhUpdateMedianMs": 0.0995000000000002,
+          "gpuBytes": 6172092,
+          "cpuNumericBytes": 2005781,
+          "setupSeconds": 0.2965719,
+          "coldSeconds": 0.0162905,
+          "bvhBuildSeconds": 0.029434000000000002
+        },
+        "speedRatio": 4.11647917561185
+      },
+      {
+        "scene": "hall-16",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 27720,
+        "objects": 2310,
+        "pressureRelativeDifference": 1.158105252759406e-07,
+        "old": {
+          "medianMs": 21.3225,
+          "p95Ms": 60.36475999999993,
+          "totalSeconds": 0.4510434,
+          "uploadMedianMs": 2.8783000000000003,
+          "bvhUpdateMedianMs": 2.4247999999999976,
+          "gpuBytes": 6172092,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1505355,
+          "coldSeconds": 0.1239274,
+          "bvhBuildSeconds": 0.0262612
+        },
+        "media": {
+          "medianMs": 9.7083,
+          "p95Ms": 11.96509,
+          "totalSeconds": 0.1481502,
+          "uploadMedianMs": 3.5136999999999947,
+          "bvhUpdateMedianMs": 2.9543,
+          "gpuBytes": 6172092,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1438588,
+          "coldSeconds": 0.0251097,
+          "bvhBuildSeconds": 0.0317101
+        },
+        "new": {
+          "medianMs": 6.3567,
+          "p95Ms": 8.90235,
+          "totalSeconds": 0.1064366,
+          "uploadMedianMs": 1.1409999999999996,
+          "bvhUpdateMedianMs": 0.7815000000000001,
+          "gpuBytes": 6172092,
+          "cpuNumericBytes": 2005781,
+          "setupSeconds": 0.2965719,
+          "coldSeconds": 0.0162905,
+          "bvhBuildSeconds": 0.029434000000000002
+        },
+        "speedRatio": 3.3543347963566004
+      },
+      {
+        "scene": "hall-16",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 27720,
+        "objects": 2310,
+        "pressureRelativeDifference": 1.158105252759406e-07,
+        "old": {
+          "medianMs": 18.9608,
+          "p95Ms": 54.20405999999993,
+          "totalSeconds": 0.42161869999999996,
+          "uploadMedianMs": 1.6716999999999982,
+          "bvhUpdateMedianMs": 1.4336000000000002,
+          "gpuBytes": 7167996,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1347068,
+          "coldSeconds": 0.0259873,
+          "bvhBuildSeconds": 0.0258673
+        },
+        "media": {
+          "medianMs": 11.6259,
+          "p95Ms": 14.705159999999998,
+          "totalSeconds": 0.18292929999999996,
+          "uploadMedianMs": 1.9480000000000017,
+          "bvhUpdateMedianMs": 1.6767999999999992,
+          "gpuBytes": 7167996,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1846587,
+          "coldSeconds": 0.0215401,
+          "bvhBuildSeconds": 0.0605423
+        },
+        "new": {
+          "medianMs": 7.1171999999999995,
+          "p95Ms": 9.19886,
+          "totalSeconds": 0.11413770000000001,
+          "uploadMedianMs": 0.3198999999999997,
+          "bvhUpdateMedianMs": 0.09980000000000015,
+          "gpuBytes": 7167996,
+          "cpuNumericBytes": 2005781,
+          "setupSeconds": 0.116933,
+          "coldSeconds": 0.015761,
+          "bvhBuildSeconds": 0.021167
+        },
+        "speedRatio": 2.6640813803181027
+      },
+      {
+        "scene": "hall-16",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 27720,
+        "objects": 2310,
+        "pressureRelativeDifference": 1.158105252759406e-07,
+        "old": {
+          "medianMs": 19.6094,
+          "p95Ms": 34.16334,
+          "totalSeconds": 0.3586019999999999,
+          "uploadMedianMs": 2.450599999999997,
+          "bvhUpdateMedianMs": 2.095200000000002,
+          "gpuBytes": 7167996,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1347068,
+          "coldSeconds": 0.0259873,
+          "bvhBuildSeconds": 0.0258673
+        },
+        "media": {
+          "medianMs": 11.8376,
+          "p95Ms": 15.664319999999998,
+          "totalSeconds": 0.19316159999999996,
+          "uploadMedianMs": 2.5017999999999985,
+          "bvhUpdateMedianMs": 2.128900000000003,
+          "gpuBytes": 7167996,
+          "cpuNumericBytes": 1941101,
+          "setupSeconds": 0.1846587,
+          "coldSeconds": 0.0215401,
+          "bvhBuildSeconds": 0.0605423
+        },
+        "new": {
+          "medianMs": 7.5306,
+          "p95Ms": 10.281639999999998,
+          "totalSeconds": 0.12471560000000001,
+          "uploadMedianMs": 1.1222999999999996,
+          "bvhUpdateMedianMs": 0.7815000000000001,
+          "gpuBytes": 7167996,
+          "cpuNumericBytes": 2005781,
+          "setupSeconds": 0.116933,
+          "coldSeconds": 0.015761,
+          "bvhBuildSeconds": 0.021167
+        },
+        "speedRatio": 2.6039624996680213
+      },
+      {
+        "scene": "hall-32",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 110664,
+        "objects": 9222,
+        "pressureRelativeDifference": 2.3267231939255292e-07,
+        "old": {
+          "medianMs": 71.17869999999999,
+          "p95Ms": 219.68238000000002,
+          "totalSeconds": 1.6082288000000002,
+          "uploadMedianMs": 8.1725,
+          "bvhUpdateMedianMs": 7.259699999999994,
+          "gpuBytes": 23645628,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.5653363,
+          "coldSeconds": 0.1505235,
+          "bvhBuildSeconds": 0.10698479999999999
+        },
+        "media": {
+          "medianMs": 12.3595,
+          "p95Ms": 17.735979999999998,
+          "totalSeconds": 0.20603669999999996,
+          "uploadMedianMs": 6.449200000000002,
+          "bvhUpdateMedianMs": 5.697799999999999,
+          "gpuBytes": 23645628,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.9540267,
+          "coldSeconds": 0.0596368,
+          "bvhBuildSeconds": 0.5240041
+        },
+        "new": {
+          "medianMs": 14.6684,
+          "p95Ms": 28.640789999999996,
+          "totalSeconds": 0.2502046,
+          "uploadMedianMs": 1.1183999999999985,
+          "bvhUpdateMedianMs": 0.38280000000000086,
+          "gpuBytes": 23645628,
+          "cpuNumericBytes": 8005397,
+          "setupSeconds": 0.4434939,
+          "coldSeconds": 0.055808,
+          "bvhBuildSeconds": 0.0842476
+        },
+        "speedRatio": 4.85251970221701
+      },
+      {
+        "scene": "hall-32",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 110664,
+        "objects": 9222,
+        "pressureRelativeDifference": 2.3267231939255292e-07,
+        "old": {
+          "medianMs": 72.76599999999999,
+          "p95Ms": 224.40318999999997,
+          "totalSeconds": 1.6804302999999998,
+          "uploadMedianMs": 9.954099999999993,
+          "bvhUpdateMedianMs": 8.360200000000011,
+          "gpuBytes": 23645628,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.5653363,
+          "coldSeconds": 0.1505235,
+          "bvhBuildSeconds": 0.10698479999999999
+        },
+        "media": {
+          "medianMs": 16.4569,
+          "p95Ms": 22.82501,
+          "totalSeconds": 0.2696451,
+          "uploadMedianMs": 9.606799999999998,
+          "bvhUpdateMedianMs": 8.379799999999992,
+          "gpuBytes": 23645628,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.9540267,
+          "coldSeconds": 0.0596368,
+          "bvhBuildSeconds": 0.5240041
+        },
+        "new": {
+          "medianMs": 12.4846,
+          "p95Ms": 18.266409999999997,
+          "totalSeconds": 0.1965582,
+          "uploadMedianMs": 4.4570000000000025,
+          "bvhUpdateMedianMs": 3.087399999999997,
+          "gpuBytes": 23645628,
+          "cpuNumericBytes": 8005397,
+          "setupSeconds": 0.4434939,
+          "coldSeconds": 0.055808,
+          "bvhBuildSeconds": 0.0842476
+        },
+        "speedRatio": 5.828460663537477
+      },
+      {
+        "scene": "hall-32",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 110664,
+        "objects": 9222,
+        "pressureRelativeDifference": 2.3267231939255292e-07,
+        "old": {
+          "medianMs": 81.3715,
+          "p95Ms": 219.31378999999995,
+          "totalSeconds": 1.7465148000000001,
+          "uploadMedianMs": 6.7395999999999985,
+          "bvhUpdateMedianMs": 5.902199999999996,
+          "gpuBytes": 24641532,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.5215936,
+          "coldSeconds": 0.0936265,
+          "bvhBuildSeconds": 0.0868543
+        },
+        "media": {
+          "medianMs": 13.4934,
+          "p95Ms": 18.016129999999997,
+          "totalSeconds": 0.21809539999999997,
+          "uploadMedianMs": 6.448899999999994,
+          "bvhUpdateMedianMs": 5.69,
+          "gpuBytes": 24641532,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.4756452,
+          "coldSeconds": 0.0486143,
+          "bvhBuildSeconds": 0.0900042
+        },
+        "new": {
+          "medianMs": 7.9854,
+          "p95Ms": 13.311189999999998,
+          "totalSeconds": 0.1469783,
+          "uploadMedianMs": 1.1229000000000031,
+          "bvhUpdateMedianMs": 0.38290000000000024,
+          "gpuBytes": 24641532,
+          "cpuNumericBytes": 8005397,
+          "setupSeconds": 0.8221766,
+          "coldSeconds": 0.0544812,
+          "bvhBuildSeconds": 0.0876503
+        },
+        "speedRatio": 10.190034312620531
+      },
+      {
+        "scene": "hall-32",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 110664,
+        "objects": 9222,
+        "pressureRelativeDifference": 2.3267231939255292e-07,
+        "old": {
+          "medianMs": 84.0026,
+          "p95Ms": 232.46525999999997,
+          "totalSeconds": 1.7966241,
+          "uploadMedianMs": 10.146900000000015,
+          "bvhUpdateMedianMs": 8.760600000000007,
+          "gpuBytes": 24641532,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.5215936,
+          "coldSeconds": 0.0936265,
+          "bvhBuildSeconds": 0.0868543
+        },
+        "media": {
+          "medianMs": 17.5067,
+          "p95Ms": 22.62166,
+          "totalSeconds": 0.2787186,
+          "uploadMedianMs": 9.880799999999995,
+          "bvhUpdateMedianMs": 8.392100000000013,
+          "gpuBytes": 24641532,
+          "cpuNumericBytes": 7747181,
+          "setupSeconds": 0.4756452,
+          "coldSeconds": 0.0486143,
+          "bvhBuildSeconds": 0.0900042
+        },
+        "new": {
+          "medianMs": 14.624500000000001,
+          "p95Ms": 19.37669,
+          "totalSeconds": 0.22266100000000003,
+          "uploadMedianMs": 6.247400000000014,
+          "bvhUpdateMedianMs": 4.284700000000003,
+          "gpuBytes": 24641532,
+          "cpuNumericBytes": 8005397,
+          "setupSeconds": 0.8221766,
+          "coldSeconds": 0.0544812,
+          "bvhBuildSeconds": 0.0876503
+        },
+        "speedRatio": 5.7439638962015795
+      },
+      {
+        "scene": "hall-64",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 442440,
+        "objects": 36870,
+        "pressureRelativeDifference": 6.879074516138263e-08,
+        "old": {
+          "medianMs": 318.64340000000004,
+          "p95Ms": 1905.50342,
+          "totalSeconds": 11.619812799999998,
+          "uploadMedianMs": 25.582300000000004,
+          "bvhUpdateMedianMs": 22.662000000000003,
+          "gpuBytes": 93539772,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 2.0039345,
+          "coldSeconds": 0.5894466,
+          "bvhBuildSeconds": 0.37239659999999997
+        },
+        "media": {
+          "medianMs": 40.477399999999996,
+          "p95Ms": 55.43937999999999,
+          "totalSeconds": 0.6460047999999999,
+          "uploadMedianMs": 30.024999999999995,
+          "bvhUpdateMedianMs": 26.526999999999994,
+          "gpuBytes": 93539772,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 1.980958,
+          "coldSeconds": 0.3169483,
+          "bvhBuildSeconds": 0.42068300000000003
+        },
+        "new": {
+          "medianMs": 12.1104,
+          "p95Ms": 25.608309999999985,
+          "totalSeconds": 0.23423839999999999,
+          "uploadMedianMs": 4.305900000000001,
+          "bvhUpdateMedianMs": 1.5188000000000006,
+          "gpuBytes": 93539772,
+          "cpuNumericBytes": 32003861,
+          "setupSeconds": 1.8722845,
+          "coldSeconds": 0.2534151,
+          "bvhBuildSeconds": 0.37007710000000005
+        },
+        "speedRatio": 26.311550402959444
+      },
+      {
+        "scene": "hall-64",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 442440,
+        "objects": 36870,
+        "pressureRelativeDifference": 6.879074516138263e-08,
+        "old": {
+          "medianMs": 343.47270000000003,
+          "p95Ms": 1909.3358899999998,
+          "totalSeconds": 11.812758899999999,
+          "uploadMedianMs": 39.583000000000034,
+          "bvhUpdateMedianMs": 33.290799999999955,
+          "gpuBytes": 93539772,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 2.0039345,
+          "coldSeconds": 0.5894466,
+          "bvhBuildSeconds": 0.37239659999999997
+        },
+        "media": {
+          "medianMs": 62.3019,
+          "p95Ms": 87.81317,
+          "totalSeconds": 0.9744888999999999,
+          "uploadMedianMs": 44.97740000000006,
+          "bvhUpdateMedianMs": 38.32420000000003,
+          "gpuBytes": 93539772,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 1.980958,
+          "coldSeconds": 0.3169483,
+          "bvhBuildSeconds": 0.42068300000000003
+        },
+        "new": {
+          "medianMs": 27.4726,
+          "p95Ms": 37.544349999999994,
+          "totalSeconds": 0.43115989999999993,
+          "uploadMedianMs": 18.471300000000024,
+          "bvhUpdateMedianMs": 12.316699999999999,
+          "gpuBytes": 93539772,
+          "cpuNumericBytes": 32003861,
+          "setupSeconds": 1.8722845,
+          "coldSeconds": 0.2534151,
+          "bvhBuildSeconds": 0.37007710000000005
+        },
+        "speedRatio": 12.502373273734559
+      },
+      {
+        "scene": "hall-64",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 15,
+        "triangles": 442440,
+        "objects": 36870,
+        "pressureRelativeDifference": 6.879074516138263e-08,
+        "old": {
+          "medianMs": 339.41179999999997,
+          "p95Ms": 1897.40922,
+          "totalSeconds": 11.6498226,
+          "uploadMedianMs": 25.536700000000025,
+          "bvhUpdateMedianMs": 22.743800000000007,
+          "gpuBytes": 94535676,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 1.9750869,
+          "coldSeconds": 0.5477869,
+          "bvhBuildSeconds": 0.4219101
+        },
+        "media": {
+          "medianMs": 58.4712,
+          "p95Ms": 79.28165999999999,
+          "totalSeconds": 0.9024947999999999,
+          "uploadMedianMs": 42.18979999999994,
+          "bvhUpdateMedianMs": 37.50819999999999,
+          "gpuBytes": 94535676,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 3.7505052,
+          "coldSeconds": 0.443306,
+          "bvhBuildSeconds": 0.6386618
+        },
+        "new": {
+          "medianMs": 12.8615,
+          "p95Ms": 27.626119999999982,
+          "totalSeconds": 0.2563279,
+          "uploadMedianMs": 4.340500000000025,
+          "bvhUpdateMedianMs": 1.5217999999999967,
+          "gpuBytes": 94535676,
+          "cpuNumericBytes": 32003861,
+          "setupSeconds": 2.3325631,
+          "coldSeconds": 0.2778178,
+          "bvhBuildSeconds": 0.3766688
+        },
+        "speedRatio": 26.389752361699646
+      },
+      {
+        "scene": "hall-64",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": true,
+        "queries": 15,
+        "triangles": 442440,
+        "objects": 36870,
+        "pressureRelativeDifference": 6.879074516138263e-08,
+        "old": {
+          "medianMs": 323.28970000000004,
+          "p95Ms": 1877.64345,
+          "totalSeconds": 11.560613400000001,
+          "uploadMedianMs": 39.08619999999996,
+          "bvhUpdateMedianMs": 33.23549999999997,
+          "gpuBytes": 94535676,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 1.9750869,
+          "coldSeconds": 0.5477869,
+          "bvhBuildSeconds": 0.4219101
+        },
+        "media": {
+          "medianMs": 78.4726,
+          "p95Ms": 100.55803999999999,
+          "totalSeconds": 1.2290344000000002,
+          "uploadMedianMs": 61.19230000000009,
+          "bvhUpdateMedianMs": 49.04229999999998,
+          "gpuBytes": 94535676,
+          "cpuNumericBytes": 30971501,
+          "setupSeconds": 3.7505052,
+          "coldSeconds": 0.443306,
+          "bvhBuildSeconds": 0.6386618
+        },
+        "new": {
+          "medianMs": 32.2581,
+          "p95Ms": 44.652249999999995,
+          "totalSeconds": 0.48766400000000004,
+          "uploadMedianMs": 19.064199999999975,
+          "bvhUpdateMedianMs": 12.821600000000016,
+          "gpuBytes": 94535676,
+          "cpuNumericBytes": 32003861,
+          "setupSeconds": 2.3325631,
+          "coldSeconds": 0.2778178,
+          "bvhBuildSeconds": 0.3766688
+        },
+        "speedRatio": 10.021969675833358
+      },
+      {
+        "scene": "room-map",
+        "raysPerBin": 256,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 1060,
+        "triangles": 1634,
+        "objects": 1,
+        "pressureRelativeDifference": 7.755679609092971e-08,
+        "old": {
+          "medianMs": 11.03855,
+          "p95Ms": 13.939245,
+          "totalSeconds": 11.922306299999999,
+          "uploadMedianMs": 0.03720000000000112,
+          "bvhUpdateMedianMs": 0.0016000000000000389,
+          "gpuBytes": 569732,
+          "cpuNumericBytes": 76261,
+          "setupSeconds": 0.014788,
+          "coldSeconds": 0.010549,
+          "bvhBuildSeconds": 0.0036063
+        },
+        "media": {
+          "medianMs": 8.08235,
+          "p95Ms": 9.60324,
+          "totalSeconds": 8.6281922,
+          "uploadMedianMs": 0.12110000000000679,
+          "bvhUpdateMedianMs": 0.0043999999999999985,
+          "gpuBytes": 569732,
+          "cpuNumericBytes": 76261,
+          "setupSeconds": 0.0263931,
+          "coldSeconds": 0.0178723,
+          "bvhBuildSeconds": 0.0074765
+        },
+        "new": {
+          "medianMs": 6.8677,
+          "p95Ms": 8.11244,
+          "totalSeconds": 7.2938072,
+          "uploadMedianMs": 0.04370000000000068,
+          "bvhUpdateMedianMs": 0.0006000000000000146,
+          "gpuBytes": 569732,
+          "cpuNumericBytes": 76289,
+          "setupSeconds": 0.0138879,
+          "coldSeconds": 0.0096886,
+          "bvhBuildSeconds": 0.0035557
+        },
+        "speedRatio": 1.607313947901044
+      },
+      {
+        "scene": "room-map",
+        "raysPerBin": 1024,
+        "bins": 3,
+        "maxBounces": 8,
+        "moving": false,
+        "queries": 1060,
+        "triangles": 1634,
+        "objects": 1,
+        "pressureRelativeDifference": 7.755679609092971e-08,
+        "old": {
+          "medianMs": 14.68615,
+          "p95Ms": 17.422985,
+          "totalSeconds": 15.643572099999998,
+          "uploadMedianMs": 0.07419999999999996,
+          "bvhUpdateMedianMs": 0.0027999999999998512,
+          "gpuBytes": 1565636,
+          "cpuNumericBytes": 76261,
+          "setupSeconds": 0.0629226,
+          "coldSeconds": 0.0124833,
+          "bvhBuildSeconds": 0.0197735
+        },
+        "media": {
+          "medianMs": 12.487950000000001,
+          "p95Ms": 17.443645,
+          "totalSeconds": 13.029833199999999,
+          "uploadMedianMs": 0.12595000000000076,
+          "bvhUpdateMedianMs": 0.00490000000000001,
+          "gpuBytes": 1565636,
+          "cpuNumericBytes": 76261,
+          "setupSeconds": 0.0404006,
+          "coldSeconds": 0.0095792,
+          "bvhBuildSeconds": 0.007075700000000001
+        },
+        "new": {
+          "medianMs": 8.086900000000002,
+          "p95Ms": 9.50728,
+          "totalSeconds": 8.648538700000001,
+          "uploadMedianMs": 0.02185000000000034,
+          "bvhUpdateMedianMs": 0.00020000000000000486,
+          "gpuBytes": 1565636,
+          "cpuNumericBytes": 76289,
+          "setupSeconds": 0.0129577,
+          "coldSeconds": 0.0082094,
+          "bvhBuildSeconds": 0.0036923999999999998
+        },
+        "speedRatio": 1.816041993841892
+      }
+    ],
+    "accuracy": [
+      {
+        "hz": 62.5,
+        "raysPerBin": 256,
+        "points": 1060,
+        "referenceRefinementChangePercent": 0.08046879869187022,
+        "referenceMeshSeconds": 0.2455877909960691,
+        "referenceSolveSeconds": 8.62495608300378,
+        "old": {
+          "errorPercent": 2413.3730463993425,
+          "within3dBPercent": 17.547169811320753,
+          "medianSolveMs": 11.03855,
+          "fieldSolveSeconds": 11.922306299999999
+        },
+        "media": {
+          "errorPercent": 2413.373074005619,
+          "within3dBPercent": 17.547169811320753,
+          "medianSolveMs": 8.08235,
+          "fieldSolveSeconds": 8.6281922
+        },
+        "new": {
+          "errorPercent": 2413.373074005619,
+          "within3dBPercent": 17.547169811320753,
+          "medianSolveMs": 6.8677,
+          "fieldSolveSeconds": 7.2938072
+        }
+      },
+      {
+        "hz": 62.5,
+        "raysPerBin": 1024,
+        "points": 1060,
+        "referenceRefinementChangePercent": 0.08046879869187022,
+        "referenceMeshSeconds": 0.2455877909960691,
+        "referenceSolveSeconds": 8.62495608300378,
+        "old": {
+          "errorPercent": 699.001958426431,
+          "within3dBPercent": 22.735849056603776,
+          "medianSolveMs": 14.68615,
+          "fieldSolveSeconds": 15.643572099999998
+        },
+        "media": {
+          "errorPercent": 699.0019645147217,
+          "within3dBPercent": 22.735849056603776,
+          "medianSolveMs": 12.487950000000001,
+          "fieldSolveSeconds": 13.029833199999999
+        },
+        "new": {
+          "errorPercent": 699.0019645147217,
+          "within3dBPercent": 22.735849056603776,
+          "medianSolveMs": 8.086900000000002,
+          "fieldSolveSeconds": 8.648538700000001
+        }
+      },
+      {
+        "hz": 125,
+        "raysPerBin": 256,
+        "points": 1060,
+        "referenceRefinementChangePercent": 0.26033387900287164,
+        "referenceMeshSeconds": 0.2455877909960691,
+        "referenceSolveSeconds": 8.021178999988479,
+        "old": {
+          "errorPercent": 2488.0286558399134,
+          "within3dBPercent": 16.88679245283019,
+          "medianSolveMs": 11.03855,
+          "fieldSolveSeconds": 11.922306299999999
+        },
+        "media": {
+          "errorPercent": 2488.0286839765427,
+          "within3dBPercent": 16.88679245283019,
+          "medianSolveMs": 8.08235,
+          "fieldSolveSeconds": 8.6281922
+        },
+        "new": {
+          "errorPercent": 2488.0286839765427,
+          "within3dBPercent": 16.88679245283019,
+          "medianSolveMs": 6.8677,
+          "fieldSolveSeconds": 7.2938072
+        }
+      },
+      {
+        "hz": 125,
+        "raysPerBin": 1024,
+        "points": 1060,
+        "referenceRefinementChangePercent": 0.26033387900287164,
+        "referenceMeshSeconds": 0.2455877909960691,
+        "referenceSolveSeconds": 8.021178999988479,
+        "old": {
+          "errorPercent": 719.8891084890804,
+          "within3dBPercent": 20.849056603773587,
+          "medianSolveMs": 14.68615,
+          "fieldSolveSeconds": 15.643572099999998
+        },
+        "media": {
+          "errorPercent": 719.8891125365593,
+          "within3dBPercent": 20.849056603773587,
+          "medianSolveMs": 12.487950000000001,
+          "fieldSolveSeconds": 13.029833199999999
+        },
+        "new": {
+          "errorPercent": 719.8891125365593,
+          "within3dBPercent": 20.849056603773587,
+          "medianSolveMs": 8.086900000000002,
+          "fieldSolveSeconds": 8.648538700000001
+        }
+      }
+    ],
+    "nearbyListeners": {
+      "distancesMetres": [
+        4.0,
+        8.0,
+        4.0,
+        8.0,
+        6.0
+      ],
+      "pressureRelativeDifference": 0.0,
+      "measurements": [
+        {
+          "moving": false,
+          "old": {
+            "queries": 15,
+            "medianMs": 314.94689999999997,
+            "p95Ms": 358.53847,
+            "nonzeroQueries": 15,
+            "arrivalCountRange": [
+              1.0,
+              103.0
+            ]
+          },
+          "new": {
+            "queries": 15,
+            "medianMs": 10.0297,
+            "p95Ms": 18.128529999999987,
+            "nonzeroQueries": 15,
+            "arrivalCountRange": [
+              1.0,
+              103.0
+            ]
+          },
+          "speedRatio": 31.40142775955412
+        },
+        {
+          "moving": true,
+          "old": {
+            "queries": 15,
+            "medianMs": 310.9221,
+            "p95Ms": 357.08607,
+            "nonzeroQueries": 15,
+            "arrivalCountRange": [
+              1.0,
+              103.0
+            ]
+          },
+          "new": {
+            "queries": 15,
+            "medianMs": 17.8626,
+            "p95Ms": 21.24764999999999,
+            "nonzeroQueries": 15,
+            "arrivalCountRange": [
+              1.0,
+              103.0
+            ]
+          },
+          "speedRatio": 17.40631822914917
+        }
+      ]
+    }
+  },
+  "figures": {
+    "finite3d-pressure-2026-10-22.png": "0478d44c637827df361bf89685add3120020c28ed69cc212d185908079b042a0",
+    "finite3d-scaling-2026-10-22.png": "5f5b418c0ab2c918d2b568d4b67d99f303b8ce317c89e1323b6cd6714f623589",
+    "finite3d-scene-2026-10-22.png": "00bd15792ac52b401c992e590fb402f58cdbdcd9fdd0365110567b711efa3f24"
+  },
+  "archive": {
+    "file": "finite3d-scaling-2026-10-22.zip",
+    "sha256": "9ff210c43941a6e5b2e827f107117fd85fcf737964e07bfaac5f998542baf98e",
+    "bytes": 2111442,
+    "members": 108
+  }
+}

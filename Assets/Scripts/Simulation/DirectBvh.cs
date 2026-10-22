@@ -24,6 +24,9 @@ internal sealed class DirectBvh
     readonly int objectCount,topCount;
     int built;
     bool initialized;
+    struct Pose { public Vector3 position; public Quaternion rotation; }
+    Pose[] previous=Array.Empty<Pose>();
+    int previousFrames;
     public int NodeCount => Nodes.Length;
     public int TopNodeCount => topCount;
     public int PrimitiveCount => local.Length;
@@ -31,7 +34,7 @@ internal sealed class DirectBvh
     public double UpdateSeconds {get;private set;}
     public int UpdateCount {get;private set;}
     public long NumericBytes => (long)Nodes.Length*48+(long)Indices.Length*4+(long)owners.Length*4+
-        (long)roots.Length*(4+48)+(long)centers.Length*12+(stack.Length+meshStack.Length)*4;
+        (long)roots.Length*(4+48)+(long)centers.Length*12+(stack.Length+meshStack.Length)*4+(long)previous.Length*28;
 
     public DirectBvh(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry)
     {
@@ -67,8 +70,17 @@ internal sealed class DirectBvh
     public bool Update(AcousticTake.State[] state,int frames=1)
     {
         long start=Stopwatch.GetTimestamp();bool changed=!initialized;
-        foreach(int owner in owners)
+        int required=checked(owners.Length*frames);if(previous.Length<required)previous=new Pose[required];
+        for(int instance=0;instance<owners.Length;instance++)
         {
+            int owner=owners[instance];bool moved=!initialized||previousFrames!=frames;
+            for(int f=0;f<frames;f++)
+            {
+                int index=f*owners.Length+instance;var pose=state[f*objectCount+owner];var old=previous[index];
+                moved|=!old.position.Equals(pose.position)||!old.rotation.Equals(pose.rotation);
+                previous[index]=new Pose {position=pose.position,rotation=pose.rotation};
+            }
+            if(!moved)continue;
             var box=WorldBounds(Nodes[roots[owner]],state[owner]);
             for(int f=1;f<frames;f++)box=Union(box,WorldBounds(Nodes[roots[owner]],state[f*objectCount+owner]));
             changed|=!box.min.Equals(bounds[owner].min)||!box.max.Equals(bounds[owner].max);bounds[owner]=box;
@@ -80,6 +92,7 @@ internal sealed class DirectBvh
             var node=Nodes[i];var box=node.count==uint.MaxValue?bounds[node.first]:Union(Nodes[node.left],Nodes[node.right]);
             node.min=box.min;node.max=box.max;Nodes[i]=node;
         }
+        previousFrames=frames;
         if(changed)UpdateCount++;
         if(!initialized){initialized=true;BuildSeconds+=TakeRender.Elapsed(start);}else UpdateSeconds+=TakeRender.Elapsed(start);
         return changed;

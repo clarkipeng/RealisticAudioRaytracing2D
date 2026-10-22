@@ -1,6 +1,90 @@
 # Acoustic experiments: history, 2D maps and GPU scaling
 
-The latest offline prototype removes the **quadratic edge-pair buffers and unbounded pair enumeration**. It retains the complete-path diffraction integrator, bounds candidate work, and uses a box BVH for visibility. In the 100-box control, median solve/readback falls from **68.04 to 5.80 ms (11.7×)** with effectively identical pressure. The 2,500-box run completes in **15.45 ms per receiver using 10.15 MB of GPU buffers**. The old descriptor allocation alone would need 33.6 GB there; that allocation is calculated, not a successful old run.
+This document is the experiment journal and source material for a process video. The chronology below includes accepted and rejected approaches; the detailed entries retain their assumptions and limitations.
+
+**Checkpoint practice**
+
+Commit each completed experiment or independently validated improvement, and checkpoint before replacing an approach. Keep each hypothesis, settings/seeds, code revision, raw measurements, before/after figures, conclusion and rejected variants together. Small edits within a run can share a checkpoint; do not discard the unsuccessful run when saving a better result. Preserve artifact sources so figures can be regenerated. Use the existing journal and archives rather than another tracking system.
+
+Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
+
+**Finite 3D scaling: material lookup and unchanged bounds — 22 October**
+
+The existing production 3D renderer now reuses its BLAS/TLAS to identify the material containing a ray vertex, and skips rebuilding world bounds for unchanged instance poses. The 442,440-triangle static test falls from **339.41 → 58.47 → 12.86 ms** across the original, material-lookup-only and pose-cache stages. This is **26.39× faster in this measured workload**, with unchanged physics to floating-point precision. Runtime changes total **30 net lines across two existing files**; no runtime dependency or new runtime file was added.
+
+This is the older finite-3D path sampler. The recently improved bounded complete-route prototype remains **2.5D** and has not been ported to arbitrary finite 3D. The production sampler still has severe spatial pressure error; faster geometry processing does not establish high fidelity or DLSS teacher quality.
+
+![Finite warehouse test geometry](benchmarks/finite3d-scene-2026-10-22.png)
+
+The scale series contains 15–36,870 closed solids: posts, shelves, rotated crates and an enclosure. Each solid has 12 triangles; the largest interior spans 224.5 × 193 × 4.8 m. This stresses many instances and genuine finite edges, not the surface complexity of a detailed scanned mesh. The independent room accuracy case also exercises a 1,634-triangle aggregate mesh. No playable scene or imported environment was added.
+
+**Two changes, measured separately**
+
+1. **Material containment:** surface rays already used BLAS/TLAS, but `MediumAt` still visited every closed volume and scanned its triangles. It now descends the existing TLAS around the query point, finds each candidate in the owner-sorted volume array, and uses the existing BLAS for the oriented boundary test. Nested media, winding and equal-volume owner priority are retained. No extra spatial index or GPU buffer. The linear fallback remains for correctness checks. GPU change checkpoint: `2d9f3fb`.
+2. **Unchanged instance bounds:** after the first change, CPU pose/bounds preparation dominated the largest case. Cache the exact position/quaternion for every owner in every frame of the submitted batch; only changed owners need world-bound transforms. Any changed bounds still trigger a full TLAS refit. This accompanying checkpoint preserves both this change and all three measured stages.
+
+```text
+Before, each solve:
+    transform all instance bounds; refit/upload TLAS if needed
+    trace paths through BLAS/TLAS
+    at each material query, scan closed volumes and their triangles
+
+After, each solve:
+    compare submitted poses with the previous batch
+    transform only changed instance bounds; refit/upload TLAS if needed
+    trace the same paths through BLAS/TLAS
+    at each material query, use TLAS candidates and BLAS boundary intersection
+    reduce pressure on GPU; read back three complex-bin results
+```
+
+The last reduction is the offline benchmark fixture, not a change to the live audio output path. It transfers 48 bytes per solve (three float4s, including diagnostic counts), and checks its sum against independent double-precision CPU summation on the smaller cases outside timed measurements.
+
+| Solids / triangles | Original ms | Material BVH only ms | + pose cache ms | Original / final |
+|---|---:|---:|---:|---:|
+| 15 / 180 | 4.99 | 2.48 | 4.44 | 1.12× |
+| 150 / 1,800 | 5.97 | 5.94 | 5.52 | 1.08× |
+| 582 / 6,984 | 9.09 | 9.21 | 6.38 | 1.43× |
+| 2,310 / 27,720 | 18.96 | 11.63 | 7.12 | 2.66× |
+| 9,222 / 110,664 | 81.37 | 13.49 | 7.99 | 10.19× |
+| 36,870 / 442,440 | 339.41 | 58.47 | 12.86 | 26.39× |
+
+One source/listener pair, 1,024 rays per bin, three bins (0/125/250 Hz), up to eight bounces, seed 17, 0.4 s acoustic horizon; five probes × three repeats. The archive also includes 256 rays/bin and one-crate movement. These are host-observed medians including state preparation/submission, tracing, GPU reduction, blocking readback and finite-output checks. They exclude scene JSON/mesh generation, solver setup, cold dispatch, Unity startup, plotting, audio/DSP and networking. Shared M5 Mac, Metal, Unity 6000.4.1f1, one worker, low priority, audio disabled. No GUI/player window, microphone or speakers used.
+
+![Measured 3D runtime and numeric-buffer memory](benchmarks/finite3d-scaling-2026-10-22.png)
+
+At 442,440 triangles, moving one crate between queries gives **323.29 → 78.47 → 32.26 ms** (10.02× original/final). This measures a sequence of poses and BVH updates, not continuous moving-boundary acoustic accuracy. Static GPU allocations remain **94.54 MB**. Accounted CPU numeric buffers rise **30.97 → 32.00 MB**: the pose cache costs 28 bytes per owner per cached frame, 1.03 MB here. Those figures exclude general managed scene storage and Unity/driver memory. Final setup is 2.33 s and the first solve 0.278 s for this case; setup excludes procedural geometry generation.
+
+The material-only stage's largest static CPU preparation is 42.19 ms, including 37.51 ms for bounds/BVH update. With the cache these become **4.34 ms**, including **1.52 ms**. These components overlap: do not add upload and BVH times. Stages ran sequentially on a shared machine; small-case regressions and timing variation are retained, including 2.48 → 4.44 ms at 180 triangles after adding the cache. The 256-ray cases are not consistently faster than 1,024-ray cases. These measurements do not establish universal speedups.
+
+Scene extent grows at fixed object density, while the 0.4 s horizon stays fixed; several largest-scene receivers are outside that horizon. Therefore a separate **442,440-triangle nearby-receiver control** keeps all five probes 4–8 m from the source, outside solids. All 15 queries have nonzero output. Static median is **314.95 → 10.03 ms (31.40×)**; one-crate movement is **310.92 → 17.86 ms (17.41×)**. Pressure is bit-for-bit identical in this supplemental old/final comparison. It supports the geometry saving within the horizon; it is not a reference-accuracy test. The scale-series curve is not a formal acoustic scaling law.
+
+**Accuracy remains the blocker**
+
+![2D pressure slices through the finite 3D room](benchmarks/finite3d-pressure-2026-10-22.png)
+
+These are 1,060 receiver probes on three XY height slices in a finite 12 × 8 × 6 m room with 25 obstacles, normalized-admittance 0.2 enclosure and rigid obstacles. The old and accelerated 3D fields look the same because these changes preserve the estimator. Absolute pressure scale is shared; teal denotes values above +10 dB. There is no amplitude fitting, smoothing or clipping of recorded values.
+
+At 125 Hz and 1,024 rays/bin, relative complex-pressure L2 error is **719.89%** against the independent FEM reference; only **20.85%** of probe amplitudes lie within ±3 dB. At 256 rays/bin error is **2,488.03%**. The sampler has enormous outliers and incomplete/approximate path physics; this experiment does not isolate all causes. More speed or edge simplification alone cannot establish correctness. The bounded 2.5D integrator's better results must not be attributed to this different 3D algorithm.
+
+The two nonzero-frequency fields are produced together: warmed full-map query time at 1,024 rays/bin is **15.64 → 13.03 → 8.65 s** for the three stages, not that amount per frequency. The existing order-4 FEM reference has 80,033 DOFs. Recorded reference costs are mesh 0.246 s plus solve 8.625 s at 62.5 Hz or 8.021 s at 125 Hz, single CPU thread. These are reused reference runs, not newly timed solves. Refinement changes are 0.080% and 0.260%, respectively; those are observed convergence, not certified error bounds or perfect physical truth. A truncated ray model and steady-state FEM solve also differ in path/time support. This is not an equal-accuracy speed comparison.
+
+Across all main cases, the largest old/final relative pressure difference is **0.0000233%**. The pose-cache stage is bit-for-bit identical to the material-only stage. Final integrated validation passes **14 Unity test cases**: 2D/3D nested/overlapping/moving-media parity, native box/sphere/capsule volumes in BVH and linear modes, BVH/refit controls, material-speed Doppler and boundary clocks. Baseline measurement suites pass 3 + 4 cases; material acceleration 17, pose-cache measurement/controls 13, nearby controls 1 + 1. These overlap and must not be summed as unique coverage. Initial exploratory runs and shader warnings are archived too. Existing compiler warnings remain.
+
+**Geometry preprocessing next, without a new runtime subsystem**
+
+Yes: preprocess a dedicated acoustic representation once per unique mesh, then reuse it across instances. First remove representation noise: weld genuinely duplicate positions while retaining material/topology distinctions, exclude coplanar triangle diagonals, and merge collinear wedge segments only when both adjacent faces and materials agree. Rebuild face-to-edge adjacency and compare pressure to the unsimplified version; changing finite segment parameterization can change a sampler even when the visible shape is identical. Current edge extraction already removes coplanar diagonals; it does not implement general acoustic decimation or collinear-wedge merging.
+
+A flat rectangular face has four boundary sides regardless of its interior render triangulation; those internal diagonals are not physical wedges. Additional lossy decimation needs a measured acoustic error budget over the intended frequency range. Preserve doorways, thin barriers, material boundaries, closed winding and meaningful wedges. Wavelength can inform the budget, but “smaller than a wavelength” is not a safe universal deletion rule. An existing mesh simplifier could handle general geometric reduction; its geometric deviation is not an acoustic-error guarantee. For example, meshoptimizer documents duplicate-vertex welding and topology/seam-aware simplification, while its sloppy variant can merge disjoint features and lose borders. No dependency has been added. [Primary implementation documentation](https://github.com/zeux/meshoptimizer#simplification).
+
+These warehouse solids already have only 12 triangles each. Removing shelves, posts or gaps would change physical geometry, so further reduction requires accuracy measurements. Keep preprocessing an offline import/build step, retain the original geometry for comparison, and validate edge counts, memory, build time, runtime and wave-reference pressure together. It cannot repair the large current 3D estimator error by itself.
+
+Remaining measured scaling costs are per-object state packing/comparison, full TLAS refit/upload when any bounds change, and repeated frequency work. BLAS reuse across identical mesh instances and acoustic proxies are useful next candidates, but this task does not implement them. These tests cover three bins, not full-spectrum realtime audio or trained upscaling.
+
+[Complete numerical ledger](benchmarks/finite3d-scaling-2026-10-22.json) · [Code snapshots, scenes, raw CSVs, tests and reference data](benchmarks/finite3d-scaling-2026-10-22.zip).
+
+---
+
+The preceding offline prototype removes the **quadratic edge-pair buffers and unbounded pair enumeration**. It retains the complete-path diffraction integrator, bounds candidate work, and uses a box BVH for visibility. In the 100-box control, median solve/readback falls from **68.04 to 5.80 ms (11.7×)** with effectively identical pressure. The 2,500-box run completes in **15.45 ms per receiver using 10.15 MB of GPU buffers**. The old descriptor allocation alone would need 33.6 GB there; that allocation is calculated, not a successful old run.
 
 This is a scaling improvement for the **offline two-interaction prototype**, not a production renderer change or proof of ray-tracer scaling at fixed accuracy. There is still linear edge-list preparation per receiver. All seven existing wave-reference maps retain their earlier accuracy; the dense-scene physical error remains large. Some small-scene timings regress. Tests ran silently in the isolated Unity Metal batch runner with audio disabled, one worker and reduced priority.
 
@@ -185,7 +269,8 @@ Keep this as a reproducible **offline prototype**, not a production renderer or 
 | `8e3391d`, 21 Oct | Tune height-proposal widths; stabilize inverse-CDF sampling | Quarter-width guidance improved some full-map results, but held-out gains were mixed. Kept width 1 as default; quarter width remains an experiment. Increasing to 1,048,576 samples improved these maps but did not remove model error. |
 | `cb0fef8`, 21 Oct | Build visibility/counts and generate complete routes on GPU | Removed CPU route lists while retaining complete-route height guidance. Full-map equivalence passes; the measured diffraction stage is much faster. Restricted to one/two-edge rigid planar paths for this experiment. |
 | `5da651f`, 21 Oct | Reuse route descriptors; compute mirror/mixed fields on GPU; sweep total sample budget | Removes the CPU common-field bottleneck. More samples improve larger maps, but errors plateau and dense-scene fidelity remains poor. Detailed comparisons above. |
-| Latest experiment, 22 Oct | Bounded candidate paths, GPU compaction and BVH visibility | Removes quadratic descriptors; 100-box control is 11.7× faster. Original maps retain accuracy; large-scene accuracy and small-scene regressions remain unresolved. |
+| `a24de93`, 22 Oct | Bounded candidate paths, GPU compaction and BVH visibility | Removes quadratic descriptors; 100-box control is 11.7× faster. Original maps retain accuracy; large-scene accuracy and small-scene regressions remain unresolved. |
+| `2d9f3fb` and this checkpoint, 22 Oct | Finite 3D material BVH queries and cached unchanged instance bounds | Largest static geometry workload is 26.39× faster; nearby-probe control 31.40×. Preserves the older 3D sampler, whose ~720% room error remains unacceptable. Three stages, code, raw data and plots archived above. |
 
 The chronology is a record of accepted and rejected experiments, not a claim that each step improved the renderer. In particular, source/listener/bidirectional sampling was tested on a restricted integral before independent wave references existed. Its earlier “error” cannot be read as error against real-world acoustics. To inspect historical code without switching your Unity checkout, use `git show REVISION:path/to/file`.
 
