@@ -1,5 +1,9 @@
 # Cleanup validation and measured bottlenecks
 
+## GPU route generation and experiment history — 2026-10-21
+
+[Consolidated history, pseudocode, timings and all seven 2D scene maps](acoustic-experiment-history.md). The offline GPU route-generation trial reproduces the prepared-route estimator within 0.001% over 2,854 cells. Including CPU preparation, the measured diffraction stage changes from 8.41 to 0.27 seconds for nine boxes and 14.96 to 0.26 seconds for 25 boxes. Cached CPU direct/mirror/mixed calculations remain outside both totals; physical error is unchanged. Final suites pass 25 Unity test executions plus independent CPU comparisons. The [source/data archive](benchmarks/gpu-route-generation-2026-10-21.zip) preserves the experiment without adding live shader variants.
+
 ## GPU sampling tuning — 2026-10-21
 
 **Narrower height proposals give a modest low-budget improvement.** A quarter-width proposal reduced full-map complex-pressure error from 32.02% to 27.90% for nine boxes and 83.23% to 78.76% for 25 boxes at the same 65,536 samples per receiver. Held-out improvements are smaller, some seed/amplitude results regress, and the difference nearly disappears at 1,048,576 samples. Keep `--proposal-scale .25` optional; the default remains `1`. The live renderer is unchanged.

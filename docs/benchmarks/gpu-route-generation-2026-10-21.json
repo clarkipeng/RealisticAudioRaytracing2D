@@ -1,0 +1,348 @@
+{
+  "baseCommit": "8e3391dfc17e24671466f5e4fdf974347f367fe7",
+  "scope": "Offline fixed-budget GPU one/two-edge route generation, rigid XY boxes, point-source infinite extrusion. 250 Hz, seed 17, N=65536, width 1. No live renderer change.",
+  "timing": "Final paired whole-map pass: freshly measured CPU packing/planning plus input/submission and warm GPU stages/readback. Excludes initial buffer allocation/upload, cold compilation, diagnostics, cached CPU direct/reflection/mixed and audio/DSP.",
+  "samples": 65536,
+  "depth": 2,
+  "hz": 250,
+  "seed": 17,
+  "proposalScale": 1,
+  "results": [
+    {
+      "boxes": 1,
+      "probes": 1014,
+      "pureEdgeParity": 1.9779994032827193e-06,
+      "errorPercent": 1.8508629248629895,
+      "within3dBPercent": 100.0,
+      "baselineCpuPreparationSeconds": 0.14708009583409876,
+      "baselineGpuMedianMs": 0.22870000000000001,
+      "baselineStageSeconds": 0.5478571958340988,
+      "generatedPreparationSeconds": 0.0068717499962076545,
+      "generatedInputSeconds": 0.0002478,
+      "generatedGraphWarmMs": 0.21910000000000002,
+      "generatedGraphColdMs": 0.8137,
+      "generatedGpuMedianMs": 0.24020000000000002,
+      "generatedGpuP95Ms": 0.2907,
+      "generatedStageSeconds": 0.25865634999620774,
+      "stageSpeedRatio": 2.118089101010399,
+      "oldInputBytes": 1705332,
+      "newInputBytes": 1318892,
+      "gpuBytes": 1319140
+    },
+    {
+      "boxes": 9,
+      "probes": 960,
+      "pureEdgeParity": 8.174515752108445e-06,
+      "errorPercent": 32.02403339468275,
+      "within3dBPercent": 58.854166666666664,
+      "baselineCpuPreparationSeconds": 8.107459300634218,
+      "baselineGpuMedianMs": 0.23245000000000002,
+      "baselineStageSeconds": 8.412911700634218,
+      "generatedPreparationSeconds": 0.0015665829996578395,
+      "generatedInputSeconds": 0.00021349999999999996,
+      "generatedGraphWarmMs": 0.44939999999999997,
+      "generatedGraphColdMs": 0.7585,
+      "generatedGpuMedianMs": 0.2635,
+      "generatedGpuP95Ms": 0.40691499999999997,
+      "generatedStageSeconds": 0.2673982829996578,
+      "stageSpeedRatio": 31.462100677157245,
+      "oldInputBytes": 38670428,
+      "newInputBytes": 1318588,
+      "gpuBytes": 1330020
+    },
+    {
+      "boxes": 25,
+      "probes": 880,
+      "pureEdgeParity": 7.147890310060778e-06,
+      "errorPercent": 83.23055298819544,
+      "within3dBPercent": 31.363636363636367,
+      "baselineCpuPreparationSeconds": 14.570917900069617,
+      "baselineGpuMedianMs": 0.2375,
+      "baselineStageSeconds": 14.963010100069617,
+      "generatedPreparationSeconds": 0.002334624994546175,
+      "generatedInputSeconds": 0.00021519999999999997,
+      "generatedGraphWarmMs": 0.1656,
+      "generatedGraphColdMs": 0.7575000000000001,
+      "generatedGpuMedianMs": 0.28105,
+      "generatedGpuP95Ms": 0.41842999999999986,
+      "generatedStageSeconds": 0.26040182499454617,
+      "stageSpeedRatio": 57.46123361609697,
+      "oldInputBytes": 59184348,
+      "newInputBytes": 1318204,
+      "gpuBytes": 1400932
+    }
+  ],
+  "plotMetrics": {
+    "larger": [
+      {
+        "scene": 1,
+        "method": "Wave reference",
+        "errorPercent": 0.0,
+        "within3dBPercent": 100.0
+      },
+      {
+        "scene": 1,
+        "method": "1. Old GPU walk \u00b7 256 \u00b7 depth 8",
+        "errorPercent": 156.7235932931087,
+        "within3dBPercent": 71.20315581854044
+      },
+      {
+        "scene": 1,
+        "method": "2. More GPU rays \u00b7 65K \u00b7 depth 8",
+        "errorPercent": 123.97882494047492,
+        "within3dBPercent": 50.69033530571993
+      },
+      {
+        "scene": 1,
+        "method": "3. Complete routes \u00b7 CPU \u00b7 65K \u00b7 depth 2",
+        "errorPercent": 1.8508717662998113,
+        "within3dBPercent": 100.0
+      },
+      {
+        "scene": 1,
+        "method": "4. GPU port + tuning \u00b7 1M \u00b7 depth 2",
+        "errorPercent": 1.8302228052011462,
+        "within3dBPercent": 100.0
+      },
+      {
+        "scene": 1,
+        "method": "5. GPU-generated routes \u00b7 65K \u00b7 depth 2",
+        "errorPercent": 1.8508629248629895,
+        "within3dBPercent": 100.0
+      },
+      {
+        "scene": 9,
+        "method": "Wave reference",
+        "errorPercent": 0.0,
+        "within3dBPercent": 100.0
+      },
+      {
+        "scene": 9,
+        "method": "1. Old GPU walk \u00b7 256 \u00b7 depth 8",
+        "errorPercent": 5998.435177250902,
+        "within3dBPercent": 1.7708333333333333
+      },
+      {
+        "scene": 9,
+        "method": "2. More GPU rays \u00b7 65K \u00b7 depth 8",
+        "errorPercent": 1241060.914392821,
+        "within3dBPercent": 0.0
+      },
+      {
+        "scene": 9,
+        "method": "3. Complete routes \u00b7 CPU \u00b7 65K \u00b7 depth 2",
+        "errorPercent": 32.02408390452266,
+        "within3dBPercent": 58.854166666666664
+      },
+      {
+        "scene": 9,
+        "method": "4. GPU port + tuning \u00b7 1M \u00b7 depth 2",
+        "errorPercent": 22.44406333962725,
+        "within3dBPercent": 70.41666666666667
+      },
+      {
+        "scene": 9,
+        "method": "5. GPU-generated routes \u00b7 65K \u00b7 depth 2",
+        "errorPercent": 32.02403339468275,
+        "within3dBPercent": 58.854166666666664
+      },
+      {
+        "scene": 25,
+        "method": "Wave reference",
+        "errorPercent": 0.0,
+        "within3dBPercent": 100.0
+      },
+      {
+        "scene": 25,
+        "method": "1. Old GPU walk \u00b7 256 \u00b7 depth 8",
+        "errorPercent": 190010.300652095,
+        "within3dBPercent": 3.0681818181818183
+      },
+      {
+        "scene": 25,
+        "method": "2. More GPU rays \u00b7 65K \u00b7 depth 8",
+        "errorPercent": 591800084.3234487,
+        "within3dBPercent": 0.0
+      },
+      {
+        "scene": 25,
+        "method": "3. Complete routes \u00b7 CPU \u00b7 65K \u00b7 depth 2",
+        "errorPercent": 83.23058513730034,
+        "within3dBPercent": 31.363636363636367
+      },
+      {
+        "scene": 25,
+        "method": "4. GPU port + tuning \u00b7 1M \u00b7 depth 2",
+        "errorPercent": 62.04455269172983,
+        "within3dBPercent": 41.13636363636364
+      },
+      {
+        "scene": 25,
+        "method": "5. GPU-generated routes \u00b7 65K \u00b7 depth 2",
+        "errorPercent": 83.23055298819544,
+        "within3dBPercent": 31.363636363636367
+      }
+    ],
+    "small": [
+      {
+        "scene": "barrier",
+        "errorPercent": 2.0097313983544045,
+        "within3dBPercent": 100.0
+      },
+      {
+        "scene": "staggered",
+        "errorPercent": 9.144112079324389,
+        "within3dBPercent": 86.652977412731
+      },
+      {
+        "scene": "slit",
+        "errorPercent": 4.195917067626269,
+        "within3dBPercent": 93.71316306483301
+      },
+      {
+        "scene": "corridor",
+        "errorPercent": 13.656935907975443,
+        "within3dBPercent": 82.4295010845987
+      }
+    ]
+  },
+  "finalSuites": [
+    {
+      "file": ".context/gpu-generation/gpu-193002.xml",
+      "sha256": "49fc3bc987d902eac0a3a6a253939da50a80c1d2c997725c6d6b036ac8c117b1",
+      "id": "2",
+      "testcasecount": "16",
+      "result": "Passed",
+      "total": "16",
+      "passed": "16",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-22 02:30:10Z",
+      "end-time": "2026-10-22 02:30:10Z",
+      "duration": "0.6957845"
+    },
+    {
+      "file": ".context/gpu-generation/gpu-193703.xml",
+      "sha256": "e45858e4cd5cb688b11e5b38f285b9ec6262881f573c5decc2be5a35fb75eaa1",
+      "id": "2",
+      "testcasecount": "7",
+      "result": "Passed",
+      "total": "7",
+      "passed": "7",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-22 02:37:11Z",
+      "end-time": "2026-10-22 02:37:13Z",
+      "duration": "2.1359171"
+    },
+    {
+      "file": ".context/gpu-generation/gpu-193431.xml",
+      "sha256": "58b2906d5034948a12d00d3db778fcd75587d31f41c3147571861c0c0c6bc8cc",
+      "id": "2",
+      "testcasecount": "2",
+      "result": "Passed",
+      "total": "2",
+      "passed": "2",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-22 02:34:39Z",
+      "end-time": "2026-10-22 02:34:39Z",
+      "duration": "0.0677092"
+    }
+  ],
+  "controls": {
+    "control-1": {
+      "relativeL2": 1.4221116995795098e-06,
+      "maximumAbsoluteDifference": 5.5959945390228454e-08,
+      "medianMs": 0.7916000000000001,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "small-no-support": {
+      "relativeL2": 0.0,
+      "maximumAbsoluteDifference": 0.0,
+      "medianMs": 0.40900000000000003,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "subset": {
+      "relativeL2": 8.182829736829771e-06,
+      "maximumAbsoluteDifference": 4.932457242132582e-05,
+      "medianMs": 0.3746,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "control-9": {
+      "relativeL2": 1.1758965235871448e-05,
+      "maximumAbsoluteDifference": 1.4626156474572594e-06,
+      "medianMs": 0.9485,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "empty": {
+      "relativeL2": 0.0,
+      "maximumAbsoluteDifference": 0.0,
+      "medianMs": 0.3166,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "small-dc": {
+      "relativeL2": 2.0790579948115986e-06,
+      "maximumAbsoluteDifference": 1.9413671433728006e-07,
+      "medianMs": 0.2639,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "subset-one-edge": {
+      "relativeL2": 6.354586818041785e-06,
+      "maximumAbsoluteDifference": 3.1117731636318643e-06,
+      "medianMs": 0.4918,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "small-first-order": {
+      "relativeL2": 1.2472581657021207e-06,
+      "maximumAbsoluteDifference": 9.494391485841359e-08,
+      "medianMs": 0.2886,
+      "routeCountParity": true,
+      "visibilityParity": true
+    },
+    "control-25": {
+      "relativeL2": 8.77973469944738e-06,
+      "maximumAbsoluteDifference": 4.0566021774052434e-06,
+      "medianMs": 0.9589000000000001,
+      "routeCountParity": true,
+      "visibilityParity": true
+    }
+  },
+  "archive": {
+    "file": "gpu-route-generation-2026-10-21.zip",
+    "sha256": "bfd5b45801c2abd3b8a67639beed86f95acca533964a1102d0dbd57bca42665b",
+    "bytes": 13060838,
+    "files": 225
+  },
+  "images": {
+    "acoustic-history-25-2026-10-21.png": "496f9665f49ba62ec866f857c1ec2ace9b882d39da2e0a4dd0894780232f4879",
+    "acoustic-history-1-2026-10-21.png": "644cd02d1b0c1721b2873c4c5000134b21ce0153238f4f0a9d2745bf2e854184",
+    "acoustic-history-9-2026-10-21.png": "fa0a3f0e4c9431c205df7606825a7410b6bd5c30652b7735b67d2d263a93a741",
+    "acoustic-history-small-2026-10-21.png": "ca5104c9d4309542fb880a63cc32a30b52cb16c0d5d14b98dae2b027369fcd56"
+  },
+  "limitations": [
+    "Pure diffraction stage speedup only; cached CPU direct/mirror/mixed fields still cost 0.36/30.69/213.96 seconds per prior map calculation.",
+    "Physical error unchanged. Only static rigid one/two-edge planar paths qualified; no broadband, moving, finite-3D or near-degenerate boundary qualification.",
+    "Earlier old GPU walk maps use depth 8 and different path coverage; not a compute-matched ranking.",
+    "Single final pass after warmup, not hardware GPU timestamps or a full process wall-clock guarantee."
+  ]
+}
