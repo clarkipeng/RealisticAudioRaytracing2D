@@ -1,0 +1,19 @@
+{
+  "initialVisibleEmitters": 2,
+  "activeRemoteVoiceVisible": true,
+  "localVoiceAndInactiveSlotsHidden": true,
+  "movingAndBehindCameraLabels": true,
+  "offscreenTagInsideViewport": true,
+  "toggleAndRegistryRebuild": true,
+  "audioSettingsUnchanged": true,
+  "acousticTriangles": 17321,
+  "existingCollidersUnchanged": 58,
+  "existingBehaviourDefinitionsUnchangedExceptPreset": 71,
+  "chapelWalk": {
+    "routeTicksPerStyle": 723,
+    "maxStylePositionDelta": 0,
+    "allRouteTicksGrounded": true,
+    "fontAndTableCollisions": true,
+    "newPhysicalObjectsCompiled": true
+  }
+}

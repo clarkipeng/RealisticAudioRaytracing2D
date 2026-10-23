@@ -1,6 +1,6 @@
 # Church visual styles and silent footage
 
-Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Church Visual Preset** on **Acoustic simulation**: select **Polished Low Poly** or **Realistic** before Play, or use **F7 / F8** while playing. Changing the Inspector selection during Play also applies it. Polished Low Poly is the saved default.
+Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Church Visual Preset** on **Acoustic simulation**: select **Polished Low Poly** or **Realistic** before Play, or use **F7 / F8** while playing. Changing the Inspector selection during Play also applies it. Polished Low Poly is the saved default. **F6** shows/hides audio-source markers in the Game view; markers start enabled in Church.
 
 | Style | Treatment |
 |---|---|
@@ -9,9 +9,25 @@ Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Chur
 
 Both use the same collision proxies, acoustic objects, input, movement and networking. Visual materials are separate from acoustic coefficients. The same small image effect supplies exposure in stops, contrast, saturation and vignette. Material pairs are serialized in the scene, so replacing a style does not destroy the other style's references on reload. No render-pipeline migration or package dependency was added.
 
+## Source markers and architectural polish — 22 October 2026
+
+[Latest views](benchmarks/church-sources-2026-10-22/overview.png) · [Source overlay](benchmarks/church-sources-2026-10-22/PolishedLowPoly-sources.png) · [Behind-camera markers](benchmarks/church-sources-2026-10-22/sources-behind.png).
+
+Both visual styles now include finer diagonal nave ribs, candle sconces, a rose-pattern medallion above the organ, an organ surround, a reading-chapel wall crest and a warm sanctuary spotlight. These four mesh parts share the existing palette in one 129 KiB `CathedralAccents.fbx`; no new materials or packages are needed. The rose is decorative geometry, not a new opening through the acoustic shell. The additions remain visual detail; existing physical/acoustic objects are preserved.
+
+`AudioSourceOverlay` is attached to the listener camera and explicitly references the scene's manager. **F6** toggles it. Amber labels identify clip emitters; cyan labels identify voice emitters. Each label shows the actual registered source position and rounded straight-line distance from that camera. Screen-edge arrows indicate offscreen sources; sources behind the camera are also labeled `behind`. The layout separates overlapping labels vertically, hiding a label if it cannot find room. Labels can be displaced for readability and remain visible through walls; they are annotations, not an occlusion or propagation visualization.
+
+The overlay respects each receiver's existing self-voice exclusion and hides inactive/disabled sources. The preallocated remote voice slots therefore appear when their actors become active. Source-list size changes rebuild the small UI. No raycast, GPU readback, audio-buffer read or new playback state is involved. These labels **do not indicate current playback, speaking activity, received loudness, or the acoustic sound field**. In Scene view, enable Gizmos to see source names and small wire markers independently of F6. Their fixed visual size is not a physical emitter radius.
+
+The component uses Unity's existing camera-space Canvas and source registry; it adds no capture format or DSP contract. To use it in another scene, add `AudioSourceOverlay` to a listener camera and assign its `manager`. Its public `Refresh()` also supports silent editor captures. UI graphics do not receive pointer events. The built-in camera projection follows Unity's [WorldToViewportPoint](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Camera.WorldToViewportPoint.html) convention; the [camera-space Canvas](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/RenderMode.ScreenSpaceCamera.html) lets the same annotations appear in offscreen renders.
+
+Verified in the isolated Unity batch runner, with audio disabled: moving-source distances/positions, behind-camera and camera-plane projections, screen-edge containment, toggling, disabled sources, local-voice exclusion, an activated remote slot and source-registry rebuilding. The cyan-voice screenshot activates a synthetic remote actor for presentation testing; it is not evidence of a new network/voice call. Source and manager settings remain unchanged after the UI checks. Both 723-tick chapel walks passed again with all ticks grounded and zero positional difference between styles. All 58 existing colliders and 71 existing behaviour definitions (except the expanded visual-preset bindings) are unchanged. Acoustic compilation remains at 17,321 triangles. Final run: no script/shader errors or exceptions; existing unrelated deprecation warnings remain.
+
+[Verification](benchmarks/church-sources-2026-10-22/verification.json), [asset/source hashes](benchmarks/church-sources-2026-10-22/manifest.json), and [authoring/check scripts, logs and first-pass renders](benchmarks/church-sources-2026-10-22/authoring.zip). Initial renders caught overlapping offscreen labels and a rose rim intersecting masonry; the final images include those corrections. This pass uses still renders and reuses the existing traversal check rather than recording another four full videos.
+
 ## Authored rooms — 22 October 2026
 
-[Current room views](benchmarks/church-rooms-2026-10-22/rooms.png) · Gameplay: [low-poly](benchmarks/church-rooms-2026-10-22/PolishedLowPoly-first-person-gameplay.mp4), [realistic](benchmarks/church-rooms-2026-10-22/Realistic-first-person-gameplay.mp4).
+[Room-authoring checkpoint views](benchmarks/church-rooms-2026-10-22/rooms.png) · Gameplay: [low-poly](benchmarks/church-rooms-2026-10-22/PolishedLowPoly-first-person-gameplay.mp4), [realistic](benchmarks/church-rooms-2026-10-22/Realistic-first-person-gameplay.mp4).
 
 The low-poly preset now has modeled detail instead of relying on the wall textures for its identity. Both styles share these additions to the existing church:
 

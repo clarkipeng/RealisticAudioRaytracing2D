@@ -1,0 +1,6 @@
+↑  Tower bells
+49 m · clip emitter
+●  Pipe organ
+26 m · clip emitter
+●  Voice
+9 m · voice emitter

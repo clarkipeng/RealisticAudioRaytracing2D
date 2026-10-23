@@ -14,6 +14,16 @@ public class RaytracedAudioSource : MonoBehaviour
     [Range(0, 2)] public float gain = 1;
     public bool disableUnityAudioSources = true;
 
+    void OnDrawGizmos()
+    {
+        if (!isActiveAndEnabled) return;
+        Gizmos.color = streamed ? new Color(.4f, .9f, 1) : new Color(1, .8f, .4f);
+        Gizmos.DrawWireSphere(transform.position, .2f);
+#if UNITY_EDITOR
+        UnityEditor.Handles.Label(transform.position + Vector3.up * .3f, name);
+#endif
+    }
+
     void Awake() => Apply();
     void OnValidate()
     {

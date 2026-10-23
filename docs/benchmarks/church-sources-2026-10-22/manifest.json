@@ -1,0 +1,27 @@
+{
+  "parentCommit": "ee9e0df0c2c2b05b8b42109c29d3f8903aa4157e",
+  "sha256": {
+    "Assets/Scenes/Church.unity": "b4c82a586f412e6e58fb2ac88b8467e8790f0cb30633f1fbabb6e6afda98c753",
+    "Assets/External/Church/CathedralAccents.fbx": "236f31867bb31c54a2afce57ca1a506067a72c9ffbcd6b76bbbd8f315e0b8340",
+    "Assets/External/Church/CathedralAccents.fbx.meta": "0093283cd08add43a4174b45ab1047a02205184aab84769fc166d5789c53b1f9",
+    "Assets/Scripts/Demo/AudioSourceOverlay.cs": "8f9fa03cb7ba989ca499147571b2a71d46bfe111ae33ea70be480885349d3822",
+    "Assets/Scripts/Demo/AudioSourceOverlay.cs.meta": "f466e09f78aef00c3e5df759586f371dae3d90b969229cc54d69e5bb52f347d4",
+    "Assets/Scripts/Audio/RaytracedAudioSource.cs": "de9ab4c84f4f50bb9c1727d145c0d44bc6242249e47ca9bc409c658954fd9435",
+    "docs/benchmarks/church-sources-2026-10-22/PolishedLowPoly-sources.png": "bd33642f618909b9afcd06e3252580dd55990bfe972d9ad74eadc14961bba431",
+    "docs/benchmarks/church-sources-2026-10-22/PolishedLowPoly-sanctuary.png": "ace3f6521210d9300c65e268e1de3f04428c3fd78f3a201c5c9fa93c84b55f79",
+    "docs/benchmarks/church-sources-2026-10-22/Realistic-sources.png": "6561dc886eb1a738ce0c87acf7c8c0421976c40d7123fb3ddfb4f9acd203ac98",
+    "docs/benchmarks/church-sources-2026-10-22/Realistic-nave.png": "bd40c988027478400f6a2d2803d35667358163e82cf5d942c398d1e000e92da1",
+    "docs/benchmarks/church-sources-2026-10-22/Realistic-sanctuary.png": "2eff44b9fa0163205e558800f00444e2ce03cbacb6e38a59fcc137b64ac4a5bd",
+    "docs/benchmarks/church-sources-2026-10-22/overview.png": "1b3f64b07c3d723a09535019807e55bd1248ff66da7c708c7b3f140e06c9e141",
+    "docs/benchmarks/church-sources-2026-10-22/PolishedLowPoly-nave.png": "b37d5a00b636141b36dc31c03f9be136fe22c9438af43c9b8249d0e8cbc586d5",
+    "docs/benchmarks/church-sources-2026-10-22/authoring.zip": "3faba5d6178839a5ff8d283f9577b4e57c6d4e339b701385b64923f1769c868c",
+    "docs/benchmarks/church-sources-2026-10-22/visible-labels.txt": "6b844a921ecedd6b16008de915ef1512591f42ce059385084476a50058b8ec93",
+    "docs/benchmarks/church-sources-2026-10-22/sources-voice.png": "5283b77b48cd93b541fbdecd416d3084686c1714a85ec61702ef88d3cc1985e1",
+    "docs/benchmarks/church-sources-2026-10-22/verification.json": "cd5e148e0c5b0711bb5b7c55662e1730a00ace84fab698daa35e5f1ac425c728",
+    "docs/benchmarks/church-sources-2026-10-22/Realistic-reading.png": "0cf16d2ef94cc0deac4df77589b228652e3b00e2165d8befa713e96809a13785",
+    "docs/benchmarks/church-sources-2026-10-22/PolishedLowPoly-reading.png": "c90d96d96f75774b7c600127abde3b355ed4b238a7df93fdd35557b61fc4efc8",
+    "docs/benchmarks/church-sources-2026-10-22/sources-behind.png": "c9fb9b44ecc5ddb3ba6cbc860d4cacdd3ea2c5c59a79863dad2d251065a0528e",
+    "docs/scene-presentation.md": "1def39040a0eedeb2d40fe337bb05752b248b121c63bca0a3ae7b45dd3e5f5e5",
+    "Assets/External/Church/README.md": "0af82f599bf29df8b50a138d1038c19ff402221280b41b407b8d1cd6e76e60b8"
+  }
+}
