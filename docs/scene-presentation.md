@@ -9,6 +9,26 @@ Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Chur
 
 Both use the same collision proxies, acoustic objects, input, movement and networking. Visual materials are separate from acoustic coefficients. The same small image effect supplies exposure in stops, contrast, saturation and vignette. Material pairs are serialized in the scene, so replacing a style does not destroy the other style's references on reload. No render-pipeline migration or package dependency was added.
 
+## Outdoor rain and thunder — 22 October 2026
+
+The saved Church scene now starts rain and occasional thunder alongside its organ and bells. Edit the ordinary `RaytracedAudioSource` components under **Church world / Weather**; F6 shows their positions. Both visual styles share these sounds. This adds three clips and three emitters, **zero production C# lines**, and no package, timer, weather UI, particle effect or new recording format.
+
+| Emitter | Position (metres) | Gain | Clip |
+|---|---|---|---|
+| Rain courtyard | `(-7, 1.3, -40)` | 0.6 | 11-second rain loop |
+| Rain east garden | `(23, 1.3, 4)` | 0.8 | Independent 13-second rain excerpt |
+| Thunder outside | `(-32, 45, -16)` | 2 | Recorded roll at second 8 of a repeating 42-second timeline |
+
+Rain boundaries have one-second constant-power crossfades. The thunder clip contains its quiet intervals, so no per-frame random scheduler is needed. `SceneSession.startSounds` starts the existing sample-timed clip events; takes retain those events and clip identity. Multiplayer's existing `SceneSoundOffset` selects the corresponding loop phase for a joining client. Weather uses installed scene assets, not a new network PCM stream. This reuses the existing synchronization; no new multi-client timing/latency test was performed.
+
+Each emitter goes through the existing transport and material response. These are **point-source approximations** of two local rain patches and an outdoor rumble. They do not cover the whole exterior uniformly, model roof vibration or simulate the length of a lightning channel. There is no separate indoor volume switch. The rain/thunder recordings already contain environmental acoustics and uncalibrated levels; use them for ambience/source diversity, not as an acoustic ground-truth target. No listening-quality claim follows from the silent tests. [Asset provenance and exact preparation](../Assets/External/Church/README.md).
+
+Cost matters: the three 44.1 kHz mono PCM16 assets total 5.55 MiB on disk and 11.10 MiB as decoded float PCM. There are now nine registered sources (five clip emitters and four existing voice slots). The current GPU implementation reserves filter/FFT buffers per registered source, even for quiet intervals. At the unchanged **1024 FFT / two rays per bin / 32 bounces** live profile, these three extra sources add approximately **2.36 GiB of filter and FFT scratch capacity alone**, calculated from `GpuAudio`'s existing allocation formulas. This is a capacity estimate, not measured residency or a live performance result. The source-count allocation needs attention before treating a richer ambient scene as cheap; silent thunder samples do not eliminate its reserved buffers. The implementation and saved quality settings are unchanged by this asset pass.
+
+Verification ran in one isolated, low-priority Unity batch job with `-disable-audio`, without Play mode, microphone/network startup, speakers or foreground windows. Clip import/readback, recorded event PCM, wraparound/late-join phase, all five overlay labels and emitter clearance from solid geometry passed. All 58 existing colliders and 17,321 acoustic triangles are preserved, as are original source/DSP/network settings. A three-second fixed outdoor weather-only render used the real GPU transport and synthesis with a deliberately cheaper **256 FFT / one ray per bin / four bounces** profile; output is finite, non-silent and unclipped (peak 0.0296). It took 0.398 s including preparation and reported 35.76 MiB numeric working storage. This smoke result does **not** establish full-profile runtime, perceived balance, indoor coverage or artifact-free movement.
+
+[Source view](benchmarks/church-weather-2026-10-22/weather-sources.png) · [Waveform/spectrogram](benchmarks/church-weather-2026-10-22/waveform-spectrogram.png) · [Silent-generated audio file](benchmarks/church-weather-2026-10-22/outdoor-smoke.wav) · [Verification](benchmarks/church-weather-2026-10-22/verification.json) · [Render settings/timing](benchmarks/church-weather-2026-10-22/render.json) · [Clip checks](benchmarks/church-weather-2026-10-22/clip-checks.json) · [Hashes](benchmarks/church-weather-2026-10-22/manifest.json). The smoke excerpt starts at loop phase 7 seconds to include thunder onset; it is not a recording of the first three seconds of normal Play.
+
 ## Source markers and architectural polish — 22 October 2026
 
 [Latest views](benchmarks/church-sources-2026-10-22/overview.png) · [Source overlay](benchmarks/church-sources-2026-10-22/PolishedLowPoly-sources.png) · [Behind-camera markers](benchmarks/church-sources-2026-10-22/sources-behind.png).

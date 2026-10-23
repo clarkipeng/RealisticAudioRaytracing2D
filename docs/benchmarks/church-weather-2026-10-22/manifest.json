@@ -1,0 +1,22 @@
+{
+  "parentCommit": "4ae9cb2acc06a3372b85452a52f0d825b6d6c3dc",
+  "sha256": {
+    "Assets/Scenes/Church.unity": "038d7bcbd8d547280595352e3ac685311c2e0c63a7d493620c35edf7734f4d80",
+    "Assets/External/Church/Audio/RainCourtyard.wav": "eaa1723ad9275352485651e03bf9c764d432aee56dc37406a5ae6b24026c0485",
+    "Assets/External/Church/Audio/RainCourtyard.wav.meta": "4f8948f5652ec8b0fe9dc091dbdbf42c6112cbcfdcc8b79335329e3593dee7cd",
+    "Assets/External/Church/Audio/RainGarden.wav": "324f6b006fe28f360b451bebaf108e39bd1c48250248e9bbfbe2a5ec7482d8eb",
+    "Assets/External/Church/Audio/RainGarden.wav.meta": "9552dd0fabdd692a5d6665cb353d524112cf55e186e6090c142eb66f004f7106",
+    "Assets/External/Church/Audio/Thunder.wav": "a43c6dd13ff746ff5da7366453d91e1f81cf8a722b0060cf7e93e5b35fae91da",
+    "Assets/External/Church/Audio/Thunder.wav.meta": "8eefde015279301ea99df461384bd35f290765dcdbe79163f924e231dd04af1a",
+    "docs/benchmarks/church-weather-2026-10-22/waveform-spectrogram.png": "492d73afb90c159ed4b649e6a552da82539ccfa4e5a47651a224a8c7de1bc7b3",
+    "docs/benchmarks/church-weather-2026-10-22/render.json": "404daa2511d8e6b5488f960b4e54c380ce61f3c39e9dc0dc0388eba2c69d7f5e",
+    "docs/benchmarks/church-weather-2026-10-22/outdoor-smoke.wav": "fe3bdbb3616012bfc85aed3ea1f793a6231de7354a3a3d4f4f4c573583647340",
+    "docs/benchmarks/church-weather-2026-10-22/labels.txt": "0f1a9a5ddfeca6db2405579f85c96ddfde1c267b922889c3a760bf6d0bd3daba",
+    "docs/benchmarks/church-weather-2026-10-22/weather-sources.png": "c957447a4d1fcd05369d7a7a2446fcca340f1a97bf9a5ac426fa871a39ad69de",
+    "docs/benchmarks/church-weather-2026-10-22/authoring.zip": "715827138e986043efd18e2ad38d83b034977adc15cc2613d70daf4956f67753",
+    "docs/benchmarks/church-weather-2026-10-22/clip-checks.json": "96e5d1f87a35aeaf4ad90f21233866c72f799e0a1aa1ca381580a023f0242676",
+    "docs/benchmarks/church-weather-2026-10-22/verification.json": "964959bb76704a4b099c1ee60968dc9103900e4936d320fa08da6b8e541f456d",
+    "Assets/External/Church/README.md": "6c50684bf35afbf55eedf862f6581c0bb10b9cb1fe83f2b7f8255ab9327f4cc9",
+    "docs/scene-presentation.md": "f8279a03de201515c021ffe24bb5179460c1db83631a2ce14c5f3b96b15d7445"
+  }
+}

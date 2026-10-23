@@ -1,0 +1,30 @@
+{
+  "RainCourtyard": {
+    "samples": 485100,
+    "seconds": 11.0,
+    "peak": 0.399993896484375,
+    "rms": 0.05199008002172973,
+    "loopSeamStep": 0.009552001953125,
+    "ordinaryStep99_9Percentile": 0.17302868652344117,
+    "sha256": "eaa1723ad9275352485651e03bf9c764d432aee56dc37406a5ae6b24026c0485"
+  },
+  "RainGarden": {
+    "samples": 573300,
+    "seconds": 13.0,
+    "peak": 0.399993896484375,
+    "rms": 0.03409392504842131,
+    "loopSeamStep": 0.027862548828125,
+    "ordinaryStep99_9Percentile": 0.08565374755859523,
+    "sha256": "324f6b006fe28f360b451bebaf108e39bd1c48250248e9bbfbe2a5ec7482d8eb"
+  },
+  "Thunder": {
+    "samples": 1852200,
+    "seconds": 42.0,
+    "peak": 0.699981689453125,
+    "rms": 0.04343481435728055,
+    "loopSeamStep": 0.0,
+    "ordinaryStep99_9Percentile": 0.014739990234375,
+    "sha256": "a43c6dd13ff746ff5da7366453d91e1f81cf8a722b0060cf7e93e5b35fae91da"
+  },
+  "rainCorrelation": 0.0054152242442896854
+}

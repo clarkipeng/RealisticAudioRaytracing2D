@@ -1,0 +1,14 @@
+{
+  "registeredSources": 9,
+  "autostartClipSources": 5,
+  "weatherEmitters": 3,
+  "weatherOutsideSolids": true,
+  "acousticTriangles": 17321,
+  "clipPhaseAndRecordedEvents": true,
+  "originalManagerSettingsPreserved": true,
+  "visibleLabels": 5,
+  "renderScope": "3 second fixed outdoor receiver, weather only, reduced FFT/ray/bounce profile; no Play mode or network/microphone startup",
+  "existingCollidersPreserved": 58,
+  "renderPeak": 0.029585959389805794,
+  "renderRms": 0.005158351734280586
+}

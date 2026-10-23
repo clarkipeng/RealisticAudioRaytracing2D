@@ -492,6 +492,57 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 86805718}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &92760999
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 92761000}
+  - component: {fileID: 92761001}
+  m_Layer: 0
+  m_Name: Thunder outside
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &92761000
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 92760999}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -32, y: 45, z: -16}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 377857098}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &92761001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 92760999}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
+  rayTraceManager: {fileID: 1893978481}
+  clip: {fileID: 8300000, guid: 2aa245cb3f18646479d56d56edd79239, type: 3}
+  streamed: 0
+  mutedListenerPlusOne: 0
+  loop: 1
+  gain: 2
+  disableUnityAudioSources: 1
 --- !u!1 &112387374
 GameObject:
   m_ObjectHideFlags: 0
@@ -1664,6 +1715,57 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: -6737320412252436444, guid: fa77ef548ecc54feaa38a2a86d8cdb46, type: 3}
+--- !u!1 &254171794
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 254171795}
+  - component: {fileID: 254171796}
+  m_Layer: 0
+  m_Name: Rain east garden
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &254171795
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 254171794}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 23, y: 1.3, z: 4}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 377857098}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &254171796
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 254171794}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
+  rayTraceManager: {fileID: 1893978481}
+  clip: {fileID: 8300000, guid: 96781aa1722994caaa09846970512b3a, type: 3}
+  streamed: 0
+  mutedListenerPlusOne: 0
+  loop: 1
+  gain: 0.8
+  disableUnityAudioSources: 1
 --- !u!1 &257682309
 GameObject:
   m_ObjectHideFlags: 0
@@ -2072,6 +2174,40 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 4, y: 0.8, z: 0.14}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &377857097
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 377857098}
+  m_Layer: 0
+  m_Name: Weather
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &377857098
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 377857097}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 946206404}
+  - {fileID: 254171795}
+  - {fileID: 92761000}
+  m_Father: {fileID: 762107864}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &398039231
 GameObject:
   m_ObjectHideFlags: 0
@@ -3566,6 +3702,7 @@ Transform:
   - {fileID: 754461508}
   - {fileID: 543450651775738106}
   - {fileID: 1594369826}
+  - {fileID: 377857098}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &763112674
@@ -4245,6 +4382,57 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 909830543}
   m_Mesh: {fileID: 9096884052415582558, guid: f68688db115df45b7b644235d57dd7f0, type: 3}
+--- !u!1 &946206403
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 946206404}
+  - component: {fileID: 946206405}
+  m_Layer: 0
+  m_Name: Rain courtyard
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &946206404
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 946206403}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -7, y: 1.3, z: -40}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 377857098}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &946206405
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 946206403}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
+  rayTraceManager: {fileID: 1893978481}
+  clip: {fileID: 8300000, guid: 4e37e23ab74314c6b8f8de6d9ff9c92f, type: 3}
+  streamed: 0
+  mutedListenerPlusOne: 0
+  loop: 1
+  gain: 0.6
+  disableUnityAudioSources: 1
 --- !u!1 &949677265
 GameObject:
   m_ObjectHideFlags: 0
@@ -9593,6 +9781,9 @@ MonoBehaviour:
   startSounds:
   - {fileID: 990204409}
   - {fileID: 1545590770}
+  - {fileID: 946206405}
+  - {fileID: 254171796}
+  - {fileID: 92761001}
   retainFullReference: 0
 --- !u!114 &1893978480
 MonoBehaviour:
@@ -9901,6 +10092,15 @@ MonoBehaviour:
   - id: voice-remote-2
     transform: {fileID: 1262903361}
     geometry: 0
+  - id: weather-rain-courtyard
+    transform: {fileID: 946206404}
+    geometry: 0
+  - id: weather-rain-garden
+    transform: {fileID: 254171795}
+    geometry: 0
+  - id: weather-thunder
+    transform: {fileID: 92761000}
+    geometry: 0
   takeSources:
   - {fileID: 990204409}
   - {fileID: 1545590770}
@@ -9908,6 +10108,9 @@ MonoBehaviour:
   - {fileID: 61542784}
   - {fileID: 707255592}
   - {fileID: 1262903362}
+  - {fileID: 946206405}
+  - {fileID: 254171796}
+  - {fileID: 92761001}
   takeListeners:
   - {fileID: 1132085635}
   replayMotionWriters: []

@@ -1,0 +1,10 @@
+↑  Tower bells
+49 m · clip emitter
+●  Pipe organ
+26 m · clip emitter
+←  Rain courtyard
+33 m · clip emitter · behind
+→  Rain east garden
+26 m · clip emitter
+↑  Thunder outside
+53 m · clip emitter · behind
