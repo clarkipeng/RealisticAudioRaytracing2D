@@ -8,6 +8,14 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**Church presentation and process footage — 22 October**
+
+Both visual styles now use one authored Church scene: flat-color low-poly treatment and darker textured PBR treatment. F7/F8 switch styles; physical/acoustic materials remain separate. A CC0 rig with looping idle/run animations follows the existing controller, and a small Built-in pipeline image effect grades the camera. This is a presentation milestone, not an acoustic-fidelity result or a photorealistic art upgrade.
+
+[Matched first-person and animation videos, primary research and controls](scene-presentation.md#verified-capture--22-october-2026). The four silent 8-second clips were rendered offscreen from scripted inputs through the real movement controller, with no foreground player or speaker output. Routes are identical across styles (397 ticks, zero positional delta), all sampled ticks remain grounded, and the rig produces 396 distinct bone poses. Scene checks preserve the authored collider/acoustic/controller definitions. Failed import/animation checks are retained alongside the final proof for the process video.
+
+---
+
 **Conservative edge preprocessing experiment — 22 October**
 
 Tried merging redundant collinear edge segments without changing any triangles. The prototype keeps owner, wedge orientation, material pair and open/solid status, merges only degree-two joints, and remaps every original triangle's edge links. Five geometry controls preserve gaps, bends and material breaks. It is **kept offline**, with no extra production code.

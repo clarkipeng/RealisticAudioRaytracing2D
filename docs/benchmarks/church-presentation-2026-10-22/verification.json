@@ -1,0 +1,61 @@
+{
+  "PolishedLowPoly": {
+    "ticks": 397,
+    "distinctBonePoses": 396,
+    "allTicksGrounded": true,
+    "videos": {
+      "PolishedLowPoly-third-person-animation.mp4": {
+        "frames": 192,
+        "width": 1280,
+        "height": 720,
+        "fps": 24,
+        "seconds": 8,
+        "audioStreams": 0
+      },
+      "PolishedLowPoly-first-person-gameplay.mp4": {
+        "frames": 192,
+        "width": 1280,
+        "height": 720,
+        "fps": 24,
+        "seconds": 8,
+        "audioStreams": 0
+      }
+    }
+  },
+  "Realistic": {
+    "ticks": 397,
+    "distinctBonePoses": 396,
+    "allTicksGrounded": true,
+    "videos": {
+      "Realistic-third-person-animation.mp4": {
+        "frames": 192,
+        "width": 1280,
+        "height": 720,
+        "fps": 24,
+        "seconds": 8,
+        "audioStreams": 0
+      },
+      "Realistic-first-person-gameplay.mp4": {
+        "frames": 192,
+        "width": 1280,
+        "height": 720,
+        "fps": 24,
+        "seconds": 8,
+        "audioStreams": 0
+      }
+    }
+  },
+  "sceneBaseline": "86d475a",
+  "unchangedAuthoredComponents": {
+    "colliders": 44,
+    "mesh filters": 45,
+    "AcousticSurface": 41,
+    "SceneSession": 1,
+    "RayTraceManager": 1,
+    "MultiplayerSession": 1,
+    "existing transforms": 127
+  },
+  "identicalFullRouteCsv": true,
+  "maxRouteDeltaMetres": 0,
+  "captureRun": "run-20261023-010605"
+}
