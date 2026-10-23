@@ -23,3 +23,9 @@ organ.tar.xz  1f0b70a2c2af14cdf051ef2d256b3bb652e7d64c0fdc8bed06642ad2af916db9
 ```
 
 Import/export scripts and diagnostic evidence are retained locally under `.context/church-assets/`. No Blender or audio-synthesis dependency is required at runtime.
+
+## Cathedral room kit
+
+`CathedralRooms.fbx` is original scene geometry authored for this project: pointed arcades and octagonal columns, floor inlays, wall panels, banners, an open baptismal font, jewel panels, reading shelves/books/table/benches, candle stands and timber trusses. Its 13 named parts use the palette in `Assets/Materials/ChurchPresentation/Rooms-*`; the three `Rooms-PBR-*` variants reuse the existing CC0 marble/wood textures. No additional third-party asset license is introduced.
+
+The saved Church scene includes these assets in both visual styles, with physical furniture/structural collision and acoustic proxies. Inlays and small decoration remain visual-only. The table and shelves have ensemble parents so their proxies move with their visuals. The source authoring scripts and validation evidence are archived in `docs/benchmarks/church-rooms-2026-10-22/authoring.zip`; Blender is not a runtime dependency. See `docs/scene-presentation.md` for room views, controls and the scope of verification.

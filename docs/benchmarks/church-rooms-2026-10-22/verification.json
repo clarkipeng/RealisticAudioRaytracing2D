@@ -1,0 +1,46 @@
+{
+  "routeTicksPerStyle": 723,
+  "maxStylePositionDelta": 0,
+  "allRouteTicksGrounded": true,
+  "fontAndTableCollisions": true,
+  "newPhysicalObjectsCompiled": true,
+  "fullCapture": {
+    "PolishedLowPoly-first-person-gameplay.mp4": {
+      "width": 1280,
+      "height": 720,
+      "nb_frames": "192",
+      "r_frame_rate": "24/1",
+      "duration": "8.000000"
+    },
+    "PolishedLowPoly-third-person-animation.mp4": {
+      "width": 1280,
+      "height": 720,
+      "nb_frames": "192",
+      "r_frame_rate": "24/1",
+      "duration": "8.000000"
+    },
+    "Realistic-first-person-gameplay.mp4": {
+      "width": 1280,
+      "height": 720,
+      "nb_frames": "192",
+      "r_frame_rate": "24/1",
+      "duration": "8.000000"
+    },
+    "Realistic-third-person-animation.mp4": {
+      "width": 1280,
+      "height": 720,
+      "nb_frames": "192",
+      "r_frame_rate": "24/1",
+      "duration": "8.000000"
+    }
+  },
+  "groupingSmokeFramesCompared": 16,
+  "groupingSmokeFramesPixelIdentical": 9,
+  "groupingSmokeWorstMeanByteDelta": 0.0006040219907407407,
+  "groupingSmokeWorstChannelByteDelta": 2.0,
+  "totalAcousticTriangles": 17321,
+  "newRuntimeLines": 0,
+  "existingCollidersUnchanged": 44,
+  "existingBehavioursUnchangedExceptRegistryAndPreset": 56,
+  "totalColliders": 58
+}

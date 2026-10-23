@@ -1,13 +1,34 @@
 # Church visual styles and silent footage
 
-Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Church Visual Preset** on **Acoustic simulation**: select **Polished Low Poly** or **Realistic** before Play, or use **F7 / F8** while playing. Changing the Inspector selection during Play also applies it. Realistic is the saved default.
+Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Church Visual Preset** on **Acoustic simulation**: select **Polished Low Poly** or **Realistic** before Play, or use **F7 / F8** while playing. Changing the Inspector selection during Play also applies it. Polished Low Poly is the saved default.
 
 | Style | Treatment |
 |---|---|
-| Polished Low Poly | Flat-color Standard materials, brighter cool fill, simple surfaces. Uses the existing meshes; this does not decimate geometry. |
+| Polished Low Poly | Faceted architectural additions, patterned stone floors, colored glass, warm chapel lamps and flat-color Standard materials. The original church shell remains; this is not a whole-scene decimation pass. |
 | Realistic | Original textured Standard/PBR materials, dark ambient fill, warm candles, cool window projections and soft shadows. A realistic treatment of the existing art, not photorealistic scanned assets. |
 
 Both use the same collision proxies, acoustic objects, input, movement and networking. Visual materials are separate from acoustic coefficients. The same small image effect supplies exposure in stops, contrast, saturation and vignette. Material pairs are serialized in the scene, so replacing a style does not destroy the other style's references on reload. No render-pipeline migration or package dependency was added.
+
+## Authored rooms — 22 October 2026
+
+[Current room views](benchmarks/church-rooms-2026-10-22/rooms.png) · Gameplay: [low-poly](benchmarks/church-rooms-2026-10-22/PolishedLowPoly-first-person-gameplay.mp4), [realistic](benchmarks/church-rooms-2026-10-22/Realistic-first-person-gameplay.mp4).
+
+The low-poly preset now has modeled detail instead of relying on the wall textures for its identity. Both styles share these additions to the existing church:
+
+- **Nave:** five pointed arcades, octagonal columns, capitals, hanging banners, timber wall panels and a stone aisle inlay.
+- **Crossing:** a compass-pattern floor and framed openings into the existing side wings. The central route to the altar stays clear.
+- **West baptistery:** an octagonal open font, circular stone inlay, faceted jewel panels, candle stands and stone ribs.
+- **East reading chapel:** book-lined shelves, a writing table with an open book, benches, timber roof trusses and warm local lighting.
+
+All additions live under `Church world / Cathedral rooms`. The table/benches and shelves have named **ensemble** parents: move those parents to keep their visuals and collision/acoustic proxies together. Meshes remain imported asset references; materials and transforms are ordinary Inspector-editable scene data. There are 13 mesh parts in one original 373 KiB FBX, 12 palette materials and three textured material variants. The asset authoring adds **zero production C# lines**, packages or runtime geometry generation. The one-off Blender/Unity authoring and checks are preserved in [authoring.zip](benchmarks/church-rooms-2026-10-22/authoring.zip).
+
+Arches, font and timber supports use their low-poly mesh as collision/acoustic geometry. Shelves, table and benches use simple wooden box proxies. Flat inlays, banners, surface panels, water decoration and candle detail do not add acoustic surfaces. These are illustrative material assignments, not measured room properties. There are 58 colliders after adding 14; all 44 existing collider definitions remain unchanged. The complete scene compiles to 17,321 acoustic triangles. The added physical geometry changes the simulated room response; this is not an acoustic-quality benchmark. Replays of an earlier scene revision still require that revision.
+
+Both presets passed a 723-tick route through both chapels with every sampled tick grounded and **zero positional difference**. Separate approaches confirmed the font and table stop the player. All new physical object types appear in acoustic compilation. Existing transform poses, mesh references, collider definitions and 56 existing behaviour definitions are preserved; the manager's object registry and the preset's material bindings intentionally expand. No DSP or networking settings changed.
+
+The four silent gameplay/animation videos each contain 192 frames at 1280×720, 24 fps, with no audio stream; the two full 397-tick nave routes are identical. After grouping furniture for editing, the chapel route and collision/compilation checks passed again. A 16-frame smoke comparison has nine pixel-identical frames; the others differ by at most two 8-bit channel levels, with a worst mean absolute difference of 0.000605 on the 0–255 scale. Full videos precede that hierarchy-only grouping; the final smoke metadata records the grouped scene. Final Unity runs have no script/shader errors or exceptions.
+
+[Verification](benchmarks/church-rooms-2026-10-22/verification.json), [full capture](benchmarks/church-rooms-2026-10-22/capture.json), [final grouping smoke](benchmarks/church-rooms-2026-10-22/grouped-smoke.json), [hashes](benchmarks/church-rooms-2026-10-22/manifest.json). The archive also retains the early dark-emission renders and failed temporary-check compilation as process history. Checks and rendering ran in the isolated, low-priority Unity batch runner with audio disabled.
 
 ## Movement and animation
 

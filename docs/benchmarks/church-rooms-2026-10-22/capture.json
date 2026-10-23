@@ -1,0 +1,53 @@
+{
+"maxRouteDeltaMetres":0,
+"captures":[
+{
+    "preset": "PolishedLowPoly",
+    "frameCount": 192,
+    "fps": 24,
+    "width": 1280,
+    "height": 720,
+    "seconds": 8.0,
+    "minLuma": 0.0408831387758255,
+    "maxLuma": 0.9691380262374878,
+    "travelledMetres": 45.93436050415039,
+    "finalPosition": {
+        "x": 4.465079307556152,
+        "y": 1.0799999237060547,
+        "z": 14.072222709655762
+    },
+    "framesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/PolishedLowPoly/first-person-frames",
+    "thirdPersonFramesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/PolishedLowPoly/third-person-frames",
+    "moviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/PolishedLowPoly/PolishedLowPoly-first-person-gameplay.mp4",
+    "thirdPersonMoviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/PolishedLowPoly/PolishedLowPoly-third-person-animation.mp4",
+    "colliderHash": "AvhKX/bm7RmOG6AbLo+3g2ct+QF65uzw1fU1KarpSto=",
+    "acousticHash": "LrOGZOl+vdXO1NnY+IvCitoGc4HighI95FloKMsJd0w=",
+    "encodedMovie": true,
+    "encodedThirdPersonMovie": true
+},
+{
+    "preset": "Realistic",
+    "frameCount": 192,
+    "fps": 24,
+    "width": 1280,
+    "height": 720,
+    "seconds": 8.0,
+    "minLuma": 0.03921568766236305,
+    "maxLuma": 0.9688549041748047,
+    "travelledMetres": 45.93436050415039,
+    "finalPosition": {
+        "x": 4.465079307556152,
+        "y": 1.0799999237060547,
+        "z": 14.072222709655762
+    },
+    "framesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/Realistic/first-person-frames",
+    "thirdPersonFramesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/Realistic/third-person-frames",
+    "moviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/Realistic/Realistic-first-person-gameplay.mp4",
+    "thirdPersonMoviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/footage/run-20261023-012855/Realistic/Realistic-third-person-animation.mp4",
+    "colliderHash": "AvhKX/bm7RmOG6AbLo+3g2ct+QF65uzw1fU1KarpSto=",
+    "acousticHash": "LrOGZOl+vdXO1NnY+IvCitoGc4HighI95FloKMsJd0w=",
+    "encodedMovie": true,
+    "encodedThirdPersonMovie": true
+}
+]
+}

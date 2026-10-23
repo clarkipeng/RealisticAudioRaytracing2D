@@ -1,0 +1,53 @@
+{
+"maxRouteDeltaMetres":0,
+"captures":[
+{
+    "preset": "PolishedLowPoly",
+    "frameCount": 4,
+    "fps": 24,
+    "width": 1280,
+    "height": 720,
+    "seconds": 0.1666666716337204,
+    "minLuma": 0.06049098074436188,
+    "maxLuma": 0.6721568703651428,
+    "travelledMetres": 0.5999984741210938,
+    "finalPosition": {
+        "x": 0.0,
+        "y": 1.0799999237060547,
+        "z": -29.280000686645509
+    },
+    "framesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/PolishedLowPoly/first-person-frames",
+    "thirdPersonFramesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/PolishedLowPoly/third-person-frames",
+    "moviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/PolishedLowPoly/PolishedLowPoly-first-person-gameplay.mp4",
+    "thirdPersonMoviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/PolishedLowPoly/PolishedLowPoly-third-person-animation.mp4",
+    "colliderHash": "5mTa0gjeTQ8EfNqt9GJypTagCTfpgEJ6fYsn0lbIN8I=",
+    "acousticHash": "MKDvcOfkRjaTJfVfdlc/cti1nxcEvN0s3xFg5P8z6TU=",
+    "encodedMovie": true,
+    "encodedThirdPersonMovie": true
+},
+{
+    "preset": "Realistic",
+    "frameCount": 4,
+    "fps": 24,
+    "width": 1280,
+    "height": 720,
+    "seconds": 0.1666666716337204,
+    "minLuma": 0.0473419614136219,
+    "maxLuma": 0.9515835046768189,
+    "travelledMetres": 0.5999984741210938,
+    "finalPosition": {
+        "x": 0.0,
+        "y": 1.0799999237060547,
+        "z": -29.280000686645509
+    },
+    "framesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/Realistic/first-person-frames",
+    "thirdPersonFramesDirectory": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/Realistic/third-person-frames",
+    "moviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/Realistic/Realistic-first-person-gameplay.mp4",
+    "thirdPersonMoviePath": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-rooms/grouped-smoke/run-20261023-013030/Realistic/Realistic-third-person-animation.mp4",
+    "colliderHash": "5mTa0gjeTQ8EfNqt9GJypTagCTfpgEJ6fYsn0lbIN8I=",
+    "acousticHash": "MKDvcOfkRjaTJfVfdlc/cti1nxcEvN0s3xFg5P8z6TU=",
+    "encodedMovie": true,
+    "encodedThirdPersonMovie": true
+}
+]
+}
