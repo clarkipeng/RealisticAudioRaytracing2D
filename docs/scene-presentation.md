@@ -35,7 +35,7 @@ nice -n 15 /Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Un
 
 Create `$OUTPUT` first. `RUNNER` contains the current `Assets`, `Packages` and `ProjectSettings`. `ffmpeg` must be on PATH to encode videos; encoding uses one thread. Omit `-nographics` because these renders need Metal. Add `-scenePresentationSmoke 1` for four frames per view before a full capture. A full run produces 8-second, 1280×720, 24 fps clips for each style/view. Raw frame sequences stay local; selected frames, videos and verification metadata are retained with the experiment history.
 
-`Tools → Acoustics → Install church presentation` rebuilds the authored bindings/materials/avatar if needed. It prompts to preserve unsaved scene edits before opening Church. The committed scene is already installed, so normal use does not require this step.
+The materials, rig, Animator controller and preset bindings are ordinary authored Unity assets. Edit those assets or the scene Inspector directly. The one-off setup code is preserved in checkpoint `a5aabce`; it was removed after authoring to keep the codebase smaller and prevent capture from overwriting scene customization. The reusable capture tool only reads the saved scene and changes its isolated in-memory copy.
 
 Asset provenance: [church assets](../Assets/External/Church/README.md), [character subset and license](../Assets/External/Kenney/AnimatedCharactersProtagonists/README.md).
 
@@ -48,3 +48,5 @@ Unity 6000.4.1f1 / Metal, silent isolated batch. Four videos passed `ffprobe`: 1
 Scene comparison against `86d475a` preserves all 44 authored collider definitions, 45 mesh filters, 41 acoustic surfaces, session/network/renderer settings, and the existing transform definitions. This excludes the new presentation child and visual lighting/material settings. No acoustic renderer benchmark or audio-quality claim follows from these presentation checks.
 
 [Verification](benchmarks/church-presentation-2026-10-22/verification.json), [capture metadata](benchmarks/church-presentation-2026-10-22/summary.json), [source/artifact hashes](benchmarks/church-presentation-2026-10-22/manifest.json), and [investigation logs / early failed frames / verification script](benchmarks/church-presentation-2026-10-22/investigation.zip) preserve the evidence. Early checks caught an empty Animator controller after a failed install, selection of the targeting pose instead of the real clips, stripped FBX animation paths, and incorrect avatar fitting. They are retained as process history, not counted as passing proof.
+
+The follow-up cleanup removes 232 lines of one-off asset setup. Its 16 smoke frames are pixel-identical to the corresponding full-capture frames, and the sampled input/pose/animation rows match. The full setup remains available at `a5aabce`; normal use and capture need only the authored assets.

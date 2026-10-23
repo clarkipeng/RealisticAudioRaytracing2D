@@ -15,9 +15,11 @@
     "Realistic-route.csv": "d26f99659e6daa6af87b0d39cabf0a6bccafbc6d7dfcfd6183dcf717ced74c8b",
     "comparison.png": "a7e9a17c5cd4045fec98d342b419b5008e3cbf60fae3455ae11505d8a7b1bb87",
     "Realistic-third-person-animation.mp4": "775ef0989e7fec90b752ca2daa6a60f64ff4dadade68cbc9bfec66d08bd4f42b",
-    "investigation.zip": "7b7d2ffcf5f7e298a889b94d3a6a04fe82e3e986a2a6d36b9706eddf9e6b3f6e",
-    "verification.json": "cff8358cbb333141b48389211690e75c7704e3ba2ddec94b832ec65f6f510fe6",
+    "investigation.zip": "59a4e942bd64fed30c8fd81a0d37729cb10083aa8e391e114a2374eec7565dec",
+    "verification.json": "8a4ec927744cc43b46646c2521ba095722a9aec11ef6edfbb1ff79d3bbf6323c",
     "PolishedLowPoly-first-person-gameplay.mp4": "4dc0946e25621e1b225d49ebdc02271e1775cc92d95c207caf961ea975a9d49f",
     "Realistic-first-person-gameplay.mp4": "01774db179a6f3263825dc58e9acc8a8e5b5889424ef80ddcfa3f28b9a584074"
-  }
+  },
+  "captureCodeCheckpoint": "a5aabce",
+  "captureCodeAfterCleanupSha256": "76c80359a8943ba3f3162cb663de8f4824731b2764051db6ced1ecae1547aa5e"
 }

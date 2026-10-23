@@ -57,5 +57,11 @@
   },
   "identicalFullRouteCsv": true,
   "maxRouteDeltaMetres": 0,
-  "captureRun": "run-20261023-010605"
+  "captureRun": "run-20261023-010605",
+  "captureCleanup": {
+    "setupCheckpoint": "a5aabce",
+    "removedSetupLines": 232,
+    "identicalSmokeFrames": 16,
+    "identicalSmokeRouteRows": true
+  }
 }
