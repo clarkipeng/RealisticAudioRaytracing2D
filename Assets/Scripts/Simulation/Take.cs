@@ -7,7 +7,7 @@ using UnityEngine;
 // Portable inputs for replay. These types contain no Unity object references.
 public sealed class AcousticTake : IDisposable
 {
-    public const int Version = 4;
+    public const int Version = 5;
     const int StateBytes = 80; // position, quaternion, four motion vectors, flags
     public enum Dimension { Planar2D, Spatial3D }
     public enum VoiceAction { Play, Stop, Gain }
@@ -24,6 +24,13 @@ public sealed class AcousticTake : IDisposable
         public int objectIndex, clipIndex;
         public bool streamed;
         public int mutedListenerPlusOne;
+    }
+
+    [Serializable] public sealed class EmissionPlane
+    {
+        public int source, samples, seed, width, height;
+        public Vector3 u, v; // Scaled local axes, independent of the sample-timed rigid pose.
+        public float[] mask; // Row-major linear power density, bottom-left origin.
     }
 
     [Serializable] public sealed class StreamDefinition
@@ -85,6 +92,7 @@ public sealed class AcousticTake : IDisposable
         public ClipDefinition[] clips;
         public MaterialDefinition[] materials;
         public string geometryHash;
+        public EmissionPlane[] planes;
     }
 
     [Serializable] public sealed class Provenance
@@ -217,6 +225,8 @@ public sealed class AcousticTake : IDisposable
             manifest.motion != "backward-pose-difference-v1")
             throw new InvalidDataException("Unsupported or incomplete acoustic take.");
         ValidateScene(manifest.scene);
+        if(manifest.version<5 && manifest.scene.planes!=null && manifest.scene.planes.Length>0)
+            throw new InvalidDataException("Legacy takes cannot authenticate emission planes.");
         if(manifest.version<4 && Array.Exists(manifest.scene.materials,m=>m.HasAdmittance))
             throw new InvalidDataException("Legacy takes cannot authenticate impedance materials.");
         if(manifest.version<3 && Array.Exists(manifest.scene.sources,v=>v.streamed || v.mutedListenerPlusOne!=0))
@@ -229,6 +239,16 @@ public sealed class AcousticTake : IDisposable
     }
 
     [Serializable] sealed class LegacySource { public int objectIndex,clipIndex; }
+    [Serializable] sealed class VersionFourScene
+    {
+        public Dimension dimension;
+        public ObjectDefinition[] objects;
+        public SourceDefinition[] sources;
+        public int[] listeners;
+        public ClipDefinition[] clips;
+        public MaterialDefinition[] materials;
+        public string geometryHash;
+    }
     [Serializable] sealed class VersionTwoScene
     {
         public Dimension dimension;
@@ -272,6 +292,8 @@ public sealed class AcousticTake : IDisposable
     public static string SceneHash(Scene scene,int version)
     {
         if(version==Version)return HashText(JsonUtility.ToJson(scene));
+        if(version==4)return HashText(JsonUtility.ToJson(new VersionFourScene {dimension=scene.dimension,objects=scene.objects,sources=scene.sources,
+            listeners=scene.listeners,clips=scene.clips,materials=scene.materials,geometryHash=scene.geometryHash}));
         var legacy=Array.ConvertAll(scene.materials,m=>new LegacyMaterial{name=m.name,interpolation=m.interpolation,
             frequencies=m.frequencies,absorption=m.absorption,scattering=m.scattering,transmission=m.transmission,ior=m.ior,damping=m.damping});
         if(version==3)return HashText(JsonUtility.ToJson(new VersionThreeScene {dimension=scene.dimension,objects=scene.objects,sources=scene.sources,
@@ -500,6 +522,7 @@ public sealed class AcousticTake : IDisposable
             if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
             if(version<1 || version>Version)throw new InvalidDataException("Unsupported take version.");
             ValidateScene(scene);
+            if(version<5 && scene.planes!=null && scene.planes.Length>0)throw new InvalidDataException("Emission planes require take version 5.");
             if(version<4 && Array.Exists(scene.materials,m=>m.HasAdmittance))throw new InvalidDataException("Impedance materials require take version 4.");
             if(version<3 && Array.Exists(scene.sources,s=>s.streamed || s.mutedListenerPlusOne!=0))throw new InvalidDataException("Source streams and monitor masks require take version 3.");
             if (pcm.Length != scene.clips.Length) throw new ArgumentException("Clip count mismatch.");
@@ -623,10 +646,18 @@ public sealed class AcousticTake : IDisposable
         foreach (int listener in scene.listeners)
             if (listener < 0 || listener >= scene.objects.Length) throw new InvalidDataException("Invalid listener binding.");
         foreach(var material in scene.materials)material.ValidateAdmittance();
+        var planeSources=new HashSet<int>();
+        if(scene.planes!=null)foreach(var plane in scene.planes)
+        {
+            AudioSourcePlane.Validate(plane);
+            if(plane.source<0 || plane.source>=scene.sources.Length || scene.sources[plane.source].streamed || !planeSources.Add(plane.source))
+                throw new InvalidDataException("Invalid emission plane source binding.");
+        }
     }
 
     static void ValidateEvent(VoiceEvent e, Scene scene)
     {
+        AudioSourcePlane.ValidateEvent(scene,e);
         if (e.sample < 0 || e.clipOffset < 0 || e.sourceIndex < 0 || e.sourceIndex >= scene.sources.Length ||
             !Enum.IsDefined(typeof(VoiceAction), e.action)) throw new InvalidDataException("Invalid audio event.");
         var source=scene.sources[e.sourceIndex];

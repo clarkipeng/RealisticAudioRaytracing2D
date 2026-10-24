@@ -48,6 +48,7 @@ public static partial class TakeRender
         }
         public int RaysPerPair => checked(FrequencyBins*RaysPerBin);
         public int SpectralSlotsPerPair => checked(FrequencyBins+RaysPerPair*checked(maxBounces+1));
+        public int SlotsPerPair(AcousticTake.Scene scene) => checked(SpectralSlotsPerPair+(AudioSourcePlane.MaximumSamples(scene)-1)*FrequencyBins);
         [Tooltip("Experimental sampled edge transport: 1 uses signed rigid-wedge contributions; 0 disables diffraction. Increase rays per bin for convergence.")]
         [Min(0)] public float diffractionFactor=1;
         public bool airAbsorption=true;
@@ -336,9 +337,11 @@ public static partial class TakeRender
     // All mutation happens on the producer/control thread. The audio callback receives PCM only.
     public sealed class Signal
     {
+        internal struct ClipClock { public uint index; public float gain; }
         struct Voice { public long sample, start, offset; public bool playing, loop; public float gain; }
         readonly List<Voice> voices=new List<Voice>();
         readonly float[] pcm;
+        internal float[] Clip => pcm;
         readonly SourceStream stream;
         public long ReadyEnd => stream==null || stream.Finished?long.MaxValue:stream.End;
         public long EndSample=long.MaxValue;
@@ -393,23 +396,37 @@ public static partial class TakeRender
             if (voices.Count>0 && voices[voices.Count-1].sample==e.sample) voices[voices.Count-1]=current;
             else { ReserveEvent(); voices.Add(current); }
         }
-        public float Read(double sample)
+        public float Read(double sample,uint phase=0)
         {
             long i=(long)Math.Floor(sample); float f=(float)(sample-i);
-            return Mathf.LerpUnclamped(Read(i),Read(i+1),f);
+            return Mathf.LerpUnclamped(Read(i,phase),Read(i+1,phase),f);
         }
-        internal float Read(long sample)
+        internal float Read(long sample,uint phase=0)
         {
-            if (sample<0 || sample>EndSample || voices.Count==0 || (stream==null && pcm.Length==0)) return 0;
+            if(!VoiceAt(sample,out var v))return 0;
+            if(stream!=null)return stream.Read(sample)*v.gain;
+            var clock=Clock(sample,v);
+            if(clock.gain==0)return 0;
+            long index=clock.index;
+            if(phase!=0)index=(index+((long)phase*pcm.Length>>16))%pcm.Length;
+            return pcm[index]*clock.gain;
+        }
+        internal ClipClock ReadClipClock(long sample) => VoiceAt(sample,out var v)?Clock(sample,v):default;
+        ClipClock Clock(long sample,Voice v)
+        {
+            long index=sample-v.start+v.offset;if(v.loop)index%=pcm.Length;
+            return index<pcm.Length?new ClipClock{index=(uint)index,gain=v.gain}:default;
+        }
+        bool VoiceAt(long sample,out Voice voice)
+        {
+            voice=default;
+            if (sample<0 || sample>EndSample || voices.Count==0 || (stream==null && pcm.Length==0)) return false;
             int gate=gateSamples.BinarySearch(sample); if (gate<0) gate=~gate-1;
-            if (gate<0 || !gateEnabled[gate]) return 0;
+            if (gate<0 || !gateEnabled[gate]) return false;
             int lo=0,hi=voices.Count;
             while (lo<hi) { int mid=lo+(hi-lo)/2; if (voices[mid].sample<=sample) lo=mid+1; else hi=mid; }
-            if (lo==0) return 0;
-            var v=voices[lo-1]; if (!v.playing) return 0;
-            if(stream!=null)return stream.Read(sample)*v.gain;
-            long index=sample-v.start+v.offset; if (v.loop) index%=pcm.Length;
-            return index<pcm.Length ? pcm[index]*v.gain:0;
+            if (lo==0) return false;
+            voice=voices[lo-1];return voice.playing;
         }
     }
 
@@ -439,6 +456,7 @@ public static partial class TakeRender
             (long)(earBlend.Length+oldEarBlend.Length)*32+(long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0);
         public Mixer(AcousticTake.Scene scene,int sampleRate,Settings settings,Signal[] signals)
         {
+            AudioSourcePlane.ValidateRender(scene,settings);
             Validate(settings); this.scene=scene; this.sampleRate=sampleRate; this.signals=signals; transition=settings.transitionSamples;
             channels=settings.ChannelsPerListener; maximumBlock=settings.responseStepSamples;
             delayFilter=settings.delayFilter;sincRadius=settings.sincRadius;

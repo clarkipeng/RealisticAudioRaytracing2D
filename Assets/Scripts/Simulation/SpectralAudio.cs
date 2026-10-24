@@ -11,7 +11,7 @@ internal sealed class SpectralAudio
     {
         public readonly Vector2[] spectrum;
         public int pair;
-        public uint identity,bin;
+        public uint identity,bin,phase;
         public PathFilter other;
         public Vector3 direction;
         public double delay,rate;
@@ -34,7 +34,7 @@ internal sealed class SpectralAudio
     readonly Hrtf hrtf;
     readonly Vector2[] native,pressure,ears,input,sum;
     readonly int[] heads,next;
-    readonly Dictionary<(float,Vector4,uint),int> groups;
+    readonly Dictionary<(float,Vector4,uint,uint),int> groups;
     Response current,previous;
     long cursor;
     bool cut;
@@ -49,12 +49,12 @@ internal sealed class SpectralAudio
     public SpectralAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals)
     {
         this.rate=rate;this.signals=signals;maximumDelay=settings.maximumDelaySeconds*(double)rate;size=settings.fftSize;hop=settings.spectralHop;channels=settings.ChannelsPerListener;
-        listeners=scene.listeners.Length;pairs=signals.Length*listeners;slots=settings.SpectralSlotsPerPair;
+        listeners=scene.listeners.Length;pairs=signals.Length*listeners;slots=settings.SlotsPerPair(scene);
         hrtf=channels==2?Hrtf.Load(rate):null;delayFilter=settings.delayFilter;radius=settings.sincRadius;
         latencyOffset=size/2+(delayFilter==TakeRender.DelayFilter.WindowedSinc?radius:0);
         fft=1;while(fft<size+(hrtf?.Taps??1)+hop-2)fft=checked(fft*2);bins=fft/2+1;
         native=new Vector2[size];pressure=new Vector2[fft];ears=Hrtf.Spectra(hrtf,fft);input=new Vector2[fft];sum=new Vector2[checked(2*listeners*channels*bins)];
-        heads=new int[slots];next=new int[slots];groups=new Dictionary<(float,Vector4,uint),int>(slots);
+        heads=new int[slots];next=new int[slots];groups=new Dictionary<(float,Vector4,uint,uint),int>(slots);
         headRotations=new Quaternion[listeners];headAngular=new Vector3[listeners];
         current=new Response(listeners*channels*hop);previous=new Response(current.block.Length);
     }
@@ -77,7 +77,7 @@ internal sealed class SpectralAudio
                 var path=paths[basePath+slot];if(path.pressureGain==0 && path.pressureImag==0)continue;
                 if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.pressureImag) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 ||
                     !float.IsFinite(path.direction.sqrMagnitude) || path.direction.w>=1)throw new InvalidOperationException("Invalid or noncausal spectral arrival at pair "+pair+", slot "+slot+": delay="+path.delaySeconds+", rate="+path.direction.w);
-                var key=(path.delaySeconds,path.direction,path.identity);
+                var key=(path.delaySeconds,path.direction,path.identity,path.emissionPhase);
                 if(!groups.TryGetValue(key,out int group)){group=count++;groups.Add(key,group);heads[group]=-1;}
                 next[slot]=heads[group];heads[group]=slot;
             }
@@ -86,6 +86,7 @@ internal sealed class SpectralAudio
                 if(current.count==current.paths.Count)current.paths.Add(new PathFilter(bins));
                 var filter=current.paths[current.count++];int slot=heads[group];var path=paths[basePath+slot];
                 filter.pair=pair;filter.direction=path.direction;filter.rate=path.direction.w;filter.delay=path.delaySeconds*(double)rate;filter.sample=current.sample;filter.identity=path.identity;filter.bin=path.frequencyBin;filter.other=null;
+                filter.phase=path.emissionPhase;
                 Array.Clear(native,0,size);
                 for(int member=slot;member>=0;member=next[member])
                 {var value=paths[basePath+member];native[value.frequencyBin]+=new Vector2(value.pressureGain,value.pressureImag);filter.bin=Math.Min(filter.bin,value.frequencyBin);}
@@ -149,7 +150,7 @@ internal sealed class SpectralAudio
                 double receiver=sample-(fft-hop)+n-latencyOffset;
                 double delay=filter.delay+filter.rate*(receiver-filter.sample),slope=filter.rate;
                 if(left!=null && right!=null)Doppler.Clock(receiver-previous.sample,current.sample-previous.sample,left.delay,right.delay,left.rate,right.rate,out delay,out slope);
-                input[n]=new Vector2(Doppler.Read(signals[source],receiver-delay,1-slope,delayFilter,radius),0);
+                input[n]=new Vector2(Doppler.Read(signals[source],receiver-delay,1-slope,delayFilter,radius,filter.phase),0);
             }
             ImpulseResponseAudio.Fft(input,false);
             var angular=headAngular[listener];int endpoints=angular.sqrMagnitude>0?2:1;

@@ -158,6 +158,12 @@ public static class SceneReplay
             t.gameObject.layer=source.gameObject.layer;
             t.localPosition = source.localPosition; t.localRotation = source.localRotation; t.localScale = source.localScale;
             var mesh = source.GetComponent<MeshFilter>(); if (mesh != null) t.gameObject.AddComponent<MeshFilter>().sharedMesh = mesh.sharedMesh;
+            var plane=source.GetComponent<AudioSourcePlane>();
+            if(plane!=null)
+            {
+                var audio=t.gameObject.AddComponent<RaytracedAudioSource>();EditorUtility.CopySerialized(source.GetComponent<RaytracedAudioSource>(),audio);audio.enabled=false;
+                EditorUtility.CopySerialized(plane,t.gameObject.AddComponent<AudioSourcePlane>());
+            }
             var surface = source.GetComponent<AcousticSurface>();
             if (surface != null) EditorUtility.CopySerialized(surface, t.gameObject.AddComponent<AcousticSurface>());
             // Keep initial source activity without running any source lifecycle methods.

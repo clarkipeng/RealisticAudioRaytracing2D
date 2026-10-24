@@ -1,0 +1,50 @@
+{
+  "parentRevision": "0659ec52962f83fd7451354ebcefc13443d774b8",
+  "unity": "6000.4.1f1",
+  "tests": {
+    "selected": 204,
+    "passed": 204,
+    "failed": 0,
+    "skipped": 0,
+    "newPlaneCases": 10
+  },
+  "scope": "Silent isolated offline rendering; no Play-mode/device/network or full-profile performance claim",
+  "sourceSha256": {
+    "Assets/Editor/SceneReplay.cs": "0a313901e83c53964299963ce0d10dbf7d3d23a52947356c6e37a3b8c107c047",
+    "Assets/External/Church/README.md": "d058c1461292a5150705960ef845cf45f2fef934d7a9d48725d3532dff2ab109",
+    "Assets/Resources/Acoustics/GpuAudio.compute": "129806ad0ea3cff622c55c3e313e5fd6f8ffa45e0353b86ae87c40a112977c22",
+    "Assets/Scenes/Church.unity": "f93056525389f283096031b434fda038a9f625636cf62cbdc49741fa5a10bc57",
+    "Assets/Scripts/Scene/SceneToTake.cs": "5fd25371592267a379379c80128cb1d4162dcb64702ab9bc0c711578089beae0",
+    "Assets/Scripts/Simulation/Doppler.cs": "bd92b8af57305551d814efdc596f72191e48af7a8dd65d22082ba31c6d80d79c",
+    "Assets/Scripts/Simulation/GpuAudio.cs": "323c251bdaeb4a67170370ef335387b276de52eddf0f7d095184fc5afadd6906",
+    "Assets/Scripts/Simulation/RayTransport.cs": "57d505d504bfdc38a1097feecb0d7ea0e3219a41fcdb17579bea984d8740c35f",
+    "Assets/Scripts/Simulation/SpectralAudio.cs": "8f1326efbea73d97af2882073a3cd48eadbf86916c242e645b66faff82c4d17b",
+    "Assets/Scripts/Simulation/Take.cs": "82b78cf101dd00823bb82b315a6f3f947fc6fb01370b5c7789d56aab2e0061d4",
+    "Assets/Scripts/Simulation/TakeRender.Live.cs": "fe5f38779e99f81994910870b2f14586847a9775c6cdc1f46572e4ac2f789a9e",
+    "Assets/Scripts/Simulation/TakeRender.cs": "095e7535b99d94c289ffe7125eeab6f6e33280853f7aaf71bc7d0a244527cd1a",
+    "Assets/Scripts/Simulation/TransportSolver.cs": "6df92d72d32e45e9056e3a4d7c217641d166bfb398f6efca777f72f019446729",
+    "Assets/Shaders/Transport.hlsl": "36d289a5ff2efc8d06bc2ce3651bfe7f16b1ee2d5b19b82ffb15c113ce33a453",
+    "docs/scene-presentation.md": "a674eeab5bedbebe3813eab25ccff3b8366ee6317a2cab1e350b14639072cf92",
+    "Assets/External/Church/RainMask.png": "780c823536e335846d498523ad97122f7ceb9e38b3c976339a78f65e8a5978ff",
+    "Assets/External/Church/RainMask.png.meta": "4144dc565233e92311d280f17eca0effd62c8c970dfacbe1ab5e51f7d45aaea8",
+    "Assets/Scripts/Audio/AudioSourcePlane.cs": "076b799cfeb74e5eafb561c16b426d9d57b247e96d4553da6c2292e9c82bc607",
+    "Assets/Scripts/Audio/AudioSourcePlane.cs.meta": "2117b4225ef49eae4dc35fe7523c075e0b8dc4f75c0e6ff4a35454c3b42727bf",
+    "Assets/Tests/Editor/PlaneSourceChecks.cs": "3ae06c3b53a1f1b0f79779e87f7743daf2799920a533437c864485171167381b",
+    "Assets/Tests/Editor/PlaneSourceChecks.cs.meta": "243747d687d2a6b12c0e2750d92263936b5da28371c9f1d9e5acac4a4d1b27a7"
+  },
+  "removed": [
+    "Assets/External/Church/Audio/RainGarden.wav",
+    "Assets/External/Church/Audio/RainGarden.wav.meta"
+  ],
+  "artifactSha256": {
+    "README.md": "464a38a1c4e745768688b6047dc2f18e59c4e6c36e7173fd881a0bbd90fcbc13",
+    "audio-check.json": "e2a082cc828de7fe027c6bc7fc823389be54764998fabd01d8707090df977dbe",
+    "authoring.zip": "df3b7feaf39ba29d2e56268fc7cc983a46dc4e14a62d349d0780ea0fe50b43d4",
+    "rain-plane-map.png": "3522c08dcfe0447bd05f36c298c4dd8661ed5eeab98929e3761dbcf787eedec1",
+    "rain-smoke.wav": "2dec291bea2889cd2d39483fd6db727f6ac93085b29a7137f277a3183074a37a",
+    "regression.json": "ff8f2862dd99e059f5c4a63cd34d459e97f41414aefb5d4336fbb0379022fa92",
+    "scene-diff.json": "5a14d4fd1457b5c2bf75999ea49192206ae7b282d94c826153e00ef7425c8423",
+    "verification.json": "4ea3fd50ce9591504392765abd49fdaef7aa3ed64766983bba1161efb63e0578",
+    "waveform-spectrogram.png": "1e67e2faf990b9cf865ea3aa13ac35fe858662b3cf0246825838e941f5da9eb6"
+  }
+}

@@ -20,7 +20,7 @@
 // CPU and GPU exchange scene inputs and finished PCM. Paths, filters, FFTs and
 // sums stay here. The small-transform fast path uses one workgroup per path;
 // larger transforms use the same radix-2 operations in global-memory stages.
-struct AudioPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,identity; float pressureImag; uint padding0,padding1,padding2; };
+struct AudioPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,identity; float pressureImag; uint emissionPhase,padding1,padding2; };
 StructuredBuffer<AudioPath> AudioArrivals;
 RWStructuredBuffer<AudioPath> AudioLast,AudioPaths;
 RWStructuredBuffer<int2> AudioTable;
@@ -30,7 +30,9 @@ RWStructuredBuffer<uint4> AudioPairState; // current bank, previous bank, rebuil
 StructuredBuffer<float4> AudioHeadsPose,AudioRings;
 RWStructuredBuffer<float4> AudioHeadHistory;
 StructuredBuffer<float2> AudioAngles,AudioEars;
-StructuredBuffer<float> AudioSource;
+StructuredBuffer<float> AudioSource,AudioClips;
+StructuredBuffer<uint4> AudioClipInfo;
+StructuredBuffer<uint2> AudioSourceClocks;
 StructuredBuffer<int> AudioFilterPairs;
 RWStructuredBuffer<float4> AudioSums;
 RWStructuredBuffer<float2> AudioFilters,AudioWork,AudioTransform;
@@ -56,7 +58,7 @@ groupshared uint AudioLocalTable[8191]; // Reserve the last uint of 32 KiB for A
 float2 AudioMultiply(float2 a,float2 b) {return float2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
 uint AudioHash(uint a) {a^=a>>16;a*=0x7feb352d;a^=a>>15;a*=0x846ca68b;return a^(a>>16);}
 uint AudioBits(float a) {return a==0?0:asuint(a);}
-bool AudioSame(AudioPath a,AudioPath b) {return a.delaySeconds==b.delaySeconds && all(a.direction==b.direction) && (AudioSpectral==0 || a.identity==b.identity);}
+bool AudioSame(AudioPath a,AudioPath b) {return a.emissionPhase==b.emissionPhase && a.delaySeconds==b.delaySeconds && all(a.direction==b.direction) && (AudioSpectral==0 || a.identity==b.identity);}
 uint AudioBank() {return AudioMeta[0] ^ (AudioSpectral!=0?0:AudioWhich);}
 // Acoustic ownership is per pair; the output/head clock still advances as one response.
 uint AudioPathBank(uint pair) {return AudioWhich==0?AudioPairState[pair].x:AudioPairState[pair].y;}
@@ -322,12 +324,21 @@ void AudioSplit(float2 v,out int whole,out float fraction)
 {
     float f=floor(v.x);fraction=(v.x-f)+v.y;float adjust=floor(fraction);whole=(int)f+(int)adjust;fraction-=adjust;
 }
-float AudioRead(uint source,int at)
+float AudioRead(uint source,int at,uint phase)
 {
     // Samples before initialization are measured zero, not missing history.
     if(AudioBlockNegative!=0 && at<-(int)AudioBlockSample.x)return 0;
     if(at<AudioAvailableStart || at>=AudioAvailableEnd){AudioError(2);return 0;}
-    int ring=(AudioRingAt+at)%(int)AudioHistory;if(ring<0)ring+=AudioHistory;return AudioSource[source*AudioHistory+ring];
+    int ring=(AudioRingAt+at)%(int)AudioHistory;if(ring<0)ring+=AudioHistory;
+    uint4 clip=AudioClipInfo[source];
+    if(clip.w!=0)
+    {
+        uint2 clock=AudioSourceClocks[clip.z*AudioHistory+ring];
+        // Exact floor(phase*length/65536) with bounded uint products on Metal.
+        uint offset=(clip.y>>16)*phase+((clip.y&65535)*phase>>16);
+        return AudioClips[clip.x+(clock.x+offset)%clip.y]*asfloat(clock.y);
+    }
+    return AudioSource[source*AudioHistory+ring];
 }
 float AudioSincValue(float x) {return abs(x)<1e-6?1:sin(AUDIO_PI*x)/(AUDIO_PI*x);}
 float AudioSample(uint g,uint n)
@@ -357,13 +368,13 @@ float AudioSample(uint g,uint n)
     }
     int d,r;float df,rf;AudioSplit(delay,d,df);AudioSplit(correction,r,rf);
     float f=-df-rf,adjust=floor(f);int at=local-d-r+(int)adjust;f-=adjust;uint source=(g/AudioSlots)/AudioListeners;
-    if(AudioSinc==0)return lerp(AudioRead(source,at),AudioRead(source,at+1),f);
+    if(AudioSinc==0)return lerp(AudioRead(source,at,p.emissionPhase),AudioRead(source,at+1,p.emissionPhase),f);
     float cutoff=min(1,1/(1-rate)),sum=0,value=0;int extent=(int)ceil(AudioRadius/cutoff);
     for(int k=1-extent;k<=extent;k++)
     {
         float x=(k-f)*cutoff;if(abs(x)>=(float)AudioRadius)continue;
         float weight=AudioSincValue(x)*AudioSincValue(x/AudioRadius)*cutoff;
-        value+=AudioRead(source,at+k)*weight;sum+=weight;
+        value+=AudioRead(source,at+k,p.emissionPhase)*weight;sum+=weight;
     }
     return value/sum;
 }

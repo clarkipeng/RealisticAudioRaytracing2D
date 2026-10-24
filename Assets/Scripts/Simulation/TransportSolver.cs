@@ -97,6 +97,7 @@ public sealed class TransportSolver : IDisposable
                            int sampleRate = 48000, bool readbackPaths = true)
     {
         TakeRender.Validate(settings);
+        AudioSourcePlane.ValidateRender(scene,settings);
         this.scene = scene;
         this.geometry = geometry;
         this.settings = settings;
@@ -211,6 +212,8 @@ public sealed class TransportSolver : IDisposable
     // no debug storage or readback. The caller owns the returned frozen CPU snapshot.
     public RaySegment[] CaptureRays(AcousticTake.State[] state, int pair, int frequencyBin)
     {
+        if(AudioSourcePlane.MaximumSamples(scene)>1)
+            throw new NotSupportedException("The single-origin ray debugger does not yet capture multi-sample planes.");
         if (disposed || pending || transport == null)
             throw new InvalidOperationException("Ray capture requires an idle GPU raytraced solver.");
         if (state.Length != scene.objects.Length || pair < 0 || pair >= pairs || frequencyBin < 0 ||

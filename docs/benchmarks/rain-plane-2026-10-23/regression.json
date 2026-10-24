@@ -1,0 +1,24 @@
+{
+  "result": "Passed",
+  "total": "204",
+  "passed": "204",
+  "failed": "0",
+  "skipped": "0",
+  "duration": "349.8232142",
+  "start-time": "2026-10-24 00:07:49Z",
+  "end-time": "2026-10-24 00:13:39Z",
+  "selection": "TakeChecks; Core/GPU/Integration; EditMode",
+  "fullResults": "authoring.zip/regression.xml",
+  "planeCases": [
+    "TakeChecks.PlaneClipOffsetsPreserveEventTimesAndLoopPhase",
+    "TakeChecks.PlaneDirectPathsUseMaskedRotatedPositionsAndSharedSourcePhases",
+    "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Mono,Linear)",
+    "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Binaural,Linear)",
+    "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(2048,Mono,Linear)",
+    "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Mono,WindowedSinc)",
+    "TakeChecks.PlaneMaskWeightsPowerAndPreservesSamplePrefixes",
+    "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Planar2D)",
+    "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Spatial3D)",
+    "TakeChecks.PlaneTakeAuthenticatesMaskAndRejectsLegacyExtension"
+  ]
+}

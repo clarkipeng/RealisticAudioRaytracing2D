@@ -7,15 +7,17 @@ using UnityEngine.Rendering;
 // shared with the CPU reference, but no path or intermediate spectrum is read back.
 internal sealed class GpuAudio : IDisposable
 {
+    struct ClipInfo { public int first,length,row,enabled; }
     readonly ComputeShader shader;
     readonly CommandBuffer commands;
     readonly TakeRender.Settings settings;
     readonly TakeRender.Signal[] signals;
-    readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock;
+    readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock,slots;
     readonly int reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
     readonly int[] kernels,transformKernels;
     readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
-    readonly ComputeBuffer args,headsPose,source,work,transform,output;
+    readonly ComputeBuffer args,headsPose,source,work,transform,output,sourceClocks;
+    readonly int[] planeRows;
     readonly float[] download;
     readonly Vector4[] poses;
     readonly bool[] audibleSources;
@@ -36,10 +38,11 @@ internal sealed class GpuAudio : IDisposable
         transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu;
     public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1)
     {
+        AudioSourcePlane.ValidateRender(scene,settings);slots=settings.SlotsPerPair(scene);
         audibleSources=new bool[signals.Length];
         for(int s=0;s<signals.Length;s++)audibleSources[s]=scene.listeners.Length>1 || scene.sources[s].mutedListenerPlusOne!=1;
         this.settings=settings;this.signals=signals;listeners=scene.listeners.Length;channels=settings.ChannelsPerListener;pairs=signals.Length*listeners;
-        capacity=checked(pairs*settings.SpectralSlotsPerPair);maximumBlock=checked(settings.responseStepSamples*maximumResponses);
+        capacity=checked(pairs*slots);maximumBlock=checked(settings.responseStepSamples*maximumResponses);
         var hrtf=channels==2?Hrtf.Load(rate):null;int taps=hrtf?.Taps??1;
         fft=1;while(fft<settings.fftSize+taps+settings.spectralHop-2)fft=checked(fft*2);bins=fft/2+1;
         history=checked((int)settings.HistorySamples(rate)+fft+maximumBlock);
@@ -55,7 +58,7 @@ internal sealed class GpuAudio : IDisposable
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
             kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
-            int hash=checked(settings.SpectralSlotsPerPair*2+1);
+            int hash=checked(slots*2+1);
             Buffer("AudioMeta",23,4).SetData(new uint[23]);
             Buffer("AudioPairState",pairs,16).SetData(new uint[pairs*4]);
             Buffer("AudioLast",capacity,RayTransport.PathStride).SetData(new RayTransport.Path[capacity]);
@@ -65,11 +68,27 @@ internal sealed class GpuAudio : IDisposable
             headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);
             Buffer("AudioHeadHistory",poses.Length*2,16);
             source=Buffer("AudioSource",checked(signals.Length*history),4,mode:ComputeBufferMode.SubUpdates);
+            // One immutable PCM upload per plane clip; only event clocks/gain stream per source.
+            planeRows=new int[signals.Length];Array.Fill(planeRows,-1);
+            var clipInfo=new ClipInfo[signals.Length];var clipData=new List<float>();
+            var clipOffsets=new Dictionary<float[],int>();int planeCount=0;
+            if(scene.planes!=null)foreach(var plane in scene.planes)
+            {
+                var pcm=signals[plane.source].Clip;
+                if(pcm==null || pcm.Length==0)throw new InvalidOperationException("Rain plane requires decoded clip PCM.");
+                if(!clipOffsets.TryGetValue(pcm,out int first)){first=clipData.Count;clipOffsets.Add(pcm,first);clipData.AddRange(pcm);}
+                planeRows[plane.source]=planeCount;
+                clipInfo[plane.source]=new ClipInfo{first=first,length=pcm.Length,row=planeCount++,enabled=1};
+            }
+            Buffer("AudioClipInfo",clipInfo.Length,16).SetData(clipInfo);
+            var clips=Buffer("AudioClips",Math.Max(1,clipData.Count),4);if(clipData.Count>0)clips.SetData(clipData);
+            sourceClocks=Buffer("AudioSourceClocks",Math.Max(1,checked(planeCount*history)),8,mode:ComputeBufferMode.SubUpdates);
+
             // Material spectra are shared by both ears. Head endpoints reuse scratch per bank's hop.
             // The immutable self-monitor mask changes storage, never source/listener IDs.
             var filterPairs=new int[pairs];int audiblePairs=0;
             for(int p=0;p<pairs;p++)filterPairs[p]=scene.sources[p/listeners].mutedListenerPlusOne==p%listeners+1?-1:audiblePairs++;
-            int filterCapacity=checked(audiblePairs*settings.SpectralSlotsPerPair);
+            int filterCapacity=checked(audiblePairs*slots);
             Buffer("AudioFilterPairs",pairs,4).SetData(filterPairs);Set("AudioFilterCapacity",filterCapacity);
             int filterElements=Math.Max(1,checked(2*filterCapacity*bins));
             Buffer("AudioFilters",filterElements,8);
@@ -79,11 +98,11 @@ internal sealed class GpuAudio : IDisposable
             // runs pair by pair, so its separate transform scratch can reuse the same rows.
             int workStride=fft<=2048?bins:fft;
             work=Buffer("AudioWork",checked(capacity*workStride),8);
-            transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(settings.SpectralSlotsPerPair,listeners*channels)*fft),8):work;
+            transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(slots,listeners*channels)*fft),8):work;
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
             PrepareEars(hrtf);
-            Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioSlots",settings.SpectralSlotsPerPair);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
+            Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioSlots",slots);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
             Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
             Set("AudioWorkStride",workStride);
             Set("AudioTransition",settings.transitionSamples);Set("AudioSpectral",settings.synthesis==TakeRender.Synthesis.Spectral?1:0);
@@ -163,7 +182,7 @@ internal sealed class GpuAudio : IDisposable
     void FftGlobal(ComputeBuffer buffer,int size,bool inverse,int pair,int which,int count=0)
     {
         BindTransform(buffer);Set("AudioTransformSize",size);Set("AudioTransformInverse",inverse?1:0);Set("AudioTransformInput",count==0 && !inverse?1:0);
-        Set("AudioTransformBase",buffer==work && count==0?pair*settings.SpectralSlotsPerPair:0);
+        Set("AudioTransformBase",buffer==work && count==0?pair*slots:0);
         if(count==0)Dispatch(reverse,pair,which);else commands.DispatchCompute(shader,reverse,count,1,1);
         for(int stage=2;;stage=checked(stage*2))
         {Set("AudioStage",stage);if(count==0)Dispatch(butterfly,pair,which);else commands.DispatchCompute(shader,butterfly,count,1,1);if(stage==size)break;}
@@ -179,6 +198,13 @@ internal sealed class GpuAudio : IDisposable
             {
                 // The previous PCM readback fences all source readers. Write this batch
                 // before dispatch, retaining history + the entire pending batch in the ring.
+                if(planeRows[s]>=0)
+                {
+                    var clock=sourceClocks.BeginWrite<TakeRender.Signal.ClipClock>(planeRows[s]*history+ring,count);
+                    try {for(int n=0;n<count;n++)clock[n]=audibleSources[s]?signals[s].ReadClipClock(uploaded+n):default;}
+                    finally {sourceClocks.EndWrite<TakeRender.Signal.ClipClock>(count);}
+                    UploadedBytes+=count*8L;continue;
+                }
                 var mapped=source.BeginWrite<float>(s*history+ring,count);
                 try {for(int n=0;n<count;n++)mapped[n]=audibleSources[s]?signals[s].Read(uploaded+n):0;}
                 finally {source.EndWrite<float>(count);}

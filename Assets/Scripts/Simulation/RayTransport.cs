@@ -15,7 +15,7 @@ internal sealed class RayTransport : IDisposable
         public float delaySeconds, pressureGain;
         public uint frequencyBin, identity;
         public float pressureImag;
-        public uint padding0, padding1, padding2;
+        public uint emissionPhase, padding1, padding2; // 16-bit cyclic PCM phase; separate from physical delay.
     }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Material
@@ -31,7 +31,7 @@ internal sealed class RayTransport : IDisposable
     }
     readonly ComputeShader shader;
     readonly CommandBuffer commands;
-    readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins;
+    readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins, directSamples;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Volume
     {
@@ -39,7 +39,7 @@ internal sealed class RayTransport : IDisposable
         public uint start, count, owner, material;
     }
     readonly ComputeBuffer materialBuffer, edgeBuffer, volumeBuffer, pathBuffer, enabledBuffer,
-        edgeRangeBuffer, edgeIndexBuffer;
+        edgeRangeBuffer, edgeIndexBuffer, emissionRanges, emissionPoints;
     readonly bool[] everActive;
     readonly uint[] enabledPairs;
     readonly Action<AsyncGPUReadbackRequest> completion;
@@ -69,7 +69,8 @@ internal sealed class RayTransport : IDisposable
         enabledPairs = new uint[checked(pairs * maximumFrames)];
         int bins = settings.fftSize / 2 + 1;
         foreach(var material in scene.materials)material.ValidateAdmittance();
-        SlotsPerPair = settings.SpectralSlotsPerPair;
+        SlotsPerPair = settings.SlotsPerPair(scene);
+        directSamples = AudioSourcePlane.MaximumSamples(scene);
         PathsPerFrame = checked(pairs * SlotsPerPair);
         Paths = new Path[readback ? checked(PathsPerFrame * maximumFrames) : 0];
         completion = OnComplete;
@@ -77,6 +78,17 @@ internal sealed class RayTransport : IDisposable
         try
         {
             commands = new CommandBuffer {name="Acoustics GPU transport"};
+            var points=new List<Vector4>();var ranges=new int[scene.sources.Length*4];
+            for(int s=0;s<scene.sources.Length;s++)
+            {
+                var plane=scene.planes==null?null:Array.Find(scene.planes,p=>p.source==s);
+                ranges[s*4]=points.Count;ranges[s*4+1]=plane?.samples??1;
+                ranges[s*4+2]=plane?.seed??0;ranges[s*4+3]=plane==null?0:1;
+                if(plane==null)points.Add(new Vector4(0,0,0,1));
+                else for(int n=0;n<plane.samples;n++)points.Add(AudioSourcePlane.Sample(plane,n));
+            }
+            emissionRanges=new ComputeBuffer(scene.sources.Length,16);emissionRanges.SetData(ranges);
+            emissionPoints=new ComputeBuffer(points.Count,16);emissionPoints.SetData(points);
             directKernel = shader.FindKernel((planar ? "EvaluateDirect2D" : "EvaluateDirect3D") +
                                              (settings.useBvh ? "Bvh" : ""));
             traceKernel =
@@ -137,6 +149,8 @@ internal sealed class RayTransport : IDisposable
                 shader.SetBuffer(kernel, "Primitives", primitives);
                 shader.SetBuffer(kernel, "States", states);
                 shader.SetBuffer(kernel, "Sources", sources);
+                shader.SetBuffer(kernel, "EmissionRanges", emissionRanges);
+                shader.SetBuffer(kernel, "EmissionPoints", emissionPoints);
                 shader.SetBuffer(kernel, "Listeners", listeners);
                 shader.SetBuffer(kernel, "RayMaterials", materialBuffer);
                 shader.SetBuffer(kernel, "Edges", edgeBuffer);
@@ -157,6 +171,7 @@ internal sealed class RayTransport : IDisposable
             shader.SetInt("RaysPerPair", settings.RaysPerPair);
             shader.SetInt("MaxBounces", settings.maxBounces);
             shader.SetInt("SlotsPerPair", SlotsPerPair);
+            shader.SetInt("DirectSamples", directSamples);
             shader.SetInt("EdgeCount", edges.Length);
             shader.SetInt("VolumeCount", volumes.Length);
             shader.SetFloat("FrequencyStep", (float)rate / settings.fftSize);
@@ -166,7 +181,7 @@ internal sealed class RayTransport : IDisposable
             GpuBytes = (long)edgeRangeBuffer.count * 8 + (long)edgeIndexBuffer.count * 4 +
                        (long)materials.Length * 32 + (long)Math.Max(1, edges.Length) * 80 +
                        Math.Max(1, volumes.Length) * 48L + (long)PathsPerFrame * maximumFrames * PathStride +
-                       enabledPairs.Length * 4L;
+                       enabledPairs.Length * 4L + (long)(scene.sources.Length+points.Count)*16;
         }
         catch
         {
@@ -418,7 +433,7 @@ internal sealed class RayTransport : IDisposable
         if (pending)
             throw new InvalidOperationException("Ray responses are still in flight.");
         commands.BeginSample("Acoustics.GPU.Direct");
-        commands.DispatchCompute(shader,directKernel,(frames*pairs*frequencyBins+63)/64,1,1);
+        commands.DispatchCompute(shader,directKernel,(checked(frames*pairs*frequencyBins*directSamples)+63)/64,1,1);
         commands.EndSample("Acoustics.GPU.Direct");
         commands.BeginSample("Acoustics.GPU.Trace");
         commands.DispatchCompute(shader,traceKernel,(frames*pairs*rayCount+63)/64,1,1);
@@ -477,6 +492,8 @@ internal sealed class RayTransport : IDisposable
         enabledBuffer?.Dispose();
         edgeRangeBuffer?.Dispose();
         edgeIndexBuffer?.Dispose();
+        emissionRanges?.Dispose();
+        emissionPoints?.Dispose();
         commands?.Dispose();
     }
 }

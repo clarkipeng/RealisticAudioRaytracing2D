@@ -80,7 +80,7 @@ public static partial class TakeRender
             gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state);
             gpuAudio.CompletePreparation();solver.CompleteAfterGpuAudio();prepared=true;
         }
-        public void Append(AcousticTake.VoiceEvent e) { signals[e.sourceIndex].Append(e); }
+        public void Append(AcousticTake.VoiceEvent e) { AudioSourcePlane.ValidateEvent(scene,e); signals[e.sourceIndex].Append(e); }
         public void Observe(long from,long to,AcousticTake.State[] left,AcousticTake.State[] right,Action<long,float[],int> output=null)
         {
             // Include the newest interval before dispatching the next GPU batch.

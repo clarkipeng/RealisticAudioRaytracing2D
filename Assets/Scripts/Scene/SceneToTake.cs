@@ -78,11 +78,14 @@ public static class SceneToTake
                 primitiveStart = start, primitiveCount = primitives.Count - start, scale = authoringCoordinates ? Vector3.one : transform.lossyScale };
         }
         var sourceDefinitions = new AcousticTake.SourceDefinition[sources.Length];
+        var planes = new List<AcousticTake.EmissionPlane>();
         var clipDefinitions = new List<AcousticTake.ClipDefinition>();
         var clipIndices = new Dictionary<AudioClip,int>();
         for (int i = 0; i < sources.Length; i++)
         {
             var source=sources[i].GetComponent<RaytracedAudioSource>();
+            var plane=sources[i].GetComponent<AudioSourcePlane>();
+            if(plane!=null && plane.enabled)planes.Add(plane.Export(i,dimension));
             if(clips[i]==null)
             {
                 sourceDefinitions[i]=new AcousticTake.SourceDefinition {objectIndex=objectIndices[sources[i]],clipIndex=-1,streamed=true,mutedListenerPlusOne=source==null?0:source.mutedListenerPlusOne};
@@ -99,7 +102,7 @@ public static class SceneToTake
         for (int i = 0; i < listeners.Length; i++) listenerIndices[i] = objectIndices[listeners[i]];
         geometry = primitives.ToArray();
         return new AcousticTake.Scene { dimension = dimension, objects = objects, sources = sourceDefinitions,
-            listeners = listenerIndices, clips = clipDefinitions.ToArray(), materials = materials.ToArray() };
+            listeners = listenerIndices, clips = clipDefinitions.ToArray(), materials = materials.ToArray(), planes = planes.ToArray() };
     }
 
     // Compare authored inputs without re-tessellating shapes or rebuilding material tables.
@@ -117,6 +120,7 @@ public static class SceneToTake
         readonly AudioClip[] sourceClips;
         readonly bool[] streamed;
         readonly int[] muted;
+        readonly PlaneSnapshot[] planes;
         readonly Transform[] listenerBindings;
         readonly BindingSnapshot[] bindings;
         readonly List<AcousticSurface> surfaces=new List<AcousticSurface>(), surfaceScratch=new List<AcousticSurface>();
@@ -130,6 +134,7 @@ public static class SceneToTake
             sourceBindings=manager.takeSources.ToArray(); listenerBindings=manager.takeListeners.ToArray();
             streamed=Array.ConvertAll(sources,t=>t.GetComponent<RaytracedAudioSource>()?.streamed??false);
             muted=Array.ConvertAll(sources,t=>t.GetComponent<RaytracedAudioSource>()?.mutedListenerPlusOne??0);
+            planes=Array.ConvertAll(sources,t=>new PlaneSnapshot(t));
             sourceObjects=sources; sourceClips=clips; sourceComponentIds=new int[sources.Length];
             for (int i=0;i<sources.Length;i++) sourceComponentIds[i]=Identity(sources[i].GetComponent<RaytracedAudioSource>());
             bindings=new BindingSnapshot[manager.takeObjects.Count];
@@ -152,6 +157,7 @@ public static class SceneToTake
                 for (int i=0;i<bindings.Length;i++) bindings[i].Validate(manager.takeObjects[i]);
                 for (int i=0;i<sourceObjects.Length;i++)
                 {
+                    planes[i].Validate(sourceObjects[i]);
                     var component=sourceObjects[i].GetComponent<RaytracedAudioSource>();
                     if(component!=null && (component.streamed!=streamed[i] || component.mutedListenerPlusOne!=muted[i]))Changed();
                     if (Identity(component)!=sourceComponentIds[i] || (component==null || (component.streamed?null:component.clip)!=sourceClips[i])) Changed();
@@ -178,6 +184,28 @@ public static class SceneToTake
             return true;
         }
         static bool Near(Vector3 a,Vector3 b) => (a-b).sqrMagnitude<=1e-10f*Mathf.Max(1,b.sqrMagnitude);
+        sealed class PlaneSnapshot
+        {
+            readonly AudioSourcePlane plane;
+            readonly Texture2D mask;
+            readonly uint updates;
+            readonly Vector2 size;
+            readonly int samples,seed,id;
+            readonly bool enabled;
+            public PlaneSnapshot(Transform source)
+            {
+                plane=source.GetComponent<AudioSourcePlane>();id=Identity(plane);
+                if(plane==null)return;
+                mask=plane.mask;updates=mask==null?0:mask.updateCount;size=plane.size;
+                samples=plane.samples;seed=plane.seed;enabled=plane.enabled;
+            }
+            public void Validate(Transform source)
+            {
+                if(Identity(source.GetComponent<AudioSourcePlane>())!=id)Changed();
+                if(plane!=null && (plane.enabled!=enabled || plane.size!=size || plane.samples!=samples || plane.seed!=seed ||
+                    plane.mask!=mask || (mask!=null && mask.updateCount!=updates)))Changed();
+            }
+        }
         sealed class BindingSnapshot
         {
             readonly Transform transform,parent;
