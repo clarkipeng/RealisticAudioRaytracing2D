@@ -29,12 +29,12 @@ internal static class Doppler
         double u=time/span,delta=right-left,a=3*delta-span*(2*leftRate+rightRate),b=-2*delta+span*(leftRate+rightRate);
         delay=left+time*leftRate+u*u*(a+u*b);rate=leftRate+u*(2*a+3*u*b)/span;
     }
-    public static float Read(TakeRender.Signal signal,double sample,double ratio,TakeRender.DelayFilter filter,int radius,uint phase=0)
+    public static float Read(TakeRender.Signal signal,double sample,double ratio,TakeRender.DelayFilter filter,int radius,uint phase=0,long birth=0)
     {
         if(!(ratio>0) || !double.IsFinite(ratio) || !double.IsFinite(sample))throw new InvalidOperationException("Invalid propagation clock.");
         // Linear is the existing low-cost approximation. Sinc also low-passes
         // when pitch-up downsamples source time; its lookahead is radius receiver samples.
-        if(filter==TakeRender.DelayFilter.Linear)return signal.Read(sample,phase);
+        if(filter==TakeRender.DelayFilter.Linear)return signal.Read(sample,phase,birth);
         double cutoff=Math.Min(1,1/ratio),sum=0,value=0;
         int extent=checked((int)Math.Ceiling(radius/cutoff));long center=checked((long)Math.Floor(sample));
         for(int k=1-extent;k<=extent;k++)
@@ -42,7 +42,7 @@ internal static class Doppler
             double x=(center+k-sample)*cutoff;
             if(Math.Abs(x)>=radius)continue;
             double weight=Sinc(x)*Sinc(x/radius)*cutoff;
-            value+=signal.Read(center+k,phase)*weight;sum+=weight;
+            value+=signal.Read(center+k,phase,birth)*weight;sum+=weight;
         }
         return (float)(value/sum);
     }

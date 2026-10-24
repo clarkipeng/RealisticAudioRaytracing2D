@@ -54,6 +54,10 @@ public sealed class TransportSolver : IDisposable
     readonly RayTransport transport;
     internal RayTransport.Path[] RayPaths => transport?.Paths;
     internal ComputeBuffer RayBuffer => transport?.Buffer;
+    internal void PrepareEmissions(TakeRender.Signal[] signals,long first,int frames,Action<long,AcousticTake.State[]> evaluate)
+    {
+        if(Emission.HasBursts(scene))transport.PrepareEmissions(signals,first,frames,evaluate);
+    }
     internal int RayPathsPerFrame => transport?.PathsPerFrame ?? 0;
     ComputeBuffer bvhNodes, bvhIndices;
     ComputeBuffer primitives, states, sources, listeners, responses;

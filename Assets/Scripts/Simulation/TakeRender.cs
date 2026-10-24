@@ -221,6 +221,7 @@ public static partial class TakeRender
         var pcm=new float[scene.clips.Length][];
         for (int c=0; c<pcm.Length; c++) { pcm[c]=take.ReadClip(c); report.preparedPcmBytes+=(long)pcm[c].Length*4; }
         var signals=Signal.FromTake(take,pcm);
+        void EvaluateEmission(long birth,AcousticTake.State[] target) => take.Evaluate(Math.Min(birth,metadata.durationSamples),target);
         int batchCapacity=shader==null || !SystemInfo.supportsAsyncGPUReadback ? 1:(int)Math.Min(settings.maximumResponsesPerBatch,(length-1)/settings.responseStepSamples+1);
         using var gpuAudio=useGpuAudio?new GpuAudio(scene,metadata.sampleRate,settings,signals,batchCapacity):null;
         var mixer=useGpuAudio?null:new Mixer(scene,metadata.sampleRate,settings,signals);
@@ -255,7 +256,7 @@ public static partial class TakeRender
                 {
                     if(settings.ResponseSample(0)>0)
                     {
-                        take.Evaluate(0,state);solver.Solve(state,response);
+                        take.Evaluate(0,state);solver.PrepareEmissions(signals,0,1,EvaluateEmission);solver.Solve(state,response);
                         if(useGpuAudio){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state,0);gpuAudio.CompletePreparation();}
                         else mixer.SetResponse(0,response,state,true,solver.RayPaths,0,0);
                         writer.Write(0L);foreach(var path in response)WritePath(writer,path);report.responseCount++;
@@ -273,6 +274,7 @@ public static partial class TakeRender
                         }
                         report.evaluationSeconds+=Elapsed(start);
                         start=Stopwatch.GetTimestamp();
+                        solver.PrepareEmissions(signals,first,frames,EvaluateEmission);
                         if(batchCapacity==1)solver.Solve(state,response);
                         else
                         {
@@ -337,7 +339,8 @@ public static partial class TakeRender
     // All mutation happens on the producer/control thread. The audio callback receives PCM only.
     public sealed class Signal
     {
-        internal struct ClipClock { public uint index; public float gain; }
+        internal struct ClipClock { public uint index; public float gain; public uint epochLow,epochHigh; }
+        internal int BurstDuration;
         struct Voice { public long sample, start, offset; public bool playing, loop; public float gain; }
         readonly List<Voice> voices=new List<Voice>();
         readonly float[] pcm;
@@ -396,22 +399,43 @@ public static partial class TakeRender
             if (voices.Count>0 && voices[voices.Count-1].sample==e.sample) voices[voices.Count-1]=current;
             else { ReserveEvent(); voices.Add(current); }
         }
-        public float Read(double sample,uint phase=0)
+        internal IEnumerable<(long start,long end)> Epochs(long from,long to)
+        {
+            for(int i=0;i<voices.Count;)
+            {
+                var voice=voices[i++];if(!voice.playing)continue;
+                while(i<voices.Count && voices[i].playing && voices[i].start==voice.start)i++;
+                long end=Math.Min(i<voices.Count?voices[i].sample:long.MaxValue,EndSample==long.MaxValue?long.MaxValue:EndSample+1);
+                if(end>from && voice.start<to)yield return (voice.start,end);
+            }
+        }
+        public float Read(double sample,uint phase=0,long birth=0)
         {
             long i=(long)Math.Floor(sample); float f=(float)(sample-i);
-            return Mathf.LerpUnclamped(Read(i,phase),Read(i+1,phase),f);
+            return Mathf.LerpUnclamped(Read(i,phase,birth),Read(i+1,phase,birth),f);
         }
-        internal float Read(long sample,uint phase=0)
+        internal float Read(long sample,uint phase=0,long birth=0)
         {
             if(!VoiceAt(sample,out var v))return 0;
             if(stream!=null)return stream.Read(sample)*v.gain;
+            if((phase&Emission.Burst)!=0)
+            {
+                long age=sample-birth;
+                if(v.start>birth || age<0 || age>=BurstDuration)return 0;
+                return pcm[(age+v.offset+(phase&~Emission.Burst))%pcm.Length]*v.gain*Emission.Window(age,BurstDuration);
+            }
             var clock=Clock(sample,v);
             if(clock.gain==0)return 0;
             long index=clock.index;
             if(phase!=0)index=(index+((long)phase*pcm.Length>>16))%pcm.Length;
             return pcm[index]*clock.gain;
         }
-        internal ClipClock ReadClipClock(long sample) => VoiceAt(sample,out var v)?Clock(sample,v):default;
+        internal ClipClock ReadClipClock(long sample)
+        {
+            if(!VoiceAt(sample,out var v))return default;
+            var clock=BurstDuration==0?Clock(sample,v):new ClipClock{index=(uint)v.offset,gain=v.gain};
+            clock.epochLow=(uint)v.start;clock.epochHigh=(uint)(v.start>>32);return clock;
+        }
         ClipClock Clock(long sample,Voice v)
         {
             long index=sample-v.start+v.offset;if(v.loop)index%=pcm.Length;

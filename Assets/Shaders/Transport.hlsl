@@ -18,7 +18,7 @@ struct RayPath
     float delaySeconds, pressureGain;
     uint frequencyBin, identity;
     float pressureImag;
-    uint emissionPhase, padding1, padding2;
+    uint emissionPhase, birthLow, birthHigh;
 };
 float2 ComplexProduct(float2 a, float2 b) { return float2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x); }
 float2 ReflectionPressure(RayMaterial material, float cosine)
@@ -46,11 +46,14 @@ struct Volume
 StructuredBuffer<Volume> Volumes;
 RWStructuredBuffer<RayPath> RayPaths;
 StructuredBuffer<uint> RayPairEnabled;
+StructuredBuffer<uint2> RayPairRanges,RayDirectSites;
+uint RayPathsPerFrame,RayDirectSiteCount;
 StructuredBuffer<uint4> EmissionRanges; // sample offset/count, stable seed, plane flag
-StructuredBuffer<float4> EmissionPoints; // scaled local position, pressure weight
-uint DirectSamples;
+StructuredBuffer<float4> EmissionPoints; // local legacy site or frozen world burst position, pressure weight
+StructuredBuffer<uint4> EmissionClocks; // phase/clip offset, birth low/high, reserved
+uint EmissionFrameStride;
 uint RaysPerBin, RaySeed;
-uint FrequencyBins, RaysPerPair, MaxBounces, SlotsPerPair, EdgeCount, VolumeCount, UseAirAbsorption;
+uint FrequencyBins, RaysPerPair, MaxBounces, EdgeCount, VolumeCount, UseAirAbsorption;
 float FrequencyStep, DiffractionFactor, MaximumPathDelay;
 // Fixed slots per captured ray avoid atomics and never truncate a path. All stores
 // and selection checks compile out of the normal transport variant.
@@ -115,15 +118,21 @@ uint HashRay(uint x)
 }
 float3 EmissionPosition(uint stateOffset,uint sourceIndex,uint sampleIndex)
 {
-    uint source=Sources[sourceIndex];
-    return States[stateOffset+source].position.xyz+Rotate(States[stateOffset+source].rotation,EmissionPoints[EmissionRanges[sourceIndex].x+sampleIndex].xyz);
+    uint source=Sources[sourceIndex];uint4 plane=EmissionRanges[(stateOffset/ObjectCount)*EmissionFrameStride+sourceIndex];
+    float3 sitePosition=EmissionPoints[plane.x+sampleIndex].xyz;
+    return plane.w==2?sitePosition:States[stateOffset+source].position.xyz+Rotate(States[stateOffset+source].rotation,sitePosition);
 }
-RayPath ApplyEmission(RayPath path,uint sourceIndex,uint sampleIndex,bool indirect)
+RayPath ApplyEmission(RayPath path,uint emissionRow,uint sampleIndex,uint raysForEmission)
 {
-    uint4 plane=EmissionRanges[sourceIndex];
+    uint4 plane=EmissionRanges[emissionRow];
     if(plane.w==0)return path;
-    float weight=EmissionPoints[plane.x+sampleIndex].w*(indirect?plane.y:1);
+    float weight=EmissionPoints[plane.x+sampleIndex].w;
+    if(raysForEmission!=0)weight*=plane.w==2?(float)RaysPerBin/raysForEmission:plane.y;
     path.pressureGain*=weight;path.pressureImag*=weight;
+    if(plane.w==2)
+    {
+        uint4 clock=EmissionClocks[plane.x+sampleIndex];path.emissionPhase=clock.x;path.birthLow=clock.y;path.birthHigh=clock.z;return path;
+    }
     path.emissionPhase=HashRay(plane.z ^ (sampleIndex*0x85ebca6bu+0x9e3779b9u))>>16;
     path.identity=HashRay(path.identity ^ HashRay(sampleIndex+plane.z+0x51ed270bu));
     return path;
@@ -427,20 +436,20 @@ bool SampleEdge(uint stateOffset, float3 source, float3 receiver, bool is2D, ino
 // Iteration follows piecewise material travel time, not distance / air speed.
 void EvaluateDirect(uint index, bool is2D)
 {
-    if (index >= FrameCount * PairCount * FrequencyBins * DirectSamples)
-        return;
-    uint frequencyBin = index % FrequencyBins, sampleIndex = (index / FrequencyBins) % DirectSamples,
-         query = index / (FrequencyBins * DirectSamples), frame = query / PairCount, pair = query % PairCount;
-    uint slot=query*SlotsPerPair+sampleIndex*FrequencyBins+frequencyBin,sourceIndex=pair/ListenerCount;
+    if (index >= FrameCount * RayDirectSiteCount * FrequencyBins)return;
+    uint frequencyBin=index%FrequencyBins,site=(index/FrequencyBins)%RayDirectSiteCount,frame=index/(FrequencyBins*RayDirectSiteCount);
+    uint2 job=RayDirectSites[site];uint pair=job.x,sampleIndex=job.y,query=frame*PairCount+pair;
+    uint slot=frame*RayPathsPerFrame+RayPairRanges[pair].x+sampleIndex*FrequencyBins+frequencyBin,sourceIndex=pair/ListenerCount;
+    uint emissionRow=frame*EmissionFrameStride+sourceIndex;
     RayPaths[slot] = (RayPath)0;
-    if (sampleIndex>=EmissionRanges[sourceIndex].y || EmissionPoints[EmissionRanges[sourceIndex].x+sampleIndex].w==0 ||
+    if (sampleIndex>=EmissionRanges[emissionRow].y || EmissionPoints[EmissionRanges[emissionRow].x+sampleIndex].w==0 ||
         RayPairEnabled[query] == 0 || !DebugSelected(query, frequencyBin))
         return;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
          listener = Listeners[pair % ListenerCount];
     float3 sourceNow = EmissionPosition(stateOffset,sourceIndex,sampleIndex),
            b = States[stateOffset + listener].position.xyz;
-    float3 sourceVelocity = PointVelocity(stateOffset + source,sourceNow),
+    float3 sourceVelocity = EmissionRanges[emissionRow].w==2?float3(0,0,0):PointVelocity(stateOffset + source,sourceNow),
            listenerVelocity = Velocity(stateOffset + listener);
     if (is2D)
     {
@@ -541,7 +550,7 @@ void EvaluateDirect(uint index, bool is2D)
     }
     RayPath direct =
         Arrival(a, b, time, gain, frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), identity);
-    RayPaths[slot] = ApplyEmission(direct,sourceIndex,sampleIndex,false);
+    RayPaths[slot] = ApplyEmission(direct,emissionRow,sampleIndex,0);
 }
 // First-order mirror path from a sampled primitive's image source. Sampling
 // primitive IDs avoids estimating a delta reflection with a diffuse connection.
@@ -651,7 +660,7 @@ void TracePaths(uint index, bool is2D)
          pair = query % PairCount;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
          listener = Listeners[pair % ListenerCount];
-    uint first = query * SlotsPerPair + FrequencyBins * DirectSamples + ray * (MaxBounces + 1);
+    uint first = frame*RayPathsPerFrame + RayPairRanges[pair].x + RayPairRanges[pair].y - RaysPerPair*(MaxBounces+1) + ray*(MaxBounces+1);
     for (uint k = 0; k <= MaxBounces; k++)
         RayPaths[first + k] = (RayPath)0;
     if (RayPairEnabled[query] == 0 || !DebugSelected(query, ray / RaysPerBin))
@@ -659,14 +668,19 @@ void TracePaths(uint index, bool is2D)
     uint frequencyBin = ray / RaysPerBin, rng = HashRay((ray % RaysPerBin) + pair * 0x85ebca6b + RaySeed + 1);
     uint debugBase = PrimitiveCount + 1 + (ray % RaysPerBin) * (2 + 2 * MaxBounces),
          debugPath = 2 + 2 * (ray % RaysPerBin);
-    uint sourceIndex=pair/ListenerCount;
-    uint4 plane=EmissionRanges[sourceIndex];
-    uint sampleIndex=plane.w==0?0:((ray%RaysPerBin)+HashRay(RaySeed ^ source))%plane.y;
+    uint sourceIndex=pair/ListenerCount,emissionRow=frame*EmissionFrameStride+sourceIndex;
+    uint4 plane=EmissionRanges[emissionRow];
+    if(plane.y==0)return;
+    uint sampleIndex=plane.w==0?0:plane.w==2?(ray%RaysPerBin)%plane.y:((ray%RaysPerBin)+HashRay(RaySeed ^ source))%plane.y;
+    uint localRay=plane.w==2?(ray%RaysPerBin)/plane.y:ray%RaysPerBin;
+    uint raysForEmission=plane.w==2?1+(RaysPerBin-1-sampleIndex)/plane.y:RaysPerBin;
+    uint birthSeed=0;
+    if(plane.w==2){uint4 clock=EmissionClocks[plane.x+sampleIndex];birthSeed=HashRay(clock.y)^HashRay(clock.z);rng=HashRay(localRay^birthSeed^HashRay(pair+RaySeed));}
     if(EmissionPoints[plane.x+sampleIndex].w==0)return;
     float3 emission=EmissionPosition(stateOffset,sourceIndex,sampleIndex);
-    float3 emissionVelocity=PointVelocity(stateOffset+source,emission);
+    float3 emissionVelocity=plane.w==2?float3(0,0,0):PointVelocity(stateOffset+source,emission);
     RayPaths[first] = ApplyEmission(
-        FirstReflection(stateOffset, source, listener, frequencyBin, ray % RaysPerBin, is2D, debugBase, emission, emissionVelocity),sourceIndex,sampleIndex,true);
+        FirstReflection(stateOffset, source, listener, frequencyBin, localRay+birthSeed, is2D, debugBase, emission, emissionVelocity),emissionRow,sampleIndex,raysForEmission);
     debugBase += 2;
     first++;
     float frequencyHz = max(1, frequencyBin * FrequencyStep);
@@ -689,7 +703,7 @@ void TracePaths(uint index, bool is2D)
         listenerVelocity.z = 0;
     }
     float frequencyRatio = 1;
-    uint identity = HashRay(0x80000000u ^ (ray % RaysPerBin));
+    uint identity = HashRay(0x80000000u ^ localRay);
     float weight = 1.0 / RaysPerBin;
     uint previousEdge = 0xffffffff;
     float3 edgeSource = position, vertexVelocity = sourceVelocity;
@@ -758,7 +772,7 @@ void TracePaths(uint index, bool is2D)
                                  (edgeDistance * last) * ReferenceDistance * weight *
                                  exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last);
                 RayPaths[first + bounce] =
-                    ApplyEmission(ApplyMaterial(Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity),materialWeight),sourceIndex,sampleIndex,true);
+                    ApplyEmission(ApplyMaterial(Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity),materialWeight),emissionRow,sampleIndex,raysForEmission);
                 DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
             }
             previousEdge = edge;
@@ -810,7 +824,7 @@ void TracePaths(uint index, bool is2D)
                         gain * sqrt(saturate((1 - material.surface.z) * material.surface.y)) * weight *
                             cosine * .5 * exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last) *
                             ReferenceDistance / max(MinimumDistance, spreadingDistance + last),
-                        frequencyBin, arrivalRatio, identity),materialWeight),sourceIndex,sampleIndex,true);
+                        frequencyBin, arrivalRatio, identity),materialWeight),emissionRow,sampleIndex,raysForEmission);
             DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
         }
         surfaceNormal = n;

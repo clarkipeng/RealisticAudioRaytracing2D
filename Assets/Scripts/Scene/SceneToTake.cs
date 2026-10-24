@@ -190,20 +190,20 @@ public static class SceneToTake
             readonly Texture2D mask;
             readonly uint updates;
             readonly Vector2 size;
-            readonly int samples,seed,id;
+            readonly int samples,seed,id,period,duration;
             readonly bool enabled;
             public PlaneSnapshot(Transform source)
             {
                 plane=source.GetComponent<AudioSourcePlane>();id=Identity(plane);
                 if(plane==null)return;
                 mask=plane.mask;updates=mask==null?0:mask.updateCount;size=plane.size;
-                samples=plane.samples;seed=plane.seed;enabled=plane.enabled;
+                samples=plane.samples;seed=plane.seed;enabled=plane.enabled;period=plane.burstPeriodSamples;duration=plane.burstDurationSamples;
             }
             public void Validate(Transform source)
             {
                 if(Identity(source.GetComponent<AudioSourcePlane>())!=id)Changed();
                 if(plane!=null && (plane.enabled!=enabled || plane.size!=size || plane.samples!=samples || plane.seed!=seed ||
-                    plane.mask!=mask || (mask!=null && mask.updateCount!=updates)))Changed();
+                    plane.burstPeriodSamples!=period || plane.burstDurationSamples!=duration || plane.mask!=mask || (mask!=null && mask.updateCount!=updates)))Changed();
             }
         }
         sealed class BindingSnapshot

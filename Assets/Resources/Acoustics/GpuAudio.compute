@@ -20,7 +20,7 @@
 // CPU and GPU exchange scene inputs and finished PCM. Paths, filters, FFTs and
 // sums stay here. The small-transform fast path uses one workgroup per path;
 // larger transforms use the same radix-2 operations in global-memory stages.
-struct AudioPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,identity; float pressureImag; uint emissionPhase,padding1,padding2; };
+struct AudioPath { float4 direction; float delaySeconds,pressureGain; uint frequencyBin,identity; float pressureImag; uint emissionPhase,birthLow,birthHigh; };
 StructuredBuffer<AudioPath> AudioArrivals;
 RWStructuredBuffer<AudioPath> AudioLast,AudioPaths;
 RWStructuredBuffer<int2> AudioTable;
@@ -32,14 +32,16 @@ RWStructuredBuffer<float4> AudioHeadHistory;
 StructuredBuffer<float2> AudioAngles,AudioEars;
 StructuredBuffer<float> AudioSource,AudioClips;
 StructuredBuffer<uint4> AudioClipInfo;
-StructuredBuffer<uint2> AudioSourceClocks;
-StructuredBuffer<int> AudioFilterPairs;
+StructuredBuffer<uint4> AudioSourceClocks;
+StructuredBuffer<int> AudioFilterPairs; // packed filter offset, or -1
+StructuredBuffer<uint2> AudioRanges;
+StructuredBuffer<uint> AudioOwners;
 RWStructuredBuffer<float4> AudioSums;
 RWStructuredBuffer<float2> AudioFilters,AudioWork,AudioTransform;
 RWStructuredBuffer<float> AudioBlocks,AudioOutput;
 struct EarBlend { uint4 index; float4 weight; };
 RWStructuredBuffer<EarBlend> AudioBlends;
-uint AudioPairs,AudioListeners,AudioChannels,AudioSlots,AudioCapacity,AudioHashSize,AudioFilterCapacity,AudioTiles;
+uint AudioPairs,AudioListeners,AudioChannels,AudioCapacity,AudioHashSize,AudioFilterCapacity,AudioTiles;
 uint AudioSize,AudioFft,AudioBins,AudioHop,AudioRate,AudioHrir,AudioRingCount,AudioHistory;
 uint AudioPoseOffset,AudioOffset,AudioChanged,AudioCut,AudioInitialized,AudioTransition,AudioSpectral;
 uint2 AudioResponseSample,AudioSolveSample,AudioBlockSample;
@@ -58,12 +60,14 @@ groupshared uint AudioLocalTable[8191]; // Reserve the last uint of 32 KiB for A
 float2 AudioMultiply(float2 a,float2 b) {return float2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
 uint AudioHash(uint a) {a^=a>>16;a*=0x7feb352d;a^=a>>15;a*=0x846ca68b;return a^(a>>16);}
 uint AudioBits(float a) {return a==0?0:asuint(a);}
-bool AudioSame(AudioPath a,AudioPath b) {return a.emissionPhase==b.emissionPhase && a.delaySeconds==b.delaySeconds && all(a.direction==b.direction) && (AudioSpectral==0 || a.identity==b.identity);}
+bool AudioEmissionSame(AudioPath a,AudioPath b) {return a.birthLow==b.birthLow && a.birthHigh==b.birthHigh;}
+uint AudioIdentityHash(AudioPath p) {return AudioHash(p.identity^AudioHash(p.frequencyBin)^AudioHash(p.birthLow)^AudioHash(p.birthHigh));}
+bool AudioSame(AudioPath a,AudioPath b) {return AudioEmissionSame(a,b) && a.emissionPhase==b.emissionPhase && a.delaySeconds==b.delaySeconds && all(a.direction==b.direction) && (AudioSpectral==0 || a.identity==b.identity);}
 uint AudioBank() {return AudioMeta[0] ^ (AudioSpectral!=0?0:AudioWhich);}
 // Acoustic ownership is per pair; the output/head clock still advances as one response.
 uint AudioPathBank(uint pair) {return AudioWhich==0?AudioPairState[pair].x:AudioPairState[pair].y;}
-uint AudioFilterAt(uint bank,uint g) {return (bank*AudioFilterCapacity+AudioFilterPairs[g/AudioSlots]*AudioSlots+g%AudioSlots)*AudioBins;}
-bool AudioReuseInput(uint g) {uint4 pair=AudioPairState[g/AudioSlots];return AudioWhich!=0 && ((AudioSpectral!=0 && AudioMatches[pair.y*AudioCapacity+g]==(int)g) || (pair.x==pair.y && (AudioSpectral==0 || AudioPaths[pair.x*AudioCapacity+g].direction.w==0)));}
+uint AudioFilterAt(uint bank,uint g) {return (bank*AudioFilterCapacity+AudioFilterPairs[AudioOwners[g]]+g-AudioRanges[AudioOwners[g]].x)*AudioBins;}
+bool AudioReuseInput(uint g) {uint4 pair=AudioPairState[AudioOwners[g]];return AudioWhich!=0 && ((AudioSpectral!=0 && AudioMatches[pair.y*AudioCapacity+g]==(int)g) || (pair.x==pair.y && (AudioSpectral==0 || AudioPaths[pair.x*AudioCapacity+g].direction.w==0)));}
 bool AudioOldOff() {return AudioWhich!=0 && AudioMeta[2]==0;}
 int AudioDifference(uint2 a,uint2 b) {return (int)(a.x-b.x);} // Local differences only; absolute sample clocks remain integers.
 float3 AudioRotate(float4 q,float3 v) {return v+2*cross(q.xyz,cross(q.xyz,v)+q.w*v);}
@@ -74,9 +78,9 @@ void AudioReset(uint3 id:SV_DispatchThreadID) {if(id.x==0){AudioMeta[1]=0;AudioM
 [numthreads(64,1,1)]
 void AudioCompare(uint3 id:SV_DispatchThreadID)
 {
-    uint i=id.x;if(i>=AudioCapacity)return;if(AudioFilterPairs[i/AudioSlots]<0)return;
+    uint i=id.x;if(i>=AudioCapacity)return;if(AudioFilterPairs[AudioOwners[i]]<0)return;
     AudioPath a=AudioArrivals[AudioOffset+i],b=AudioLast[i];
-    if(!AudioSame(a,b) || a.pressureGain!=b.pressureGain || a.pressureImag!=b.pressureImag || a.frequencyBin!=b.frequencyBin){InterlockedOr(AudioMeta[1],1);InterlockedOr(AudioPairState[i/AudioSlots].z,1);}
+    if(!AudioSame(a,b) || a.pressureGain!=b.pressureGain || a.pressureImag!=b.pressureImag || a.frequencyBin!=b.frequencyBin){InterlockedOr(AudioMeta[1],1);InterlockedOr(AudioPairState[AudioOwners[i]].z,1);}
     if(AudioSpectral!=0 && a.direction.w!=0)InterlockedOr(AudioMeta[1],2);
     AudioLast[i]=a;
 }
@@ -125,7 +129,7 @@ EarBlend AudioBlend(float3 direction)
 bool AudioMovingHead(uint listener) {return any(AudioHeadHistory[(AudioBank()*2+1)*AudioListeners+listener].yzw!=0);}
 void AudioPrepareHead(uint g)
 {
-    uint bank=AudioBank(),listener=(g/AudioSlots)%AudioListeners,anchor=5+bank*2;
+    uint bank=AudioBank(),listener=(AudioOwners[g])%AudioListeners,anchor=5+bank*2;
     float4 q=AudioHeadHistory[bank*2*AudioListeners+listener];q.xyz=-q.xyz;
     float3 omega=AudioHeadHistory[(bank*2+1)*AudioListeners+listener].yzw;
     float speed=length(omega);uint endpoints=speed>0?2:1;
@@ -133,7 +137,7 @@ void AudioPrepareHead(uint g)
     // world space, then transform the incident ray into the listener's frame.
     for(uint end=0;end<endpoints;end++)
     {
-        float3 direction=AudioPaths[AudioPathBank(g/AudioSlots)*AudioCapacity+g].direction.xyz;
+        float3 direction=AudioPaths[AudioPathBank(AudioOwners[g])*AudioCapacity+g].direction.xyz;
         if(speed>0)
         {
             float dt=(AudioDifference(AudioBlockSample,uint2(AudioMeta[anchor],AudioMeta[anchor+1]))+end*AudioHop)/(float)AudioRate;
@@ -162,7 +166,7 @@ void AudioInsert(uint pair,uint hash,int group,int member)
 [numthreads(64,1,1)]
 void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    uint pair=id.x;if(pair>=AudioPairs)return;uint bank=AudioPairState[pair].x,base=pair*AudioSlots;
+    uint pair=id.x;if(pair>=AudioPairs)return;uint bank=AudioPairState[pair].x,base=AudioRanges[pair].x;
     bool rebuild=AudioPairState[pair].z!=0 && AudioFilterPairs[pair]>=0;
     if(rebuild)
     {
@@ -170,7 +174,7 @@ void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
             if(AudioHashSize<=8191)AudioLocalTable[t]=0xffffffff;else AudioTable[pair*AudioHashSize+t]=int2(-1,-1);
         // Reuse the future member links as temporary keys. Stable slot order is
         // restored below before those links are written; no floating atomics.
-        for(uint slot=tid.x;slot<AudioSlots;slot+=64)
+        for(uint slot=tid.x;slot<AudioRanges[pair].y;slot+=64)
         {
             uint i=base+slot;AudioPath path=AudioArrivals[AudioOffset+i];AudioNext[i]=-1;
             if((path.pressureGain==0 && path.pressureImag==0) || AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x==0)continue;
@@ -178,6 +182,7 @@ void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
             uint hash=AudioHash(AudioBits(path.delaySeconds));
             for(uint k=0;k<4;k++)hash=AudioHash(hash^AudioBits(path.direction[k]));
             if(AudioSpectral!=0)hash=AudioHash(hash^path.identity);
+            hash=AudioHash(hash^path.emissionPhase^AudioHash(path.birthLow)^AudioHash(path.birthHigh));
             AudioNext[i]=(int)(hash%AudioHashSize);
         }
     }
@@ -185,7 +190,7 @@ void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
     if(rebuild)
     {
         uint count=0;
-        for(uint slot=0;slot<AudioSlots;slot++)
+        for(uint slot=0;slot<AudioRanges[pair].y;slot++)
         {
             uint i=base+slot;if(AudioNext[i]<0)continue;uint hash=(uint)AudioNext[i];
             AudioPath path=AudioArrivals[AudioOffset+i];
@@ -227,7 +232,7 @@ bool AudioContinuous(AudioPath left,AudioPath right,float span)
 [numthreads(64,1,1)]
 void AudioMatch(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    uint pair=id.x;uint4 banks=AudioPairState[pair];uint base=pair*AudioSlots;
+    uint pair=id.x;uint4 banks=AudioPairState[pair];uint base=AudioRanges[pair].x;
     uint count=AudioCounts[banks.x*AudioPairs+pair],oldCount=AudioCounts[banks.y*AudioPairs+pair];
     if(tid.x==0)AudioSkip=AudioMeta[2]==0?1:0;GroupMemoryBarrierWithGroupSync();
     if(AudioSkip!=0){for(uint slot=tid.x;slot<count;slot+=64)AudioMatches[banks.x*AudioCapacity+base+slot]=-1;return;}
@@ -237,12 +242,12 @@ void AudioMatch(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
     for(uint i=0;i<oldCount;i++)
     {
         uint g=base+i;AudioMatches[banks.y*AudioCapacity+g]=-1;
-        AudioPath path=AudioPaths[banks.y*AudioCapacity+g];uint hash=AudioHash(path.identity^AudioHash(path.frequencyBin))%AudioHashSize;
+        AudioPath path=AudioPaths[banks.y*AudioCapacity+g];uint hash=AudioIdentityHash(path)%AudioHashSize;
         int2 entry=AudioLookup(pair,hash);
         while(entry.x>=0)
         {
             AudioPath existing=AudioPaths[banks.y*AudioCapacity+base+entry.x];
-            if(existing.identity==path.identity && existing.frequencyBin==path.frequencyBin)break;
+            if(AudioEmissionSame(existing,path) && existing.identity==path.identity && existing.frequencyBin==path.frequencyBin)break;
             hash=(hash+1)%AudioHashSize;entry=AudioLookup(pair,hash);
         }
         AudioInsert(pair,hash,entry.x<0?(int)i:entry.x,entry.x<0?(int)i:65535);
@@ -252,12 +257,12 @@ void AudioMatch(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
     {
         uint g=base+group;AudioMatches[banks.x*AudioCapacity+g]=-1;
         if(AudioSpectral==0 || AudioMeta[21]!=0 || AudioMeta[22]==0)continue;
-        AudioPath path=AudioPaths[banks.x*AudioCapacity+g];uint hash=AudioHash(path.identity^AudioHash(path.frequencyBin))%AudioHashSize;
+        AudioPath path=AudioPaths[banks.x*AudioCapacity+g];uint hash=AudioIdentityHash(path)%AudioHashSize;
         for(uint probe=0;probe<AudioHashSize;probe++)
         {
             int2 entry=AudioLookup(pair,hash);int previous=entry.x;if(previous<0)break;
             AudioPath old=AudioPaths[banks.y*AudioCapacity+base+previous];
-            if(old.identity==path.identity && old.frequencyBin==path.frequencyBin)
+            if(AudioEmissionSame(old,path) && old.identity==path.identity && old.frequencyBin==path.frequencyBin)
             {
                 int used=AudioMatches[banks.y*AudioCapacity+base+previous];
                 if(entry.y!=65535 && AudioContinuous(old,path,span))
@@ -292,12 +297,12 @@ void AudioFftShared(uint n,bool inverse,uint thread)
 void AudioFilter(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(tid.x==0)AudioSkip=AudioPairState[AudioPair].z==0?1:0;GroupMemoryBarrierWithGroupSync();
-    if(AudioSkip!=0)return;uint g=AudioPair*AudioSlots+group.x,t=tid.x;
+    if(AudioSkip!=0)return;uint g=AudioRanges[AudioPair].x+group.x,t=tid.x;
     for(uint n=t;n<AudioSize;n+=256)AudioShared[n]=0;GroupMemoryBarrierWithGroupSync();
     if(t==0)
     {
         int i=AudioHeads[g];
-        for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];AudioShared[p.frequencyBin]+=float2(p.pressureGain,p.pressureImag);i=AudioNext[i];}
+        for(uint visit=0;visit<AudioRanges[AudioPair].y && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];AudioShared[p.frequencyBin]+=float2(p.pressureGain,p.pressureImag);i=AudioNext[i];}
         if(i>=0)AudioError(4);
         AudioShared[0].y=AudioShared[AudioSize/2].y=0;
     }
@@ -324,7 +329,7 @@ void AudioSplit(float2 v,out int whole,out float fraction)
 {
     float f=floor(v.x);fraction=(v.x-f)+v.y;float adjust=floor(fraction);whole=(int)f+(int)adjust;fraction-=adjust;
 }
-float AudioRead(uint source,int at,uint phase)
+float AudioRead(uint source,int at,AudioPath path)
 {
     // Samples before initialization are measured zero, not missing history.
     if(AudioBlockNegative!=0 && at<-(int)AudioBlockSample.x)return 0;
@@ -333,7 +338,19 @@ float AudioRead(uint source,int at,uint phase)
     uint4 clip=AudioClipInfo[source];
     if(clip.w!=0)
     {
-        uint2 clock=AudioSourceClocks[clip.z*AudioHistory+ring];
+        uint4 clock=AudioSourceClocks[clip.z*AudioHistory+ring];
+        uint phase=path.emissionPhase;
+        if((phase&0x80000000u)!=0)
+        {
+            // The full epoch comparison rejects an old burst after a restart.
+            if(clock.w>path.birthHigh || (clock.w==path.birthHigh && clock.z>path.birthLow))return 0;
+            int age=AudioDifference(AudioBlockSample,uint2(path.birthLow,path.birthHigh))+at;
+            if(age<=0 || age>=(int)clip.w-2)return 0;
+            float window=.5-.5*cos(2*AUDIO_PI*age/(clip.w-2));
+            uint index=((clock.x%clip.y)+(phase&0x7fffffffu))%clip.y;
+            index=(index+(uint)age%clip.y)%clip.y;
+            return AudioClips[clip.x+index]*asfloat(clock.y)*window;
+        }
         // Exact floor(phase*length/65536) with bounded uint products on Metal.
         uint offset=(clip.y>>16)*phase+((clip.y&65535)*phase>>16);
         return AudioClips[clip.x+(clock.x+offset)%clip.y]*asfloat(clock.y);
@@ -343,7 +360,7 @@ float AudioRead(uint source,int at,uint phase)
 float AudioSincValue(float x) {return abs(x)<1e-6?1:sin(AUDIO_PI*x)/(AUDIO_PI*x);}
 float AudioSample(uint g,uint n)
 {
-    uint bank=AudioPathBank(g/AudioSlots);AudioPath p=AudioPaths[bank*AudioCapacity+g];
+    uint bank=AudioPathBank(AudioOwners[g]);AudioPath p=AudioPaths[bank*AudioCapacity+g];
     int local=(int)n-(int)(AudioFft-AudioHop)-AudioLatency;
     uint anchor=AudioSpectral!=0?(AudioWhich==0?19:17):5+AudioBank()*2;
     int delta=AudioDifference(AudioBlockSample,uint2(AudioMeta[anchor],AudioMeta[anchor+1]))+local;
@@ -352,7 +369,7 @@ float AudioSample(uint g,uint n)
     int match=AudioMatches[bank*AudioCapacity+g];
     if(AudioSpectral!=0 && match>=0)
     {
-        uint other=AudioWhich==0?AudioPairState[g/AudioSlots].y:AudioPairState[g/AudioSlots].x;
+        uint other=AudioWhich==0?AudioPairState[AudioOwners[g]].y:AudioPairState[AudioOwners[g]].x;
         AudioPath q=AudioPaths[other*AudioCapacity+match],left=p,right=q;
         if(AudioWhich==0){left=q;right=p;}
         float span=AudioDifference(uint2(AudioMeta[19],AudioMeta[20]),uint2(AudioMeta[17],AudioMeta[18]));
@@ -367,21 +384,21 @@ float AudioSample(uint g,uint n)
         }
     }
     int d,r;float df,rf;AudioSplit(delay,d,df);AudioSplit(correction,r,rf);
-    float f=-df-rf,adjust=floor(f);int at=local-d-r+(int)adjust;f-=adjust;uint source=(g/AudioSlots)/AudioListeners;
-    if(AudioSinc==0)return lerp(AudioRead(source,at,p.emissionPhase),AudioRead(source,at+1,p.emissionPhase),f);
+    float f=-df-rf,adjust=floor(f);int at=local-d-r+(int)adjust;f-=adjust;uint source=(AudioOwners[g])/AudioListeners;
+    if(AudioSinc==0)return lerp(AudioRead(source,at,p),AudioRead(source,at+1,p),f);
     float cutoff=min(1,1/(1-rate)),sum=0,value=0;int extent=(int)ceil(AudioRadius/cutoff);
     for(int k=1-extent;k<=extent;k++)
     {
         float x=(k-f)*cutoff;if(abs(x)>=(float)AudioRadius)continue;
         float weight=AudioSincValue(x)*AudioSincValue(x/AudioRadius)*cutoff;
-        value+=AudioRead(source,at+k,p.emissionPhase)*weight;sum+=weight;
+        value+=AudioRead(source,at+k,p)*weight;sum+=weight;
     }
     return value/sum;
 }
 [numthreads(256,1,1)]
 void AudioInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    uint g=AudioPair*AudioSlots+group.x,t=tid.x;
+    uint g=AudioRanges[AudioPair].x+group.x,t=tid.x;
     if(t==0)AudioSkip=AudioOldOff()?1:AudioReuseInput(g)?2:0;GroupMemoryBarrierWithGroupSync();
     if(AudioSkip==1)return;if(t==0)AudioPrepareHead(g);if(AudioSkip==2)return;
     if(t==0)InterlockedAdd(AudioMeta[16],1);
@@ -397,7 +414,7 @@ float4 AudioSum(uint channel,uint bin,bool moving,uint tile)
         uint bank=AudioPathBank(pair);
         for(uint p=tile;p<AudioCounts[bank*AudioPairs+pair];p+=AudioTiles)
         {
-            uint g=pair*AudioSlots+p;
+            uint g=AudioRanges[pair].x+p;
             float2 filtered=AudioMultiply(AudioWork[g*AudioWorkStride+bin],AudioFilters[AudioFilterAt(bank,g)+bin]);
             value.xy+=AudioMultiply(filtered,AudioEar(AudioBlends[g],ear,bin));
             if(moving)value.zw+=AudioMultiply(filtered,AudioEar(AudioBlends[AudioCapacity+g],ear,bin));
@@ -466,25 +483,25 @@ void AudioWrite(uint3 id:SV_DispatchThreadID)
 [numthreads(256,1,1)]
 void AudioMaterialGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    if(AudioPairState[AudioPair].z==0)return;uint g=AudioPair*AudioSlots+group.x;
-    for(uint k=tid.x;k<AudioSize;k+=256){uint bin=min(k,AudioSize-k);float2 gain=0;int i=AudioHeads[g];for(uint visit=0;visit<AudioSlots && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];if(p.frequencyBin==bin)gain+=float2(p.pressureGain,p.pressureImag);i=AudioNext[i];}if(i>=0)AudioError(4);if(k==0 || k==AudioSize/2)gain.y=0;else if(k>AudioSize/2)gain.y=-gain.y;AudioTransform[group.x*AudioFft+k]=gain;}
+    if(AudioPairState[AudioPair].z==0)return;uint g=AudioRanges[AudioPair].x+group.x;
+    for(uint k=tid.x;k<AudioSize;k+=256){uint bin=min(k,AudioSize-k);float2 gain=0;int i=AudioHeads[g];for(uint visit=0;visit<AudioRanges[AudioPair].y && i>=0;visit++){AudioPath p=AudioArrivals[AudioOffset+i];if(p.frequencyBin==bin)gain+=float2(p.pressureGain,p.pressureImag);i=AudioNext[i];}if(i>=0)AudioError(4);if(k==0 || k==AudioSize/2)gain.y=0;else if(k>AudioSize/2)gain.y=-gain.y;AudioTransform[group.x*AudioFft+k]=gain;}
 }
 [numthreads(256,1,1)]
 void AudioPadGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    if(AudioPairState[AudioPair].z==0)return;uint g=AudioPair*AudioSlots+group.x;
+    if(AudioPairState[AudioPair].z==0)return;uint g=AudioRanges[AudioPair].x+group.x;
     for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[g*AudioFft+n]=n<AudioSize?float2(AudioTransform[group.x*AudioFft+(n+AudioSize/2)%AudioSize].x,0):0;
 }
 [numthreads(256,1,1)]
 void AudioFilterGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    if(AudioPairState[AudioPair].z==0)return;uint g=AudioPair*AudioSlots+group.x;
+    if(AudioPairState[AudioPair].z==0)return;uint g=AudioRanges[AudioPair].x+group.x;
     for(uint k=tid.x;k<AudioBins;k+=256)AudioFilters[AudioFilterAt(AudioPairState[AudioPair].x,g)+k]=AudioWork[g*AudioFft+k];
 }
 [numthreads(256,1,1)]
 void AudioInputGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    if(AudioOldOff())return;uint g=AudioPair*AudioSlots+group.x;if(tid.x==0)AudioPrepareHead(g);if(AudioReuseInput(g))return;
+    if(AudioOldOff())return;uint g=AudioRanges[AudioPair].x+group.x;if(tid.x==0)AudioPrepareHead(g);if(AudioReuseInput(g))return;
     if(tid.x==0)InterlockedAdd(AudioMeta[16],1);
     for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[g*AudioFft+n]=float2(AudioSample(g,n),0);
 }

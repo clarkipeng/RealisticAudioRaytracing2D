@@ -16,7 +16,8 @@ public static partial class TakeRender
         }
         readonly AcousticTake.Scene scene;
         readonly Settings settings;
-        readonly int sampleRate,listener,lead;
+        readonly int sampleRate,listener,lead,lookahead;
+        readonly bool bursts;
         readonly long historySamples;
         readonly TransportSolver solver;
         readonly Mixer mixer;
@@ -48,10 +49,12 @@ public static partial class TakeRender
         public Live(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,float[][] pcm,int rate,Settings settings,
             AudioManager.PcmQueue queue,int lead,int listener,ComputeShader shader=null,SourceStream[] streams=null)
         {
-            Validate(settings); historySamples=settings.HistorySamples(rate);
+            Validate(settings);bursts=Emission.HasBursts(scene);historySamples=settings.HistorySamples(rate);
+            if(bursts)foreach(var p in scene.planes)historySamples=Math.Max(historySamples,settings.HistorySamples(rate)+p.burstDurationSamples+2L*settings.responseStepSamples);
+            lookahead=(int)Math.Max(settings.ResponseSample(0),bursts?settings.responseStepSamples:0);
             if (listener<0 || listener>=scene.listeners.Length) throw new ArgumentOutOfRangeException(nameof(listener));
             this.scene=scene; sampleRate=rate; this.settings=settings; this.queue=queue; this.lead=lead; this.listener=listener;
-            if(queue!=null && lead<settings.ResponseSample(0))throw new ArgumentException("Playback lead must cover acoustic response lookahead.");
+            if(queue!=null && lead<lookahead)throw new ArgumentException("Playback lead must cover acoustic response lookahead.");
             if(queue!=null && queue.Channels!=settings.ChannelsPerListener) throw new ArgumentException("Queue/output channel mismatch.");
             signals=new Signal[scene.sources.Length];
             for (int i=0;i<signals.Length;i++) signals[i]=scene.sources[i].streamed?new Signal(streams[i],settings.maximumSignalEvents):new Signal(pcm[scene.sources[i].clipIndex],settings.maximumSignalEvents);
@@ -78,7 +81,7 @@ public static partial class TakeRender
             if(gpuAudio==null)return;
             Array.Copy(state,batchStates,state.Length);solver.BeginSolve(batchStates,1,false);
             gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state);
-            gpuAudio.CompletePreparation();solver.CompleteAfterGpuAudio();prepared=true;
+            gpuAudio.CompletePreparation();solver.CompleteAfterGpuAudio();prepared=!bursts;
         }
         public void Append(AcousticTake.VoiceEvent e) { AudioSourcePlane.ValidateEvent(scene,e); signals[e.sourceIndex].Append(e); }
         public void Observe(long from,long to,AcousticTake.State[] left,AcousticTake.State[] right,Action<long,float[],int> output=null)
@@ -133,7 +136,7 @@ public static partial class TakeRender
                 if (!RenderTo(frame,wait)) return;
                 frame.output=null; head=(head+1)%observations.Length; pending--;retained++;
                 long next=Cursor+(settings.responseStepSamples-Cursor%settings.responseStepSamples)%settings.responseStepSamples;
-                long before=Math.Min(Cursor,settings.ResponseSample(next));
+                long before=bursts?Cursor-historySamples:Math.Min(Cursor,settings.ResponseSample(next));
                 while(retained>0 && observations[(head-retained+observations.Length)%observations.Length].end<=before)retained--;
                 foreach (var signal in signals) signal.Prune(Cursor-historySamples);
                 int last=cuts.BinarySearch(previousResponse); if (last<0) last=~last-1;
@@ -153,22 +156,25 @@ public static partial class TakeRender
         }
         void PrepareBatch()
         {
-            if(!prepared && Cursor==0 && settings.ResponseSample(0)>0)
-            {
-                EvaluateObserved(0,evaluated);solver.Solve(evaluated,paths);
-                if(gpuAudio!=null){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,evaluated,0);gpuAudio.CompletePreparation();}
-                else mixer.SetResponse(0,paths,evaluated,true,solver.RayPaths,0,0);
-                prepared=true;
-            }
             var newest=observations[(head+pending-1)%observations.Length];
             long knownEnd=Math.Min(WritableEnd,newest.end);
-            if(newest.end==newest.to && finalState==null)knownEnd=Math.Min(knownEnd,newest.end-settings.ResponseSample(0));
+            if(newest.end==newest.to && finalState==null)knownEnd=Math.Min(knownEnd,newest.end-lookahead);
+            // A procedural response includes births through the following interval.
+            // Wait for complete input intervals so future birth poses are measured.
+            if(bursts && !Finishing)knownEnd=knownEnd/settings.responseStepSamples*settings.responseStepSamples;
             batchFirst=Cursor%settings.responseStepSamples==0?Cursor:Cursor+settings.responseStepSamples-Cursor%settings.responseStepSamples;
             batchEnd=Math.Min(knownEnd,checked((Cursor/settings.responseStepSamples+settings.maximumResponsesPerBatch)*settings.responseStepSamples));
             // Bound live submissions by playback lead, retaining batching when catching up.
             if(queue!=null)batchEnd=Math.Min(batchEnd,Cursor+Math.Max(settings.responseStepSamples,lead));
             batchCount=batchEnd<=batchFirst?0:(int)(1+(batchEnd-1-batchFirst)/settings.responseStepSamples);
             if(batchEnd<=Cursor)return;
+            if(!prepared && Cursor==0 && settings.ResponseSample(0)>0)
+            {
+                EvaluateObserved(0,evaluated);solver.PrepareEmissions(signals,0,1,EvaluateObserved);solver.Solve(evaluated,paths);
+                if(gpuAudio!=null){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,evaluated,0);gpuAudio.CompletePreparation();}
+                else mixer.SetResponse(0,paths,evaluated,true,solver.RayPaths,0,0);
+                prepared=true;
+            }
             for(int f=0;f<batchCount;f++)
             {
                 long sample=settings.ResponseSample(batchFirst+(long)f*settings.responseStepSamples);
@@ -178,7 +184,7 @@ public static partial class TakeRender
             if(batchCount>0)
             {
                 batchDiagnostics=gpuAudio==null || ResponseApplied!=null;
-                long start=Stopwatch.GetTimestamp();solver.BeginSolve(batchStates,batchCount,batchDiagnostics);
+                long start=Stopwatch.GetTimestamp();solver.PrepareEmissions(signals,batchFirst,batchCount,EvaluateObserved);solver.BeginSolve(batchStates,batchCount,batchDiagnostics);
                 double elapsed=Elapsed(start);SolveSeconds+=elapsed;MaximumSolveSeconds=Math.Max(MaximumSolveSeconds,elapsed);
             }
             batchActive=true;batchReady=batchCount==0;audioQueued=audioReady=false;

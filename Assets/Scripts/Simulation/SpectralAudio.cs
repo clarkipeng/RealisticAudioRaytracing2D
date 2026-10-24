@@ -15,7 +15,7 @@ internal sealed class SpectralAudio
         public PathFilter other;
         public Vector3 direction;
         public double delay,rate;
-        public long sample;
+        public long sample,birth;
         public PathFilter(int count){spectrum=new Vector2[count];}
     }
     sealed class Response
@@ -24,17 +24,18 @@ internal sealed class SpectralAudio
         public int count;
         public readonly float[] block;
         public long sample;
-        public readonly Dictionary<(int,uint,uint),PathFilter> index=new Dictionary<(int,uint,uint),PathFilter>();
+        public readonly Dictionary<(int,uint,uint,long),PathFilter> index=new Dictionary<(int,uint,uint,long),PathFilter>();
         public Response(int count){block=new float[count];}
     }
     readonly int size,hop,fft,bins,rate,channels,listeners,pairs,slots,latencyOffset,radius;
+    readonly RayTransport.Layout layout;
     readonly TakeRender.DelayFilter delayFilter;
     readonly double maximumDelay;
     readonly TakeRender.Signal[] signals;
     readonly Hrtf hrtf;
     readonly Vector2[] native,pressure,ears,input,sum;
     readonly int[] heads,next;
-    readonly Dictionary<(float,Vector4,uint,uint),int> groups;
+    readonly Dictionary<(float,Vector4,uint,uint,long),int> groups;
     Response current,previous;
     long cursor;
     bool cut;
@@ -48,19 +49,19 @@ internal sealed class SpectralAudio
         (current.paths.Count+previous.paths.Count)*((long)bins*8+60);
     public SpectralAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals)
     {
-        this.rate=rate;this.signals=signals;maximumDelay=settings.maximumDelaySeconds*(double)rate;size=settings.fftSize;hop=settings.spectralHop;channels=settings.ChannelsPerListener;
-        listeners=scene.listeners.Length;pairs=signals.Length*listeners;slots=settings.SlotsPerPair(scene);
+        Emission.Configure(scene,signals);this.rate=rate;this.signals=signals;maximumDelay=settings.maximumDelaySeconds*(double)rate;size=settings.fftSize;hop=settings.spectralHop;channels=settings.ChannelsPerListener;
+        listeners=scene.listeners.Length;pairs=signals.Length*listeners;layout=new RayTransport.Layout(scene,settings);slots=layout.MaximumSlots;
         hrtf=channels==2?Hrtf.Load(rate):null;delayFilter=settings.delayFilter;radius=settings.sincRadius;
         latencyOffset=size/2+(delayFilter==TakeRender.DelayFilter.WindowedSinc?radius:0);
         fft=1;while(fft<size+(hrtf?.Taps??1)+hop-2)fft=checked(fft*2);bins=fft/2+1;
         native=new Vector2[size];pressure=new Vector2[fft];ears=Hrtf.Spectra(hrtf,fft);input=new Vector2[fft];sum=new Vector2[checked(2*listeners*channels*bins)];
-        heads=new int[slots];next=new int[slots];groups=new Dictionary<(float,Vector4,uint,uint),int>(slots);
+        heads=new int[slots];next=new int[slots];groups=new Dictionary<(float,Vector4,uint,uint,long),int>(slots);
         headRotations=new Quaternion[listeners];headAngular=new Vector3[listeners];
         current=new Response(listeners*channels*hop);previous=new Response(current.block.Length);
     }
     public void SetResponse(long sample,bool cut,RayTransport.Path[] paths,int offset,AcousticTake.Scene scene,AcousticTake.State[] states,long? anchor=null,AcousticTake.State[] headStates=null)
     {
-        if(paths==null || offset<0 || paths.Length-offset<checked(pairs*slots))throw new ArgumentException("Missing directional ray response.");
+        if(paths==null || offset<0 || paths.Length-offset<layout.Capacity)throw new ArgumentException("Missing directional ray response.");
         foreach(var state in states)cut|=(state.flags&AcousticTake.StateFlags.Cut)!=0;
         hasPrevious=initialized;this.cut=cut;headSample=sample;headStates??=states;
         (current,previous)=(previous,current);current.count=0;current.index.Clear();
@@ -71,13 +72,13 @@ internal sealed class SpectralAudio
         for(int pair=0;pair<pairs;pair++)
         {
             int listener=pair%listeners;if(scene.sources[pair/listeners].mutedListenerPlusOne==listener+1 || !TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener))continue;
-            int basePath=offset+pair*slots,count=0;groups.Clear();
-            for(int slot=0;slot<slots;slot++)
+            int basePath=offset+layout.Ranges[pair].x,count=0;groups.Clear();
+            for(int slot=0;slot<layout.Ranges[pair].y;slot++)
             {
                 var path=paths[basePath+slot];if(path.pressureGain==0 && path.pressureImag==0)continue;
                 if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.pressureImag) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 ||
                     !float.IsFinite(path.direction.sqrMagnitude) || path.direction.w>=1)throw new InvalidOperationException("Invalid or noncausal spectral arrival at pair "+pair+", slot "+slot+": delay="+path.delaySeconds+", rate="+path.direction.w);
-                var key=(path.delaySeconds,path.direction,path.identity,path.emissionPhase);
+                var key=(path.delaySeconds,path.direction,path.identity,path.emissionPhase,path.Birth);
                 if(!groups.TryGetValue(key,out int group)){group=count++;groups.Add(key,group);heads[group]=-1;}
                 next[slot]=heads[group];heads[group]=slot;
             }
@@ -86,11 +87,11 @@ internal sealed class SpectralAudio
                 if(current.count==current.paths.Count)current.paths.Add(new PathFilter(bins));
                 var filter=current.paths[current.count++];int slot=heads[group];var path=paths[basePath+slot];
                 filter.pair=pair;filter.direction=path.direction;filter.rate=path.direction.w;filter.delay=path.delaySeconds*(double)rate;filter.sample=current.sample;filter.identity=path.identity;filter.bin=path.frequencyBin;filter.other=null;
-                filter.phase=path.emissionPhase;
+                filter.phase=path.emissionPhase;filter.birth=path.Birth;
                 Array.Clear(native,0,size);
                 for(int member=slot;member>=0;member=next[member])
                 {var value=paths[basePath+member];native[value.frequencyBin]+=new Vector2(value.pressureGain,value.pressureImag);filter.bin=Math.Min(filter.bin,value.frequencyBin);}
-                var key=(pair,filter.identity,filter.bin);
+                var key=(pair,filter.identity,filter.bin,filter.birth);
                 if(!current.index.TryAdd(key,filter))current.index[key]=null;
                 // The solve supplies the retarded-time anchor. Carrying an
                 // approximate slope between solves can accumulate nonphysical drift.
@@ -106,7 +107,7 @@ internal sealed class SpectralAudio
         }
         for(int i=0;i<current.count;i++)
         {
-            var filter=current.paths[i];var key=(filter.pair,filter.identity,filter.bin);
+            var filter=current.paths[i];var key=(filter.pair,filter.identity,filter.bin,filter.birth);
             if(!cut && current.index[key]==filter && previous.index.TryGetValue(key,out var old) && old!=null &&
                 Doppler.Continuous(current.sample-previous.sample,old.delay,filter.delay,old.rate,filter.rate))
             {filter.other=old;old.other=filter;}
@@ -150,7 +151,7 @@ internal sealed class SpectralAudio
                 double receiver=sample-(fft-hop)+n-latencyOffset;
                 double delay=filter.delay+filter.rate*(receiver-filter.sample),slope=filter.rate;
                 if(left!=null && right!=null)Doppler.Clock(receiver-previous.sample,current.sample-previous.sample,left.delay,right.delay,left.rate,right.rate,out delay,out slope);
-                input[n]=new Vector2(Doppler.Read(signals[source],receiver-delay,1-slope,delayFilter,radius,filter.phase),0);
+                input[n]=new Vector2(Doppler.Read(signals[source],receiver-delay,1-slope,delayFilter,radius,filter.phase,filter.birth),0);
             }
             ImpulseResponseAudio.Fft(input,false);
             var angular=headAngular[listener];int endpoints=angular.sqrMagnitude>0?2:1;

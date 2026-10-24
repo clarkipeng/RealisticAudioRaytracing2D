@@ -1,0 +1,16 @@
+# Seeded emission validation
+
+The implementation adds finite masked-plane bursts and shared packed transport/DSP ranges. It keeps the saved Church scene in its legacy fixed-site mode. See the [source and lifetime contract](../../simulation-contracts.md#seeded-emission-sampling-and-batching) for controls, normalization and remaining scope.
+
+**221 distinct checks passed**, with no failures or skips: 220 selected `TakeChecks` Core/GPU/Integration cases, followed by one additional packed-transport offset case. The 17 new emission cases cover fixed integer vectors, full-width counters, quantized mask PDFs and tiny positive support, exhaustive interval enumeration, batching, coverage errors, gain/Stop/restart, v5/v6 authentication, frozen origins, uneven ray allocation, CPU/GPU synthesis, independent delayed-window sums, live warm-up, packed point/plane/listener ranges, reordered equal-geometry births and shared/global FFT paths. Legacy plane, point, stream, IR, geometry and spectral tests remain in the broader suite.
+
+The real-scene probe opened the existing **v5** Church rain take and wrote a **v6** burst take with the same **17,321 triangles**, two recorded poses and 88,200-sample movement interval. At 44,100 Hz, it used a 5,512-sample period/duration, capacity 16, 16 rays/bin, FFT 128, hop 32, response step 2,048, two bounces and 0.5-second maximum delay. It multiplied the old gain by the clip RMS (0.0519901) to account for the new clip-normalized source definition. This is a source-model experiment, not a lower/higher ray-quality pair with the old rain.
+
+The renderer wrote **114,603 finite samples**, including tail: peak **0.0315614**, RMS **0.000858433**. It reported **1.364 s** wall time, **0.161 s** preparation and **22.99 MiB** numeric working storage; material filters reserved **8.19 MiB**, with 4,160 path slots and 128 peak active groups. These are one-run offline measurements with the shader cache from testing, not a cold-start comparison, measured peak resident memory or a full-scene live deadline claim. The profile has one rain source and a shorter transport horizon than the saved scene.
+
+- `verification.json` contains test counts, audio statistics and the complete render report/settings/provenance.
+- `rain-smoke.wav` is the renderer's unmodified float PCM output. It uses the existing rain asset and its [provenance](../../../Assets/External/Church/README.md); no new audio asset was downloaded.
+- `validation.zip` contains both NUnit result files, the one-off probe source, the complete numeric v6 input take and direct diagnostic responses. Extract `take/` for ordinary offline replay. The probe documents how this input was derived from the local prior v5 take; its environment variable and input path need adapting to repeat that conversion elsewhere.
+- `manifest.json` hashes the validation artifacts and source files. Source history stays in Git.
+
+Unity 6000.4.1f1 / Metal. Jobs ran sequentially in an isolated project with `nice -n 15 -batchmode -force-metal -disable-audio -job-worker-count 1`. No foreground scene, device playback, microphone or network call was used. Existing Metal potential-initialization/integer-division warning families remain. No artifact-free listening, physical rain/thunder validation, dynamic shelter, coherent channel source or external-trigger insertion solve is claimed.

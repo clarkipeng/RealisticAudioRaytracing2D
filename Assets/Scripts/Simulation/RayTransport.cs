@@ -8,6 +8,32 @@ using UnityEngine.Rendering;
 internal sealed class RayTransport : IDisposable
 {
     public const int PathStride = 48;
+    // The same prefix ranges own transport paths, CPU groups and GPU FFT rows.
+    // One plane's site capacity must not pad every other source/listener pair.
+    internal sealed class Layout
+    {
+        internal readonly Vector2Int[] Ranges,DirectSites;
+        internal readonly int[] Owners;
+        internal readonly int Capacity,MaximumSlots;
+        internal Layout(AcousticTake.Scene scene,TakeRender.Settings settings)
+        {
+            Ranges=new Vector2Int[checked(scene.sources.Length*scene.listeners.Length)];
+            var direct=new List<Vector2Int>();
+            for(int s=0;s<scene.sources.Length;s++)
+            {
+                int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
+                int slots=checked(settings.SpectralSlotsPerPair+(sites-1)*settings.FrequencyBins);
+                MaximumSlots=Math.Max(MaximumSlots,slots);
+                for(int l=0;l<scene.listeners.Length;l++)
+                {
+                    int pair=s*scene.listeners.Length+l;Ranges[pair]=new Vector2Int(Capacity,slots);Capacity=checked(Capacity+slots);
+                    for(int n=0;n<sites;n++)direct.Add(new Vector2Int(pair,n));
+                }
+            }
+            Owners=new int[Capacity];for(int p=0;p<Ranges.Length;p++)Array.Fill(Owners,p,Ranges[p].x,Ranges[p].y);
+            DirectSites=direct.ToArray();
+        }
+    }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     public struct Path
     {
@@ -15,7 +41,8 @@ internal sealed class RayTransport : IDisposable
         public float delaySeconds, pressureGain;
         public uint frequencyBin, identity;
         public float pressureImag;
-        public uint emissionPhase, padding1, padding2; // 16-bit cyclic PCM phase; separate from physical delay.
+        public uint emissionPhase, birthLow, birthHigh; // High phase bit selects finite burst; otherwise legacy 16-bit phase.
+        public long Birth => (long)(((ulong)birthHigh<<32)|birthLow);
     }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Material
@@ -31,7 +58,8 @@ internal sealed class RayTransport : IDisposable
     }
     readonly ComputeShader shader;
     readonly CommandBuffer commands;
-    readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins, directSamples;
+    readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins;
+    readonly Layout layout;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Volume
     {
@@ -39,7 +67,8 @@ internal sealed class RayTransport : IDisposable
         public uint start, count, owner, material;
     }
     readonly ComputeBuffer materialBuffer, edgeBuffer, volumeBuffer, pathBuffer, enabledBuffer,
-        edgeRangeBuffer, edgeIndexBuffer, emissionRanges, emissionPoints;
+        edgeRangeBuffer, edgeIndexBuffer, emissionRanges, emissionPoints, emissionClocks, pairRanges, directSites;
+    readonly Emission.Batch emissions;
     readonly bool[] everActive;
     readonly uint[] enabledPairs;
     readonly Action<AsyncGPUReadbackRequest> completion;
@@ -50,7 +79,7 @@ internal sealed class RayTransport : IDisposable
     public int PathsPerFrame { get; }
     public int SlotsPerPair { get; }
     internal ComputeBuffer Buffer => pathBuffer;
-    public long CpuBytes => Paths.Length * (long)PathStride + enabledPairs.Length * 4L + everActive.Length;
+    public long CpuBytes => Paths.Length * (long)PathStride + enabledPairs.Length * 4L + everActive.Length + emissions.NumericBytes + layout.Owners.Length*4L + (layout.Ranges.Length+layout.DirectSites.Length)*8L;
     public long GpuBytes { get; }
     public RayTransport(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
                         TakeRender.Settings settings, ComputeShader shader, ComputeBuffer primitives,
@@ -69,26 +98,19 @@ internal sealed class RayTransport : IDisposable
         enabledPairs = new uint[checked(pairs * maximumFrames)];
         int bins = settings.fftSize / 2 + 1;
         foreach(var material in scene.materials)material.ValidateAdmittance();
-        SlotsPerPair = settings.SlotsPerPair(scene);
-        directSamples = AudioSourcePlane.MaximumSamples(scene);
-        PathsPerFrame = checked(pairs * SlotsPerPair);
+        layout=new Layout(scene,settings);SlotsPerPair=layout.MaximumSlots;PathsPerFrame=layout.Capacity;
         Paths = new Path[readback ? checked(PathsPerFrame * maximumFrames) : 0];
         completion = OnComplete;
         bool planar = scene.dimension == AcousticTake.Dimension.Planar2D;
         try
         {
             commands = new CommandBuffer {name="Acoustics GPU transport"};
-            var points=new List<Vector4>();var ranges=new int[scene.sources.Length*4];
-            for(int s=0;s<scene.sources.Length;s++)
-            {
-                var plane=scene.planes==null?null:Array.Find(scene.planes,p=>p.source==s);
-                ranges[s*4]=points.Count;ranges[s*4+1]=plane?.samples??1;
-                ranges[s*4+2]=plane?.seed??0;ranges[s*4+3]=plane==null?0:1;
-                if(plane==null)points.Add(new Vector4(0,0,0,1));
-                else for(int n=0;n<plane.samples;n++)points.Add(AudioSourcePlane.Sample(plane,n));
-            }
-            emissionRanges=new ComputeBuffer(scene.sources.Length,16);emissionRanges.SetData(ranges);
-            emissionPoints=new ComputeBuffer(points.Count,16);emissionPoints.SetData(points);
+            pairRanges=new ComputeBuffer(layout.Ranges.Length,8);pairRanges.SetData(layout.Ranges);
+            directSites=new ComputeBuffer(layout.DirectSites.Length,8);directSites.SetData(layout.DirectSites);
+            emissions=new Emission.Batch(scene,settings,rate,maximumFrames);
+            emissionRanges=new ComputeBuffer(emissions.Ranges.Length,16);emissionRanges.SetData(emissions.Ranges);
+            emissionPoints=new ComputeBuffer(emissions.Points.Length,16);emissionPoints.SetData(emissions.Points);
+            emissionClocks=new ComputeBuffer(emissions.Clocks.Length,16);emissionClocks.SetData(emissions.Clocks);
             directKernel = shader.FindKernel((planar ? "EvaluateDirect2D" : "EvaluateDirect3D") +
                                              (settings.useBvh ? "Bvh" : ""));
             traceKernel =
@@ -149,8 +171,11 @@ internal sealed class RayTransport : IDisposable
                 shader.SetBuffer(kernel, "Primitives", primitives);
                 shader.SetBuffer(kernel, "States", states);
                 shader.SetBuffer(kernel, "Sources", sources);
+                shader.SetBuffer(kernel, "RayPairRanges", pairRanges);
+                shader.SetBuffer(kernel, "RayDirectSites", directSites);
                 shader.SetBuffer(kernel, "EmissionRanges", emissionRanges);
                 shader.SetBuffer(kernel, "EmissionPoints", emissionPoints);
+                shader.SetBuffer(kernel, "EmissionClocks", emissionClocks);
                 shader.SetBuffer(kernel, "Listeners", listeners);
                 shader.SetBuffer(kernel, "RayMaterials", materialBuffer);
                 shader.SetBuffer(kernel, "Edges", edgeBuffer);
@@ -170,8 +195,9 @@ internal sealed class RayTransport : IDisposable
             shader.SetInt("FrequencyBins", bins);
             shader.SetInt("RaysPerPair", settings.RaysPerPair);
             shader.SetInt("MaxBounces", settings.maxBounces);
-            shader.SetInt("SlotsPerPair", SlotsPerPair);
-            shader.SetInt("DirectSamples", directSamples);
+            shader.SetInt("EmissionFrameStride", emissions.FrameStride);
+            shader.SetInt("RayPathsPerFrame", PathsPerFrame);
+            shader.SetInt("RayDirectSiteCount", layout.DirectSites.Length);
             shader.SetInt("EdgeCount", edges.Length);
             shader.SetInt("VolumeCount", volumes.Length);
             shader.SetFloat("FrequencyStep", (float)rate / settings.fftSize);
@@ -181,13 +207,19 @@ internal sealed class RayTransport : IDisposable
             GpuBytes = (long)edgeRangeBuffer.count * 8 + (long)edgeIndexBuffer.count * 4 +
                        (long)materials.Length * 32 + (long)Math.Max(1, edges.Length) * 80 +
                        Math.Max(1, volumes.Length) * 48L + (long)PathsPerFrame * maximumFrames * PathStride +
-                       enabledPairs.Length * 4L + (long)(scene.sources.Length+points.Count)*16;
+                       enabledPairs.Length * 4L + (long)(emissions.Ranges.Length+2*emissions.Points.Length)*16+(long)(layout.Ranges.Length+layout.DirectSites.Length)*8;
         }
         catch
         {
             Dispose();
             throw;
         }
+    }
+    internal void PrepareEmissions(TakeRender.Signal[] signals,long first,int frames,Action<long,AcousticTake.State[]> evaluate)
+    {
+        emissions.Prepare(signals,first,frames,evaluate);
+        emissionRanges.SetData(emissions.Ranges,0,0,frames*emissions.FrameStride);
+        emissionPoints.SetData(emissions.Points,0,0,frames*emissions.PointsPerFrame);emissionClocks.SetData(emissions.Clocks,0,0,frames*emissions.PointsPerFrame);
     }
     internal void BindDebug(ComputeBuffer segments)
     {
@@ -433,7 +465,7 @@ internal sealed class RayTransport : IDisposable
         if (pending)
             throw new InvalidOperationException("Ray responses are still in flight.");
         commands.BeginSample("Acoustics.GPU.Direct");
-        commands.DispatchCompute(shader,directKernel,(checked(frames*pairs*frequencyBins*directSamples)+63)/64,1,1);
+        commands.DispatchCompute(shader,directKernel,(checked(frames*layout.DirectSites.Length*frequencyBins)+63)/64,1,1);
         commands.EndSample("Acoustics.GPU.Direct");
         commands.BeginSample("Acoustics.GPU.Trace");
         commands.DispatchCompute(shader,traceKernel,(frames*pairs*rayCount+63)/64,1,1);
@@ -494,6 +526,7 @@ internal sealed class RayTransport : IDisposable
         edgeIndexBuffer?.Dispose();
         emissionRanges?.Dispose();
         emissionPoints?.Dispose();
+        emissionClocks?.Dispose();pairRanges?.Dispose();directSites?.Dispose();
         commands?.Dispose();
     }
 }

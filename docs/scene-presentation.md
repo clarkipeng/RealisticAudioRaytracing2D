@@ -9,9 +9,18 @@ Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Chur
 
 Both use the same collision proxies, acoustic objects, input, movement and networking. Visual materials are separate from acoustic coefficients. The same small image effect supplies exposure in stops, contrast, saturation and vignette. Material pairs are serialized in the scene, so replacing a style does not destroy the other style's references on reload. No render-pipeline migration or package dependency was added.
 
+## Seeded rain bursts — 24 October 2026
+
+The renderer now supports seeded finite bursts on the existing masked plane. Each burst gets a new weighted-mask position and clip offset, then keeps its world position through its delayed tail. CPU/GPU spectral synthesis and live/offline scheduling share the same event clocks. Transport and DSP now use per-source/listener ranges, so point sources no longer reserve the largest plane's direct-site capacity.
+
+Enable this on `AudioSourcePlane` with a positive **Burst Period Samples** and **Burst Duration Samples** of at least four, measured at the capture rate. **Samples** bounds retained bursts, including propagation/filter history; **Rays Per Bin** must cover every retained burst. Zero period keeps the original fixed-site behavior. Source gain is normalized against clip mean-square power, so set the level for this source model rather than assuming the old value has identical loudness. The existing Church scene retains its fixed-site source and current profile; this is an opt-in model change, not an automatic conversion of recorded input.
+
+[Implementation and lifetime contract](simulation-contracts.md#seeded-emission-sampling-and-batching) · [Validation evidence](benchmarks/seeded-emission-2026-10-24/README.md). Thunder remains the existing point recording; a coherent channel source needs its own signal/site model, while reusing the same transport.
+
+
 ## Masked rain plane — 23 October 2026
 
-The section below describes the implemented fixed-site plane. The proposed replacement is specified and audited in [Seeded emission sampling and batching](simulation-contracts.md#seeded-emission-sampling-and-batching); finite moving-in-time rain bursts and lightning-channel emission are not implemented by that specification update.
+The section below records the 23 October fixed-site plane checkpoint. The optional finite-burst path and packed storage are described above; lightning-channel emission remains future work.
 
 Church now has one **Rain ground** object under **Church world / Weather**. Its `AudioSourcePlane` component distributes the existing looping rain clip over a 58 × 86 metre rectangle at `(0, 1.06, -7)`. The authored `RainMask.png` excludes covered ground, sampled from the existing static colliders. Thunder remains the ordinary elevated point source. The scene has eight registered sources, including four voice slots, and four autostart clips. Both visual styles use the same sound sources.
 
@@ -31,7 +40,7 @@ Planes currently require **Raytraced + Spectral**, with GPU or CPU-reference syn
 
 Take version 5 authenticates the plane axes, density mask, sample budget and seed alongside existing source/clip data. Compact input reconstruction preserves the component and source contract. Older take versions still use their original scene-hash layouts; replaying an older compact recording still requires its original scene/code revision. Multiplayer continues to share ordinary scene playback timing; no extra weather audio stream is sent. This change has not been tested with another computer.
 
-GPU capacity uses the largest plane budget across source/listener pairs: `bins * (maxSpatialSamples + raysPerBin * (maxBounces + 1))` slots per pair. Point pairs leave additional direct slots empty. At Church's unchanged live profile, source count falls from nine to eight while slots per pair rise from `67*bins` to `74*bins`; this does not imply a measured speedup. Plane PCM and clock buffers also consume memory. The scene's expensive live quality settings are unchanged.
+At the 23 October checkpoint, GPU capacity used the largest plane budget across source/listener pairs: `bins * (maxSpatialSamples + raysPerBin * (maxBounces + 1))` slots per pair. Point pairs leave additional direct slots empty. At Church's unchanged live profile, source count falls from nine to eight while slots per pair rise from `67*bins` to `74*bins`; this does not imply a measured speedup. Plane PCM and clock buffers also consume memory. The scene's expensive live quality settings are unchanged.
 
 The real-scene check preserved all 58 serialized colliders (59 loaded including the player controller) and all 17,321 acoustic triangles. It verified compact replay scene equivalence, rejected changed plane configuration/mask contents, and opened the previous version-4 weather take. Five of the eight sites survive this mask. A two-second scripted outdoor receiver move plus tail rendered finite, non-silent PCM with peak **0.02035**, RMS **0.003751**, and **24.30 MiB** reported numeric working storage. This used rain only, 256 FFT, one ray per bin and four bounces. The measured run took **142.29 s total**, including **141.79 s preparation** and **0.50 s after preparation**; these are one-run offline timings, not a full-profile real-time or warm-start benchmark. No artifact-free listening or physical-accuracy claim follows from this smoke test.
 

@@ -2,16 +2,20 @@ using System;
 using System.IO;
 using UnityEngine;
 
-// Looping rain texture distributed over a rectangle; transform motion remains sample-timed.
+// A masked rectangle: legacy fixed sites or seeded finite bursts on the audio clock.
 [RequireComponent(typeof(RaytracedAudioSource)), DisallowMultipleComponent]
 public sealed class AudioSourcePlane : MonoBehaviour
 {
     public Vector2 size = new Vector2(10, 10);
     [Tooltip("Readable linear grayscale texture: white emits, black is sheltered. Empty means white.")]
     public Texture2D mask;
-    [Min(1), Tooltip("Stable spatial samples. Independent of rays per frequency bin.")]
+    [Min(1), Tooltip("Fixed spatial sites in legacy mode; maximum retained events in burst mode.")]
     public int samples = 8;
     public int seed = 1;
+    [Min(0), Tooltip("Zero preserves fixed sites. Otherwise emit one seeded burst per period, in capture-rate samples.")]
+    public int burstPeriodSamples;
+    [Min(4), Tooltip("Hann-windowed burst length in capture-rate samples. Samples above bounds retained bursts; overflow is an error.")]
+    public int burstDurationSamples = 2400;
 
     public AcousticTake.EmissionPlane Export(int source, AcousticTake.Dimension dimension)
     {
@@ -28,14 +32,17 @@ public sealed class AudioSourcePlane : MonoBehaviour
             u = inverse * transform.TransformVector(Vector3.right * size.x),
             v = inverse * transform.TransformVector((dimension == AcousticTake.Dimension.Planar2D ? Vector3.up : Vector3.forward) * size.y),
             width = mask == null ? 1 : mask.width, height = mask == null ? 1 : mask.height,
-            mask = Array.ConvertAll(pixels, p => p.r) };
+            mask = Array.ConvertAll(pixels, p => p.r),
+            generatorVersion = burstPeriodSamples == 0 ? 0 : 1, burstPeriodSamples = burstPeriodSamples,
+            burstDurationSamples = burstPeriodSamples == 0 ? 0 : burstDurationSamples };
         Validate(result);
         return result;
     }
 
     internal static void Validate(AcousticTake.EmissionPlane p)
     {
-        if (p == null || p.samples < 1 || p.width < 1 || p.height < 1 || p.mask == null ||
+        if (p == null || (p.generatorVersion != 0 && p.generatorVersion != 1) ||
+            (p.generatorVersion == 0 ? p.burstPeriodSamples != 0 || p.burstDurationSamples != 0 : p.burstPeriodSamples <= 0 || p.burstDurationSamples < 4) || p.samples < 1 || p.width < 1 || p.height < 1 || p.mask == null ||
             (long)p.width * p.height != p.mask.Length || !float.IsFinite(p.u.sqrMagnitude + p.v.sqrMagnitude) ||
             !float.IsFinite(Vector3.Cross(p.u, p.v).sqrMagnitude) || !(Vector3.Cross(p.u, p.v).sqrMagnitude > 0) ||
             Array.Exists(p.mask, x => !float.IsFinite(x) || x < 0 || x > 1))
