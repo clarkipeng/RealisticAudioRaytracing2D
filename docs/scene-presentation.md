@@ -11,6 +11,8 @@ Both use the same collision proxies, acoustic objects, input, movement and netwo
 
 ## Masked rain plane — 23 October 2026
 
+The section below describes the implemented fixed-site plane. The proposed replacement is specified and audited in [Seeded emission sampling and batching](simulation-contracts.md#seeded-emission-sampling-and-batching); finite moving-in-time rain bursts and lightning-channel emission are not implemented by that specification update.
+
 Church now has one **Rain ground** object under **Church world / Weather**. Its `AudioSourcePlane` component distributes the existing looping rain clip over a 58 × 86 metre rectangle at `(0, 1.06, -7)`. The authored `RainMask.png` excludes covered ground, sampled from the existing static colliders. Thunder remains the ordinary elevated point source. The scene has eight registered sources, including four voice slots, and four autostart clips. Both visual styles use the same sound sources.
 
 Edit **Size**, **Mask**, **Samples**, and **Seed** on `AudioSourcePlane`; keep its `RaytracedAudioSource` looping. White mask pixels emit, black pixels emit nothing, and gray values reduce power density. Masks must be readable, linear grayscale textures; empty means fully white. Masks are sampled without filtering across shelter boundaries. The selected object's gizmo outlines its plane. F6 labels its logical centre, not the individual sampled positions. Paint the mask again if you change the architecture: it is authored data, not a runtime roof detector.

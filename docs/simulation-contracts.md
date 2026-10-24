@@ -1,8 +1,10 @@
 # Acoustic simulation and reconstruction: design contract
 
-Updated 2026-10-07 against the current Unity 6 working tree. This is the single design specification for runtime cleanup, scenes, microphone/clip sources, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
+Updated 2026-10-24 against main-repo checkpoint `b16ab86`; individual sections retain their implementation dates. This is the single design specification for runtime cleanup, scenes, microphone/clip sources, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
 
 [README](../README.md) remains the operating guide for actual APIs and workflows. [Cleanup results](cleanup-results.md) contains the current station offline benchmarks and explicitly dated historical measurements.
+
+**Design audit, 2026-10-24:** [seeded emission sampling and batching](#seeded-emission-sampling-and-batching) specifies shared point/plane/polyline sampling, procedural event reconstruction, sample timing, GPU ownership and validation. It corrects the earlier assumption that a seed removes runtime history or that subsampling independent emitters automatically preserves acoustic power. This section is proposed; the implemented version-5 rain plane still uses fixed sites and looping clip offsets.
 
 Planning update, 2026-10-18: [artifact reduction and sampling](#artifact-reduction-and-sampling-plan) defines the next investigation. It does not change the implementation status of the earlier sections.
 
@@ -54,6 +56,7 @@ Review the [runtime changes](#runtime-cleanup-and-shared-scene-session), [scene 
 | Multiple endpoints | Every source/listener pair; mono or binaural mix per head; one monitored listener. | Larger workload benchmarks and explicit local receiver selection for multiplayer. |
 | Comparison | Coarse/fine schedules, metrics/reference gate, native audio A/B/Difference, waveform/spectrogram plots and synchronized listener/top-down/free-camera views. | Per-pair target checks, learned outputs and validated reflection comparisons. |
 | Runtime | Bounded PCM/capture queues, GPU transport and DSP with asynchronous PCM batches, selectable CPU reference, fractional-delay FIR, provenance and diagnostics. | Lower measured latency/memory and reconstruction scheduling. |
+| Distributed sources | Version-5 masked plane with stable sites and cyclic clip offsets; raytraced spectral GPU/CPU synthesis. | Seeded finite bursts, polyline emitters, explicit emission lifetimes and packed work ranges; see the emission design audit. |
 | Microphone and networking | Opt-in device capture, timestamped source streams, Opus voice, LAN host/join, presented-state recording and local acoustic rendering of remote voices. | Two-machine and four-player testing, measured hardware timing, clock-drift correction and echo cancellation. |
 | Learning | Not implemented. | Validated teachers, dataset loader, models and inference. |
 
@@ -87,7 +90,7 @@ GPU: trace → group compatible arrivals → material + head filters
 CPU: async PCM completion → live queue, or wait → offline WAV
 ```
 
-Transport paths remain in their existing 32-byte buffer. Direct-only probes remain available for diagnostics; the CPU reference explicitly requests full path readback. GPU groups match delay, arrival direction and delay rate, plus topology identity in Spectral mode. Material bins become a short FIR, composed with the complete interpolated KEMAR ear response. Spectral uses continuous emission-time clocks; IR fixes the rate to zero and evaluates the equivalent sum of delayed path filters. The CPU IR reference instead uses a partitioned scene FIR. Both GPU modes use overlap-save, apply travel delay once and retain old/new response banks for samplewise fades.
+Transport paths now use 48 bytes after the impedance/plane extensions; direct diagnostic responses remain 32 bytes in GPU memory. Direct-only probes remain available for diagnostics; the CPU reference explicitly requests full path readback. GPU groups match delay, arrival direction and delay rate, plus topology identity in Spectral mode and the plane's cyclic clip phase. Material bins become a short FIR, composed with the complete interpolated KEMAR ear response. Spectral uses continuous emission-time clocks; IR fixes the rate to zero and evaluates the equivalent sum of delayed path filters. The CPU IR reference instead uses a partitioned scene FIR. Both GPU modes use overlap-save, apply travel delay once and retain old/new response banks for samplewise fades.
 
 GPU storage keeps two acoustic banks per source/listener pair and two shared head/clock response banks. Arrival or listener-activity changes rebuild only the affected pair; unchanged pairs retain their acoustic bank even while another pair changes. Current/previous ownership is stored per pair, so fading responses can share unchanged filters while retaining independent time anchors. Ear spectra are composed during reduction. Each bank computes its own four-direction blends at hop endpoints, reusing the existing blend scratch sequentially. For moving heads, two endpoint outputs are packed as `A + iB` into one complex IFFT; real/imaginary output holds the two real ear signals, interpolated samplewise across the valid hop. Static heads retain one endpoint. No extra FFT dispatch or path/spectrum readback is needed. Unchanged acoustics skip grouping and material filter construction even when the head changes. Matched spectral endpoints use the same interpolated source clock and reuse source FFTs when their compacted group indices agree. Reordered matches remain correct and synthesize separately. IR reuses unchanged input clocks and stops dispatching old-response work after its fade. Fully stationary spectral responses skip the redundant old mix.
 
@@ -693,7 +696,7 @@ Source inactivity stops new emission while preserving already-emitted tails. Geo
 
 ### Implemented files and versions
 
-New take inputs use version 4, adding authenticated complex admittance. Version 2 introduced transmission/IOR/damping and version 3 added source streams. Versions 1–3 remain readable using their original scene checksums; missing coefficients use zero transmission/damping and IOR one. Current direct render and monitored-output manifests use version 3, adding propagation delay rate to the version-2 directional records and channel metadata. Existing version-1 response files contain delay/gain only; readers must dispatch on the manifest version rather than infer row widths. Old take inputs remain usable for mono or binaural rendering.
+New take inputs use version 5, adding authenticated plane axes, density masks, spatial sample counts and seeds. Version 2 introduced transmission/IOR/damping, version 3 added source streams, and version 4 added complex admittance. Versions 1–4 remain readable using their original scene checksums; missing coefficients use zero transmission/damping and IOR one. Current direct render and monitored-output manifests use version 3, adding propagation delay rate to the version-2 directional records and channel metadata. Existing version-1 response files contain delay/gain only; readers must dispatch on the manifest version rather than infer row widths. Old take inputs remain usable for mono or binaural rendering. Seeded finite emissions require a new authenticated input contract; version-5 fixed-site planes must not silently acquire the proposed behavior.
 
 ```text
 take/
@@ -841,7 +844,7 @@ The current CPU/HLSL direct ABI is:
 | State | float4 position/rotation/velocity/angularVelocity at 0/16/32/48; uint flags/padding at 64; 80 bytes. |
 | Source/listener bindings | int32 object indices, 4 bytes each. |
 | Direct response | float4 direction at 0 (xyz world listener-to-arrival-origin, w=delay rate); float32 delay/gain at 16/20; reserved zero at 24/28; 32 bytes. v3 diagnostic disk rows remain separately packed to six floats. |
-| Spectral path | Same first 24 bytes; uint frequency bin/identity at 24/28; float32 imaginary gain at 32; padding at 36/40/44; 48 bytes. |
+| Spectral path | Same first 24 bytes; uint frequency bin/identity at 24/28; float32 imaginary gain at 32; uint cyclic clip phase at 36; padding at 40/44; 48 bytes. |
 | Material | float4 absorption/scattering/transmission/slowness at 0; float4 interior attenuation/admittance real/admittance imaginary/boundary mode at 16; 32 bytes. |
 | Optional BVH node | float4 boundsMin/boundsMax at 0/16; uint left/right/first/count at 32/36/40/44; 48 bytes. World TLAS / local BLAS bounds; a separate int32 array maps leaves to original primitive IDs. |
 
@@ -898,6 +901,188 @@ ResponseFrame:
 ```
 
 A request hash includes evaluated state bytes, not only timestamp. Reconfiguration/seek changes generation. Actual transport completions publish monotonically by scene sample; stale completions are counted and cannot replace newer source data. Predicted outputs have a separate output-sample cursor: a late actual solve may refresh predictor history for future outputs without rewriting audio already consumed.
+
+### Seeded emission sampling and batching
+
+**Proposed and audited 2026-10-24 against `b16ab86`; no runtime implementation or performance claim.** One source definition describes shape, signal and schedule. A seed reconstructs procedural inputs; shared transport/DSP renders them. Keep one numeric emission helper, small shape-sampling functions and the existing renderer. No per-drop GameObjects, per-weather transport kernels, new service or general event framework.
+
+#### Audit findings and decisions
+
+| Evidence in the current code | Consequence and design decision |
+|---|---|
+| `AudioSourcePlane.Sample` generates shifted Halton sites, nearest-texel mask density and `sqrt(area*density/count)` weights. `RayTransport` uploads them once. | This implements a stationary finite noise-source approximation, not individual impacts. Keep it readable as the version-5 source model. |
+| `TracePaths` selects `(rayIndex + fixedSeedOffset) % planeSampleCount`; zero-density sites return immediately. | When rays per bin are fewer than sites, the same subset is used across bins/updates for that seed. Some indirect launches are wasted or whole sites receive no indirect coverage. Importance-sample supported locations and report coverage; do not describe repeated identical samples as increased fidelity. |
+| `ApplyEmission` multiplies indirect pressure by site count; each ray has its own inverse-ray-count weight. | This compensates selection in pressure, but is not a guarantee of correct finite-budget power for independent signals. See the normalization counterexample below. |
+| `Signal.Append(Play)` restarts the source's sole voice; GPU plane reads use one logical source clock and a cyclic `emissionPhase`. | A random clip phase is not an independent event clock. Add derived finite-emission clocks without inserting every procedural burst into the source command log. |
+| `GpuAudio.compute` / `SpectralAudio` group by delay, direction, topology and clip phase; GPU indexing assumes constant `AudioSlots` per pair. | New emissions need explicit identity in grouping/matching; packed transport alone does not fix DSP indexing or memory. Migrate both sides together. |
+| `SlotsPerPair` uses the largest plane sample count for every source/listener pair. GPU filter/scratch storage is sized from that capacity. | Use per-pair ranges instead of global-max padding. Share PCM/BVH/materials; budget per-emission filter history explicitly. |
+| `SetActivity` keeps tracing a source once it has ever been active. Current two-bank storage owns acoustic response revisions. | Finite emission retirement requires the actual arrival/history support and completion fences. Two acoustic banks do not replace the lifetimes of multiple overlapping emissions. |
+
+Source locations: [plane sampling](../Assets/Scripts/Audio/AudioSourcePlane.cs), [transport setup](../Assets/Scripts/Simulation/RayTransport.cs), [HLSL transport](../Assets/Shaders/Transport.hlsl), [source clocks](../Assets/Scripts/Simulation/TakeRender.cs), [GPU allocation](../Assets/Scripts/Simulation/GpuAudio.cs), [GPU DSP](../Assets/Resources/Acoustics/GpuAudio.compute), [CPU DSP](../Assets/Scripts/Simulation/SpectralAudio.cs). Current Church validation and limits remain in [scene presentation](scene-presentation.md#masked-rain-plane--23-october-2026).
+
+#### Inputs, identities and random access
+
+Separate authored input from derived work:
+
+| Saved input | Derived execution data |
+|---|---|
+| Stable source ID, generator version/seed, sample rate and epoch start; shape/mask and signal assets with hashes; schedule, gain and envelope parameters. | Events required by the current source-history interval, sampled origins, clip offsets, work ranges and GPU descriptors. |
+| Accepted external triggers and parameter changes at integer samples, plus existing scene motion and microphone/network PCM. | Acoustic paths, filters, FFTs and finished PCM. |
+
+The seed replaces a persistent procedural-event list, not the state needed to render pending sound. A derived emission may be regenerated when its inputs remain available, or cached until its tail retires. A moving shape's earlier pose cannot be recovered from its seed alone. One canonical emission description must serve every receiver, frequency and render budget.
+
+Use stateless integer random access with the source seed and counter tuple `(sourceID, epochID, eventIndex, propertyTag, counter)`. Property tags isolate start jitter, shape choice, within-element coordinates, duration and clip offset. Use explicit wrapping uint operations with CPU/HLSL golden vectors; include both words of long indices. Keep the full identity tuple as identity: a 32-bit random hash is not a unique event ID. A derived emission's identity is `(eventID, siteID)`: rain bursts initially have site zero; one line strike has multiple spatial samples. A slot/generation pair identifies a resident descriptor and must map back to that identity. Source IDs do not change when tables are reordered.
+
+Use separate render keys for spatial quadrature and ray direction/bounce sampling; neither ray count, frequency count, listener index, dispatch order nor batch size enters source generation. Do not advance `UnityEngine.Random` or depend on a sequential RNG replay from scene start. The [counter-based RNG design](https://github.com/DEShawResearch/random123) is the relevant reference; adopting a new RNG package is unnecessary. Integer decisions must match exactly across CPU/GPU; positions and rendered floating-point PCM need declared numerical tolerances, not a cross-device bit-identity promise.
+
+**Initial random-access schedule:** a versioned, jittered burst cadence with one event in each authored interval of `P` integer samples. This is an inexpensive ambience model, not a claim of a Poisson raindrop process. `P`, burst duration and envelope change the source realization and are fixed across Low/High renders. A physical impact process with a different count law is a later source-model experiment.
+
+```text
+eventID = (sourceID, epochID, i)                 // i >= 0, integer
+start(i) = epochStart + i*P + UniformInt(seed, eventID, "time", P)
+duration(i) = SampleDuration(seed, eventID)     // positive, authored maximum
+origin(i) = SampleShape(seed, eventID)
+signal(i) = SelectSignalAndOffset(seed, eventID)
+```
+
+`UniformInt(..., P)` returns an integer in `[0,P)` with a specified integer mapping. The generator version fixes that mapping and schedule, not just the hash function. Checked 64-bit arithmetic handles CPU/file clocks; GPU uses two uint words and bounded local differences. Arbitrary numbers of events may share one audio block; block size is not a scheduling parameter. One-shot thunder can instead use the exact externally accepted trigger timestamp and its seed.
+
+For an emission-time lookup interval `[u,v)` and maximum burst duration `D`, visit only:
+
+```text
+first = max(0, floorDiv(u - epochStart - D, P))
+last  = floorDiv(v - 1 - epochStart, P)
+for i in [first, last]:
+    derive event(i)
+    keep it if start(i) < v and end(i) > u
+```
+
+This range conservatively includes shorter events that may already have ended; filter them rather than dropping a partially overlapping event. `floorDiv` means mathematical floor, including negative pre-roll. Obtain `[u,v)` from the DSP's actual required source interval, including maximum propagation delay, fractional resampling, material/HRIR support and overlap-save history. Do not substitute only the output block or one STFT window. Enumerating an hour into a take costs work proportional to the required interval, not the elapsed hour. Shared descriptor identity prevents duplicate accumulation where consecutive batches overlap.
+
+An accepted schedule/signal-model change starts a new versioned epoch at its sample. Shape/mask changes still require a new take initially. Gain automation changes amplitude at emission time without restarting the schedule or reseeding events. Stop closes that epoch's emission gate; it does not erase earlier arrivals. Gate input at emission time, with any authored fade applied there. Play/restart gives a new epoch identity. Existing single-voice clip behavior stays unchanged. Arbitrary many-voice authoring is not a dependency of procedural bursts.
+
+#### Shape sampling and source signals
+
+Return `(localPosition, elementID, actualProbability)` from a small sampler. Geometry determines sampling; the name “rain” or “thunder” never selects a propagation kernel.
+
+| Shape | Preparation | Sampling |
+|---|---|---|
+| Point | Position/pose binding. | Return its origin with discrete probability one. |
+| Masked plane | Cell weight `m_j * area_j`; effective emitting area `M = sum(m_j * area_j)`. | Select a supported cell by weight, then uniform coordinates inside it. |
+| Polyline | Segment weight `density_j * length_j`; retain actual endpoint geometry. | Select a segment by weight, then uniform distance along it. |
+
+Start with one shared cumulative-weight table and binary search: source origins are generated once per event, not once per ray/frequency/listener. Alias lookup is an optional replacement if measured useful at larger event counts; it needs a preprocessing table and gives constant-time discrete selection. [PBRT sampling reference](https://www.pbr-book.org/4ed/Sampling_Algorithms/The_Alias_Method). Use identical canonical table bytes and integer selection thresholds on CPU/GPU, hash/version the preparation rule, and return the actual discrete probability after quantization. Do not silently erase positive support. An all-black mask produces no emissions and zero power, without rejection loops or division by zero.
+
+For constant density within a selected cell, the continuous position PDF is `cellProbability / cellArea`; for a segment it is `segmentProbability / segmentLength`. Preserve these units. Sampling more strongly in bright cells already applies the density distribution; multiplying by the mask again without deriving the weight would apply it twice. Plane area follows transformed axes; initial take-fixed scale/mask/shape contracts remain. Static masks are authored shelter data, not dynamic roof detection. Polygonal/mesh surfaces can follow only when a real scene needs them.
+
+A rain impact/burst freezes its world origin at its start sample, using the accepted source pose at that time; a lightning strike similarly freezes its channel. Retain that derived origin if the needed pose history is about to expire. This prevents later plane motion from dragging an old impact. Existing continuous attached emitters continue using their recorded trajectories. New events at different positions must never match as one moving path and create false Doppler.
+
+Rain begins with finite, smoothly windowed excerpts from the existing stationary-noise clip. Reuse the immutable clip; store only offsets/times in derived descriptors. Envelopes have zero endpoints, and loop wrapping is explicit. Finite one-shot clips zero-extend rather than wrap. Fixed offsets into one recording only approximate independent signals: inspect correlation among overlapping excerpts and periodicity; do not claim random offsets make arbitrary tonal clips independent. The seed defines the same waveform for a burst's direct, reflected and diffracted arrivals.
+
+Thunder can use a finite branched polyline with an explicit signal/correlation model and per-element emission timing. Sound originates along the channel; unequal travel times help produce the roll ([NOAA](https://www.weather.gov/safety/lightning-science-thunder)). Start validation with a synthetic dry pulse and a declared coherent line-source model. Replaying a recording that already contains a distant rolling arrival along every segment would apply that spatial/time spread again. A plausible thunder asset/model, atmospheric refraction and near-channel nonlinear shock behavior are not provided by the current linear acoustic renderer. Keep the existing point recording until the line prototype is validated.
+
+For that coherent line prototype, the curve and shared pulse are source inputs; sampled sites approximate its spatial integral and carry separate `siteID`s. Increasing quadrature samples is a render-quality change, with correct linear weights and stable sample prefixes. Increasing independently driven noise sites or changing the rain burst cadence changes the source field. Do not conflate these two uses of shape sampling or invent independent segment waveforms when refining a coherent line.
+
+#### Normalization and ray allocation
+
+Three operations need different weights:
+
+1. **Actual discrete events:** positions/times/waveforms are inputs. Their gain comes from the authored signal model. Changing render rays never changes their count or gain.
+2. **Approximating a continuous source:** coherent pressure density `a(x)` sampled with PDF `q(x)` uses `a(x)/(N*q(x))`. Independent unit-power noise representing power density `rho(x)` uses `sqrt(rho(x)/(N*q(x)))`. These are different source contracts. Refining independent noise sites changes the source realization, not just transport quality.
+3. **Sampling propagation of fixed inputs:** path selection uses the actual selection/continuation PDFs and ray counts exactly once. This estimates a sum of the fixed signals; it does not redefine their physical power.
+
+For stationary zero-mean rain excerpts, let `sigma²` be the clip's mean-square signal after its documented preparation, `w[n]` the burst envelope and `W = sum(w[n]^2)`. With cadence `P`, effective mask area `M` and pressure-density gain `G`, a source-model normalization is:
+
+```text
+burstAmplitude² = G² * M * P / (sigma² * W)
+expected total emitted power = G² * M
+```
+
+This is the long-run independent-noise approximation before propagation, not a guarantee of constant instantaneous listener RMS. Do not renormalize to the number of currently audible events, listener location or ray count. A silent clip remains silent; do not amplify near-silent excerpts individually. Actual discrete impacts may instead preserve measured per-impact energy and let intensity change the event rate. That is a different source setting. Noise correlation and clip/environment coloration remain measurable limitations.
+
+**Audit correction to the earlier shared-budget proposal:** unbiased pressure does not imply correct finite-sample power. For `K` independent equal-power signals, selecting `R` distinct signals uniformly and multiplying their pressure by `K/R` gives expected power `K/R` times the full sum. With 16 signals and 4 selected, that is **4× power, +6.02 dB**, even though the pressure estimator is unbiased over selections. With-replacement sampling has its own additional variance; a square-root compensation would change the fixed-waveform estimator rather than repair it.
+
+The first correctness baseline therefore evaluates every represented emission's direct path and allocates at least one indirect launch to every retained emission in each evaluated frequency bin, with per-emission launch-count normalization. A logical source gets total budget `R`, distributed evenly first; `R >= K` is an explicit coverage requirement for this baseline. More rays refine each emission's paths. A finite ray estimate still has transport noise; this coverage rule does not establish accurate reverberant power.
+
+If the requested source density/tail makes that baseline too costly, report the required budget and measured cost. Offline tiles all work; live requires a fitting profile and reports an overload rather than silently dropping bursts. Subsampling whole independent emissions below that coverage floor, or replacing them with aggregate stochastic power, is a separate measured approximation. It must pass power, covariance and temporal-artifact checks before becoming a low-cost mode. A fixed total ray budget bounds launches, not guaranteed sound quality or total FFT/filter memory.
+
+Keep per-emission ray sequence prefixes stable as budgets change. A path's matching key includes emission identity and geometric sample/topology identity; allocation changes must not interpolate unrelated paths. Keep current deterministic direct/first-mirror accounting: this change must not duplicate an arrival already counted by another connection technique.
+
+#### Batching, clock offsets and memory ownership
+
+Derived data has three levels; no shader branches on weather names:
+
+```text
+Source/epoch → derived emission descriptors → trace/DSP work ranges
+
+Emission: full identity mapping; frozen origin or pose binding;
+          start/end; clip reference/offset; envelope; source weight
+PairRange: logical source, listener, firstPath, pathCapacity
+TraceJob: pairRange, emission handle, frequency, firstRay, rayCount, outputBase
+```
+
+Pack ranges using cumulative counts in a stable order. Jobs describe ranges of work, not one CPU object per ray. The CPU can enumerate candidate IDs/counts and submit one preparation dispatch without GPU count readback. Generate/sample each emission once and reuse it across frequency/listener jobs. Initially allow conservatively sized zero-gain candidates so compaction/count scans are not a prerequisite; retained work is uniquely owned by event ID. Use the same prepared source inputs for all receivers. Per-shape kernel specialization waits for profiling.
+
+Both tracing and DSP must consume per-pair ranges. Replace `query*SlotsPerPair`, `g/AudioSlots`, `g%AudioSlots` and equivalent bank/filter-address assumptions together. Do not turn each burst into a registered Unity source with the old full pair capacity. Retain logical-source mute/monitor semantics. One PCM copy per distinct clip, one scene BVH/material table, and shared shapes remain; independent positions/signals still require independent acoustic work.
+
+The current 48-byte path has two unused uint lanes at offsets 40/44. Prefer an emission descriptor index/generation there, retaining the existing phase lane for legacy planes; verify every C#/HLSL mirror and GPU echo before fixing this ABI. Group/match/reuse keys must compare the emission handle as well as the geometric path identity. Repacking a pair may change group addresses, so unchanged inputs/filters are reused by verified identity and bank ownership, never merely by equal compacted indices. Derived descriptor tables hold full event/site identity and integer times; path payloads need not duplicate those fields.
+
+Current direct work is roughly `T*L*F*S*max(K_s)` and path capacity is `T*L*F*S*(max(K_s)+R*(B+1))`, where `T` is solve frames, `L` listeners, `F` bins, `S` logical sources, `K_s` retained emission count, `R` rays per source/bin and `B` bounces. Packed capacity becomes roughly `T*L*F*sum_s(K_s+R_s*(B+1))`; actual frames may have different counts. This removes padding, not the traversal or DSP cost of valid paths. Filter storage still scales with live path/group count times DSP FFT bins and response banks. Report allocated/resident estimates separately from actual touched work; no speedup percentage is assumed.
+
+Keep four independent offsets:
+
+| Offset | Contract |
+|---|---|
+| Buffer range/index | Storage address only; may change after a completed batch. |
+| Emission start | Absolute integer sample; never derived from dispatch position or STFT hop. |
+| Clip offset | Which samples produce the dry signal. |
+| Travel delay | Continuous physical time from transport; applied once. |
+
+```text
+RequiredEmissionInterval(outputBatch, transportSupport, dspSupport) → [u,v)
+derive/cache overlapping emissions; prepare their trace jobs
+trace at the declared scene solve times and necessary emission-birth knots
+for output samples through the existing spectral DSP:
+    e = descriptor(path.emissionHandle)
+    t = retardedEmissionTime(outputSample, path)
+    local = t - e.startSample
+    dry = ReadWindowedSignal(e, local)       // zero outside emission support
+    accumulate filtered/resampled contribution through the existing DSP
+```
+
+For example, output batch `[100000,101024)`, emission start `100200` and static delay `150.5` samples give local arrival `350.5`, before separately reported implementation latency. Fractional resampling handles this; neither onset nor delay rounds to a batch/hop. Evaluate the window/gate in the source-time sampling function, including interpolation taps; masking finished output would cut off delayed/filter energy.
+
+Births inside a solve interval must enter its transport work even if a burst is absent at both interval endpoints. Known static procedural origins can be prepared for that interval. An external trigger or pose-dependent birth needs its accepted inputs and an insertion solve at that timestamp before dependent PCM is published. It must not be postponed to the next regular solve or faded in as a replacement of an unrelated event. Output chunks may split at such knots while retaining the absolute STFT/solve schedule. Path-response interpolation stays within one emission; the burst envelope controls its onset/end.
+
+A descriptor may retire only when no future output within the declared propagation/filter support can read it, no acoustic bank/history references it, and all submitted GPU/readback work using it has completed. A recycled slot increments generation. Candidate regeneration recovers source metadata; it does not reconstruct discarded acoustic filters, moving-scene history or already emitted PCM. Seeking/late join therefore requires source/scene reconstruction and DSP pre-roll, or an explicit cold-start result. Keep all upload ranges immutable until their existing completion fence; no GPU/file work enters the audio callback.
+
+Retained event count grows approximately with `eventRate * (maximumBurstDuration + propagationSupport + DSPHistory + queuedTime)`, not only currently playing grains. Long lightning channels can exceed the configured ten-second delay support: validate requested support and report truncation rather than clamping arrivals or silently raising memory. Reuse existing offline partition/retry and live overload reporting. Partitioning must retain all work and normalization; memory-budget changes must not alter the source schedule or divide gain by the local tile size.
+
+#### Replay, implementation sequence and acceptance
+
+Capture hashes bind generator version, seed, shape/mask/table recipe, clip preparation, envelope, schedule, source pose policy and accepted epoch/trigger timeline. Extend the take schema when these fields ship; preserve version-1–5 readers and original semantics. Compact takes still require matching scene/assets/build; numeric takes must carry the numeric definitions needed for offline replay. A code commit hash is provenance, not a substitute for required input assets. Multiplayer shares the agreed epoch/trigger timestamps and definition identity; each client's ray budget can differ without changing the rain. Microphone/network PCM remains recorded input, never synthesized from a seed.
+
+Implementation order keeps each step measurable:
+
+1. Add the pure numeric generator/shape helper and independent CPU fixtures. Freeze integer decision vectors, source signal and timing contracts before GPU integration. Keep existing `AudioSourcePlane` authoring and legacy samples readable.
+2. Implement one masked-plane finite-burst path with the existing spectral renderer and CPU/GPU parity. Extend signal access, grouping keys and emission lifetime together. Use existing source Play/Stop/Gain as epoch controls; do not build arbitrary polyphonic gameplay APIs first.
+3. Migrate pair ranges and DSP address calculations together. Compare packed vs unpacked execution at identical finite-burst inputs; compare old fixed-site vs new bursts as a separate source-model experiment. Add alias lookup/compaction only if their measured savings justify code and storage.
+4. Exercise the same helper with a synthetic polyline pulse, then choose suitable thunder emission assets/model. Keep IR, dynamic shelter masks, arbitrary mesh emitters, procedural lightning geometry and particle synchronization outside this first change. Current point/clip/microphone behavior must remain covered.
+
+| Atomic responsibility | Independent acceptance evidence |
+|---|---|
+| Procedural identity/time | Same descriptors under shuffled work, changed batch sizes, direct interval lookup vs sequential enumeration, long clocks/indices, epoch changes and stop/restart; exact integer decisions on CPU/HLSL. |
+| Shape sampler | Analytic plane/segment coordinates and probabilities; black/gray masks, total emitting area, rotated/scaled shapes, degenerate/all-zero input and finite-precision support. CDF/alias must describe the same declared distribution if both are implemented. |
+| Signal/normalization | Known finite clip and envelope; emission-time gain/gating, clip wrap vs zero extension, coherent cancellation vs independent-noise power, correlation and the 16/4 subsampling counterexample. |
+| Propagation identity | Analytic direct/mirror delays for a fixed event, overlapping emissions at different origins, preserved old origins/tails, no false Doppler on birth or slot reuse. Geometry/transport physics tests remain independent. |
+| Scheduling/ownership | Mid-hop event that starts/ends between solves; fractional arrival across a batch boundary; delayed tail past Stop; long pre-roll; reused slot/in-flight response; full result under smaller memory tiles. |
+| Format/replay | Saved definitions regenerate exact inputs; changed seeds/assets/generator versions fail identity checks; old takes retain behavior; lower ray quality leaves emission descriptors unchanged. |
+
+Keep two end-to-end cases: a silent offline Church rain walk and a simple line-strike scene with direct/mirror arrivals. Compare CPU/GPU synthesis and several batch partitions on the same absolute solve/hop grid. Use existing `PlaneSourceChecks`/DSP fixtures and offline diagnostics rather than another test runner. Run synthetic checks offscreen with audio disabled; no microphone/network/foreground Unity session is needed for this specification.
+
+Benchmark event preparation, mask sampling, upload, traversal, filters, FFT/mix and readback separately, plus whole-job cold/warm time and peak working buffers. Vary source/event density, delay support, listeners, ray budget, FFT grid and batch size one at a time. Save waveform/spectrogram residuals, RMS/power bias, cross-correlation, onset/tail error, residual jumps, capacity/coverage and deadline failures. Source-definition changes are separate experiments, not Low/High training pairs. Renderer invariance tests keep source inputs and absolute solve schedule fixed; physical accuracy still needs the existing independent references.
+
+**Design-audit evidence:** scratch arithmetic checks passed 1,200 randomized interval-enumeration/partition cases, including clocks above `2^32` and `2^48`, and three envelope-energy examples. The independent-signal counterexample gives power ratios 8, 4 and 1 for `(K,R)=(8,1),(16,4),(16,16)`. These validate the stated arithmetic, not Unity scheduling, GPU implementation, listening quality or real thunder/rain physics. The remaining implementation gates are the table above; no runtime test result is claimed by this documentation change.
 
 ## 7. Live, offline and audio rendering
 
