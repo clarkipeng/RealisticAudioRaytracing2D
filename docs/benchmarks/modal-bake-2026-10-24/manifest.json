@@ -1,0 +1,32 @@
+{
+  "baseCommit": "e9f33afa2c7139d247c216ca932fd386bd07dc34",
+  "sourceSha256": {
+    ".gitignore": "104eaac07be47ab03d9b2fdb5ed8b26d70a9a21f561282032787e506b9be12a8",
+    "README.md": "652ca0c7b7cefec0bb0de1809f7f208ee969a3d86505eca7102d005c17e287be",
+    "docs/simulation-contracts.md": "b8fda3db8ad7774c6b5e00efbde64cc98e588bcecd64181e4dc5fb4ca4202bda",
+    "Assets/Scripts/Scene/AudioMaterial.cs": "0047dca2742bb302b8d629867ae05d8c4c120fde38e4a1332ac48ce0849c6c09",
+    "Assets/Editor/ModalBakeEditor.cs": "a59727f5c8fa25c7815eb704afccd8b692d3c5c50e7284ea704e347381783a13",
+    "Assets/Editor/ModalBakeEditor.cs.meta": "83b07df3f8bccfd06bb9f6c5c5aa50ffe85f25759574c81bc44292e795fc215e",
+    "Assets/Scripts/Simulation/ModalBody.cs": "0ed181d9f76c2d715dcc6e23b86ab90cabf88ab7360fd89c100c515422c5f140",
+    "Assets/Scripts/Simulation/ModalBody.cs.meta": "45c6d439b6ce6a905c61573e5b339a955ddc507ab763d3d38eecb2b4b1d2a696",
+    "Assets/Tests/Editor/ModalBakeChecks.cs": "6301c487501a2027493154fdf8cffb526a78bc548543c4a7a965659e458d4b92",
+    "Assets/Tests/Editor/ModalBakeChecks.cs.meta": "6f86a8dae41a747c923ac4199d774b379a19d50fcac90805a79ede647f242e1b",
+    "tools/modal_bake.py": "c6583099efd6c2c8e9623499a1e390088f1e2268dcba906a594118ef8cac63a1",
+    "tools/test_modal_bake.py": "2043224856e816608ee5c091295141da4c3c120ac51b96ae4e572bf6b69c5f9e"
+  },
+  "artifactSha256": {
+    "validation.zip": "78897d93862b82afbe3b7fbd646675599ea7bc71361d8bd5eccc80e81b105467",
+    "README.md": "bf8035240cd740ba3278fc99a2e85224a8e1d0b38adfdfcdad886d7e122fb947",
+    "approximation.png": "329028066223a514a0b938cfbb9508b44a39dd612da6ba9fd237baf8c1d6943a",
+    "verification.json": "ea2942d365669fec4ec005a710df6d0bebacb73decbc13eef8ad19f832245eb3"
+  },
+  "localBankSha256": {
+    "solid-order3.npz": "963a98ea111ecae3a97eb568672aec26cb239dcafc73218e11dbb29ae2f999f8",
+    "solid-order3-coarse.npz": "9be0d3d3f4f31a3886ab22aae57ba97df11925cdb8eca68e7b01cae0145c7835",
+    "proxy-order3.npz": "a27a4f6bf8cd56e2c2e84008b06f88f9a3340fadd800c8e916af24d070f2aa8a",
+    "proxy-order3-coarse.npz": "27496d8c684507e4e75dd02a9f86b74f631ef7129be9476a56d93112ce190ac7",
+    "panel.npz": "c80172f6cb15efd03a32abf4c07027b5687d86621c9d1bc0e7385de0db5ceee0",
+    "beam.npz": "48b09698fa6a1a015db7e8b7f1508a81c3bca10e559b5690ccda2b137e64ec08"
+  },
+  "note": "Hashes identify this snapshot; timing metadata and modal eigenvector signs/bases need not reproduce byte-for-byte."
+}

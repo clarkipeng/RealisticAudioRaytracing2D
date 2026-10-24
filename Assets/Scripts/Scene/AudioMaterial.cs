@@ -44,6 +44,15 @@ public class AudioMaterial : ScriptableObject
     [Min(0f)]
     public float density = 2400f;
 
+    [Header("Solid vibration (offline bake)")]
+    [Tooltip("Young's modulus in Pa for a homogeneous isotropic solid. Used by modal export, independently of legacy propagation controls. Default is illustrative concrete.")]
+    [Min(1f)] public float modalYoungModulus = 25e9f;
+    [Range(-0.99f, 0.499f)] public float modalPoissonRatio = 0.2f;
+    [Tooltip("Internal structural loss factor. Does not include mounting or acoustic radiation losses.")]
+    [Range(0f, 0.2f)] public float modalLossFactor = 0.01f;
+
+    [Header("Legacy propagation controls")]
+
     [Tooltip("How 'open' the material structure is. 0 = Solid/Watertight, 1 = Open Foam/Cloth.")]
     [Range(0f, 1f)]
     public float porosity = 0.1f;

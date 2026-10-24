@@ -4,7 +4,7 @@ Updated 2026-10-24 against main-repo checkpoint `b16ab86`; individual sections r
 
 [README](../README.md) remains the operating guide for actual APIs and workflows. [Cleanup results](cleanup-results.md) contains the current station offline benchmarks and explicitly dated historical measurements.
 
-**Design audit, 2026-10-24:** [seeded emission sampling and batching](#seeded-emission-sampling-and-batching) specifies shared point/plane/polyline sampling, procedural event reconstruction, sample timing, GPU ownership and validation. It corrects the earlier assumption that a seed removes runtime history or that subsampling independent emitters automatically preserves acoustic power. This section is proposed; the implemented version-5 rain plane still uses fixed sites and looping clip offsets.
+**Design audit, 2026-10-24:** [seeded emission sampling and batching](#seeded-emission-sampling-and-batching) specifies shared point/plane/polyline sampling, procedural event reconstruction, sample timing, GPU ownership and validation. Its first version-6 masked-burst slice is implemented at `e9f33af`; polyline sources remain proposed. Bursts are a granular ambience model, not individual physical drops. The [primitive and solid-mesh vibration bake](#primitive-and-solid-mesh-vibration-bake) adds a separate mechanical reference and shared resonator; acoustic radiation and physical rain excitation are not yet integrated.
 
 Planning update, 2026-10-18: [artifact reduction and sampling](#artifact-reduction-and-sampling-plan) defines the next investigation. It does not change the implementation status of the earlier sections.
 
@@ -901,6 +901,64 @@ ResponseFrame:
 ```
 
 A request hash includes evaluated state bytes, not only timestamp. Reconfiguration/seek changes generation. Actual transport completions publish monotonically by scene sample; stale completions are counted and cannot replace newer source data. Predicted outputs have a separate output-sample cursor: a late actual solve may refresh predictor history for future outputs without rewriting audio already consumed.
+
+### Primitive and solid-mesh vibration bake
+
+**Implemented 2026-10-24:** `tools/modal_bake.py` prepares one homogeneous, isotropic, linear-elastic physical object. It provides analytical rectangular plate modes, solid box/closed-mesh finite-element modes, mesh-to-box approximation, uniform size/material retuning, ordered-spectrum comparisons and a mechanical impulse renderer. `ModalBody` consumes the same modal data in Unity. This is structural displacement/velocity, **not acoustic pressure**. It does not enable physical rain in the Church scene or change existing propagation/take semantics.
+
+**Authoring.** `AudioMaterial.density` is shared; `modalYoungModulus`, `modalPoissonRatio` and `modalLossFactor` specify elasticity and internal loss independently of the legacy rigidity/porosity propagation heuristics. Defaults are illustrative, not calibrated measurements. These fields are consumed by modal export and are not part of the existing take material definition. Geometry and support belong to the object; event forces belong to the source generator. Loss factor is not inferred from stiffness or density. Initial per-mode viscous damping uses `zeta = loss/2`, the lightly damped approximation to structural loss; mounting/radiation losses are not included.
+
+`Tools > Acoustics > Modal Bake > Export selected mesh` writes flat triangle/vertex arrays in metres, with world rotation/scale baked relative to the selected object's world origin. `Export selected box collider` instead preserves the primitive's dimensions and right-handed frame. It rejects mixed acoustic materials and sheared box transforms. Export is read-only with respect to the scene. Both exports explicitly start with `support: "free"`; edit mounting before baking a fixed object. A fitted proxy does not replace rendering/collision geometry automatically.
+
+Minimal input (dimensions and position are metres):
+
+```json
+{
+  "version": 1,
+  "geometry": {"kind": "plate", "size": [0.4, 0.25, 0.002]},
+  "material": {"density": 2700, "young": 70000000000, "poisson": 0.33, "loss": 0.01},
+  "support": "simply-supported"
+}
+```
+
+`geometry.kind = box` uses a solid's three dimensions; `mesh` uses `vertices` and `triangles` (flat or Nx3 arrays). `obj` takes a `file` relative to the JSON, with triangulated faces and metre coordinates. Optional primitive `center` and `basis` provide a proper rotation with basis vectors in matrix columns. Solid support is `free` or `clamp-x-min`, `clamp-y-min`, `clamp-z-min`, evaluated in the geometry frame; plate support is explicitly `simply-supported`. Mesh-derived proxies must be fitted in the free configuration before choosing supports in their new frame. Disconnected shells, open/inconsistently oriented surfaces and degenerate triangles are rejected. Exact duplicate rendering vertices are welded. Edge checks and signed volume do not certify absence of self intersections; the selected source must represent a valid solid. Volume meshing uses existing Netgen, not automatic arbitrary mesh repair.
+
+**Approximation.** `fit` evaluates oriented enclosing boxes from exact area-integrated surface moments and up to 16 distinct dominant face-normal directions. It selects the smallest-volume candidate, not a guaranteed globally minimum box. Output includes dimensions/frame, volume fill/error and deterministic sampled, one-way source-surface-to-box distances. These are geometric metrics, never a certificate of matching resonances. Bounding-box decomposition into disconnected resonators is not performed. To accept an approximation acoustically, compare direct and proxy bakes after independently refining their discretizations; the current `compare` command reports sorted frequency-spectrum differences only, not mode correspondence, excitation, decay or radiation error. A thin fitted box can be explicitly changed to `plate` with declared support; it is not silently assigned plate boundary conditions.
+
+**Mechanical bake.** Plate modes use Kirchhoff thin-plate formulas, with mass normalization `sqrt(4/(rho*a*b*h))`. Initial eligibility requires `h/min(a,b) <= .05`; retained modes additionally satisfy `h*sqrt((m/a)^2+(n/b)^2) <= .1`. These conservative model limits are not an error bound. The sorted mode prefix stops at the requested count/frequency/model limit and is reported. Solid modes use vector elasticity on tetrahedra, consistent mass, configurable FE order and mesh size, and deterministic-start shift-invert Lanczos (`scipy.sparse.linalg.eigsh`). Free connected solids must produce exactly six discarded rigid-body modes; clamped boundary degrees of freedom are eliminated. The solver checks positive elastic eigenvalues, relative residuals and mass orthogonality. Input/tetrahedral volumes must agree within 1%; frequency convergence still needs independent mesh/order refinement. No coupled air load, nonlinear impact/contact, plasticity, joint compliance or arbitrary anisotropy is claimed.
+
+The NPZ bank stores float64 `frequencies[mode]`, `positions[vertex,xyz]`, `shapes[mode,vertex,xyz]`, int32 `triangles[face,corner]`, and JSON metadata including inputs, units, method/version and solver report. Mode shapes have units `kg^-1/2` and are mass normalized. FEM fields are sampled on a surface subdivision at twice the FE order; the portable bank uses piecewise-linear barycentric interpolation between those samples. That interpolation has its own approximation error. Plate samples resolve each retained sinusoid with at least eight intervals per half-wave. The NPZ contains mechanical data only, with no arbitrary pressure gain.
+
+**Parametric reuse.** At fixed Poisson ratio, unchanged ideal supports and homogeneous material, uniform scale `s`, Young's modulus and density changes give:
+
+```text
+frequency_new = frequency_old / s * sqrt((E_new/E_old)*(rho_old/rho_new))
+shape_new     = shape_old * sqrt(rho_old/(rho_new*s^3))
+position_new  = s * position_old       # scale about bank coordinate origin
+```
+
+Retuning changes mass-normalized coupling as well as frequency, and can change internal loss. It does not invent omitted modes if the shifted band needs them. Nonuniform scale, Poisson ratio changes, new supports or changed topology need a new bake. Acoustic radiation must later be recomputed consistently; a pitch change alone is not a complete acoustic retune. Stored solve reports describe the original mechanical discretization, with retune factors recorded separately.
+
+**Shared runtime.** `export` writes a flat JSON bank for `new ModalBody.Bank(json)`. Multiple bodies share that immutable bank and have independent state. `Bank.Couple(triangle, barycentric, vector, coefficients)` projects an impulse in N s, or an observation direction, onto the modes. `ModalBody.Render` takes sorted integer-sample impacts within the current batch, sums coincident impacts into the existing modal velocity and advances the exact damped-oscillator recurrence. Sampling occurs after impulses at that sample and before advancing to the next. State persists across batches, and stopping new impacts leaves ringing intact. All retained modes must lie below Nyquist. No clipping, automatic energy normalization, listener attenuation or propagation delay is applied. Finite contact forces can be supplied as time-distributed impulses; a physically validated raindrop force law remains work. The Python `Resonator` and `impulse` command provide the independent reference/diagnostic path.
+
+Commands (NumPy/SciPy; NGSolve also required for solid bakes):
+
+```sh
+python tools/modal_bake.py fit exported-mesh.json fitted-box.json
+python tools/modal_bake.py bake fitted-box.json box.npz --modes 32 --mesh-size 0.03 --order 2
+python tools/modal_bake.py bake exported-mesh.json mesh.npz --modes 32 --mesh-size 0.03 --order 2
+python tools/modal_bake.py compare mesh.npz box.npz approximation.json
+python tools/modal_bake.py retune box.npz larger.npz --scale 2 --young 100000000000 --density 7800
+python tools/modal_bake.py export larger.npz unity-modal.json
+python tools/modal_bake.py impulse box.npz impacts.json mechanical.npz --rate 48000 --samples 48000 --batch 1024
+python -m unittest discover -s tools -p test_modal_bake.py -v
+```
+
+CLI outputs require new paths. `impacts.json` has `observation: {triangle, barycentric: [u,v,w], direction: [x,y,z]}` and `impacts: [{sample, triangle, barycentric, direction, impulse}]`; directions are unit vectors and impulse is N s. The diagnostic output has displacement in metres and velocity in m/s; it is intentionally not a WAV. Batch size is not a physical parameter. The source NPZ SHA-256 in exported JSON is provenance, not a self-authentication of editable JSON.
+
+**Next integration boundary:** map physical drop excitation into shared body state, convert coherent surface velocity into acoustic emission, and validate that radiation against a declared boundary model before routing it through the existing ray renderer. Do not replay wet rain excerpts as individual physical impacts, emit every surface sample as independent noise, or add structural transmission on top of the same legacy transmission contribution. Water-impact/bubble excitation remains a separate mechanism; the solid resonator does not generate it.
+
+Primary references: [modal FEM implementation](https://github.com/cxzheng/ModalSound), [plate/eigenfrequency analysis](https://www.comsol.com/multiphysics/eigenfrequency-analysis), [SciPy generalized shift-invert solver](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.eigsh.html), [modal radiation](https://www.cs.columbia.edu/cg/transfer/). Validation and source/artifact hashes: [modal bake evidence](benchmarks/modal-bake-2026-10-24/README.md).
 
 ### Seeded emission sampling and batching
 
