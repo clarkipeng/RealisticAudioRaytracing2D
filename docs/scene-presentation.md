@@ -11,6 +11,8 @@ Both use the same collision proxies, acoustic objects, input, movement and netwo
 
 ## Current scope — 24 October 2026
 
+**Next walkthrough, planned:** [sequence and code organization](simulation-contracts.md#sequenced-church-walkthrough-and-environment-behavior-planned) covers a visible character, ringing tower bells, calling birds, rising wind/clouds, rain and lightning/thunder in order. It includes synchronized source animation, shared weather state, shelter-aware rain and replay/capture requirements. No footage for this sequence has been rendered yet.
+
 Church retains **Maximum bounces = 32** under Raytraced/Spectral, with its existing sources, reflections, reverberation, occlusion, transmission and material/listener filtering. Only the new object-vibration/radiation integration is deferred. The mechanical bake tools remain available separately and are not connected to scene playback.
 
 Zero bounces remains available as an optional diagnostic mode. [Implementation and limits](simulation-contracts.md#direct-sound-without-room-reverberation-2026-10-24) · [Historical zero-bounce verification at `f65f212`](benchmarks/direct-sound-2026-10-24/README.md). Those renders used zero bounces; they do not measure the restored 32-bounce profile. Earlier sections below retain their historical settings and measurements.

@@ -8,6 +8,8 @@ Updated 2026-10-24 against main-repo checkpoint `b16ab86`; individual sections r
 
 Planning update, 2026-10-18: [artifact reduction and sampling](#artifact-reduction-and-sampling-plan) defines the next investigation. It does not change the implementation status of the earlier sections.
 
+**Presentation plan, 2026-10-24:** [sequenced church walkthrough and environment behavior](#sequenced-church-walkthrough-and-environment-behavior-planned) specifies the ordered bells → birds → wind/clouds → rain → lightning/thunder film, shared sample-clock behavior, scene/replay integration and visual acceptance. It preserves the existing reverberation and defers vibration/radiation integration. This section is a design, not implemented footage.
+
 Research update, 2026-10-18: the [planar wave reference](#wave-reference-suite-research-and-implementation-plan) is implemented and benchmarked. The [ray/learned reconstruction experiment](#ray-transport-and-learned-reconstruction-experiment) defines candidate kernels, search ranges, a reproducible scene suite and an aggregate score; the replacement kernels and neural models remain proposed.
 
 **Current direction, clarified 2026-10-19:** the product goal remains **realtime 3D acoustics in large, dynamic environments**. Use 2D scenes as the inexpensive development/validation stage. Keep heuristics in route/sample allocation; retain signed pressure, physical delay, frequency dependence and the existing wedge kernel. The [complete-route sampling experiment](cleanup-results.md#minimal-planar-diffraction-sampling--2026-10-19) is an offline diagnostic, not the intended exhaustive runtime algorithm. `Planar2D` retains its declared point-source/infinite-extrusion convention, so its matched wave reference remains valid.
@@ -685,6 +687,156 @@ Generate documented impulse, sweep and seeded-noise fixtures. Preserve the horn 
 Asset scope for the new scenes: build church walls/arches/pews from native primitives and simple authored meshes first. Use shared stone/plaster/wood Standard materials; select only needed maps from the [Poly Haven texture library](https://polyhaven.com/textures) after layout acceptance. For outdoor visuals, the optional [Kenney Nature Kit](https://kenney.nl/assets/nature-kit) supplies CC0 trees/rocks; import only used models with its license. Use the existing Built-in material shaders and a simple Standard water surface initially. A custom animated water shader is decorative later work, not an acoustic dependency. No new asset download is implied by this document.
 
 Store scenes in `Assets/Scenes`, shared player/speaker/door prefabs in `Assets/Prefabs`, environment-only prefabs under their environment folder, visual and acoustic material assets separately under `Assets/Materials`, and external models/licenses in `Assets/External`. Reuse existing locations rather than adding a package tree. Asset hashes/provenance bind training recipes. Placeholder acoustics must be labeled as such until sourced coefficients replace them.
+
+### Sequenced church walkthrough and environment behavior (planned)
+
+**Design only, 2026-10-24, audited against `45575b1`.** Produce a walkthrough in which a visible character encounters tower bells, birds, building wind/cloud cover, rain, then lightning and thunder. Preserve the existing source/transport system and Church's 32-bounce reflections. Defer structural vibration, physical drop excitation and object-radiation synthesis. Swinging an authored bell and animating leaves are presentation behavior, not modal simulation.
+
+#### First film and visible cause of each sound
+
+Target a roughly 60-second sequence at 1920 × 1080, 30 fps, followed by enough held footage to include the renderer's remaining audio tail. Use the saved Polished Low Poly art direction with an authored clear-to-storm lighting profile. Walk with the existing collision controller and avatar animation. Primarily follow the character in third person; permit a short belfry cutaway and a view toward the strike. The listener stays at the character's head throughout, including cutaways. A first-person alternate can reuse the same take.
+
+| Time | Action and framing | World/audio behavior |
+|---|---|---|
+| 0–4 s | Establish the church exterior and walking character. | Clear sky, readable daylight, light breeze. Weather and bell sources wait for their cues. |
+| 4–14 s | Character looks toward the tower; show the moving bell and clapper clearly. | Play one authored bell phrase; align each visible contact with an annotated strike in its PCM. Existing acoustics supplies distance and echoes. |
+| 14–24 s | Continue along a planted courtyard path; frame a calling bird before it moves. | One or two audible birds call in order, with a small visual flock if useful. Leaves move gently; bell decay can overlap. |
+| 24–34 s | Approach the entrance as the weather changes. | Clouds visibly thicken and move; sunlight/shadows soften, ambient light cools, wind and leaf rustle rise. Birds quieten or take shelter. |
+| 34–44 s | Rain becomes visible against both the sky and dark masonry. | Ramp rain sound and visual density together. Show falling streaks, exposed-ground splashes and gradual wetting. Wind bends streaks and foliage consistently. |
+| 44–52 s | Reveal a lightning strike while retaining the character's listening position. | One shared strike cue produces the bolt, brief scene illumination and thunder emission. The renderer supplies acoustic travel time; do not add another arbitrary thunder delay. |
+| 52–60 s | Character walks under cover/through the entrance; end looking back toward rain. | Exterior rain continues visibly through openings and becomes acoustically screened by the existing geometry. Finish the source envelope, then hold the shot for delayed sound and echoes. |
+
+Times are an editable first storyboard, not constants embedded in behavior scripts. The bell phrase's actual transient spacing determines its animation. The route must be measured against the scene before locking these times; a camera must not hide teleportation, clipping or impossible walking speed. The film should communicate events through visible motion/light first. Optional small event captions belong to a diagnostic export; the normal video hides the current source labels and controls.
+
+#### Audited starting point
+
+| Existing code/data | Reuse and missing work |
+|---|---|
+| `SceneSession.Step`, `PlayerController`, `ChurchAvatarPresenter` | Already provide explicit simulation steps, collision walking and manually advanced animation. Drive recorded movement inputs; do not animate the player root through walls. |
+| `ChurchPresentationCapture` | Already renders offscreen and encodes video, but its short route is hardcoded and its movies are silent. Extend capture for a sequence, independently rendered PCM and final muxing. |
+| `RaytracedAudioSource`, `RayTraceManager.RecordSourceEvent` | Reuse Play/Gain/Stop and source registration. The current method timestamps at `CaptureSampleNow` (normally the current pose tick), and cannot accept an arbitrary scheduled sample. Add an explicit timestamp entry point instead of tying cue onset to an `Update` call. |
+| `SceneSession.startSounds` | Starts bell/organ/rain/thunder together today. A sequence must explicitly own its source bindings so this list does not start them a second time. Preserve ordinary autostart behavior outside the sequence. |
+| `AudioSourcePlane` and `RainMask.png` | Keep one logical rain source and its existing fixed sites for this film. The mask describes exposed ground; it is not a volumetric roof/interior test for visual rain. |
+| `ChurchVisualPreset` | Owns materials, ambient/fog and named light settings today. It must provide a style baseline; weather then derives final lighting from that baseline, without two scripts overwriting the same properties. |
+| Imported church `Bell` mesh | A bell model exists; inspect/split its fixed frame, swinging body and clapper and author the correct pivots. No assumption that the whole imported mesh can swing. |
+| Current source assets | Bell contains ambience and a phrase; thunder has eight seconds of leading silence in a 42-second loop. Prepare and document cue-ready regions/assets. Bird calls, bird presentation and suitable wind-reactive foliage still need asset work. A tree texture is not a rigged tree. |
+| `SceneRecording` / `SceneReplay.Rig` | Compact replay currently supports only train/door actors, rejects arbitrary rigid bodies and activation changes, and has no environment-cue record. Add one explicit environment actor adapter and recorded environment data before claiming replay support. |
+| Built-in rendering; Timeline 1.8.11 already installed | Keep the current render pipeline. The first sequence needs a small numeric asset, not a new cinematic framework. Timeline can later edit/compile that same data, or author camera-only animation; it must not become a second audio scheduler. |
+
+#### Code boundaries
+
+Use **one sample clock, one sequence state, and one emission path**. Different visible actors can have different components; their audio all uses the existing transport/DSP. A bell, a bird and thunder do not require separate ray kernels.
+
+```mermaid
+flowchart LR
+    A[Sequence asset or recorded commands] --> B[EnvironmentSequence evaluator]
+    C[SceneSession sample clock] --> B
+    B --> D[Weather state and actor poses]
+    B --> E[Timed acoustic events]
+    D --> F[Weather, bell and bird presentation]
+    D --> G[Recorded source poses]
+    E --> H[Existing Play / Gain / Stop stream]
+    G --> I[Existing transport and audio synthesis]
+    H --> I
+    J[Walkthrough capture] --> K[Camera shots and video]
+    I --> L[Listener PCM]
+    K --> M[Clock-aligned final movie]
+    L --> M
+```
+
+Proposed files are responsibility boundaries, not a requirement for a class per effect:
+
+| Location | Responsibility |
+|---|---|
+| `Assets/Scripts/Demo/EnvironmentSequence.cs` | Serializable sequence definition and numeric evaluator: stable IDs, seed, weather keys, actor paths and sorted cues. Own no cameras, renderers, materials, GPU audio buffers or Unity `AudioSource`. Keep small value types together here. |
+| `Assets/Scripts/Demo/EnvironmentSequenceActor.cs` | `SceneActor` adapter. Initialize/reset the evaluator, advance from the session clock, update registered source poses and expose due acoustic events. Supply settings identity and isolated replay bindings. No private `Update` clock. |
+| `Assets/Scripts/Demo/EnvironmentPresentation.cs` | Apply evaluated weather to sky/clouds, lighting/fog, rain/splashes, surface wetness and shared foliage wind. Cache explicit bindings and reuse property blocks; no name search or per-particle object creation each frame. |
+| `Assets/Scripts/Demo/BellPresentation.cs`, `BirdPresentation.cs` | Apply local pose/animation at a supplied sequence time. Each prefab owns its visual references and authored motion. Neither calls Play based on animation/render callbacks. Split these because their visual behavior differs, not their audio pipeline. |
+| `Assets/Editor/ChurchPresentationCapture.cs` | Add sequence capture/validation and camera framing to the existing tool. Keep route/shot data outside runtime weather behavior. Own encoder invocation, progress and outputs. |
+| `Assets/Sequences/ChurchWeather.asset` plus prefabs/art assets | Author the sequence and its bindings before recording. Reuse the church scene; no second hand-maintained copy of its architecture. Wind-capable foliage/cloud/rain materials live with their art assets. |
+
+Make the sequence opt-in on the scene/session. The character's scripted route is a source of `SceneRecording.Input`, separate from the environment actor. In normal play the same environment behavior can run while the user walks freely. Gameplay can issue a typed cue or weather transition to the evaluator at a recorded sample; it does not need to know the film's shot list. Do not introduce a global event bus, plugin registry, weather-specific audio managers or a generic property-path animation system.
+
+Store the authored definition in an immutable ScriptableObject; each session owns a separate evaluator/cursor. Keep scene Transform/Renderer/source references on the actor and presentation bindings, addressed by stable IDs in the asset. Validate duplicate/missing IDs and fixed clip/profile compatibility before recording. Never store transient playback state back into the shared asset.
+
+#### Minimal state and cue contract
+
+The shared weather controls are **cloud cover** `[0,1]`, **rain amount** `[0,1]`, and **wind velocity** in world metres/second. Rain amount is an authored intensity for this ambience model, not a claim of measured rainfall. A style profile maps these controls to lighting, fog, particle density and rustle/rain level. Keep a global gust seed/profile and object-level foliage flexibility, rather than independent wind settings on every leaf or sound source. No new acoustic material parameters are needed for this presentation pass.
+
+Evaluate weather curves and gusts from absolute sequence time. Clouds, foliage, rain drift and rustle share the same wind state, with stable spatial phase variation. Derive wetness from accumulated rain over the sequence, so it does not disappear when rain stops. First-film wetness can remain after the storm; drying/evaporation is separate work. Freeze the authored profiles and initial state for a recording.
+
+Conceptual numeric records, compiled for the capture sample rate:
+
+```text
+Sequence: version, seed, durationSamples, weatherKeys[], actorPaths[], cues[]
+WeatherKey: sample, cloudCover, rainAmount, windVelocity
+Cue: stableId, sample, kind, targetBindingId, profileId, strength
+Cue kinds initially: BellPhrase, BirdCall, LightningStrike
+```
+
+Profiles supply the fixed clip binding/region, visual motion and relative onset annotations; they are not a universal bag of optional properties. A continuous rain/wind envelope belongs to the weather track, not thousands of discrete rain cues. At a fixed version, derive randomness from `(sequence seed, target ID, cue ID, property tag)`. Camera changes, ray budgets, particle counts and iteration order must not alter the acoustic events.
+
+Author times in seconds; quantize once to integer samples when starting/compiling a run and retain those exact values. Advance monotonic intervals `[previousSample, nextSample)`; process time-zero cues explicitly and retain a cursor so repeated evaluation cannot duplicate them. Sort equal-time commands by a persisted authored ordinal. Validate conflicting commands on one source before capture. Visual `Evaluate(time)` is side-effect-free; drawing a frame or scrubbing a camera cannot emit sound again.
+
+The current Gain event is a step, not a ramp. Initially sample gradual rain/rustle envelopes on the existing fixed simulation grid and record those exact Gain events; use conservative level changes and verify discontinuities numerically and in a later listening review. Keep the weather envelope on the logical source's shared event clock: baking it into rain PCM would shift it differently at the plane's decorrelated clip offsets. Do not claim sample-smooth automation that the code does not implement. If this fails the audio-quality gate, add one shared, versioned gain-ramp contract to CPU/GPU source evaluation; do not hide it with visual fades or a separate soundtrack. Count retained events against `maximumSignalEvents`.
+
+#### Clock, scheduling and replay
+
+Extend `RayTraceManager` with an explicit-sample source-event entry point and have its current convenience API delegate to it. Validate registration, nonnegative samples and ordering, and route each accepted event once to both the writer and live renderer. Merge scenario events with other accepted source commands in sample order. Submit events for a simulation interval before publishing the observation that allows audio through that interval; reject or explicitly reschedule a late interactive request rather than retroactively changing consumed PCM. Precompiled scenario events retain their exact sub-tick samples.
+
+Keep event emission outside the isolated actor's transform evaluation. The live/capture adapter drains its numeric events into the shared event stream; input replay consumes the recorded acoustic events and evaluates actor poses without generating them again. Source and listener poses still use the existing fixed-step observation/interpolation contract. Rendering at 24, 30 or 60 fps changes picture sampling, not physics, cue times or emitted PCM.
+
+Persist a small versioned environment supplement: resolved cue samples/IDs, weather keys and accepted overrides, seed, actor/profile bindings, initial state and dependency hashes. Reference/authenticate it in the scene-input manifest, copy it with input exports, and reconstruct it in `SceneReplay.Rig`. Add an explicit adapter for `EnvironmentSequenceActor` in the existing supported-actor switches. A seed alone cannot recover changed assets, algorithms or interactive commands. Older takes without the supplement retain their existing behavior; unsupported environment data must fail visibly rather than replay a static scene.
+
+Initialize and register every acoustic source/clip before capture. Change poses and events during a take, not source membership, clip references, plane masks or mesh topology. Keep registered source objects active; hide purely visual children as needed. Seeking backwards restores initial numeric state and replays to the requested sample; reset/re-simulate seeded visual particles. Resume audio from the reconstructed event/history state, not by calling Play for every visible object.
+
+#### Per-effect behavior
+
+**Bells.** Author the bell body/yoke/clapper with fixed support geometry. Animate coherent swing and clapper contact against measured transient markers in one bell phrase, and let the phrase's existing decay continue. Retain the current fixed belfry radiation point for this approximation. Visual mesh motion must not accidentally move/rebuild the acoustic tower or claim simulated bell vibration. `Play` on the same source restarts its waveform, so overlapping long-decay strikes cannot be implemented by repeatedly restarting it. Use a prepared phrase for the first film; separately driven bells later need explicit fixed voices or an upstream shared excitation mix. Show an actual close enough belfry view, not just a label above the tower.
+
+**Birds.** Start with at most two persistent audible birds and fixed registered sources; additional distant flock members may be visual-only. Chirps use verified clip regions and cue times; beak/body motion follows those annotations. Bind moving source position to its bird actor on the simulation clock. Deterministic perched/short-flight paths are sufficient for this film. Defer flock AI. Do not move a pooled source to an unrelated location while its earlier sound is still propagating, swap its clip during capture, or allocate an acoustic source per animated feather/bird in the distant flock.
+
+**Wind and foliage.** Use branch bending and smaller leaf flutter with authored stiffness/vertex weights, stable per-instance phases and common wind direction. Leave trunks/supports rooted; expand renderer bounds to include shader displacement. Use a wind-capable material—the current Standard materials will not move just because a wind field exists. One persistent rustle source per featured grove is enough initially; foliage count does not increase ray count. Foliage motion and wind are visual/emission controls, not changes to acoustic wave speed or a structural-vibration model.
+
+**Clouds and lighting.** Show moving cloud structure and increased coverage, not only reduced exposure. A cloud layer compatible with the built-in pipeline is sufficient; volumetric weather is not required. Derive directional-light intensity/color, sky/ambient probe, fog and window-light contribution from the selected style baseline plus weather. Preserve candle warmth. Reapply weather after a style change without accumulating multiplicative darkening. Fix exposure during lightning so the flash is visible; avoid per-frame full reflection/GI rebakes. Exact sky/ambient/reflection treatment must be checked in the offscreen path as well as Play mode.
+
+**Rain.** Use bounded particle/render batches for streaks near the viewer plus a cheaper distant layer; world-space drops should not slide with the camera. Camera-local density/LOD only affects pictures. Keep rain audio's existing world-fixed plane/mask and sample budget independent. Bake a reusable static shelter/height representation from the same architecture: the current ground mask can identify exposed ground splashes, while falling rain must terminate at the first roof/ground surface and remain absent inside covered rooms. A separate height map or small near-field collision pass is required; a 2D ground mask alone is insufficient. Wet/splash the roof exterior where visible without inventing deferred roof-vibration audio. Keep particle count bounded and allow existing drops to land when emission stops. Do not create one GameObject, acoustic source or ray solve per visible drop.
+
+**Lightning and thunder.** One strike record owns its world anchor, seed, flash pulse pattern and thunder event. Make the visible strike and the audio source position agree with the chosen point-source approximation. Prepare a non-looping thunder clip with the authored eight-second lead removed; retain and document the recording's internal roll. Emit at the strike time and let transport add distance delay exactly once. Do not animate the flash from the delayed listener WAV. An extended lightning-channel source remains future work; the existing recording is not dry pressure from a simulated channel. Verify the strike stays within the configured delay horizon and is legible in the shot.
+
+**Shelter transition.** Show the character crossing a real boundary. Rain remains visible outside through doorways/windows; splash/wetness excludes interior surfaces. Existing occlusion/transmission/reflections determine the heard change. No receiver-zone switch that mutes all outdoor rain when the listener enters a building. Static shelter data must be regenerated when architecture changes; dynamic door occlusion is already acoustic, while rain through arbitrary moving roofs is beyond this first static shelter bake.
+
+#### Capture, source cost and output
+
+Reuse the existing silent/offscreen batch workflow. First produce a low-resolution storyboard/contact sheet, then short bell, foliage/rain and lightning clips; inspect those before the full film. Frame every requested behavior clearly enough to judge motion. Keep camera poses, character head poses and environment state in the capture report. Verify the walk is collision-safe and animation is actually advancing, not a sliding avatar.
+
+Record the scene/source events and poses once, render its audio with the existing engine, then render pictures from the same timeline. Video frame `f` samples world time `f/fps`; the PCM sample rate is independent. Compensate only the reported algorithmic DSP latency when aligning WAV and video, and render sufficient additional PCM to do that without clipping the end. Preserve acoustic travel delay and reverberant tails. Extend the final held shot for the declared drain interval. A belfry/strike camera cut does not teleport the acoustic listener. Export a clean movie with audio, the unnormalized float WAV/take, cue/state report and a few representative frames; a separate diagnostic movie may show source/cue labels.
+
+Plan the complete source roster before rendering. Existing Church has eight registered sources; inactive intervals still reserve substantial filter/FFT memory. Each additional point source/listener pair at the current `F=513`, two rays/bin and 32 bounces adds `F * (1 + 2 * 33) = 34,371` path slots before downstream DSP storage. Count one rain plane, one bell phrase, one thunder source, the small audible bird set and a featured rustle region; share clips/visual instances instead of adding sources per leaf/drop. Measure the existing full-profile memory and a short render with the new roster before launching the film. Batch size can be tuned without changing source events; do not silently disable reverberation or lower acoustic quality to make a capture finish. Any later source partitioning must preserve IDs, seeds, history, phase and linear summation and pass parity before use.
+
+Bird/rustle assets and new visual models require provenance in the existing asset README. Reuse current bell/rain/thunder sources where suitable; document edits and onset annotations. Save capture-specific source selections/envelopes as sequence data, not destructive edits to the original PCM or permanent changes to normal scene autostart.
+
+#### Implementation order and audit gates
+
+1. **Resolve assets and route:** inspect the bell hierarchy, choose licensed bird/rustle clips and foliage, author cue-ready audio/onset markers, and verify the exterior-to-cover walk. Preview clear, overcast and rainy lighting with the existing art style.
+2. **Shared sequence and replay:** implement the numeric asset/evaluator, explicit event timestamps, source ownership and one environment actor adapter. Prove an ordered bell/bird/thunder sequence with simple visuals and a captured/reconstructed take before adding weather complexity.
+3. **Weather and actor presentation:** implement shared weather state, bell/bird animation, wind-capable foliage, shelter-aware rain and the strike/lighting cue. Inspect short clips for synchronization, frame-rate independence and visual legibility.
+4. **Full capture:** preflight the complete audio roster at the retained profile, capture the walk/take, render PCM and frames, align/mux, then inspect frames and motion around every transition. Commit reproducible code/data and the final media/evidence locally.
+
+| Audit | Acceptance |
+|---|---|
+| Repeated evaluation, time zero, frame skips and seek/restart | Each cue produces the same ordered sample-time events once; reset/replay reconstructs state. No render callback emits audio. |
+| Live vs offline vs reconstructed input | Matching event/pose identities; PCM agreement within established renderer tolerance. Saved environment settings/asset changes are detected. No duplicate autostart/replay emissions. |
+| Bell/bird contact timing | Visual contact/onset within one video frame of its source cue. Received onset additionally includes renderer travel time; the annotated recorded phrase, not a guessed sine period, drives sync. |
+| Lightning timing | The visual strike and emitted thunder share a sample origin; known-distance fixture verifies one travel delay after DSP-latency alignment. Captured storm is not compared against an assumed arbitrary pause. |
+| Particle/shader timing | Same seed and fixed stepping reproduce the inspected sequence on the supported setup. Camera cuts and visual budgets do not change event/PCM hashes. No claim of cross-device bitwise particle images. |
+| Rain shelter and wind | No visible rain/splashes inside the sampled covered rooms; rain remains visible beyond openings. Clouds, drops and leaves use the declared wind direction; wet surfaces stay wet after rain stops. |
+| Audio and end of film | Every event has audible input, finite/unclipped rendered PCM, no unintended waveform restart or abrupt envelope artifact, and preserved tail support. Any delivery gain is one documented global gain, not per-shot normalization. |
+| Cost and scene scope | Source count/capacity and measured capture costs reported. Church's 32-bounce profile retained. No modal/radiation integration or per-particle acoustic objects. |
+
+**Design audit result:** this requires new sequencing and presentation, not new acoustic transport. The main integration risks are the present-time-only event API, simultaneous autostart, unsupported replay actors, phrase/loop timing, source-buffer cost, and mistaking the ground rain mask for 3D shelter. The boundaries above address those explicitly; no implementation or render is claimed by this spec.
+
+Unity references supporting the implementation choices: [explicit particle simulation and restart](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/ParticleSystem.Simulate.html), [fixed particle seeds](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/ParticleSystem-useAutoRandomSeed.html), [shared-material per-instance values](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/MaterialPropertyBlock.html), and [Timeline's authoring role](https://docs.unity3d.com/Packages/com.unity.timeline@1.8/manual/index.html). These APIs support controlled stepping/authoring; they do not establish acoustic accuracy or guarantee identical rendered images across hardware.
 
 ## 4. Capture and saved inputs
 
