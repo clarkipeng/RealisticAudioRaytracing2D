@@ -68,6 +68,27 @@ public sealed class SceneSequence : ScriptableObject
         t=t*t*(3-2*t);
         position=Vector3.Lerp(a.position,b.position,t);rotation=Quaternion.Euler(0,Mathf.LerpAngle(a.yaw,b.yaw,t),0);
     }
+    // Integrate the same piecewise-linear wind and bounded gust analytically.
+    // Using time * current velocity would make clouds/rain jump when a gust changes.
+    public Vector3 WindTravel(double seconds)
+    {
+        var travel=Vector3.zero;
+        for(int i=0;i<weather.Length&&seconds>weather[i].time;i++)
+        {
+            var a=weather[i];double end=i+1<weather.Length?Math.Min(seconds,weather[i+1].time):seconds;
+            var slope=i+1<weather.Length?(weather[i+1].wind-a.wind)/(weather[i+1].time-a.time):Vector3.zero;
+            double length=end-a.time,constant=length,linear=length*length*.5;
+            void Gust(double amplitude,double frequency,double phase)
+            {
+                double left=frequency*a.time+phase,right=frequency*end+phase;
+                constant+=amplitude*(Math.Cos(left)-Math.Cos(right))/frequency;
+                linear+=amplitude*(-length*Math.Cos(right)/frequency+(Math.Sin(right)-Math.Sin(left))/(frequency*frequency));
+            }
+            Gust(.16,1.7,seed*.73);Gust(.08,4.1,seed*1.13);
+            travel+=a.wind*(float)constant+slope*(float)linear;
+        }
+        return travel;
+    }
     public sealed class Run
     {
         public struct Command

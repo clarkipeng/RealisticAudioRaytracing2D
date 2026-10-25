@@ -263,7 +263,7 @@ public static partial class ChurchPresentationCapture
     {
         camera.Render();
         RenderTexture.active = rt;
-        texture.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
+        texture.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
         texture.Apply(false);
         SampleLuma(texture, ref minLuma, ref maxLuma);
         File.WriteAllBytes(path, texture.EncodeToPNG());

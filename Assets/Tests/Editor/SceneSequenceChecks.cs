@@ -38,6 +38,17 @@ public sealed class SceneSequenceChecks
         Assert.That(sequence.At(100).wetness,Is.EqualTo(sequence.At(4).wetness));
         Assert.That(sequence.At(1).rain,Is.EqualTo(.5f));
     }
+    [Test] public void WindTravelHasTheSharedWindAsItsVelocity()
+    {
+        sequence.weather[0].wind=new Vector3(1,0,2);sequence.weather[1].wind=new Vector3(6,0,1);
+        sequence.weather[2].wind=new Vector3(2,0,-1);
+        foreach(double t in new[]{.5,1.5,2.0,3.5,4.0,8})
+        {
+            var velocity=(sequence.WindTravel(t+.005)-sequence.WindTravel(t-.005))/.01f;
+            Assert.That(Vector3.Distance(velocity,sequence.At(t).wind),Is.LessThan(.02f));
+        }
+        Assert.That(sequence.WindTravel(0),Is.EqualTo(Vector3.zero));
+    }
     [Test] public void SourceConflictsAndDuplicateOccurrencesFailBeforeCapture()
     {
         var cues=sequence.cues;var c=cues[1];c.target="bird";cues[1]=c;
@@ -92,8 +103,12 @@ public sealed class SceneSequenceChecks
         {
             var session=scene.GetRootGameObjects().SelectMany(r=>r.GetComponentsInChildren<SceneSession>()).Single();
             session.InitializeSimulation();var manager=session.manager;manager.monitorLive=false;
-            var actor=session.actors.OfType<SceneSequenceActor>().Single();manager.BeginTakeRecording(path);actor.BeginAudio(manager.sampleRate,manager.RecordSourceEventAt);
-            for(int i=0;i<250;i++){session.Step(default,.02f);manager.CaptureSimulationObservation();}
+            var actor=session.actors.OfType<SceneSequenceActor>().Single();SceneRecording inputs=null;
+            manager.RecordingStarted+=p=>inputs=new SceneRecording(session,p);
+            manager.RecordingObserved+=s=>inputs.Observe(s,session.Tick);
+            manager.RecordingFinalizing+=_=>inputs.Complete(true);
+            manager.BeginTakeRecording(path);actor.BeginAudio(manager.sampleRate,manager.RecordSourceEventAt);
+            for(int i=0;i<250;i++){inputs.BeforeTick(session.Tick,default,Time.fixedDeltaTime);session.Step(default,Time.fixedDeltaTime);manager.CaptureSimulationObservation();}
             Assert.Throws<InvalidOperationException>(()=>manager.RecordSourceEventAt(actor.Target("bell"),new AcousticTake.VoiceEvent{sample=0,action=AcousticTake.VoiceAction.Stop}));
             manager.CaptureSimulationObservation(true);
             using var take=AcousticTake.Open(path);

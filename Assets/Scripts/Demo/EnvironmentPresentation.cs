@@ -40,7 +40,7 @@ public sealed class EnvironmentPresentation : MonoBehaviour
     }
     public void Evaluate(double seconds,Camera view)
     {
-        Initialize();float t=(float)seconds;var weather=sequence.Definition.At(seconds);
+        Initialize();float t=(float)seconds;var weather=sequence.Definition.At(seconds);var travel=sequence.Definition.WindTravel(seconds);
         float illumination=0;
         foreach(var cue in sequence.Definition.cues)
         {
@@ -71,7 +71,7 @@ public sealed class EnvironmentPresentation : MonoBehaviour
         RenderSettings.fogStartDistance=Mathf.Lerp(80,35,weather.rain);RenderSettings.fogEndDistance=Mathf.Lerp(240,145,weather.rain);
         RenderSettings.fogColor=Color.Lerp(new Color(.57f,.7f,.76f),new Color(.24f,.30f,.36f),weather.cloud);
         skyInstance.SetFloat("_Cloud",weather.cloud);skyInstance.SetFloat("_SequenceTime",t);
-        skyInstance.SetFloat("_Flash",illumination);skyInstance.SetVector("_Wind",weather.wind);RenderSettings.skybox=skyInstance;
+        skyInstance.SetFloat("_Flash",illumination);skyInstance.SetVector("_WindTravel",travel);RenderSettings.skybox=skyInstance;
         block.Clear();block.SetVector("_Wind",weather.wind);block.SetFloat("_SequenceTime",t);
         foreach(var renderer in foliage)renderer.SetPropertyBlock(block);
         block.Clear();block.SetFloat("_Glossiness",Mathf.Lerp(.15f,.8f,weather.wetness));
@@ -83,8 +83,8 @@ public sealed class EnvironmentPresentation : MonoBehaviour
         for(int i=0;i<maximumDrops;i++)
         {
             uint id=unchecked((uint)(i+sequence.Definition.seed*129));
-            float x=Mathf.Repeat(Hash(id*3)*rainSize.x+t*weather.wind.x*.3f,rainSize.x);
-            float z=Mathf.Repeat(Hash(id*3+1)*rainSize.y+t*weather.wind.z*.3f,rainSize.y);
+            float x=Mathf.Repeat(Hash(id*3)*rainSize.x+travel.x*.3f,rainSize.x);
+            float z=Mathf.Repeat(Hash(id*3+1)*rainSize.y+travel.z*.3f,rainSize.y);
             float y=1+Mathf.Repeat(Hash(id*3+2)*74-t*23,74);
             float roof=shelterHeights.GetPixelBilinear(x/rainSize.x,z/rainSize.y).r*100;
             var p=new Vector3(rainMin.x+x,y,rainMin.y+z);

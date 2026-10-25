@@ -28,6 +28,7 @@ public static partial class ChurchPresentationCapture
         try
         {
             Physics.simulationMode=SimulationMode.Script;Time.fixedDeltaTime=.02f;
+            float step=Time.fixedDeltaTime; // Unity may quantize the requested value; record/use its actual clock.
             QualitySettings.antiAliasing=4;QualitySettings.shadows=ShadowQuality.All;QualitySettings.shadowResolution=ShadowResolution.High;QualitySettings.shadowDistance=100;
             var session=FindObject<SceneSession>();var manager=session.manager;
             session.GetComponent<ChurchVisualPreset>().Apply(ChurchVisualPreset.Preset.PolishedLowPoly);
@@ -55,16 +56,16 @@ public static partial class ChurchPresentationCapture
                 for(int frame=0;frame<=frames;frame++)
                 {
                     double time=frame/30.0;
-                    while((session.Tick+1)*.02<=time+1e-7)
+                    while((session.Tick+1)*(double)step<=time+1e-7)
                     {
-                        var input=WalkthroughInput(session,session.Tick*.02);
-                        recording?.BeforeTick(session.Tick,input,.02f);session.Step(input,.02f);Physics.Simulate(.02f);avatar.ManualUpdate(.02f);
+                        var input=WalkthroughInput(session,session.Tick*(double)step);
+                        recording?.BeforeTick(session.Tick,input,step);session.Step(input,step);Physics.Simulate(step);avatar.ManualUpdate(step);
                         if(manager.IsRecordingTake)
                         {
-                            bool final=session.Tick>=3000;manager.CaptureSimulationObservation(final);
+                            bool final=actor.Seconds>=actor.Definition.duration;manager.CaptureSimulationObservation(final);
                             if(final)recording=null;
                         }
-                        var p=session.player.position;route.WriteLine(FormattableString.Invariant($"{session.Tick},{session.Tick*.02:R},{p.x:R},{p.y:R},{p.z:R},{(session.Walker.Ground!=null?1:0)}"));
+                        var p=session.player.position;route.WriteLine(FormattableString.Invariant($"{session.Tick},{session.Tick*(double)step:R},{p.x:R},{p.y:R},{p.z:R},{(session.Walker.Ground!=null?1:0)}"));
                     }
                     if(frame==frames)break;
                     if(storyboard&&(checkpoint>=checkpoints.Length||time<checkpoints[checkpoint]))continue;
@@ -104,7 +105,7 @@ public static partial class ChurchPresentationCapture
         else target=new Vector3(0,0,-29);
         var delta=target-session.player.position;delta.y=0;
         float speed=time<14?.75f:time<24?.65f:time<44?1.8f:time<52?.8f:1.6f;
-        var world=delta.normalized*Mathf.Min(speed,delta.magnitude/.02f);
+        var world=delta.normalized*Mathf.Min(speed,delta.magnitude/Time.fixedDeltaTime);
         var local=session.player.InverseTransformDirection(world)/session.Walker.speed;
         float yaw=delta.sqrMagnitude>.04f?Mathf.Atan2(delta.x,delta.z)*Mathf.Rad2Deg:session.player.eulerAngles.y;
         float turn=Mathf.Clamp(Mathf.DeltaAngle(session.player.eulerAngles.y,yaw),-1.5f,1.5f);
