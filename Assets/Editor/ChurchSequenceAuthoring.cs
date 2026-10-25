@@ -65,12 +65,12 @@ public static class ChurchSequenceAuthoring
         var wind=Source("wind","TreeWind",new Vector3(25,5,-28));
         var sequence=ScriptableObject.CreateInstance<SceneSequence>();sequence.name="Church walkthrough";sequence.seed=173;sequence.duration=60;
         sequence.cues=new[]{
-            new SceneSequence.Cue{id="tower-phrase",target="bell",kind=SceneSequence.CueKind.Bell,time=4,duration=17,gain=2},
+            new SceneSequence.Cue{id="tower-phrase",target="bell",kind=SceneSequence.CueKind.Bell,time=4,duration=17,gain=26},
             new SceneSequence.Cue{id="robin-first",target="bird",kind=SceneSequence.CueKind.Bird,time=15,duration=3.12f,gain=1.4f},
             new SceneSequence.Cue{id="robin-answer",target="bird",kind=SceneSequence.CueKind.Bird,time=19,duration=3.12f,gain=1.4f},
-            new SceneSequence.Cue{id="storm-strike",target="thunder",kind=SceneSequence.CueKind.Lightning,time=45,duration=11.3f,gain=2}};
-        sequence.levels=new[]{new SceneSequence.LevelTrack{id="grove-gust",target="wind",kind=SceneSequence.LevelKind.Wind,start=23,end=60,gain=1.4f},
-            new SceneSequence.LevelTrack{id="courtyard-rain",target="rain",kind=SceneSequence.LevelKind.Rain,start=33,end=60,gain=1.2f}};
+            new SceneSequence.Cue{id="storm-strike",target="thunder",kind=SceneSequence.CueKind.Lightning,time=45,duration=11.3f,gain=40}};
+        sequence.levels=new[]{new SceneSequence.LevelTrack{id="grove-gust",target="wind",kind=SceneSequence.LevelKind.Wind,start=23,end=60,gain=6},
+            new SceneSequence.LevelTrack{id="courtyard-rain",target="rain",kind=SceneSequence.LevelKind.Rain,start=33,end=60,gain=.1f}};
         SceneSequence.WeatherKey Weather(float t,float cloud,float rain,float windSpeed)=>new SceneSequence.WeatherKey {time=t,cloud=cloud,rain=rain,wind=new Vector3(windSpeed,0,windSpeed*.35f)};
         sequence.weather=new[]{Weather(0,.08f,0,.5f),Weather(23,.15f,0,.7f),Weather(32,.85f,0,5),Weather(35,1,.15f,7),
             Weather(41,1,.9f,8),Weather(52,1,1,6),Weather(58,1,.9f,5),Weather(60,1,0,0)};

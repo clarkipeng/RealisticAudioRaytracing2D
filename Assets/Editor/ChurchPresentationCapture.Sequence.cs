@@ -22,6 +22,7 @@ public static partial class ChurchPresentationCapture
         string directory=Argument("-sequenceOutput");if(string.IsNullOrEmpty(directory))throw new ArgumentException("Pass -sequenceOutput.");
         if(Directory.Exists(directory))throw new IOException("Capture output already exists.");Directory.CreateDirectory(directory);
         bool storyboard=Argument("-sequenceStoryboard")=="1";
+        bool takeOnly=Argument("-sequenceTakeOnly")=="1";
         EditorSceneManager.OpenScene(ScenePath);
         var oldMode=Physics.simulationMode;float oldStep=Time.fixedDeltaTime;SceneRecording recording=null;
         Camera camera=null;RenderTexture target=null;Texture2D texture=null;
@@ -68,6 +69,7 @@ public static partial class ChurchPresentationCapture
                         var p=session.player.position;route.WriteLine(FormattableString.Invariant($"{session.Tick},{session.Tick*(double)step:R},{p.x:R},{p.y:R},{p.z:R},{(session.Walker.Ground!=null?1:0)}"));
                     }
                     if(frame==frames)break;
+                    if(takeOnly)continue;
                     if(storyboard&&(checkpoint>=checkpoints.Length||time<checkpoints[checkpoint]))continue;
                     PositionSequenceCamera(camera,session.player,actor,time);
                     environment.Evaluate(time,camera);bell.Evaluate(time);bird.Evaluate(time);
@@ -80,7 +82,7 @@ public static partial class ChurchPresentationCapture
             var settings=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(manager.directSettings));
             settings.maximumResponsesPerBatch=4;settings.tailSamples=11*manager.sampleRate;
             File.WriteAllText(Path.Combine(directory,"render-job.json"),"{\"take\":\"take\",\"output\":\"audio\",\"shader\":\""+AssetDatabase.GetAssetPath(manager.directShader)+"\",\"settings\":"+JsonUtility.ToJson(settings)+"}");
-            File.WriteAllText(Path.Combine(directory,"summary.json"),JsonUtility.ToJson(new SequenceSummary{frames=storyboard?checkpoint:frames,
+            File.WriteAllText(Path.Combine(directory,"summary.json"),JsonUtility.ToJson(new SequenceSummary{frames=takeOnly?0:storyboard?checkpoint:frames,
                 width=width,height=height,seconds=duration,finalPosition=session.player.position,maxBounces=settings.maxBounces,sourceCount=manager.takeSources.Count,
                 listener="Player head; independent of picture camera",minLuma=min,maxLuma=max},true));
             Debug.Log("CHURCH_SEQUENCE_CAPTURE "+directory);

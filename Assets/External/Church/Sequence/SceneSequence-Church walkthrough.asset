@@ -21,7 +21,7 @@ MonoBehaviour:
     kind: 1
     time: 4
     duration: 17
-    gain: 2
+    gain: 26
     clipOffset: 0
     loop: 0
   - id: robin-first
@@ -45,7 +45,7 @@ MonoBehaviour:
     kind: 3
     time: 45
     duration: 11.3
-    gain: 2
+    gain: 40
     clipOffset: 0
     loop: 0
   weather:
@@ -87,13 +87,13 @@ MonoBehaviour:
     kind: 1
     start: 23
     end: 60
-    gain: 1.4
+    gain: 6
   - id: courtyard-rain
     target: rain
     kind: 0
     start: 33
     end: 60
-    gain: 1.2
+    gain: 0.1
   poses:
   - target: bird
     keys:
