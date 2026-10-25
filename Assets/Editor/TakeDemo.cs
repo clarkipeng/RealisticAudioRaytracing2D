@@ -73,7 +73,7 @@ public static partial class TakeDemo
         manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
         manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Mono;
         manager.directSettings.transport=TakeRender.Transport.Raytraced; manager.directSettings.audioBackend=TakeRender.AudioBackend.Gpu;
-        manager.directSettings.useBvh=true; manager.directSettings.raysPerBin=2; manager.directSettings.maxBounces=0;
+        manager.directSettings.useBvh=true; manager.directSettings.raysPerBin=2; manager.directSettings.maxBounces=32;
         manager.directSettings.diffractionFactor=0; // Experimental edge estimates remain excluded from this room preset.
         manager.directSettings.responseStepSamples=1024; manager.directSettings.transitionSamples=512;
         manager.directSettings.tailSamples=3*manager.sampleRate; manager.monitorLeadSamples=16384;

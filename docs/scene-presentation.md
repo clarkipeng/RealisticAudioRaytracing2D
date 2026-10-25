@@ -9,11 +9,11 @@ Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Chur
 
 Both use the same collision proxies, acoustic objects, input, movement and networking. Visual materials are separate from acoustic coefficients. The same small image effect supplies exposure in stops, contrast, saturation and vignette. Material pairs are serialized in the scene, so replacing a style does not destroy the other style's references on reload. No render-pipeline migration or package dependency was added.
 
-## Direct sound — 24 October 2026
+## Current scope — 24 October 2026
 
-Church now saves **Maximum bounces = 0** under Raytraced/Spectral. This preserves the existing point/plane sources, direct travel delay, occlusion, transmission and material/listener filtering. The renderer skips reflection and diffraction work and allocates only direct path/filter slots. Existing source recordings keep their recorded ambience; this setting does not make wet rain/thunder clips dry or turn them into physical drop synthesis. The mechanical bake remains available separately, with object radiation deferred.
+Church retains **Maximum bounces = 32** under Raytraced/Spectral, with its existing sources, reflections, reverberation, occlusion, transmission and material/listener filtering. Only the new object-vibration/radiation integration is deferred. The mechanical bake tools remain available separately and are not connected to scene playback.
 
-[Implementation and limits](simulation-contracts.md#direct-sound-without-room-reverberation-2026-10-24) · [Silent numerical and Church-scene verification](benchmarks/direct-sound-2026-10-24/README.md). Earlier sections below retain their historical settings and measurements.
+Zero bounces remains available as an optional diagnostic mode. [Implementation and limits](simulation-contracts.md#direct-sound-without-room-reverberation-2026-10-24) · [Historical zero-bounce verification at `f65f212`](benchmarks/direct-sound-2026-10-24/README.md). Those renders used zero bounces; they do not measure the restored 32-bounce profile. Earlier sections below retain their historical settings and measurements.
 
 ## Seeded rain bursts — 24 October 2026
 

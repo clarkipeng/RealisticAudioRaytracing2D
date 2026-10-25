@@ -9798,7 +9798,7 @@ MonoBehaviour:
     synthesis: 1
     audioBackend: 0
     raysPerBin: 2
-    maxBounces: 0
+    maxBounces: 32
     seed: 0
     raysPerPair: 0
     diffractionFactor: 0
