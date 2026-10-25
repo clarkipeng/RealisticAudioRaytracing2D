@@ -143,7 +143,7 @@ public sealed class TakeEditor : Editor
         settings.audioBackend=(TakeRender.AudioBackend)EditorGUILayout.EnumPopup("Audio backend",settings.audioBackend);
         settings.raysPerBin=EditorGUILayout.IntField("Rays per frequency bin",settings.RaysPerBin);settings.raysPerPair=0;
         settings.seed=EditorGUILayout.IntField("Sampling seed",settings.seed);
-        settings.maxBounces=EditorGUILayout.IntField("Maximum bounces",settings.maxBounces);
+        settings.maxBounces=EditorGUILayout.IntField("Maximum bounces (0 = direct only)",settings.maxBounces);
         settings.fftSize=EditorGUILayout.IntField("Acoustic frequency grid (FFT size)",settings.fftSize);
         settings.spectralHop=EditorGUILayout.IntField("Convolution block (samples)",settings.spectralHop);
         settings.diffractionFactor=EditorGUILayout.FloatField("Diffraction factor",settings.diffractionFactor);

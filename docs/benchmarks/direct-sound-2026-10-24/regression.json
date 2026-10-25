@@ -1,0 +1,250 @@
+{
+  "run": {
+    "total": "46",
+    "passed": "46",
+    "failed": "0",
+    "skipped": "0",
+    "duration": "12.0280202",
+    "start-time": "2026-10-25 02:19:32Z",
+    "end-time": "2026-10-25 02:19:44Z"
+  },
+  "cases": [
+    {
+      "fullname": "DirectSoundChurchProbe.SavedChurchProfileRendersDirectSound",
+      "result": "Passed",
+      "duration": "8.638543"
+    },
+    {
+      "fullname": "TakeChecks.EmissionBatchPreservesBirthsAcrossPartitionQualityAndLongClocks",
+      "result": "Passed",
+      "duration": "0.026433"
+    },
+    {
+      "fullname": "TakeChecks.EmissionCandidateIntervalsMatchExhaustiveBirthEnumeration",
+      "result": "Passed",
+      "duration": "0.017106"
+    },
+    {
+      "fullname": "TakeChecks.EmissionClockKeepsWindowClipOffsetGainAndRestartSeparate",
+      "result": "Passed",
+      "duration": "0.014834"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,1)",
+      "result": "Passed",
+      "duration": "0.129588"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,64,1)",
+      "result": "Passed",
+      "duration": "0.369887"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,128,1)",
+      "result": "Passed",
+      "duration": "0.087496"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,1)",
+      "result": "Passed",
+      "duration": "0.360874"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,0)",
+      "result": "Passed",
+      "duration": "0.091329"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,64,0)",
+      "result": "Passed",
+      "duration": "0.352302"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,128,0)",
+      "result": "Passed",
+      "duration": "0.083904"
+    },
+    {
+      "fullname": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,0)",
+      "result": "Passed",
+      "duration": "0.358113"
+    },
+    {
+      "fullname": "TakeChecks.EmissionPackedDspKeepsDistinctBirthsAndPointSources(128,2)",
+      "result": "Passed",
+      "duration": "0.022213"
+    },
+    {
+      "fullname": "TakeChecks.EmissionPackedDspKeepsDistinctBirthsAndPointSources(2048,1)",
+      "result": "Passed",
+      "duration": "0.147709"
+    },
+    {
+      "fullname": "TakeChecks.EmissionPackedTransportKeepsFrameSourceAndListenerOffsets",
+      "result": "Passed",
+      "duration": "0.012910"
+    },
+    {
+      "fullname": "TakeChecks.EmissionTakeAuthenticatesGeneratorAndPreservesVersionFive",
+      "result": "Passed",
+      "duration": "0.012362"
+    },
+    {
+      "fullname": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,False)",
+      "result": "Passed",
+      "duration": "0.017825"
+    },
+    {
+      "fullname": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,False)",
+      "result": "Passed",
+      "duration": "0.012343"
+    },
+    {
+      "fullname": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,True)",
+      "result": "Passed",
+      "duration": "0.017451"
+    },
+    {
+      "fullname": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,True)",
+      "result": "Passed",
+      "duration": "0.012270"
+    },
+    {
+      "fullname": "TakeChecks.EmissionVersionOneIntegerGoldenVectors",
+      "result": "Passed",
+      "duration": "0.009175"
+    },
+    {
+      "fullname": "TakeChecks.EmissionWeightedMaskHasCorrectMassPdfAndEmptySupport",
+      "result": "Passed",
+      "duration": "0.043157"
+    },
+    {
+      "fullname": "TakeChecks.MirrorChecks",
+      "result": "Passed",
+      "duration": "0.025224"
+    },
+    {
+      "fullname": "TakeChecks.PlaneClipOffsetsPreserveEventTimesAndLoopPhase",
+      "result": "Passed",
+      "duration": "0.010704"
+    },
+    {
+      "fullname": "TakeChecks.PlaneDirectPathsUseMaskedRotatedPositionsAndSharedSourcePhases",
+      "result": "Passed",
+      "duration": "0.016843"
+    },
+    {
+      "fullname": "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Mono,Linear)",
+      "result": "Passed",
+      "duration": "0.032522"
+    },
+    {
+      "fullname": "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Binaural,Linear)",
+      "result": "Passed",
+      "duration": "0.230685"
+    },
+    {
+      "fullname": "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(2048,Mono,Linear)",
+      "result": "Passed",
+      "duration": "0.281943"
+    },
+    {
+      "fullname": "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Mono,WindowedSinc)",
+      "result": "Passed",
+      "duration": "0.130413"
+    },
+    {
+      "fullname": "TakeChecks.PlaneMaskWeightsPowerAndPreservesSamplePrefixes",
+      "result": "Passed",
+      "duration": "0.011648"
+    },
+    {
+      "fullname": "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Planar2D)",
+      "result": "Passed",
+      "duration": "0.014151"
+    },
+    {
+      "fullname": "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Spatial3D)",
+      "result": "Passed",
+      "duration": "0.012765"
+    },
+    {
+      "fullname": "TakeChecks.PlaneTakeAuthenticatesMaskAndRejectsLegacyExtension",
+      "result": "Passed",
+      "duration": "0.011982"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(ImpulseResponse,False,1)",
+      "result": "Passed",
+      "duration": "0.017587"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(Spectral,False,1)",
+      "result": "Passed",
+      "duration": "0.027164"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(ImpulseResponse,True,1)",
+      "result": "Passed",
+      "duration": "0.028725"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(Spectral,True,1)",
+      "result": "Passed",
+      "duration": "0.027772"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(ImpulseResponse,False,0)",
+      "result": "Passed",
+      "duration": "0.013572"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(Spectral,False,0)",
+      "result": "Passed",
+      "duration": "0.025651"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(ImpulseResponse,True,0)",
+      "result": "Passed",
+      "duration": "0.027883"
+    },
+    {
+      "fullname": "TakeChecks.StreamedAndClipSourcesProduceTheSameAudio(Spectral,True,0)",
+      "result": "Passed",
+      "duration": "0.027994"
+    },
+    {
+      "fullname": "TakeChecks.TransportMaterials",
+      "result": "Passed",
+      "duration": "0.014872"
+    },
+    {
+      "fullname": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(False,False)",
+      "result": "Passed",
+      "duration": "0.030511"
+    },
+    {
+      "fullname": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(False,True)",
+      "result": "Passed",
+      "duration": "0.036518"
+    },
+    {
+      "fullname": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(True,False)",
+      "result": "Passed",
+      "duration": "0.030451"
+    },
+    {
+      "fullname": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(True,True)",
+      "result": "Passed",
+      "duration": "0.029725"
+    }
+  ],
+  "refinedSceneRun": {
+    "total": "1",
+    "passed": "1",
+    "failed": "0",
+    "skipped": "0",
+    "duration": "8.1380172"
+  }
+}

@@ -904,6 +904,60 @@ public partial class TakeChecks
         }
         Assert.That(energy,Is.GreaterThan(1e-6));Assert.That(peak,Is.LessThan(2e-4));Assert.That(Math.Sqrt(error/energy),Is.LessThan(5e-4));
     }
+    [TestCase(false,false),TestCase(false,true),TestCase(true,false),TestCase(true,true),Category("GPU")]
+    public void ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(bool planar,bool bvh)
+    {
+        var shader=RequireGpu();const int rate=8192,count=512;
+        var scene=Scene(2);scene.dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D;
+        scene.listeners=new[]{1};scene.objects[2].primitiveCount=1;
+        scene.materials=new[]{new AcousticTake.MaterialDefinition {frequencies=new[]{0f},absorption=new[]{0f},
+            scattering=new[]{0f},transmission=new[]{0f},ior=new[]{1f},damping=new[]{0f}}};
+        var geometry=new[]{new AcousticTake.Primitive {objectIndex=2,a=new Vector3(0,-10,-10),b=new Vector3(0,10,-10),c=new Vector3(0,0,10)}};
+        var state=States(2);state[0].position=new Vector3(-1,-1,0);state[1].position=new Vector3(-1,1,0);
+        state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        var settings=SpectralSettings();settings.speedOfSound=512;settings.maxBounces=0;settings.useBvh=bvh;settings.responseStepSamples=count;
+        settings.diffractionFactor=1; // Zero bounces must also suppress the experimental edge branch.
+        TakeRender.Validate(settings);
+        var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1});
+        using(var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate))
+        {
+            var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);
+            Assert.That(solver.RayPaths.Length,Is.EqualTo(settings.FrequencyBins),"Only direct arrivals own storage.");
+            foreach(var path in solver.RayPaths)
+            {Near(path.pressureGain,.5f,"Direct pressure");Near(path.delaySeconds,2f/512,"Direct delay");}
+            var cpu=new TakeRender.Mixer(scene,rate,settings,new[]{signal});
+            using var gpu=new GpuAudio(scene,rate,settings,new[]{signal},maximumResponses:4);
+            var expected=new float[count];var actual=new float[count];
+            cpu.SetResponse(0,direct,state,false,solver.RayPaths,0);gpu.SetResponse(0,false,solver.RayBuffer,0,scene,state);
+            cpu.Render(0,count,expected);gpu.Render(0,count,actual);
+            int onset=settings.DspLatencySamples+32;
+            for(int i=0;i<count;i++)
+            {Near(expected[i],i==onset?.5f:0,"Analytic dry impulse",2e-6f);Near(actual[i],expected[i],"GPU dry impulse",2e-6f);}
+            Assert.That(gpu.Diagnostics.pathCapacity,Is.EqualTo(settings.FrequencyBins));
+            state[1].position=new Vector3(1,1,0);solver.Solve(state,direct);
+            foreach(var path in solver.RayPaths)Near(path.pressureGain,0,"Opaque direct occlusion");
+        }
+        // Transmission remains available on the same direct-only path.
+        scene.materials[0].transmission[0]=.25f;
+        using(var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate))
+        {
+            solver.Solve(state,new TakeRender.DirectPath[1]);
+            // Material transmission is an energy fraction; pressure uses its square root.
+            foreach(var path in solver.RayPaths)Near(path.pressureGain,.5f/Mathf.Sqrt(8),"Transmitted direct pressure",1e-5f);
+        }
+        // Positive control proves the fixture can produce an audible reflected tail.
+        scene.materials[0].transmission[0]=0;state[1].position=new Vector3(-1,1,0);settings.maxBounces=1;settings.diffractionFactor=0;
+        using(var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:rate))
+        {
+            var direct=new TakeRender.DirectPath[1];solver.Solve(state,direct);
+            Assert.That(solver.RayPaths[settings.FrequencyBins].pressureGain,Is.GreaterThan(0));
+            var mixer=new TakeRender.Mixer(scene,rate,settings,new[]{signal});var wet=new float[count];
+            mixer.SetResponse(0,direct,state,false,solver.RayPaths,0);mixer.Render(0,count,wet);
+            double energy=0;for(int i=settings.DspLatencySamples+36;i<count;i++)energy+=(double)wet[i]*wet[i];
+            Assert.That(energy,Is.GreaterThan(.001),"Reflection-enabled control must ring after the dry impulse.");
+        }
+    }
+
     [Test, Category("GPU")]
     public void GpuOnlyTransportRetainsOwnershipUntilAudioCompletes()
     {

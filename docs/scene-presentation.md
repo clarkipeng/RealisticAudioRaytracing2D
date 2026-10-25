@@ -9,11 +9,17 @@ Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Chur
 
 Both use the same collision proxies, acoustic objects, input, movement and networking. Visual materials are separate from acoustic coefficients. The same small image effect supplies exposure in stops, contrast, saturation and vignette. Material pairs are serialized in the scene, so replacing a style does not destroy the other style's references on reload. No render-pipeline migration or package dependency was added.
 
+## Direct sound — 24 October 2026
+
+Church now saves **Maximum bounces = 0** under Raytraced/Spectral. This preserves the existing point/plane sources, direct travel delay, occlusion, transmission and material/listener filtering. The renderer skips reflection and diffraction work and allocates only direct path/filter slots. Existing source recordings keep their recorded ambience; this setting does not make wet rain/thunder clips dry or turn them into physical drop synthesis. The mechanical bake remains available separately, with object radiation deferred.
+
+[Implementation and limits](simulation-contracts.md#direct-sound-without-room-reverberation-2026-10-24) · [Silent numerical and Church-scene verification](benchmarks/direct-sound-2026-10-24/README.md). Earlier sections below retain their historical settings and measurements.
+
 ## Seeded rain bursts — 24 October 2026
 
 The renderer now supports seeded finite bursts on the existing masked plane. Each burst gets a new weighted-mask position and clip offset, then keeps its world position through its delayed tail. CPU/GPU spectral synthesis and live/offline scheduling share the same event clocks. Transport and DSP now use per-source/listener ranges, so point sources no longer reserve the largest plane's direct-site capacity.
 
-Enable this on `AudioSourcePlane` with a positive **Burst Period Samples** and **Burst Duration Samples** of at least four, measured at the capture rate. **Samples** bounds retained bursts, including propagation/filter history; **Rays Per Bin** must cover every retained burst. Zero period keeps the original fixed-site behavior. Source gain is normalized against clip mean-square power, so set the level for this source model rather than assuming the old value has identical loudness. The existing Church scene retains its fixed-site source and current profile; this is an opt-in model change, not an automatic conversion of recorded input.
+Enable this on `AudioSourcePlane` with a positive **Burst Period Samples** and **Burst Duration Samples** of at least four, measured at the capture rate. **Samples** bounds retained bursts, including propagation/filter history; **Rays Per Bin** must cover every retained burst when bounces are positive. At zero bounces all retained bursts receive direct evaluation without an indirect-ray budget. Zero period keeps the original fixed-site behavior. Source gain is normalized against clip mean-square power, so set the level for this source model rather than assuming the old value has identical loudness. The existing Church scene retains its fixed-site source; seeded bursts remain opt-in.
 
 [Implementation and lifetime contract](simulation-contracts.md#seeded-emission-sampling-and-batching) · [Validation evidence](benchmarks/seeded-emission-2026-10-24/README.md). Thunder remains the existing point recording; a coherent channel source needs its own signal/site model, while reusing the same transport.
 
@@ -36,7 +42,7 @@ Direct paths evaluate every site. Indirect rays select among those same sites an
 
 The GPU receives one immutable PCM copy per distinct plane clip and one sample-clock/gain stream per logical plane source, not a separate PCM upload for every site. Spatial points and mask weights are prepared once; the GPU applies sample-timed poses. CPU reference synthesis follows the same clip-offset contract. The shared path ABI remains 48 bytes by using a former padding field. There is one new runtime component and no new weather manager, source hierarchy, network stream or package dependency.
 
-Planes currently require **Raytraced + Spectral**, with GPU or CPU-reference synthesis. Direct-only and IR modes reject them explicitly. The single-origin ray-debug capture also rejects multi-site planes; ordinary point-source debug remains available. Its centre-based direct diagnostic is not an area-field measurement. Dynamic shelter masks, rain particles, roof vibration and calibrated emission patterns remain outside this implementation.
+Planes require **Raytraced + Spectral**, with GPU or CPU-reference synthesis. The legacy `Transport.Direct` baseline and IR modes reject them explicitly; Raytraced/Spectral now supports direct plane audio with zero bounces. The single-origin ray-debug capture also rejects multi-site planes; ordinary point-source debug remains available. Its centre-based direct diagnostic is not an area-field measurement. Dynamic shelter masks, rain particles, roof vibration and calibrated emission patterns remain outside this implementation.
 
 Take version 5 authenticates the plane axes, density mask, sample budget and seed alongside existing source/clip data. Compact input reconstruction preserves the component and source contract. Older take versions still use their original scene-hash layouts; replaying an older compact recording still requires its original scene/code revision. Multiplayer continues to share ordinary scene playback timing; no extra weather audio stream is sent. This change has not been tested with another computer.
 

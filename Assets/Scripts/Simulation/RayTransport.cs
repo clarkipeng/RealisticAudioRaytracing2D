@@ -467,9 +467,12 @@ internal sealed class RayTransport : IDisposable
         commands.BeginSample("Acoustics.GPU.Direct");
         commands.DispatchCompute(shader,directKernel,(checked(frames*layout.DirectSites.Length*frequencyBins)+63)/64,1,1);
         commands.EndSample("Acoustics.GPU.Direct");
-        commands.BeginSample("Acoustics.GPU.Trace");
-        commands.DispatchCompute(shader,traceKernel,(frames*pairs*rayCount+63)/64,1,1);
-        commands.EndSample("Acoustics.GPU.Trace");
+        if(rayCount>0)
+        {
+            commands.BeginSample("Acoustics.GPU.Trace");
+            commands.DispatchCompute(shader,traceKernel,(frames*pairs*rayCount+63)/64,1,1);
+            commands.EndSample("Acoustics.GPU.Trace");
+        }
         Graphics.ExecuteCommandBuffer(commands);commands.Clear();
         if (Paths.Length == 0)
             return;

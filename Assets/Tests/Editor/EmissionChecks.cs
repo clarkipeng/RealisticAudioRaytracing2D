@@ -109,9 +109,11 @@ public partial class TakeChecks
         Assert.Throws<InvalidDataException>(()=>AcousticTake.ReadManifest(path));
     }
 
-    [TestCase(TakeRender.DelayFilter.Linear,64),TestCase(TakeRender.DelayFilter.WindowedSinc,64)]
-    [TestCase(TakeRender.DelayFilter.Linear,128),TestCase(TakeRender.DelayFilter.WindowedSinc,128),Category("GPU")]
-    public void EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(TakeRender.DelayFilter filter,int step)
+    [TestCase(TakeRender.DelayFilter.Linear,64,1),TestCase(TakeRender.DelayFilter.WindowedSinc,64,1)]
+    [TestCase(TakeRender.DelayFilter.Linear,128,1),TestCase(TakeRender.DelayFilter.WindowedSinc,128,1)]
+    [TestCase(TakeRender.DelayFilter.Linear,64,0),TestCase(TakeRender.DelayFilter.WindowedSinc,64,0)]
+    [TestCase(TakeRender.DelayFilter.Linear,128,0),TestCase(TakeRender.DelayFilter.WindowedSinc,128,0),Category("GPU")]
+    public void EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(TakeRender.DelayFilter filter,int step,int bounces)
     {
         var shader=RequireGpu();const int rate=8192;var scene=Scene();scene.planes=new[]{BurstPlane()};
         var pcm=new float[257];var random=new System.Random(37);for(int i=0;i<pcm.Length;i++)pcm[i]=(float)(random.NextDouble()*2-1);
@@ -127,6 +129,7 @@ public partial class TakeChecks
             foreach(var e in events)writer.Append(e);writer.Complete();
         }
         using var take=AcousticTake.Open(takePath);var settings=BurstSettings();settings.delayFilter=filter;settings.responseStepSamples=step;
+        settings.maxBounces=bounces;if(bounces==0)settings.raysPerBin=1; // All direct events still receive coverage.
         float[] expected=null;
         foreach(var mode in new[]{(TakeRender.AudioBackend.CpuReference,1),(TakeRender.AudioBackend.Gpu,1),(TakeRender.AudioBackend.Gpu,3)})
         {

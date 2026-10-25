@@ -131,15 +131,17 @@ public partial class TakeChecks
         using(var file=File.OpenWrite(Path.Combine(path,"source-0.f32")))file.WriteByte(1);
         Assert.Throws<InvalidDataException>(()=>AcousticTake.Open(path));
     }
-    [TestCase(TakeRender.Synthesis.ImpulseResponse,false),TestCase(TakeRender.Synthesis.Spectral,false)]
-    [TestCase(TakeRender.Synthesis.ImpulseResponse,true),TestCase(TakeRender.Synthesis.Spectral,true),Category("Voice")]
-    public void StreamedAndClipSourcesProduceTheSameAudio(TakeRender.Synthesis synthesis,bool gpu)
+    [TestCase(TakeRender.Synthesis.ImpulseResponse,false,1),TestCase(TakeRender.Synthesis.Spectral,false,1)]
+    [TestCase(TakeRender.Synthesis.ImpulseResponse,true,1),TestCase(TakeRender.Synthesis.Spectral,true,1),Category("Voice")]
+    [TestCase(TakeRender.Synthesis.ImpulseResponse,false,0),TestCase(TakeRender.Synthesis.Spectral,false,0)]
+    [TestCase(TakeRender.Synthesis.ImpulseResponse,true,0),TestCase(TakeRender.Synthesis.Spectral,true,0)]
+    public void StreamedAndClipSourcesProduceTheSameAudio(TakeRender.Synthesis synthesis,bool gpu,int bounces)
     {
         var shader=RequireGpu();
         const int rate=8192,size=128,length=2048;
         var scene=Scene();var state=States();var settings=SpectralSettings();
         settings.synthesis=synthesis;settings.fftSize=size;settings.spectralHop=32;settings.responseStepSamples=size;
-        settings.raysPerBin=1;settings.maxBounces=1;
+        settings.raysPerBin=1;settings.maxBounces=bounces;
         var pcm=new float[length];for(int i=0;i<pcm.Length;i++)pcm[i]=.2f*Mathf.Sin(i*.17f);
         using var stream=new SourceStream(length);stream.Append(pcm,0,pcm.Length,length);stream.Finish();
         var signals=new[]{new TakeRender.Signal(pcm),new TakeRender.Signal(stream,32)};

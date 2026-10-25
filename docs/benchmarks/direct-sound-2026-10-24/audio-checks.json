@@ -1,0 +1,20 @@
+{
+  "outdoor": {
+    "sampleRate": 44100,
+    "samples": 220501,
+    "peak": 0.0478818416595459,
+    "rms": 0.004409015470114449,
+    "finalSecondPeak": 0,
+    "finite": true,
+    "unclipped": true
+  },
+  "indoor": {
+    "sampleRate": 44100,
+    "samples": 220501,
+    "peak": 0.016424883157014847,
+    "rms": 0.0022692813348104547,
+    "finalSecondPeak": 0,
+    "finite": true,
+    "unclipped": true
+  }
+}

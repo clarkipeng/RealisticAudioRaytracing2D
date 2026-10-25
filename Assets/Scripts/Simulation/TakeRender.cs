@@ -36,7 +36,9 @@ public static partial class TakeRender
         public Transport transport;
         public Synthesis synthesis=Synthesis.Spectral;
         public AudioBackend audioBackend;
-        [Min(1)] public int raysPerBin=1,maxBounces=5;
+        [Min(1)] public int raysPerBin=1;
+        [Min(0), Tooltip("Zero renders direct sound only, including material transmission, with no reflection or diffraction paths.")]
+        public int maxBounces=5;
         public int seed;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
         public int FrequencyBins => fftSize/2+1;
@@ -46,7 +48,7 @@ public static partial class TakeRender
         {
             if(raysPerPair>0 && FrequencyBins>0){raysPerBin=RaysPerBin;raysPerPair=0;}
         }
-        public int RaysPerPair => checked(FrequencyBins*RaysPerBin);
+        public int RaysPerPair => maxBounces==0 ? 0:checked(FrequencyBins*RaysPerBin);
         public int SpectralSlotsPerPair => checked(FrequencyBins+RaysPerPair*checked(maxBounces+1));
         public int SlotsPerPair(AcousticTake.Scene scene) => checked(SpectralSlotsPerPair+(AudioSourcePlane.MaximumSamples(scene)-1)*FrequencyBins);
         [Tooltip("Experimental sampled edge transport: 1 uses signed rigid-wedge contributions; 0 disables diffraction. Increase rays per bin for convergence.")]
@@ -210,6 +212,8 @@ public static partial class TakeRender
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
             report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.";
+            if(settings.maxBounces==0)
+                report.transportDescription="Synthesis="+settings.synthesis+". Direct sound only: retarded direct arrivals, occlusion, material transmission/interior travel and air/material attenuation. No reflected, scattered or diffracted paths are allocated or traced. Existing source recordings may contain their own reverberation.";
         }
         if(settings.listenerOutput==ListenerOutput.Binaural)
         {var hrtf=Hrtf.Load(metadata.sampleRate); report.hrtfDataset=Hrtf.Dataset; report.hrtfHash=hrtf.Hash; report.hrtfTaps=hrtf.Taps;}
@@ -638,8 +642,8 @@ public static partial class TakeRender
         {
             if(settings.fftSize<2 || (settings.fftSize&(settings.fftSize-1))!=0 || settings.spectralHop<1 || settings.spectralHop>settings.fftSize/2 ||
                 settings.fftSize%settings.spectralHop!=0 || settings.responseStepSamples%settings.spectralHop!=0 ||
-                settings.RaysPerBin<1 || settings.maxBounces<1 || !float.IsFinite(settings.diffractionFactor) || settings.diffractionFactor<0)
-                throw new ArgumentException("Raytraced transport needs a power-of-two FFT, a dividing hop no larger than half the FFT, response steps divisible by the hop, and positive ray/bounce counts.");
+                settings.RaysPerBin<1 || settings.maxBounces<0 || !float.IsFinite(settings.diffractionFactor) || settings.diffractionFactor<0)
+                throw new ArgumentException("Raytraced transport needs a power-of-two FFT, a dividing hop no larger than half the FFT, response steps divisible by the hop, positive ray counts and nonnegative bounce counts (zero is direct sound only).");
             checked { _=settings.SpectralSlotsPerPair; }
         }
     }

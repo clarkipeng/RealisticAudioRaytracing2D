@@ -145,8 +145,8 @@ internal static class Emission
                         {
                             long birth=Birth(keys[s],epoch.start,index,p.burstPeriodSamples);
                             if(birth>=end || birth<=from-p.burstDurationSamples)continue;
-                            if(range.count>=p.samples || range.count>=settings.RaysPerBin)
-                                throw new InvalidOperationException("Seeded burst coverage exceeds plane Samples or Rays Per Bin. Increase both bounds or reduce the delay horizon/event rate.");
+                            if(range.count>=p.samples || (settings.maxBounces>0 && range.count>=settings.RaysPerBin))
+                                throw new InvalidOperationException("Seeded burst coverage exceeds plane Samples or, with indirect transport enabled, Rays Per Bin. Increase the relevant bounds or reduce the delay horizon/event rate.");
                             uint key=keys[s];var local=sampler.Sample(Random(key,epoch.start,index,1),Random(key,epoch.start,index,2),Random(key,epoch.start,index,3),out double pdf);
                             if(!positions[s].TryGetValue(birth,out var world))
                             {
