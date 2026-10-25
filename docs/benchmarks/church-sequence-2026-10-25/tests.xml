@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="9" result="Passed" total="9" passed="9" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-10-25 22:01:57Z" end-time="2026-10-25 22:02:02Z" duration="5.004393">
+  <test-suite type="TestSuite" id="1000" name="AudioRayTrace2D" fullname="AudioRayTrace2D" runstate="Runnable" testcasecount="281" result="Passed" start-time="2026-10-25 22:01:57Z" end-time="2026-10-25 22:02:02Z" duration="5.004393" total="9" passed="9" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1335" name="Acoustics.Tests.dll" fullname="/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/gpu-audio/runner/Library/ScriptAssemblies/Acoustics.Tests.dll" runstate="Runnable" testcasecount="281" result="Passed" start-time="2026-10-25 22:01:57Z" end-time="2026-10-25 22:02:02Z" duration="4.993791" total="9" passed="9" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="42479" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestFixture" id="1318" name="SceneSequenceChecks" fullname="SceneSequenceChecks" classname="SceneSequenceChecks" runstate="Runnable" testcasecount="7" result="Passed" start-time="2026-10-25 22:01:57Z" end-time="2026-10-25 22:02:02Z" duration="4.359873" total="7" passed="7" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-case id="1323" name="ActorFreezesAuthoringAndResumesAnActivityOnANewAudioClock" fullname="SceneSequenceChecks.ActorFreezesAuthoringAndResumesAnActivityOnANewAudioClock" methodname="ActorFreezesAuthoringAndResumesAnActivityOnANewAudioClock" classname="SceneSequenceChecks" runstate="Runnable" seed="1161191751" result="Passed" start-time="2026-10-25 22:01:57Z" end-time="2026-10-25 22:01:57Z" duration="0.020347" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1319" name="CommandsDoNotDependOnObservationPartitionOrRepeatedFrames" fullname="SceneSequenceChecks.CommandsDoNotDependOnObservationPartitionOrRepeatedFrames" methodname="CommandsDoNotDependOnObservationPartitionOrRepeatedFrames" classname="SceneSequenceChecks" runstate="Runnable" seed="1955548234" result="Passed" start-time="2026-10-25 22:01:57Z" end-time="2026-10-25 22:01:57Z" duration="0.006351" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1324" name="IsolatedChurchReplayRemapsSequenceBindingsAndMovesTheSameBird" fullname="SceneSequenceChecks.IsolatedChurchReplayRemapsSequenceBindingsAndMovesTheSameBird" methodname="IsolatedChurchReplayRemapsSequenceBindingsAndMovesTheSameBird" classname="SceneSequenceChecks" runstate="Runnable" seed="1644102010" result="Passed" start-time="2026-10-25 22:01:57Z" end-time="2026-10-25 22:01:58Z" duration="0.118903" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1325" name="SilentCaptureStoresCueSamplesAndRejectsRetroactiveCommands" fullname="SceneSequenceChecks.SilentCaptureStoresCueSamplesAndRejectsRetroactiveCommands" methodname="SilentCaptureStoresCueSamplesAndRejectsRetroactiveCommands" classname="SceneSequenceChecks" runstate="Runnable" seed="504669140" result="Passed" start-time="2026-10-25 22:01:58Z" end-time="2026-10-25 22:02:02Z" duration="4.197841" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1322" name="SourceConflictsAndDuplicateOccurrencesFailBeforeCapture" fullname="SceneSequenceChecks.SourceConflictsAndDuplicateOccurrencesFailBeforeCapture" methodname="SourceConflictsAndDuplicateOccurrencesFailBeforeCapture" classname="SceneSequenceChecks" runstate="Runnable" seed="925589409" result="Passed" start-time="2026-10-25 22:02:02Z" end-time="2026-10-25 22:02:02Z" duration="0.000338" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1320" name="WeatherAndWetnessCanBeEvaluatedInAnyOrder" fullname="SceneSequenceChecks.WeatherAndWetnessCanBeEvaluatedInAnyOrder" methodname="WeatherAndWetnessCanBeEvaluatedInAnyOrder" classname="SceneSequenceChecks" runstate="Runnable" seed="1081157190" result="Passed" start-time="2026-10-25 22:02:02Z" end-time="2026-10-25 22:02:02Z" duration="0.000495" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1321" name="WindTravelHasTheSharedWindAsItsVelocity" fullname="SceneSequenceChecks.WindTravelHasTheSharedWindAsItsVelocity" methodname="WindTravelHasTheSharedWindAsItsVelocity" classname="SceneSequenceChecks" runstate="Runnable" seed="1038587420" result="Passed" start-time="2026-10-25 22:02:02Z" end-time="2026-10-25 22:02:02Z" duration="0.001811" asserts="0">
+          <properties>
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+      </test-suite>
+      <test-suite type="TestFixture" id="1001" name="TakeChecks" fullname="TakeChecks" classname="TakeChecks" runstate="Runnable" testcasecount="265" result="Passed" start-time="2026-10-25 22:02:02Z" end-time="2026-10-25 22:02:02Z" duration="0.608004" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-case id="1246" name="ManagerCapture" fullname="TakeChecks.ManagerCapture" methodname="ManagerCapture" classname="TakeChecks" runstate="Runnable" seed="1894647461" result="Passed" start-time="2026-10-25 22:02:02Z" end-time="2026-10-25 22:02:02Z" duration="0.047454" asserts="0">
+          <properties>
+            <property name="Category" value="Core" />
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+        </test-case>
+        <test-case id="1225" name="SceneMotionKeepsItsSimulationTimestamp" fullname="TakeChecks.SceneMotionKeepsItsSimulationTimestamp" methodname="SceneMotionKeepsItsSimulationTimestamp" classname="TakeChecks" runstate="Runnable" seed="1862725318" result="Passed" start-time="2026-10-25 22:02:02Z" end-time="2026-10-25 22:02:02Z" duration="0.546955" asserts="0">
+          <properties>
+            <property name="Category" value="Core" />
+            <property name="retryIteration" value="0" />
+            <property name="repeatIteration" value="0" />
+          </properties>
+          <output><![CDATA[Saving results to: /Users/clarkpeng/Library/Application Support/DefaultCompany/AudioRayTrace2D/TestResults.xml
+]]></output>
+        </test-case>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

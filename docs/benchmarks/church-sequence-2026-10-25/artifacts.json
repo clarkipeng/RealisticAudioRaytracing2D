@@ -1,0 +1,11 @@
+{
+  "movie": "/Users/clarkpeng/conductor/workspaces/realisticaudioraytracing2d/tyler/.context/church-walkthrough/church-walkthrough.mp4",
+  "movieSha256": "e46bd30ad40cc73f0f2f2e12d88fd3e2d215772fcc6bd707708509a0980728be",
+  "movieBytes": 20591110,
+  "videoSource": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-sequence/walkthrough/video-silent.mp4",
+  "numericTake": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-sequence/release/take",
+  "masterWav": "/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/church-sequence/release/audio/listener-0.wav",
+  "imageFramesRendered": 1971,
+  "imageFramesEncoded": 2130,
+  "heldLastImageSeconds": 5.3
+}

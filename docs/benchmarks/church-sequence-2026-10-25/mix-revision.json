@@ -1,0 +1,14 @@
+{
+  "poseBytesUnchanged": true,
+  "numericSceneUnchanged": true,
+  "eventTimesAndActionsUnchanged": true,
+  "gainMultipliersBySourceIndex": {
+    "0": 13,
+    "6": 0.08333333333333333,
+    "7": 20,
+    "9": 4.285714285714286
+  },
+  "events": 3214,
+  "stateHash": "a72da0e21a50bf654d1cec9e2c4218336424aced647a4b37984716cd851f9da9",
+  "eventHash": "77aab8374f38d568da73ff6c100dd6481e68f1f701e6846c64985d21fb4d3a59"
+}

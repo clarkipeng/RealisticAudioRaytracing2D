@@ -1,0 +1,92 @@
+{
+  "sampleRate": 44100,
+  "eventCount": 3214,
+  "sourceCount": 10,
+  "playSeconds": {
+    "voice-local": [
+      0.0
+    ],
+    "voice-remote-0": [
+      0.0
+    ],
+    "voice-remote-1": [
+      0.0
+    ],
+    "voice-remote-2": [
+      0.0
+    ],
+    "3c7c86e3b7b241e1997ff74083a43585": [
+      4.0
+    ],
+    "sequence-bird": [
+      15.0,
+      19.0
+    ],
+    "sequence-wind": [
+      23.0
+    ],
+    "weather-rain-courtyard": [
+      33.0
+    ],
+    "weather-thunder": [
+      45.0
+    ]
+  },
+  "maximumAutomationGainStep": {
+    "sequence-wind": 0.07636547088623047,
+    "weather-rain-courtyard": 0.0009000264108181
+  },
+  "takeSeconds": 60.01997732426304,
+  "sources": [
+    "3c7c86e3b7b241e1997ff74083a43585",
+    "0c54922ad5df4c5c844f9b73d478955e",
+    "voice-local",
+    "voice-remote-0",
+    "voice-remote-1",
+    "voice-remote-2",
+    "weather-rain-courtyard",
+    "weather-thunder",
+    "sequence-bird",
+    "sequence-wind"
+  ],
+  "windows": {
+    "quiet": {
+      "rms": 0.0,
+      "peak": 0.0
+    },
+    "bells": {
+      "rms": 0.020042320077198104,
+      "peak": 0.16280487179756165
+    },
+    "bird": {
+      "rms": 0.02341095779983909,
+      "peak": 0.2118951678276062
+    },
+    "wind": {
+      "rms": 0.01470666285339597,
+      "peak": 0.08078523725271225
+    },
+    "rain": {
+      "rms": 0.03687369206914441,
+      "peak": 0.5168476104736328
+    },
+    "thunder": {
+      "rms": 0.07228357041752882,
+      "peak": 0.4715561866760254
+    },
+    "interior": {
+      "rms": 0.008806331077961742,
+      "peak": 0.08804014325141907
+    },
+    "end": {
+      "rms": 0.0,
+      "peak": 0.0
+    }
+  },
+  "masterPeak": 0.5487269163131714,
+  "masterOverFullScaleSamples": 0,
+  "dspLatencySamples": 1040,
+  "tailCoversResponseSupport": true,
+  "movieGain": 1.5490401048868632,
+  "movieSeconds": 71
+}

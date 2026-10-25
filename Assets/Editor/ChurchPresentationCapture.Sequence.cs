@@ -25,6 +25,8 @@ public static partial class ChurchPresentationCapture
         bool takeOnly=Argument("-sequenceTakeOnly")=="1";
         EditorSceneManager.OpenScene(ScenePath);
         var oldMode=Physics.simulationMode;float oldStep=Time.fixedDeltaTime;SceneRecording recording=null;
+        int oldAa=QualitySettings.antiAliasing;var oldShadows=QualitySettings.shadows;
+        var oldResolution=QualitySettings.shadowResolution;float oldDistance=QualitySettings.shadowDistance;
         Camera camera=null;RenderTexture target=null;Texture2D texture=null;
         try
         {
@@ -90,6 +92,8 @@ public static partial class ChurchPresentationCapture
         finally
         {
             recording?.Dispose();Physics.simulationMode=oldMode;Time.fixedDeltaTime=oldStep;
+            QualitySettings.antiAliasing=oldAa;QualitySettings.shadows=oldShadows;
+            QualitySettings.shadowResolution=oldResolution;QualitySettings.shadowDistance=oldDistance;
             RenderTexture.active=null;if(camera!=null)UnityEngine.Object.DestroyImmediate(camera.gameObject);
             if(target!=null)UnityEngine.Object.DestroyImmediate(target);if(texture!=null)UnityEngine.Object.DestroyImmediate(texture);
         }

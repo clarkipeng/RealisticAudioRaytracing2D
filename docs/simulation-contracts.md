@@ -690,7 +690,7 @@ Store scenes in `Assets/Scenes`, shared player/speaker/door prefabs in `Assets/P
 
 ### Sequenced church walkthrough and environment behavior (planned)
 
-**Implementation underway, 2026-10-24; original design audited against `45575b1`.** Produce a walkthrough in which a visible character encounters tower bells, birds, building wind/cloud cover, rain, then lightning and thunder. Preserve the existing source/transport system and Church's 32-bounce reflections. Defer structural vibration, physical drop excitation and object-radiation synthesis. Swinging an authored bell and animating leaves are presentation behavior, not modal simulation.
+**Implemented and verified, 2026-10-25; original design audited against `45575b1`.** The [completed walkthrough and validation](benchmarks/church-sequence-2026-10-25/README.md) shows a visible character encountering tower bells, birds, building wind/cloud cover, rain, then lightning and thunder. Preserve the existing source/transport system and Church's 32-bounce reflections. Defer structural vibration, physical drop excitation and object-radiation synthesis. Swinging an authored bell and animating leaves are presentation behavior, not modal simulation.
 
 The concrete implementation uses `SceneSequence` (authored data plus numeric evaluator), `SceneSequenceActor` (fixed-step binding adapter), and the three presentation components below. `ChurchSequenceAuthoring` saves original reusable meshes/materials and the sequence into ordinary Unity assets. `ChurchPresentationCapture.CaptureSequence` supplies normal walking/interaction input and records offscreen; picture-camera cuts leave the acoustic listener at the player's head. No event-type transport kernels are added.
 
