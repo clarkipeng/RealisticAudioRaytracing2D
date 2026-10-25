@@ -729,7 +729,7 @@ Use **one sample clock, one sequence state, and one emission path**. Different v
 
 ```mermaid
 flowchart LR
-    A[Sequence asset or recorded commands] --> B[EnvironmentSequence evaluator]
+    A[Sequence asset or recorded commands] --> B[SceneSequence evaluator]
     C[SceneSession sample clock] --> B
     B --> D[Weather state and actor poses]
     B --> E[Timed acoustic events]
@@ -748,8 +748,8 @@ Proposed files are responsibility boundaries, not a requirement for a class per 
 
 | Location | Responsibility |
 |---|---|
-| `Assets/Scripts/Demo/EnvironmentSequence.cs` | Serializable sequence definition and numeric evaluator: stable IDs, seed, weather keys, actor paths and sorted cues. Own no cameras, renderers, materials, GPU audio buffers or Unity `AudioSource`. Keep small value types together here. |
-| `Assets/Scripts/Demo/EnvironmentSequenceActor.cs` | `SceneActor` adapter. Initialize/reset the evaluator, advance from the session clock, update registered source poses and expose due acoustic events. Supply settings identity and isolated replay bindings. No private `Update` clock. |
+| `Assets/Scripts/Demo/SceneSequence.cs` | Serializable sequence definition and numeric evaluator: stable IDs, seed, typed parameter tracks, actor paths and sorted cues. Start with weather tracks, but keep scheduling independent of weather or Church. Own no cameras, renderers, materials, GPU audio buffers or Unity `AudioSource`. Keep small value types together here. |
+| `Assets/Scripts/Demo/SceneSequenceActor.cs` | Existing `SceneActor` adapter. Initialize/reset the evaluator, advance from the session clock, apply bound actor tracks and expose due acoustic events. Supply settings identity and isolated replay bindings. No private `Update` clock or replacement actor hierarchy. |
 | `Assets/Scripts/Demo/EnvironmentPresentation.cs` | Apply evaluated weather to sky/clouds, lighting/fog, rain/splashes, surface wetness and shared foliage wind. Cache explicit bindings and reuse property blocks; no name search or per-particle object creation each frame. |
 | `Assets/Scripts/Demo/BellPresentation.cs`, `BirdPresentation.cs` | Apply local pose/animation at a supplied sequence time. Each prefab owns its visual references and authored motion. Neither calls Play based on animation/render callbacks. Split these because their visual behavior differs, not their audio pipeline. |
 | `Assets/Editor/ChurchPresentationCapture.cs` | Add sequence capture/validation and camera framing to the existing tool. Keep route/shot data outside runtime weather behavior. Own encoder invocation, progress and outputs. |
@@ -758,6 +758,58 @@ Proposed files are responsibility boundaries, not a requirement for a class per 
 Make the sequence opt-in on the scene/session. The character's scripted route is a source of `SceneRecording.Input`, separate from the environment actor. In normal play the same environment behavior can run while the user walks freely. Gameplay can issue a typed cue or weather transition to the evaluator at a recorded sample; it does not need to know the film's shot list. Do not introduce a global event bus, plugin registry, weather-specific audio managers or a generic property-path animation system.
 
 Store the authored definition in an immutable ScriptableObject; each session owns a separate evaluator/cursor. Keep scene Transform/Renderer/source references on the actor and presentation bindings, addressed by stable IDs in the asset. Validate duplicate/missing IDs and fixed clip/profile compatibility before recording. Never store transient playback state back into the shared asset.
+
+#### Shared abstractions and future behavior
+
+**Refinement, 2026-10-24:** generalize scheduling and ownership, while keeping the meaning of each behavior local to its actor/profile. The planned sequence types are named `SceneSequence` rather than `EnvironmentSequence` because trains, doors, machines and footsteps need the same timing/replay services. These names describe proposed code, not an implemented framework.
+
+Three kinds of behavior need distinct semantics:
+
+| Kind | Examples | Contract |
+|---|---|---|
+| **Occurrence** | Bell phrase/strike, bird call, lightning strike, future foot contact | One accepted event has a stable identity, source-time sample, target and typed profile. It may cause several visual/audio consequences with different durations. |
+| **Activity** | Rain shower, wind rustle, engine running, repeated bell peal | A stable instance starts, receives parameter changes and stops. Updates do not restart its waveform or reseed it. Stopping emission leaves existing particles and acoustic tails to finish. |
+| **State** | Cloud cover, wetness, a door's open fraction, bird perched/flying | Values persist between events. Store initial conditions and accepted changes, or reconstruct from versioned deterministic inputs. Wetness is not the same thing as whether rain is currently active. |
+
+These are small data/lifetime contracts, not three new services. Implement the current cases with explicit structs/enums and existing actor methods; extract shared code only when actual behaviors use it. For example, one `LightningStrike` occurrence supplies both a flash and thunder emission. Their common cause is recorded once; their appearance and listener arrival are evaluated on their appropriate clocks.
+
+| Generalize now | Keep specific |
+|---|---|
+| Sample clock, ordered dispatch, reset/replay and deterministic seed derivation | Bell swing, bird flight, cloud shading and rain rendering |
+| Immutable profiles, stable scene bindings and separate per-run state | The parameters and units within bell/bird/weather profiles |
+| Occurrence/activity identity, accepted start/update/stop and retained tail ownership | Which actor permits overlap, retriggers, finishes a phrase or fades out |
+| A shared weather value queried at `(position, sample)`; initially uniform | How a tree, bird, cloud or rustle emitter responds to that value |
+| Existing source representation composed from signal, spatial support and schedule | The generator for a recording, granular ambience or future physical impact |
+| Recording of accepted causes and resulting acoustic events, with explicit ownership | Asset preparation, contact annotations and effect-specific visual animation |
+
+The sequence orders **when** to request a behavior; its actor/profile owns **what** that request means. Keep `BellPhrase`, `BirdCall` and `LightningStrike` as explicit initial implementations, dispatching through known scene bindings. Do not add a case for every species/weather preset to the transport, or turn the sequence evaluator into an all-purpose actor AI. Reuse the existing `SceneActor`; no generic state-machine editor, reflection-based property binding, plugin loader or global event bus is needed.
+
+**Keep identities separate.** An actor is a persistent world object, a profile is reusable configuration/assets, an occurrence/activity identifies one execution, and an acoustic source slot is renderer storage. Ten strikes from one bell are ten occurrences, not ten persistent scene objects. Two birds sharing a clip still have different poses and activity. Reusing a buffer must not change the recorded identity or random choices. Introduce slot generations only if reusable source slots are actually implemented.
+
+**Lifetime and overlap.** Treat scheduled, emitting, draining and finished as the relevant lifetime stages. Each behavior declares a small overlap policy: reject, restart, or explicit overlap. Choose prepared bell phrases and fixed bird/thunder voices for the first film. A stop ends future emission at its recorded time; a hard truncation, if ever needed, is a different explicit operation. Visual completion, acoustic completion and safe buffer retirement are separate. Restarting an activity creates a new identity/epoch, while parameter updates retain its identity. Do not implement a general voice pool before the existing fixed-source registration/history contract can support it.
+
+**Parameters and blending.** Give every controlled value a unit/range and one writer. The style preset supplies a baseline; the shared weather state determines its adjustment. Gameplay/sequence requests feed that same owner instead of writing competing light, gain or wind values. For the initial sequence, conflicting same-target/same-time assignments are invalid; when interactive overrides are added, record the resolved transition and its start value/time. Do not silently introduce last-`Update`-wins behavior, a numeric priority system or universal blending rules. Pressure gain, power density, rain amount and wind speed are different quantities even when represented by floats.
+
+**Reusable sampling boundary.** Keep signal generation, spatial support and emission scheduling distinct, extending the existing [emission contract](#seeded-emission-sampling-and-batching). A rustling patch may reuse plane sampling; a bird uses a moving point; a later thunder model may use a line with its own correlation/emission law. Sharing sampling/transport does not imply playing the same waveform independently at every spatial sample. Preserve source/event identity and normalization when changing quality; additional visual particles do not create acoustic events.
+
+Track the following extensions with the requirement that would justify implementing them:
+
+| Future behavior | Boundary to preserve now | Implementation trigger / status |
+|---|---|---|
+| Footsteps, doors closing, object contacts | Record contact time, position, target/surface identity and typed contact data when available; actor simulation accepts the event, presentation follows it. Animation callbacks are not the sole acoustic clock. | First interactive contact sound. Reuse existing material/asset mappings; physical excitation and new mechanical properties remain deferred. |
+| Repeated/overlapping strikes and calls | Separate occurrence identity from source storage; preserve tails, positions and history. | A real scene requires simultaneous independent voices. Measure fixed-voice cost first; do not prematurely pool or silently steal voices. |
+| Roof drips, runoff and drying | Persistent per-region state can outlive rain; later emission can have the rain activity as a causal parent. | A requested water-interaction scene. Wetness visuals are in the film; water simulation, dripping emitters and structural roof sound are future work. |
+| Local showers, gusts and moving shelter | `WeatherAt(position, sample)` and a separate shelter query, with explicit world coordinates and dependency versions. | First spatially varying region or moving cover. Begin with uniform weather/static shelter; do not allocate a weather grid now. |
+| Birds reacting to weather, footsteps or thunder | A reaction consumes a world event/state and creates another accepted occurrence with a stable identity; it does not inspect the final listener WAV. | First behavior interaction. The initial film uses authored reactions; a physically heard reaction would need the reacting actor's own arrival/perception model. |
+| Interactive control and interruption | Start/update/stop semantics, single ownership, recorded acceptance time and overlap policy. | User/gameplay control of an effect. Small explicit actor state transitions are sufficient before any behavior-graph tool. |
+| Multiplayer and late join | Follow existing host authority for shared causes, stable event IDs and server-time mapping; keep local presentation separate from authority. | Enabling sequence playback in multiplayer. Clients need current activities/phase/state plus relevant history or an explicit cold start, not merely a random seed or replay of every old cue. |
+| Long captures and seeking | Serializable numeric state plus the ordered event log; visual and DSP history are distinct. | Measured replay-from-zero cost warrants checkpoints. Rebuild from initialization initially; snapshots/cache infrastructure remain deferred. |
+| Larger worlds and multiple listeners | Budgets for visual instances, active acoustic sources, retained events and rays are independent. A camera's culling cannot delete a shared acoustic cause. | Measured source/DSP bottleneck. Any acoustic prioritization/approximation requires an explicit error/retirement policy; ordinary visual LOD is not permission to drop sound. |
+| Vibration-based emitters and coherent channel sources | Typed physical excitation can later replace a clip generator while retaining timing, pose, source identity and transport boundaries. | Separate validated radiation/source models. Deferred; their phase, directivity and persistent state cannot be replaced by a generic gain parameter. |
+
+The existing multiplayer loop steps shared `SceneActor`s only on the world owner. A future sequence adapter must therefore separate authoritative decisions from client presentation/reconstruction; putting all visual evaluation solely in `SceneActor.Step` would freeze it on clients. Do not label the first single-player film as multiplayer-ready before that adapter and its late-join checks exist.
+
+**Scope decision:** add the shared identity/lifetime/ownership contracts to the design now, implement only the concrete film behaviors first, and use the table as the extension backlog. No extra kernels, scene services, per-leaf/per-drop objects or acoustic material parameters follow merely from this generalization.
 
 #### Minimal state and cue contract
 
@@ -770,11 +822,12 @@ Conceptual numeric records, compiled for the capture sample rate:
 ```text
 Sequence: version, seed, durationSamples, weatherKeys[], actorPaths[], cues[]
 WeatherKey: sample, cloudCover, rainAmount, windVelocity
-Cue: stableId, sample, kind, targetBindingId, profileId, strength
+Cue: occurrenceId, sample, kind, targetBindingId, profileId
 Cue kinds initially: BellPhrase, BirdCall, LightningStrike
+Activity command: activityId, sample, targetBindingId, start/update/stop
 ```
 
-Profiles supply the fixed clip binding/region, visual motion and relative onset annotations; they are not a universal bag of optional properties. A continuous rain/wind envelope belongs to the weather track, not thousands of discrete rain cues. At a fixed version, derive randomness from `(sequence seed, target ID, cue ID, property tag)`. Camera changes, ray budgets, particle counts and iteration order must not alter the acoustic events.
+Profiles supply the fixed clip binding/region, visual motion and relative onset annotations; they are not a universal bag of optional properties. Add typed parameters to a concrete cue/activity only when needed, with declared units rather than one universal physical `strength`. Weather keys compile to the rain/rustle activity's start, parameter updates and stop. A continuous rain/wind envelope belongs to the weather track, not thousands of discrete rain cues. At a fixed version, derive randomness from `(sequence seed, target ID, cue ID, property tag)`. Camera changes, ray budgets, particle counts and iteration order must not alter the acoustic events.
 
 Author times in seconds; quantize once to integer samples when starting/compiling a run and retain those exact values. Advance monotonic intervals `[previousSample, nextSample)`; process time-zero cues explicitly and retain a cursor so repeated evaluation cannot duplicate them. Sort equal-time commands by a persisted authored ordinal. Validate conflicting commands on one source before capture. Visual `Evaluate(time)` is side-effect-free; drawing a frame or scrubbing a camera cannot emit sound again.
 
@@ -786,7 +839,7 @@ Extend `RayTraceManager` with an explicit-sample source-event entry point and ha
 
 Keep event emission outside the isolated actor's transform evaluation. The live/capture adapter drains its numeric events into the shared event stream; input replay consumes the recorded acoustic events and evaluates actor poses without generating them again. Source and listener poses still use the existing fixed-step observation/interpolation contract. Rendering at 24, 30 or 60 fps changes picture sampling, not physics, cue times or emitted PCM.
 
-Persist a small versioned environment supplement: resolved cue samples/IDs, weather keys and accepted overrides, seed, actor/profile bindings, initial state and dependency hashes. Reference/authenticate it in the scene-input manifest, copy it with input exports, and reconstruct it in `SceneReplay.Rig`. Add an explicit adapter for `EnvironmentSequenceActor` in the existing supported-actor switches. A seed alone cannot recover changed assets, algorithms or interactive commands. Older takes without the supplement retain their existing behavior; unsupported environment data must fail visibly rather than replay a static scene.
+Persist a small versioned sequence supplement: resolved cue samples/IDs, activity start/update/stop identities, weather keys and accepted overrides, seed, actor/profile bindings, initial state and dependency hashes. Reference/authenticate it in the scene-input manifest, copy it with input exports, and reconstruct it in `SceneReplay.Rig`. Add an explicit adapter for `SceneSequenceActor` in the existing supported-actor switches. A seed alone cannot recover changed assets, algorithms or interactive commands. Older takes without the supplement retain their existing behavior; unsupported sequence data must fail visibly rather than replay a static scene.
 
 Initialize and register every acoustic source/clip before capture. Change poses and events during a take, not source membership, clip references, plane masks or mesh topology. Keep registered source objects active; hide purely visual children as needed. Seeking backwards restores initial numeric state and replays to the requested sample; reset/re-simulate seeded visual particles. Resume audio from the reconstructed event/history state, not by calling Play for every visible object.
 

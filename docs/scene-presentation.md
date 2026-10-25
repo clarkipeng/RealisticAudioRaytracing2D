@@ -11,7 +11,7 @@ Both use the same collision proxies, acoustic objects, input, movement and netwo
 
 ## Current scope — 24 October 2026
 
-**Next walkthrough, planned:** [sequence and code organization](simulation-contracts.md#sequenced-church-walkthrough-and-environment-behavior-planned) covers a visible character, ringing tower bells, calling birds, rising wind/clouds, rain and lightning/thunder in order. It includes synchronized source animation, shared weather state, shelter-aware rain and replay/capture requirements. No footage for this sequence has been rendered yet.
+**Next walkthrough, planned:** [sequence and code organization](simulation-contracts.md#sequenced-church-walkthrough-and-environment-behavior-planned) covers a visible character, ringing tower bells, calling birds, rising wind/clouds, rain and lightning/thunder in order. It includes synchronized source animation, shared weather state, shelter-aware rain and replay/capture requirements. [Shared abstractions and future behavior](simulation-contracts.md#shared-abstractions-and-future-behavior) separates occurrences, activities and persistent state, with an extension backlog for contacts, local weather, overlap and late join. No footage for this sequence has been rendered yet.
 
 Church retains **Maximum bounces = 32** under Raytraced/Spectral, with its existing sources, reflections, reverberation, occlusion, transmission and material/listener filtering. Only the new object-vibration/radiation integration is deferred. The mechanical bake tools remain available separately and are not connected to scene playback.
 
