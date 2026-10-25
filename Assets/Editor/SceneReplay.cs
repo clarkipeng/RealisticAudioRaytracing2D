@@ -133,6 +133,8 @@ public static class SceneReplay
                         target.train=copies[train.train]; target.carriage=copies[train.carriage]; target.route=route;
                         target.boardingPlatform=train.boardingPlatform==null?null:copies[train.boardingPlatform];
                     }
+                    else if(actor is SceneSequenceActor sequence && copy is SceneSequenceActor sequenceCopy)
+                        sequenceCopy.bindings=Array.ConvertAll(sequence.bindings,b=>new SceneSequenceActor.Binding{id=b.id,target=copies[b.target]});
                     else if(!(actor is SlidingDoor)) throw new NotSupportedException("No isolated replay adapter for "+actor.GetType().Name);
                     return copy;
                 });

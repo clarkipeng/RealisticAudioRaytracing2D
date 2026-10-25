@@ -679,7 +679,7 @@ public sealed class AcousticTake : IDisposable
         }
     }
 
-    static void ValidateEvent(VoiceEvent e, Scene scene)
+    internal static void ValidateEvent(VoiceEvent e, Scene scene)
     {
         AudioSourcePlane.ValidateEvent(scene,e);
         if (e.sample < 0 || e.clipOffset < 0 || e.sourceIndex < 0 || e.sourceIndex >= scene.sources.Length ||

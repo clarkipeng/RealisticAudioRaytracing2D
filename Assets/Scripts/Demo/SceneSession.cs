@@ -36,14 +36,21 @@ public sealed class SceneSession : MonoBehaviour
     public void InitializeSimulation()
     {
         ConfigureControls(); Tick=0; pending=default;
+        if(manager!=null)manager.simulation=this;
         var ids=new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        int sequences=0;
         foreach(var actor in actors)
         {
             if(actor==null || !actor.isActiveAndEnabled || actor.gameObject.scene!=gameObject.scene ||
                 string.IsNullOrWhiteSpace(actor.id) || !ids.Add(actor.id))
                 throw new InvalidOperationException("Scene actors need unique persisted IDs and active bindings in this scene.");
-            if(!(actor is StationDemo) && !(actor is SlidingDoor))
+            if(!(actor is StationDemo) && !(actor is SlidingDoor) && !(actor is SceneSequenceActor))
                 throw new NotSupportedException("Add an isolated replay adapter before recording actor "+actor.GetType().Name);
+            if(actor is SceneSequenceActor sequence)
+            {
+                if(++sequences>1)throw new InvalidOperationException("One shared scene sequence owns scheduled events.");
+                if(manager!=null)sequence.sampleRate=manager.sampleRate;
+            }
             actor.Initialize();
         }
         walker.Initialize(); look.Initialize(); Physics.SyncTransforms();
@@ -67,7 +74,6 @@ public sealed class SceneSession : MonoBehaviour
         manager.RecordingObserved+=ObserveInputRecording;
         manager.RecordingFinalizing+=FinalizeInputRecording;
         manager.RecordingStopped+=EndInputRecording;
-        manager.simulation=this;
         Application.runInBackground=true;
         // Presentation must not hold the main thread that submits acoustic work.
         QualitySettings.vSyncCount=0;Application.targetFrameRate=60;
@@ -138,6 +144,8 @@ public sealed class SceneSession : MonoBehaviour
         else if(input.interact)multiplayer.RequestInteraction();
         if(moved) Physics.SyncTransforms();
         look.Simulate(input.look); walker.Simulate(input.movement,input.jump,seconds); Tick++;
+        if(manager!=null && !IsInputReplay && (manager.IsRecordingTake || manager.IsLiveSimulation))
+            foreach(var actor in actors)if(actor is SceneSequenceActor sequence)sequence.Drain(manager.RecordSourceEventAt);
     }
 
     void BeginInputRecording(string directory)
@@ -173,9 +181,11 @@ public sealed class SceneSession : MonoBehaviour
     {
         foreach(var source in startSounds)
         {
+            if(Array.Exists(actors,a=>a is SceneSequenceActor sequence && sequence.Owns(source.transform)))continue;
             long offset=source.loop?(long)((multiplayer?.SceneSoundOffset??0)*manager.sampleRate)%Math.Max(1,(long)(source.clip.length*manager.sampleRate)):0;
             manager.RecordSourceEvent(source.transform,AcousticTake.VoiceAction.Play,source.gain,source.loop,offset);
         }
+        foreach(var actor in actors)if(actor is SceneSequenceActor sequence)sequence.BeginAudio(manager.sampleRate,manager.RecordSourceEventAt);
     }
     void StartLiveAudio()
     {

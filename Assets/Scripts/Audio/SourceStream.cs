@@ -11,6 +11,7 @@ public sealed class SourceStream : IDisposable
     public long First {get;private set;}
     public long End {get;private set;}
     public bool Finished {get;private set;}
+    public int Capacity=>ring.Length;
     readonly float[] ring;
     readonly BinaryReader file;
     long page=-1;
@@ -60,7 +61,7 @@ public sealed class SourceStream : IDisposable
     // Bounded disk queue. No file IO or waiting in the audio callback; failures stay incomplete.
     internal sealed class Capture : IDisposable
     {
-        struct Block {public int source,count;public long sample,available;public Status status;public byte[] data;}
+        struct Block {public int source,count;public long sample,available;public Status status;public byte[] data;public TaskCompletionSource<bool> flushed;}
         readonly BlockingCollection<Block> queue=new BlockingCollection<Block>(128);
         readonly Task writer;
         readonly BinaryWriter[] pcm;
@@ -108,6 +109,7 @@ public sealed class SourceStream : IDisposable
             {
                 foreach(var b in queue.GetConsumingEnumerable())
                 {
+                    if(b.flushed!=null){b.flushed.SetResult(true);continue;}
                     try {
                     if(b.sample!=descriptions[b.source].samples)throw new InvalidDataException("Non-contiguous recorded source.");
                     if(b.data==null) {var f=pcm[b.source].BaseStream;f.Position+=b.count*4L;f.SetLength(f.Position);}
@@ -124,6 +126,15 @@ public sealed class SourceStream : IDisposable
             Dispose();if(Failure!=null)throw new IOException("Source recording failed.",Failure);
             foreach(var d in descriptions)if(d!=null)d.sha256=AcousticTake.HashFile(Path.Combine(directory,d.file));
             manifest.sourceBlocksHash=AcousticTake.HashFile(Path.Combine(directory,"source-blocks.bin"));
+        }
+        // Offline callers may wait for disk; Recorded/Enqueue never waits on an audio producer.
+        public void Flush()
+        {
+            if(Failure!=null)throw new IOException("Source recording failed.",Failure);
+            var flushed=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if(!queue.TryAdd(new Block{flushed=flushed}))throw new IOException("Source recording queue is full.");
+            Task.WhenAny(flushed.Task,writer).GetAwaiter().GetResult();
+            if(Failure!=null||!flushed.Task.IsCompleted)throw new IOException("Source recording stopped before its flush.",Failure);
         }
         // Stop accepting blocks immediately; failed recording must not stall live audio.
         public Task Abort()

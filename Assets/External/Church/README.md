@@ -1,5 +1,7 @@
 # Church assets
 
+The saved scene now uses `Sequence/SceneSequence-Church walkthrough.asset` for its single-player demonstration: bells, robin calls, wind, rain, then thunder. The organ and voice bindings remain registered; the sequence does not autostart them. Existing acoustic reflections are retained. See `docs/scene-presentation.md` for the capture workflow and limitations.
+
 All bundled third-party assets below are published under **CC0 1.0**: https://creativecommons.org/publicdomain/zero/1.0/
 
 - **Church model and textures:** Daniel Andersson; explorable-interior adaptation by AnyRPG. https://opengameart.org/content/medieval-church-interior — derived from https://opengameart.org/content/medieval-church . Download: https://opengameart.org/sites/default/files/church.blend . Exported to FBX with separate editable parts and centered local origins. Packed textures extracted unchanged. `ChurchCollision.fbx` keeps architectural surfaces and doors, dissolving coplanar detail within 2 degrees; duplicate vertices and degenerate faces are removed. Decorative statue, window bars and small exterior trim are omitted from this approximation. The scene supplies its floor and furniture.
@@ -7,6 +9,12 @@ All bundled third-party assets below are published under **CC0 1.0**: https://cr
 - **Organ samples:** “Church organ emulation”, FreePats / Roberto, version 2019-09-24, recorded from Fons Adriaensen's Aeolus emulator. https://freepats.zenvoid.org/Organ/pipe-organ.html . Source archive: https://freepats.zenvoid.org/Organ/ChurchOrganEmulation/ChurchOrganEmulation-SFZ-20190924.tar.xz . `Audio/Organ.wav` is an original C / A minor / F / G passage rendered from the nearest supplied note samples, downmixed, resampled and faded, with a 0.45 peak and silence in a 30-second loop. No additional reverb was applied. This is sampled organ emulation, not a recording of a physical church organ or a calibrated acoustic reference.
 - **Rain:** “Rain and Thunder #1” (0124), Joseph SARDIN / BigSoundBank. https://bigsoundbank.com/rain-and-storm-s0124.html . Original WAV: https://bigsoundbank.com/UPLOAD/bwf-en/0124.wav . `Audio/RainCourtyard.wav` uses the early 1–13 s excerpt, downmixed to mono, with a one-second constant-power wrap crossfade and a 0.4 peak. The resulting loop is 11 seconds. The original recording's later thunder is not included. The superseded second point-source excerpt, `RainGarden.wav`, remains in checkpoint `0659ec5`.
 - **Thunder:** “Thunder #3” (3114), Joseph SARDIN & Axeline T. / BigSoundBank. https://bigsoundbank.com/thunder-3-s3114.html . Original WAV: https://bigsoundbank.com/UPLOAD/bwf-en/3114.wav . `Audio/Thunder.wav` resamples the mono recording from 48 kHz to 44.1 kHz with a polyphase filter, removes its mean, adds 80 ms boundary fades and scales its peak to 0.7. The 11.2-second roll starts at second 8 of a 42-second loop, with silence elsewhere. This is an authored repeating soundtrack, not a stochastic storm simulation.
+- **Robin:** “Robin #4” (1670), Joseph SARDIN / BigSoundBank, CC0. https://bigsoundbank.com/robin-4-s1670.html . Original WAV: https://bigsoundbank.com/UPLOAD/bwf-en/1670.wav . `Audio/RobinCall.wav` preserves the 3.115-second recording, resamples to 44.1 kHz, removes its mean, adds 25 ms boundary fades and scales to a 0.6 peak.
+- **Tree wind:** “Wind and tree squeaks” (1051), Joseph SARDIN / BigSoundBank, CC0. https://bigsoundbank.com/wind-and-tree-squeaks-s1051.html . Original WAV: https://bigsoundbank.com/UPLOAD/bwf-en/1051.wav . `Audio/TreeWind.wav` uses seconds 20–37, resampled to 44.1 kHz, with a one-second constant-power wrap crossfade, producing a 16-second loop at a 0.4 peak. It includes natural branch creaks; it is not isolated leaf excitation.
+
+`Audio/ThunderCue.wav` prepares the original 3114 recording directly with mean removal, resampling, 30 ms boundary fades and a 0.7 peak. It has no authored eight-second pre-delay. The sequence starts this clip at the visible flash; acoustic transport adds propagation delay. The original recording's own temporal structure and environmental acoustics remain. `BellPresentation.strikes` annotates the existing bell phrase's measured envelope peaks at 0.08, 2.03, 4.02, 6.02, 8.02 and 10.01 seconds. The bell animation is not a vibration simulation.
+
+`Sequence/` contains original mesh/material assets authored by `ChurchSequenceAuthoring`: a hollow bell with a separate clapper and fixed support, a robin with separate wings/beak, and shared tree branch/foliage meshes. The original static `Bell` renderer is hidden; architectural collision and acoustic geometry are preserved. Trees and bird detail are presentation geometry. Static roof heights are sampled from the scene's colliders for visual rain; foliage is not modeled as watertight acoustic or rain shelter.
 
 Textures import as ordinary repeating 3D textures (not the project’s default clamped sprites), capped at 1024 pixels. Both meshes are readable for acoustic compilation and replay. Audio imports as preloaded PCM.
 
@@ -24,6 +32,8 @@ church.blend  bcc2f59154473dcb46d580d1a60f1358fe6a0339d2d602c9f8cd3d31ef03e393
 organ.tar.xz  1f0b70a2c2af14cdf051ef2d256b3bb652e7d64c0fdc8bed06642ad2af916db9
 0124.wav      d37affc216bd76b5f1964fbafacb19644ac057b00a099d96dff061ec2b5a2643
 3114.wav      448d45edf4022a0ac979a076e997321abcef3807cc8f41dcae2be2e317360255
+1670.wav      02276115894a2ecda9e771b98f4b24be6d0946982d51425a37d41797d0cb46b4
+1051.wav      f9f9290c47c22ff1d18a7aa9330f3ba7b65a17cc376761e53e3929b56ba38e53
 ```
 
 Import/export scripts and diagnostic evidence are retained locally under `.context/church-assets/`. No Blender or audio-synthesis dependency is required at runtime.

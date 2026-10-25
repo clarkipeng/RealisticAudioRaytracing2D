@@ -10,7 +10,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using Debug = UnityEngine.Debug;
 
-public static class ChurchPresentationCapture
+public static partial class ChurchPresentationCapture
 {
     const string ScenePath = "Assets/Scenes/Church.unity";
     const int Width = 1280;

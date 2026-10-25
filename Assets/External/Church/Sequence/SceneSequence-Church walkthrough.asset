@@ -1,0 +1,111 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b40316f91d13440fb8ae2352dfb5a4d1, type: 3}
+  m_Name: Church walkthrough
+  m_EditorClassIdentifier: Acoustics::SceneSequence
+  version: 1
+  seed: 173
+  duration: 60
+  cues:
+  - id: tower-phrase
+    target: bell
+    kind: 1
+    time: 4
+    duration: 17
+    gain: 2
+    clipOffset: 0
+    loop: 0
+  - id: robin-first
+    target: bird
+    kind: 2
+    time: 15
+    duration: 3.12
+    gain: 1.4
+    clipOffset: 0
+    loop: 0
+  - id: robin-answer
+    target: bird
+    kind: 2
+    time: 19
+    duration: 3.12
+    gain: 1.4
+    clipOffset: 0
+    loop: 0
+  - id: storm-strike
+    target: thunder
+    kind: 3
+    time: 45
+    duration: 11.3
+    gain: 2
+    clipOffset: 0
+    loop: 0
+  weather:
+  - time: 0
+    cloud: 0.08
+    rain: 0
+    wind: {x: 0.5, y: 0, z: 0.175}
+  - time: 23
+    cloud: 0.15
+    rain: 0
+    wind: {x: 0.7, y: 0, z: 0.24499999}
+  - time: 32
+    cloud: 0.85
+    rain: 0
+    wind: {x: 5, y: 0, z: 1.75}
+  - time: 35
+    cloud: 1
+    rain: 0.15
+    wind: {x: 7, y: 0, z: 2.45}
+  - time: 41
+    cloud: 1
+    rain: 0.9
+    wind: {x: 8, y: 0, z: 2.8}
+  - time: 52
+    cloud: 1
+    rain: 1
+    wind: {x: 6, y: 0, z: 2.1}
+  - time: 58
+    cloud: 1
+    rain: 0.9
+    wind: {x: 5, y: 0, z: 1.75}
+  - time: 60
+    cloud: 1
+    rain: 0
+    wind: {x: 0, y: 0, z: 0}
+  levels:
+  - id: grove-gust
+    target: wind
+    kind: 1
+    start: 23
+    end: 60
+    gain: 1.4
+  - id: courtyard-rain
+    target: rain
+    kind: 0
+    start: 33
+    end: 60
+    gain: 1.2
+  poses:
+  - target: bird
+    keys:
+    - time: 0
+      position: {x: 26, y: 5.6, z: -35.8}
+      yaw: 220
+    - time: 22.2
+      position: {x: 26, y: 5.6, z: -35.8}
+      yaw: 220
+    - time: 25
+      position: {x: 22, y: 9, z: -23}
+      yaw: 330
+    - time: 28
+      position: {x: 16, y: 11, z: -12}
+      yaw: 330

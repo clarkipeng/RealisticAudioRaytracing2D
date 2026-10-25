@@ -131,7 +131,7 @@ public class RayTraceManager : MonoBehaviour
     Transform[] captureObjects;
     double takeClockOrigin;
     int takeOutputRate;
-    long previousTakeSample;
+    long previousTakeSample,lastSourceEventSample;
     bool replayPlaying;
     bool externalCaptureClock;
     readonly HashSet<int> takeCuts = new HashSet<int>();
@@ -258,7 +258,7 @@ public class RayTraceManager : MonoBehaviour
         liveDiagnostics=new LiveDiagnostics {sampleRate=sampleRate,leadSamples=monitorLeadSamples,queueCapacity=monitorCapacitySamples};
         AudioSettings.GetDSPBufferSize(out liveDiagnostics.deviceBufferSamples,out var deviceBufferCount);
         takeClockOrigin = AudioSettings.dspTime; takeOutputRate = AudioSettings.outputSampleRate;
-        previousTakeSample = -1;
+        previousTakeSample = lastSourceEventSample = -1;
         try
         {
             captureStreams=new SourceStream[scene.sources.Length];streamEpochs.Clear();
@@ -403,6 +403,22 @@ public class RayTraceManager : MonoBehaviour
             simulation.AdvanceTo(TakeSampleNow(),simulationOrigin,sampleRate);
     }
 
+    // Offline picture capture advances the same fixed simulation without a device clock.
+    public void CaptureSimulationObservation(bool final=false)
+    {
+        if(captureScene==null||simulation==null||monitorLive||externalCaptureClock)
+            throw new InvalidOperationException("Manual observations require an unmonitored simulation capture.");
+        long sample=PoseSample;
+        if(captureStreams!=null)foreach(var stream in captureStreams)if(stream!=null)
+            while(stream.End<=sample)
+            {
+                stream.Prune(stream.End);
+                stream.SilenceUntil(Math.Min(sample+1,stream.End+Math.Min(4096,stream.Capacity)),sample,SourceStream.Status.Missing);
+                streamCapture?.Flush();
+            }
+        if(final)EndCapture(sample);else CaptureTakeState(sample);
+    }
+
     public void MarkTakeDiscontinuity(Transform target)
     {
         for(int i=0;i<takeObjects.Count;i++)
@@ -458,11 +474,18 @@ public class RayTraceManager : MonoBehaviour
     public void RecordSourceEvent(Transform target, AcousticTake.VoiceAction action, float gain = 1, bool repeat = false, long clipOffset = 0)
     {
         if (captureScene == null) return;
+        RecordSourceEventAt(target,new AcousticTake.VoiceEvent { sample=CaptureSampleNow(),action=action,gain=gain,loop=repeat,clipOffset=clipOffset });
+    }
+    public void RecordSourceEventAt(Transform target,AcousticTake.VoiceEvent e)
+    {
+        if(captureScene==null)throw new InvalidOperationException("Start capture before scheduling source events.");
+        if(e.sample<0 || e.sample<previousTakeSample || e.sample<lastSourceEventSample)
+            throw new InvalidOperationException("Source events must precede their observation and be ordered by sample.");
         int index=Array.IndexOf(captureSources,target);
         if (index < 0) throw new InvalidOperationException("Source is not registered in this take.");
-        var e=new AcousticTake.VoiceEvent { sample=CaptureSampleNow(), sourceIndex=index,
-            action=action, gain=gain, loop=repeat, clipOffset=clipOffset };
+        e.sourceIndex=index;AcousticTake.ValidateEvent(e,captureScene);
         takeWriter?.Append(e); liveDirect?.Append(e);
+        lastSourceEventSample=e.sample;
     }
     public void AppendReplaySound(AcousticTake.VoiceEvent value)
     {
