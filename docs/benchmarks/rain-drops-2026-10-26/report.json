@@ -1,0 +1,259 @@
+{
+  "seed": 42,
+  "sample_rate": 44100,
+  "status": "awaiting listening",
+  "method": "mono overlap-add of recorded impact snippets; no added ambience or room response",
+  "rates_are": "sample triggers per second, not physical rainfall units",
+  "sources": {
+    "concrete": {
+      "id": 683772,
+      "sha256": "328e564fc3f4dc44f802d8c4eca309960bb428919b39bc7cee49b66d368d94ef",
+      "peaks_s": [
+        0.0718,
+        0.425,
+        2.0234,
+        2.9872,
+        3.6607,
+        4.1246,
+        4.6275,
+        5.2052,
+        7.9619,
+        9.0035,
+        9.8925
+      ],
+      "author": "Elements-Library",
+      "license": "CC0",
+      "page": "https://freesound.org/people/Elements-Library/sounds/683772/",
+      "download": "https://cdn.freesound.org/previews/683/683772_14876768-hq.mp3",
+      "input_is": "lossy public HQ MP3 preview, not original WAV",
+      "decoded_pcm_sha256": "c6f75a2dc6e7984ee3454eef68499bad8929aa811875aaf494a656a125d5ce64",
+      "cut_sample_ranges": [
+        [
+          1623,
+          12648
+        ],
+        [
+          17199,
+          28224
+        ],
+        [
+          87688,
+          98713
+        ],
+        [
+          130192,
+          141217
+        ],
+        [
+          159893,
+          170918
+        ],
+        [
+          180351,
+          191376
+        ],
+        [
+          202529,
+          213554
+        ],
+        [
+          228006,
+          239031
+        ],
+        [
+          349576,
+          360601
+        ],
+        [
+          395511,
+          406536
+        ],
+        [
+          434716,
+          445741
+        ]
+      ],
+      "bank_bytes_float32": 485100,
+      "event_counts": {
+        "6": 32,
+        "60": 309,
+        "600": 3046
+      },
+      "density_audition_rms": 0.015,
+      "density_audition_gains": {
+        "6-per-second": 7.3879118368215835,
+        "60-per-second": 2.581533701925691,
+        "600-per-second": 0.8088234166131908
+      },
+      "solo_gain": 6.146797099941031,
+      "reference_gain": 9.794365772702214
+    },
+    "metal": {
+      "id": 683778,
+      "sha256": "9395e21f22477946a63da7393315ed2611ea407870f083571502f78464a7981e",
+      "peaks_s": [
+        0.443,
+        1.6822,
+        2.4574,
+        3.4541,
+        4.379,
+        5.4955,
+        6.0672,
+        6.5042,
+        8.794,
+        11.4909,
+        11.9369,
+        12.9127,
+        16.3189
+      ],
+      "author": "Elements-Library",
+      "license": "CC0",
+      "page": "https://freesound.org/people/Elements-Library/sounds/683778/",
+      "download": "https://cdn.freesound.org/previews/683/683778_14876768-hq.mp3",
+      "input_is": "lossy public HQ MP3 preview, not original WAV",
+      "decoded_pcm_sha256": "d355e35d64fa5a03bede51e41525028d7811a776ab69a56f669cee7dfd0dba96",
+      "cut_sample_ranges": [
+        [
+          17993,
+          29018
+        ],
+        [
+          72642,
+          83667
+        ],
+        [
+          106828,
+          117853
+        ],
+        [
+          150782,
+          161807
+        ],
+        [
+          191570,
+          202595
+        ],
+        [
+          240808,
+          251833
+        ],
+        [
+          266020,
+          277045
+        ],
+        [
+          285292,
+          296317
+        ],
+        [
+          386272,
+          397297
+        ],
+        [
+          505205,
+          516230
+        ],
+        [
+          524874,
+          535899
+        ],
+        [
+          567907,
+          578932
+        ],
+        [
+          718120,
+          729145
+        ]
+      ],
+      "bank_bytes_float32": 573300,
+      "event_counts": {
+        "6": 32,
+        "60": 309,
+        "600": 3046
+      },
+      "density_audition_rms": 0.015,
+      "density_audition_gains": {
+        "6-per-second": 0.8156858721381249,
+        "60-per-second": 0.2795148596189783,
+        "600-per-second": 0.08464820278387965
+      },
+      "solo_gain": 0.6374594183780351,
+      "reference_gain": 1.0223152763390408
+    }
+  },
+  "audio": {
+    "concrete-6-per-second.wav": {
+      "sha256": "f8e8214fd3f7a3cd66ce71a2bbb9631d857f9c4e8209fa0024b37c4122e8afeb",
+      "seconds": 5.0,
+      "rms": 0.014999999999999998,
+      "peak": 0.3079351288954938
+    },
+    "concrete-60-per-second.wav": {
+      "sha256": "ce687ecbacb049061c5c6a187eec6e0e021667ff7333e30d13ec3c4296594865",
+      "seconds": 5.0,
+      "rms": 0.015,
+      "peak": 0.16349049347661485
+    },
+    "concrete-600-per-second.wav": {
+      "sha256": "060eaa27ad79600ece814b4afcae2840580279c162e0f1a4d2be88c05b890b25",
+      "seconds": 5.0,
+      "rms": 0.015,
+      "peak": 0.08654178384604018
+    },
+    "concrete-buildup.wav": {
+      "sha256": "842c72c0a94a739be9117e00fa0427dee6849dcbf410586eec7db29069dbacae",
+      "seconds": 16.0,
+      "rms": 0.014523687548277812,
+      "peak": 0.3079351288954938
+    },
+    "concrete-snippets.wav": {
+      "sha256": "4d32c6ac0db685aac5a5045feb2ae7e543a0b3c1d36de8eb78f5adfeb6ebd9a7",
+      "seconds": 5.0,
+      "rms": 0.005774490581885517,
+      "peak": 0.25
+    },
+    "concrete-recording.wav": {
+      "sha256": "84b3fc5582679005fb9a4a8de01f0e7f1efc9f514e9ac5c92419a1291a7e84cd",
+      "seconds": 11.91281179138322,
+      "rms": 0.008044739581291175,
+      "peak": 0.4000000000000001
+    },
+    "metal-6-per-second.wav": {
+      "sha256": "077ff16dfcfbfde001e528c13016a5828508909778c9b5377e958885a79735ad",
+      "seconds": 5.0,
+      "rms": 0.015000000000000001,
+      "peak": 0.3341244505634362
+    },
+    "metal-60-per-second.wav": {
+      "sha256": "1d3350cab9767e8ca70c1f2b61f6c9c3be25b6876b033c7a831694ed0e82afac",
+      "seconds": 5.0,
+      "rms": 0.015000000000000001,
+      "peak": 0.1398202556462282
+    },
+    "metal-600-per-second.wav": {
+      "sha256": "f2aa5c84f0470c01327e15103700200c62fab30e6801fa5c385e718c275ef3bc",
+      "seconds": 5.0,
+      "rms": 0.015000000000000001,
+      "peak": 0.0820187407412887
+    },
+    "metal-buildup.wav": {
+      "sha256": "4887a8770378ccf48ca7fedf59bfca612d01ca687031147179861d39b841fad8",
+      "seconds": 16.0,
+      "rms": 0.014523687548277812,
+      "peak": 0.3341244505634362
+    },
+    "metal-snippets.wav": {
+      "sha256": "f32da301039d08e3f2a584dfeebcdaa76962cc77d324e63882c0a1b40a096f56",
+      "seconds": 5.0,
+      "rms": 0.005943901189674607,
+      "peak": 0.25
+    },
+    "metal-recording.wav": {
+      "sha256": "4343888727d72a4f1e6c56fc888f67b1ea8d6e8d0fa7beb4cf4a17429811ef5e",
+      "seconds": 16.934943310657598,
+      "rms": 0.007028267409277833,
+      "peak": 0.39999999999999997
+    }
+  }
+}

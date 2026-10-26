@@ -12,6 +12,8 @@ Research review, 26 October 2026. Recommendation and experiments, not an impleme
 
 **That audition was also rejected as sounding bad.** Fine-cache and fresh rain outputs differ by 1.95% relative RMS, but numerical similarity is not a listening pass. The fixture uses a single emitter in a closed ideal box, not rain distributed over actual exposed surfaces. It remains an interpolation control; source and scene realism are unaccepted.
 
+**Recorded-drop search and trial:** the user requested the old comparison again and online sources whose drops can accumulate into rain. The [candidate search and audition](benchmarks/rain-drops-2026-10-26/README.md) identifies two purpose-built paid libraries and uses CC0 concrete/metal drip previews for a small overlapping-snippet test. Three trigger densities are volume matched for texture comparison. These are empirical impact snippets with recording acoustics retained, not calibrated dry droplets; listening acceptance is pending.
+
 The best candidate for this project is a hybrid: model rainfall as many varied surface impacts, synthesize the dense component in bounded world-space regions, and preserve distinguishable impacts where spatial detail matters. Use the existing geometry/transport for shelter and propagation. Evaluate this against a small explicit-drop reference before choosing the runtime representation. A bank of convincing sounds solves a different problem from a stable spatial estimator; both need attention.
 
 ## What the literature establishes
