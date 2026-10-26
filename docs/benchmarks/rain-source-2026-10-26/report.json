@@ -1,0 +1,1192 @@
+{
+  "version": "rain-source-experiment-v1",
+  "scope": "Dry source only; no distance, occlusion, reflection, roof radiation or SPL calibration.",
+  "seconds": 8,
+  "sampleRate": 44100,
+  "blockSize": 2048,
+  "seeds": [
+    23,
+    47,
+    91
+  ],
+  "intensities": [
+    0.25,
+    1,
+    4
+  ],
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "numpyVersion": "2.5.4",
+  "measuredWindowSeconds": [
+    1,
+    7
+  ],
+  "cases": [
+    {
+      "surface": "hard",
+      "intensity": 0.25,
+      "seed": 23,
+      "events": 8031,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "5b2d8f08b1c073fa7154032aa722d3d44133031b5bd52230de36f5e81020963e",
+      "sourceHash": "df07e55ead9e936c488a2796fcdf005d48583d0d9d38b2be9bc1007fefb91914",
+      "eventGenerationSeconds": 0.0009324169950559735,
+      "explicitSeconds": 0.01643849999527447,
+      "compactSeconds": 0.07453466599690728,
+      "maximumAbsoluteError": 1.0408340855860843e-17,
+      "relativeRmsError": 5.514483129688132e-16,
+      "metrics": {
+        "rms": 0.0031172068167959815,
+        "rmsDbFS": -50.124687654087346,
+        "peak": 0.024773761810258043,
+        "crestDb": 18.004526808325167,
+        "excessKurtosis": 1.8846340892892686,
+        "levelP90MinusP10Db": 7.357202529731275,
+        "bandPowerFraction": [
+          0.04565494134525904,
+          0.2522115406751848,
+          0.614481932877834,
+          0.08765158510172213
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.831627073325284,
+            0.8240989766060507,
+            0.6639924081215209
+          ],
+          [
+            0.8316270733252838,
+            0.9999999999999998,
+            0.9292568212588644,
+            0.7874224832050658
+          ],
+          [
+            0.8240989766060506,
+            0.9292568212588643,
+            1.0,
+            0.851025424846753
+          ],
+          [
+            0.6639924081215209,
+            0.7874224832050658,
+            0.8510254248467531,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3399891301058694
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 0.25,
+      "seed": 47,
+      "events": 8092,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "e83e7b40a770a387758d2666bef39d48e0447b09aee99614217d5e06cc614808",
+      "sourceHash": "2e270027d3ca6d1e93f3745ab00497371c0326c5876dc3af93ce3ddd908bc62d",
+      "eventGenerationSeconds": 0.0007736249972367659,
+      "explicitSeconds": 0.01584624999668449,
+      "compactSeconds": 0.07381549999990966,
+      "maximumAbsoluteError": 1.3877787807814457e-17,
+      "relativeRmsError": 5.54972742337476e-16,
+      "metrics": {
+        "rms": 0.0032254370796451167,
+        "rmsDbFS": -49.828228514117924,
+        "peak": 0.0250814401637851,
+        "crestDb": 17.815277911061756,
+        "excessKurtosis": 2.1361312446075296,
+        "levelP90MinusP10Db": 7.433000349417014,
+        "bandPowerFraction": [
+          0.04588828292064366,
+          0.2586984257873451,
+          0.6104571245473246,
+          0.0849561667446867
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8336481084256608,
+            0.8192996637891412,
+            0.6649896132987947
+          ],
+          [
+            0.833648108425661,
+            0.9999999999999998,
+            0.9326476612773881,
+            0.7931411216947132
+          ],
+          [
+            0.8192996637891411,
+            0.9326476612773882,
+            0.9999999999999999,
+            0.8603488209149681
+          ],
+          [
+            0.6649896132987946,
+            0.7931411216947131,
+            0.8603488209149681,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3740124785914888
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 0.25,
+      "seed": 91,
+      "events": 8028,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "e54931e76bb5d16ae400c29cb93211a31d3fa199f1d7f213d98b03055da94735",
+      "sourceHash": "82c11db329390c7681eab48db3d56bb2d32112a7ca35289bed008317be0b8c1d",
+      "eventGenerationSeconds": 0.0006954579876037315,
+      "explicitSeconds": 0.015831625001737848,
+      "compactSeconds": 0.07630858301126864,
+      "maximumAbsoluteError": 1.3877787807814457e-17,
+      "relativeRmsError": 5.533594120342006e-16,
+      "metrics": {
+        "rms": 0.0031799910713920052,
+        "rmsDbFS": -49.95148198805114,
+        "peak": 0.026432779335540942,
+        "crestDb": 18.394338596600996,
+        "excessKurtosis": 1.8235533275101563,
+        "levelP90MinusP10Db": 7.326194701462761,
+        "bandPowerFraction": [
+          0.04616872119797611,
+          0.25354682355410374,
+          0.6140184766121177,
+          0.08626597863580238
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8242120910071007,
+            0.8089625014775566,
+            0.6255837375007726
+          ],
+          [
+            0.8242120910071007,
+            1.0,
+            0.911270763233536,
+            0.7496460187928425
+          ],
+          [
+            0.8089625014775566,
+            0.911270763233536,
+            1.0,
+            0.8525314653970375
+          ],
+          [
+            0.6255837375007725,
+            0.7496460187928425,
+            0.8525314653970375,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.4010961356333617
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 1,
+      "seed": 23,
+      "events": 32062,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "97412378709ce66d68ea57b8548f46c7c2e2ba005d1882e5d54f82bb32a090d6",
+      "sourceHash": "4dae216ed889d1f6d9e2acec9ff405a28397a3faefc0302540ca1d08ad0fb2d2",
+      "eventGenerationSeconds": 0.002293124998686835,
+      "explicitSeconds": 0.06516045800526626,
+      "compactSeconds": 0.08337949999258853,
+      "maximumAbsoluteError": 2.42861286636753e-17,
+      "relativeRmsError": 5.9276414253088325e-16,
+      "metrics": {
+        "rms": 0.006462116045375063,
+        "rmsDbFS": -43.792504945514764,
+        "peak": 0.03643555857039073,
+        "crestDb": 15.023013581605145,
+        "excessKurtosis": 0.49080315959334975,
+        "levelP90MinusP10Db": 3.8108245535873024,
+        "bandPowerFraction": [
+          0.04605389618237672,
+          0.25527066807666293,
+          0.6140717796496699,
+          0.0846036560912905
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.5908493905931851,
+            0.6476890338935268,
+            0.467382299610883
+          ],
+          [
+            0.5908493905931851,
+            0.9999999999999999,
+            0.7901352800714607,
+            0.5997256908929521
+          ],
+          [
+            0.6476890338935269,
+            0.7901352800714607,
+            1.0,
+            0.7065942415138255
+          ],
+          [
+            0.46738229961088307,
+            0.5997256908929521,
+            0.7065942415138255,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3029003417979347
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 1,
+      "seed": 47,
+      "events": 32179,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "38d8edcb7e5498522f8e93b2abc77aec243afa4514883b65d4eded05042e4db0",
+      "sourceHash": "585683bf6d3ee240ac9570be68ff6f93c0c84370a74c285bb88f17ab398d054c",
+      "eventGenerationSeconds": 0.0034166660043410957,
+      "explicitSeconds": 0.09154366700386163,
+      "compactSeconds": 0.11483312500058673,
+      "maximumAbsoluteError": 2.42861286636753e-17,
+      "relativeRmsError": 5.913767251443644e-16,
+      "metrics": {
+        "rms": 0.006441699412573649,
+        "rmsDbFS": -43.81999088839021,
+        "peak": 0.03917197404407942,
+        "crestDb": 15.679500049676058,
+        "excessKurtosis": 0.503336519198037,
+        "levelP90MinusP10Db": 4.075606849023551,
+        "bandPowerFraction": [
+          0.04541620974316797,
+          0.2554868671233084,
+          0.6143141565018512,
+          0.0847827666316724
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5907929366244086,
+            0.5823578521897887,
+            0.46467422758467875
+          ],
+          [
+            0.5907929366244087,
+            1.0,
+            0.8251857601367409,
+            0.6190443701828828
+          ],
+          [
+            0.5823578521897889,
+            0.8251857601367409,
+            0.9999999999999999,
+            0.7221560062798903
+          ],
+          [
+            0.46467422758467875,
+            0.6190443701828828,
+            0.7221560062798903,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.32467423291583325
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 1,
+      "seed": 91,
+      "events": 32055,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "74e07cbf4c3e583950bce48c4f28ac05f9c87630fffc5392d845d3e68f789f2e",
+      "sourceHash": "31c341b745fdbe5a33046ad1a295edd73f5ed633a2a19635865a165707dadcfa",
+      "eventGenerationSeconds": 0.0022427079966291785,
+      "explicitSeconds": 0.06584383398876525,
+      "compactSeconds": 0.07869191699137446,
+      "maximumAbsoluteError": 2.7755575615628914e-17,
+      "relativeRmsError": 5.910451227411188e-16,
+      "metrics": {
+        "rms": 0.006315177133641881,
+        "rmsDbFS": -43.992289269285145,
+        "peak": 0.04009371595533834,
+        "crestDb": 16.053815454964248,
+        "excessKurtosis": 0.47211867574085975,
+        "levelP90MinusP10Db": 3.791494292455205,
+        "bandPowerFraction": [
+          0.04368427405145024,
+          0.2518928793103069,
+          0.6171670374100239,
+          0.08725580922821892
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5747685356183794,
+            0.5873783342438834,
+            0.4065568835951263
+          ],
+          [
+            0.5747685356183794,
+            1.0,
+            0.7997109626051685,
+            0.5936651155764088
+          ],
+          [
+            0.5873783342438834,
+            0.7997109626051685,
+            1.0,
+            0.7204825127767565
+          ],
+          [
+            0.40655688359512626,
+            0.5936651155764088,
+            0.7204825127767566,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3391745989700541
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 4,
+      "seed": 23,
+      "events": 128125,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "bf5933921c0956d57f59695d3035c88bcc6eae59f581bf0e16e6e32e9fb13960",
+      "sourceHash": "74d26f53e5ddbc41985b6973f86b6e19be7fbed841d1ea2b8753231b7231a410",
+      "eventGenerationSeconds": 0.009331125009339303,
+      "explicitSeconds": 0.26876533300674055,
+      "compactSeconds": 0.11906345799798146,
+      "maximumAbsoluteError": 6.245004513516506e-17,
+      "relativeRmsError": 6.997888646545337e-16,
+      "metrics": {
+        "rms": 0.012926768280704569,
+        "rmsDbFS": -37.77020072170173,
+        "peak": 0.07005066012965176,
+        "crestDb": 14.678445366903976,
+        "excessKurtosis": 0.10866242922527602,
+        "levelP90MinusP10Db": 2.1442026457676846,
+        "bandPowerFraction": [
+          0.045218218112177896,
+          0.2570935226418758,
+          0.6138893809418966,
+          0.08379887830404958
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.2990809163641393,
+            0.3049647982513211,
+            0.2576443342966804
+          ],
+          [
+            0.2990809163641393,
+            1.0,
+            0.5505797902583285,
+            0.37444199282814283
+          ],
+          [
+            0.3049647982513211,
+            0.5505797902583286,
+            1.0,
+            0.5342577615404173
+          ],
+          [
+            0.2576443342966803,
+            0.37444199282814283,
+            0.5342577615404173,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.32630355682805384
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 4,
+      "seed": 47,
+      "events": 128362,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "0420e8933d35d78d5416513bc5d385f68a6dc0dda68f7a9c407fcd3a7684420c",
+      "sourceHash": "d5805cbb04a4a7369d2c15a603e602fb19acc9e81d221b061fda189fc10d79b5",
+      "eventGenerationSeconds": 0.00942466699052602,
+      "explicitSeconds": 0.2741937499959022,
+      "compactSeconds": 0.08695566700771451,
+      "maximumAbsoluteError": 6.245004513516506e-17,
+      "relativeRmsError": 6.979483624595023e-16,
+      "metrics": {
+        "rms": 0.012792157126677701,
+        "rmsDbFS": -37.86112429538341,
+        "peak": 0.06655603160211447,
+        "crestDb": 14.324872681023832,
+        "excessKurtosis": 0.13491111920983734,
+        "levelP90MinusP10Db": 2.1981901978230525,
+        "bandPowerFraction": [
+          0.0458546604208094,
+          0.2549454929657729,
+          0.6137418603651134,
+          0.08545798624830443
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.2825482796974936,
+            0.3583099757631279,
+            0.15580092006625615
+          ],
+          [
+            0.2825482796974936,
+            0.9999999999999999,
+            0.5590924979213543,
+            0.339401249912111
+          ],
+          [
+            0.3583099757631279,
+            0.5590924979213543,
+            0.9999999999999998,
+            0.4935323359152534
+          ],
+          [
+            0.15580092006625615,
+            0.339401249912111,
+            0.4935323359152535,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3946026172923691
+      }
+    },
+    {
+      "surface": "hard",
+      "intensity": 4,
+      "seed": 91,
+      "events": 128110,
+      "bankHash": "dcf03f8bf4b892685f5ec3ebcc6b02e436d1b74b9425d203af0be943cdb1bc3f",
+      "eventHash": "8cce51e0631797ed5b1db7bdd53f722ed684170fef145c387aacae2a3d446be2",
+      "sourceHash": "ab5a58718e57cc3c8b378a89cbcaf3aa7598b51d0f84dbeb81e1981e2072546e",
+      "eventGenerationSeconds": 0.009247750000213273,
+      "explicitSeconds": 0.2722292910038959,
+      "compactSeconds": 0.09241283300798386,
+      "maximumAbsoluteError": 6.938893903907228e-17,
+      "relativeRmsError": 6.974097356230623e-16,
+      "metrics": {
+        "rms": 0.012901512341723948,
+        "rmsDbFS": -37.787187556545035,
+        "peak": 0.06287655263680716,
+        "crestDb": 13.756962004750289,
+        "excessKurtosis": 0.14956326539954556,
+        "levelP90MinusP10Db": 2.3493588934682847,
+        "bandPowerFraction": [
+          0.04557862887648415,
+          0.2550420353857228,
+          0.6152210786801111,
+          0.084158257057682
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.36542045163727005,
+            0.28423833312939145,
+            0.18585159015235211
+          ],
+          [
+            0.3654204516372701,
+            0.9999999999999998,
+            0.5598993935664927,
+            0.3428330924940694
+          ],
+          [
+            0.2842383331293914,
+            0.5598993935664925,
+            1.0,
+            0.4979614439142128
+          ],
+          [
+            0.18585159015235214,
+            0.34283309249406946,
+            0.4979614439142129,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.2922419750543898
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 0.25,
+      "seed": 23,
+      "events": 8031,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "5b2d8f08b1c073fa7154032aa722d3d44133031b5bd52230de36f5e81020963e",
+      "sourceHash": "11dda05ec9fa3efdf8df7f1e8279dd1cb12641f3f3bae378a2ff62b59d923faf",
+      "eventGenerationSeconds": 0.001656750013353303,
+      "explicitSeconds": 0.03955645899986848,
+      "compactSeconds": 0.09132525000313763,
+      "maximumAbsoluteError": 1.3877787807814457e-17,
+      "relativeRmsError": 5.585051969703501e-16,
+      "metrics": {
+        "rms": 0.003554418988107259,
+        "rmsDbFS": -48.98462759421734,
+        "peak": 0.029022972712006295,
+        "crestDb": 18.239465464246592,
+        "excessKurtosis": 1.804623885517989,
+        "levelP90MinusP10Db": 7.220729607180196,
+        "bandPowerFraction": [
+          0.03505568429298949,
+          0.19386391893568225,
+          0.5911186468103117,
+          0.17996174996101655
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8315056566937785,
+            0.7931892831498909,
+            0.44593740733688403
+          ],
+          [
+            0.8315056566937785,
+            1.0,
+            0.9046246512051203,
+            0.493816231535668
+          ],
+          [
+            0.793189283149891,
+            0.9046246512051204,
+            1.0,
+            0.5378454779733375
+          ],
+          [
+            0.44593740733688403,
+            0.49381623153566795,
+            0.5378454779733375,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.34463070584067407
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 0.25,
+      "seed": 47,
+      "events": 8092,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "e83e7b40a770a387758d2666bef39d48e0447b09aee99614217d5e06cc614808",
+      "sourceHash": "7853695196f17807ef4292a78eebd1682ab25e81c7fb5a98b6c84d14fa11d613",
+      "eventGenerationSeconds": 0.000909583002794534,
+      "explicitSeconds": 0.0169218329974683,
+      "compactSeconds": 0.08087466600409243,
+      "maximumAbsoluteError": 1.734723475976807e-17,
+      "relativeRmsError": 5.60629559037588e-16,
+      "metrics": {
+        "rms": 0.0036934739477753288,
+        "rmsDbFS": -48.65129919928642,
+        "peak": 0.02842578814382299,
+        "crestDb": 17.725549497980932,
+        "excessKurtosis": 2.018640939120127,
+        "levelP90MinusP10Db": 7.329338102899271,
+        "bandPowerFraction": [
+          0.03493282801323943,
+          0.19710267746979712,
+          0.5905688028511717,
+          0.17739569166579167
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8335632938519745,
+            0.7588363574833019,
+            0.4689644625702801
+          ],
+          [
+            0.8335632938519745,
+            1.0,
+            0.8943834843403812,
+            0.4914286783811336
+          ],
+          [
+            0.7588363574833019,
+            0.8943834843403812,
+            0.9999999999999998,
+            0.5677218027013493
+          ],
+          [
+            0.4689644625702802,
+            0.49142867838113363,
+            0.5677218027013494,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3920259489087222
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 0.25,
+      "seed": 91,
+      "events": 8028,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "e54931e76bb5d16ae400c29cb93211a31d3fa199f1d7f213d98b03055da94735",
+      "sourceHash": "98445cc52b672a7dbf8fe16056c3cc757d5a0365f359f7b8a47b9889fb7054b0",
+      "eventGenerationSeconds": 0.0007848329987609759,
+      "explicitSeconds": 0.018030708000878803,
+      "compactSeconds": 0.0855264160054503,
+      "maximumAbsoluteError": 1.3877787807814457e-17,
+      "relativeRmsError": 5.597782847276024e-16,
+      "metrics": {
+        "rms": 0.0036568137139852026,
+        "rmsDbFS": -48.73794326000933,
+        "peak": 0.03065119109379744,
+        "crestDb": 18.46689037407208,
+        "excessKurtosis": 1.7783929295358183,
+        "levelP90MinusP10Db": 7.166802959699993,
+        "bandPowerFraction": [
+          0.03484594253854884,
+          0.19154290366806898,
+          0.5962503756719382,
+          0.17736077812144402
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999998,
+            0.8240900276343713,
+            0.7569085250571932,
+            0.41479834291144024
+          ],
+          [
+            0.8240900276343713,
+            1.0,
+            0.8595229602404928,
+            0.4283319080187332
+          ],
+          [
+            0.7569085250571933,
+            0.8595229602404928,
+            0.9999999999999998,
+            0.510082577137187
+          ],
+          [
+            0.41479834291144024,
+            0.42833190801873317,
+            0.510082577137187,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3901454207402404
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 1,
+      "seed": 23,
+      "events": 32062,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "97412378709ce66d68ea57b8548f46c7c2e2ba005d1882e5d54f82bb32a090d6",
+      "sourceHash": "99547a625c00ec84ed59c71040463419a21e70c49c7a86ae9755509327eb11f3",
+      "eventGenerationSeconds": 0.002284833011799492,
+      "explicitSeconds": 0.06801429099868983,
+      "compactSeconds": 0.07799833299941383,
+      "maximumAbsoluteError": 3.469446951953614e-17,
+      "relativeRmsError": 6.035295614462767e-16,
+      "metrics": {
+        "rms": 0.007395511114712869,
+        "rmsDbFS": -42.620636117915794,
+        "peak": 0.04293024441610157,
+        "crestDb": 15.275903339292148,
+        "excessKurtosis": 0.4893020516774915,
+        "levelP90MinusP10Db": 3.9466469574973786,
+        "bandPowerFraction": [
+          0.03510316245826203,
+          0.19478495187290112,
+          0.5989515845365713,
+          0.17116030113226546
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5908710821036695,
+            0.5985713996814132,
+            0.24262833744631343
+          ],
+          [
+            0.5908710821036695,
+            0.9999999999999999,
+            0.7655832735385889,
+            0.3243745230044629
+          ],
+          [
+            0.5985713996814132,
+            0.7655832735385889,
+            1.0,
+            0.40552863687599877
+          ],
+          [
+            0.24262833744631343,
+            0.3243745230044629,
+            0.40552863687599877,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.30308037285907885
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 1,
+      "seed": 47,
+      "events": 32179,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "38d8edcb7e5498522f8e93b2abc77aec243afa4514883b65d4eded05042e4db0",
+      "sourceHash": "cc2c6ea54c000ea4ea126937924c43d6b52860fb4d06f1092439958fd5cbd827",
+      "eventGenerationSeconds": 0.002609083996503614,
+      "explicitSeconds": 0.06814629200380296,
+      "compactSeconds": 0.07906237500719726,
+      "maximumAbsoluteError": 4.163336342344337e-17,
+      "relativeRmsError": 6.001635912960959e-16,
+      "metrics": {
+        "rms": 0.007397020739914482,
+        "rmsDbFS": -42.61886327225686,
+        "peak": 0.04434406628317495,
+        "crestDb": 15.555573567165059,
+        "excessKurtosis": 0.4885252512338121,
+        "levelP90MinusP10Db": 4.014715647208156,
+        "bandPowerFraction": [
+          0.034387846672622346,
+          0.19363083386576385,
+          0.599178205408476,
+          0.17280311405313784
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5905875419703795,
+            0.5422338340280325,
+            0.25231986674519136
+          ],
+          [
+            0.5905875419703795,
+            1.0,
+            0.7828358981429742,
+            0.3462971762902408
+          ],
+          [
+            0.5422338340280325,
+            0.7828358981429742,
+            0.9999999999999998,
+            0.4505783490656417
+          ],
+          [
+            0.25231986674519136,
+            0.34629717629024076,
+            0.45057834906564165,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.3339713014284784
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 1,
+      "seed": 91,
+      "events": 32055,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "74e07cbf4c3e583950bce48c4f28ac05f9c87630fffc5392d845d3e68f789f2e",
+      "sourceHash": "224a32ba4bd2b1185abcd173794bf9d69889e138c0beb2ce8165381c9850c1a4",
+      "eventGenerationSeconds": 0.0021707499981857836,
+      "explicitSeconds": 0.06428104201040696,
+      "compactSeconds": 0.11885475000599399,
+      "maximumAbsoluteError": 2.7755575615628914e-17,
+      "relativeRmsError": 5.98390017517378e-16,
+      "metrics": {
+        "rms": 0.007255789203338772,
+        "rmsDbFS": -42.78630685952316,
+        "peak": 0.045496283775080935,
+        "crestDb": 15.945825341285719,
+        "excessKurtosis": 0.43969903068030014,
+        "levelP90MinusP10Db": 3.7898769452270713,
+        "bandPowerFraction": [
+          0.03303664921501661,
+          0.1906880522435406,
+          0.5998354138927965,
+          0.17643988464864627
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5745698762734452,
+            0.5225585471207309,
+            0.2513695071700338
+          ],
+          [
+            0.5745698762734451,
+            1.0,
+            0.7407605051650838,
+            0.2551451656703318
+          ],
+          [
+            0.5225585471207309,
+            0.7407605051650837,
+            1.0,
+            0.385279818056425
+          ],
+          [
+            0.2513695071700338,
+            0.2551451656703318,
+            0.3852798180564251,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.35344264749364573
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 4,
+      "seed": 23,
+      "events": 128125,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "bf5933921c0956d57f59695d3035c88bcc6eae59f581bf0e16e6e32e9fb13960",
+      "sourceHash": "eaabe17ba1dec9a1368c446a3fbcb8cd372c6e610c17e0235f38a87313a8250b",
+      "eventGenerationSeconds": 0.010325374998501502,
+      "explicitSeconds": 0.26135816700116266,
+      "compactSeconds": 0.08487816699198447,
+      "maximumAbsoluteError": 7.979727989493313e-17,
+      "relativeRmsError": 7.172284991382612e-16,
+      "metrics": {
+        "rms": 0.014780857155124123,
+        "rmsDbFS": -36.6060076017108,
+        "peak": 0.08492680715454134,
+        "crestDb": 15.186903541258598,
+        "excessKurtosis": 0.08160587650570683,
+        "levelP90MinusP10Db": 2.1536205832335327,
+        "bandPowerFraction": [
+          0.03452756007464204,
+          0.19651027974751947,
+          0.5965434158325837,
+          0.17241874434525475
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.2989828361323004,
+            0.29939564390455653,
+            0.1729133519832352
+          ],
+          [
+            0.2989828361323004,
+            0.9999999999999999,
+            0.5224000050754436,
+            0.2332677960862235
+          ],
+          [
+            0.2993956439045565,
+            0.5224000050754436,
+            1.0,
+            0.3534916811987162
+          ],
+          [
+            0.1729133519832352,
+            0.23326779608622347,
+            0.35349168119871616,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.2948523371570477
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 4,
+      "seed": 47,
+      "events": 128362,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "0420e8933d35d78d5416513bc5d385f68a6dc0dda68f7a9c407fcd3a7684420c",
+      "sourceHash": "f90c888ed6e21b1c72f94724b92e01875bf8fc8c7299d7346390bbda239fea5a",
+      "eventGenerationSeconds": 0.009375958004966378,
+      "explicitSeconds": 0.26136033299553674,
+      "compactSeconds": 0.0818696250062203,
+      "maximumAbsoluteError": 1.0408340855860843e-16,
+      "relativeRmsError": 7.182497669956337e-16,
+      "metrics": {
+        "rms": 0.014672746267478025,
+        "rmsDbFS": -36.6697718510307,
+        "peak": 0.07230713722516251,
+        "crestDb": 13.85339519789506,
+        "excessKurtosis": 0.14215566516023026,
+        "levelP90MinusP10Db": 2.1037592451483462,
+        "bandPowerFraction": [
+          0.03479573709224237,
+          0.19364590070850327,
+          0.5981814468027663,
+          0.173376915396488
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.28224463592281795,
+            0.3179519446163063,
+            0.08608019951903298
+          ],
+          [
+            0.28224463592281795,
+            1.0,
+            0.5540177675182499,
+            0.19259624171677012
+          ],
+          [
+            0.3179519446163063,
+            0.5540177675182498,
+            1.0,
+            0.33649471770093065
+          ],
+          [
+            0.08608019951903298,
+            0.19259624171677012,
+            0.3364947177009307,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.38756458030297736
+      }
+    },
+    {
+      "surface": "water",
+      "intensity": 4,
+      "seed": 91,
+      "events": 128110,
+      "bankHash": "18b1f262509a9dc66323aefa6a40095abcd83e9d499b36acd4bcbd7010744033",
+      "eventHash": "8cce51e0631797ed5b1db7bdd53f722ed684170fef145c387aacae2a3d446be2",
+      "sourceHash": "598a2e9820b5c2c8ee8feade758e4237f8448c2554e2a834d48f29577f4898c1",
+      "eventGenerationSeconds": 0.009510542004136369,
+      "explicitSeconds": 0.2749190409958828,
+      "compactSeconds": 0.08510958300030325,
+      "maximumAbsoluteError": 8.326672684688674e-17,
+      "relativeRmsError": 7.172706348091325e-16,
+      "metrics": {
+        "rms": 0.01478682864312643,
+        "rmsDbFS": -36.60249919819067,
+        "peak": 0.06746254802991757,
+        "crestDb": 13.183754003571806,
+        "excessKurtosis": 0.11528866080877531,
+        "levelP90MinusP10Db": 2.3787844936242735,
+        "bandPowerFraction": [
+          0.03463818280872831,
+          0.19400719570333783,
+          0.5981780330342998,
+          0.17317658845363396
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.36541417244161384,
+            0.2719967828372621,
+            0.06899296039383797
+          ],
+          [
+            0.36541417244161384,
+            1.0,
+            0.5410200947766123,
+            0.175066205614112
+          ],
+          [
+            0.2719967828372621,
+            0.5410200947766123,
+            1.0,
+            0.32024320050670135
+          ],
+          [
+            0.06899296039383797,
+            0.175066205614112,
+            0.32024320050670135,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.29300117954180194
+      }
+    }
+  ],
+  "files": {
+    "hard-rain-prototype.wav": {
+      "seconds": 8.079977324263039,
+      "peak": 0.21920017722187804,
+      "sha256": "ea56e47f0d08c3c37c6eb0544ac73dec4a59853e66d282004e578bf85488dd6b"
+    },
+    "water-rain-prototype.wav": {
+      "seconds": 8.079977324263039,
+      "peak": 0.2582728947604299,
+      "sha256": "309eb479e34f8f54e462578b74e642ce163ea3308ce073f76ac8c3424d1f1505"
+    },
+    "real-rain-reference.wav": {
+      "seconds": 8.0,
+      "peak": 0.2707441890833924,
+      "sha256": "01c3dc42e1bc0cb3d07aa83b643c76d7efddbcde301d63fb1a5ae665e8ff5078"
+    },
+    "reference-then-hard-prototype.wav": {
+      "seconds": 12.5,
+      "peak": 0.2707441890833924,
+      "sha256": "273df6455d60985d3746205471909db1fdfd35e0e0c038ebef7d79b1a3e9e06c"
+    },
+    "dense-then-thinned-control.wav": {
+      "seconds": 12.5,
+      "peak": 0.7780610560909357,
+      "sha256": "8491f7b94f73faf9249718ab23f6e69c7de8a726a4763ec4400c2449fe5543fd"
+    }
+  },
+  "hard": {
+    "bankBytes": 903424,
+    "explicitArrayWorkingBytes": 4989256,
+    "memoryScope": "Arrays in source convolver only; excludes shared bank, output/events, FFT scratch and all propagation/DSP.",
+    "regionWaveformCorrelation": -0.003507364907399584,
+    "thinnedMetrics": {
+      "rms": 0.005708642105931913,
+      "rmsDbFS": -44.869343670575866,
+      "peak": 0.12932968184531135,
+      "crestDb": 27.103307854538087,
+      "excessKurtosis": 36.496825689647885,
+      "levelP90MinusP10Db": 43.824352025925045,
+      "bandPowerFraction": [
+        0.0461078611527697,
+        0.23989699181150015,
+        0.620224926674489,
+        0.09377022036124123
+      ],
+      "envelopeCorrelation": [
+        [
+          0.9999999999999998,
+          0.9257627286228554,
+          0.9168579916518114,
+          0.7762069527550547
+        ],
+        [
+          0.9257627286228554,
+          1.0,
+          0.9741996072397741,
+          0.8805315842284133
+        ],
+        [
+          0.9168579916518114,
+          0.974199607239774,
+          1.0,
+          0.9280197111711099
+        ],
+        [
+          0.7762069527550547,
+          0.8805315842284133,
+          0.9280197111711098,
+          1.0
+        ]
+      ],
+      "envelopeModulationFractionBelow10Hz": 0.34281448731066266
+    }
+  },
+  "water": {
+    "bankBytes": 903424,
+    "explicitArrayWorkingBytes": 4989256,
+    "memoryScope": "Arrays in source convolver only; excludes shared bank, output/events, FFT scratch and all propagation/DSP.",
+    "regionWaveformCorrelation": -0.00795414860369118,
+    "thinnedMetrics": {
+      "rms": 0.006323772606037323,
+      "rmsDbFS": -43.98047510154783,
+      "peak": 0.12933287081236855,
+      "crestDb": 26.214653456565237,
+      "excessKurtosis": 29.312603772870226,
+      "levelP90MinusP10Db": 43.481386971523655,
+      "bandPowerFraction": [
+        0.037553720145005874,
+        0.19548611077387912,
+        0.5858375268911181,
+        0.1811226421899969
+      ],
+      "envelopeCorrelation": [
+        [
+          1.0,
+          0.9257066936204436,
+          0.8974349999054777,
+          0.5609598151666771
+        ],
+        [
+          0.9257066936204436,
+          1.0,
+          0.958964592757159,
+          0.6298502299936738
+        ],
+        [
+          0.8974349999054777,
+          0.9589645927571588,
+          1.0,
+          0.6849876783108696
+        ],
+        [
+          0.560959815166677,
+          0.6298502299936738,
+          0.6849876783108695,
+          1.0
+        ]
+      ],
+      "envelopeModulationFractionBelow10Hz": 0.33057757504674345
+    }
+  },
+  "reference": {
+    "file": "Assets/External/Church/Audio/RainCourtyard.wav",
+    "sha256": "eaa1723ad9275352485651e03bf9c764d432aee56dc37406a5ae6b24026c0485",
+    "url": "https://bigsoundbank.com/rain-and-storm-s0124.html",
+    "author": "Joseph SARDIN",
+    "license": "CC0",
+    "conditions": "Outdoor heavy rain; surface and microphone position unspecified. Existing mono excerpt; original acoustics retained.",
+    "metrics": {
+      "rms": 0.05743603375746823,
+      "rmsDbFS": -24.81631115829501,
+      "peak": 0.399993896484375,
+      "crestDb": 16.85737844768527,
+      "excessKurtosis": 0.35253868553081746,
+      "levelP90MinusP10Db": 4.5984452228145365,
+      "bandPowerFraction": [
+        0.12192316981812182,
+        0.26040236041561204,
+        0.4463263442704447,
+        0.17134812549582146
+      ],
+      "envelopeCorrelation": [
+        [
+          0.9999999999999999,
+          0.4315495132953393,
+          0.4385528258021845,
+          0.31162114370632016
+        ],
+        [
+          0.4315495132953393,
+          1.0,
+          0.7168908838179022,
+          0.5974944270810378
+        ],
+        [
+          0.4385528258021845,
+          0.7168908838179022,
+          1.0,
+          0.7739729140910767
+        ],
+        [
+          0.31162114370632016,
+          0.5974944270810378,
+          0.7739729140910768,
+          1.0
+        ]
+      ],
+      "envelopeModulationFractionBelow10Hz": 0.6643285985499552
+    }
+  },
+  "audition": {
+    "syntheticGain": 6.016105854351045,
+    "referenceGain": 0.6768708009372549,
+    "fadeMilliseconds": 20,
+    "comparisonGapSeconds": 0.5,
+    "levelMatching": "One synthetic gain for both surfaces and thinning control. Reference separately RMS-matched to hard candidate over 1\u20137 s; no limiter."
+  }
+}

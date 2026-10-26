@@ -2,6 +2,8 @@
 
 Research review, 26 October 2026. Recommendation and experiments, not an implemented replacement or a claim of perceptual validation.
 
+**Follow-up:** the [first dry-source experiment](benchmarks/rain-source-2026-10-26/README.md) implements two varied impact banks and compares explicit dense-drop mixing with bounded impulse-bank convolution. All 18 numerical cases agree to float64 precision; listening acceptance and spatial integration remain pending. This avoids a lossy statistical replacement at the first stage while still decoupling mixing cost from per-drop filter state.
+
 The best candidate for this project is a hybrid: model rainfall as many varied surface impacts, synthesize the dense component in bounded world-space regions, and preserve distinguishable impacts where spatial detail matters. Use the existing geometry/transport for shelter and propagation. Evaluate this against a small explicit-drop reference before choosing the runtime representation. A bank of convincing sounds solves a different problem from a stable spatial estimator; both need attention.
 
 ## What the literature establishes
