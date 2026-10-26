@@ -182,6 +182,29 @@ public partial class TakeChecks
     }
 
     [Test, Category("Core")]
+    public void RecorderKeepsSubToleranceLookInput()
+    {
+        var player=new GameObject("Player").transform;player.gameObject.AddComponent<CharacterController>();
+        player.gameObject.AddComponent<PlayerController>();
+        var head=new GameObject("Head").AddComponent<MouseLook>();head.transform.SetParent(player);head.playerBody=player;
+        var session=new GameObject("Session").AddComponent<SceneSession>();session.player=player;
+        session.manager=session.gameObject.AddComponent<RayTraceManager>();session.InitializeSimulation();
+        string path=Path.Combine(directory,"tiny-look");Directory.CreateDirectory(path);
+        var tiny=new Vector2(5e-6f,-1e-7f);
+        Assert.That(tiny==Vector2.zero,Is.True,"Unity's vector operator deliberately hides this real input.");
+        using(var recorder=new SceneRecording(session,path))
+        {
+            recorder.BeforeTick(0,default,Time.fixedDeltaTime);
+            recorder.BeforeTick(1,new SceneRecording.Input{look=tiny},Time.fixedDeltaTime);
+            recorder.BeforeTick(2,default,Time.fixedDeltaTime);
+        }
+        using var input=new BinaryReader(File.OpenRead(Path.Combine(path,"input.bin")));
+        Assert.That(input.BaseStream.Length,Is.EqualTo(50),"The zero-input repeat is compacted; every nonzero turn survives.");
+        input.BaseStream.Position=25;Assert.That(input.ReadInt64(),Is.EqualTo(1));input.ReadSingle();input.ReadSingle();
+        Assert.That(input.ReadSingle(),Is.EqualTo(tiny.x));Assert.That(input.ReadSingle(),Is.EqualTo(tiny.y));
+    }
+
+    [Test, Category("Core")]
     public void BatchJobsRequireExplicitComparison()
     {
         var job=TakeBatch.ParseJob("{\"take\":\"input\",\"output\":\"output\"}");

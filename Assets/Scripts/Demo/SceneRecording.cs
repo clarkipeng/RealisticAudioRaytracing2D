@@ -118,7 +118,7 @@ public sealed class SceneRecording : IDisposable
                 !actors[i].isActiveAndEnabled || !actors[i].SettingsUnchanged)
                 throw new InvalidOperationException("Scene actor order, activity or settings changed during input recording.");
         if(tick!=manifest.ticks) throw new InvalidOperationException("Scene input ticks must be contiguous from zero.");
-        if(manifest.inputCount==0 || !value.movement.Equals(heldMovement) || value.look!=Vector2.zero || value.jump || value.interact)
+        if(manifest.inputCount==0 || !value.movement.Equals(heldMovement) || !value.look.Equals(Vector2.zero) || value.jump || value.interact)
         {
             input.Write(manifest.ticks); input.Write(value.movement.x); input.Write(value.movement.y);
             input.Write(value.look.x); input.Write(value.look.y); input.Write((byte)((value.jump?1:0)|(value.interact?2:0)));
