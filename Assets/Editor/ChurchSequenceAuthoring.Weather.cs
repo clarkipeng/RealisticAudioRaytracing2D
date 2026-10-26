@@ -28,6 +28,24 @@ public static partial class ChurchSequenceAuthoring
         }
         Debug.Log("CHURCH_SURFACE_RAIN_AUTHORED first acoustic surface from above");
     }
+    static void ConfigureWindCoverage(AudioSourcePlane canopy)
+    {
+        // About 43 overlapping grains at 44.1 kHz. Capacity includes the
+        // propagation tail and both response banks, not just audible grains.
+        canopy.samples=80;canopy.burstPeriodSamples=2048;canopy.burstDurationSamples=88200;
+    }
+    public static void UpdateWindCoverage()
+    {
+        if(!Application.isBatchMode||Application.isPlaying)throw new InvalidOperationException("Author offscreen in batch mode.");
+        foreach(string path in new[]{"Assets/Scenes/Church.unity","Assets/Scenes/ChurchWeatherComparison.unity"})
+        {
+            EditorSceneManager.OpenScene(path);
+            var actor=Object.FindAnyObjectByType<SceneSequenceActor>();
+            ConfigureWindCoverage(actor.Target("wind").GetComponent<AudioSourcePlane>());
+            EditorSceneManager.MarkSceneDirty(actor.gameObject.scene);EditorSceneManager.SaveScene(actor.gameObject.scene);
+        }
+        Debug.Log("CHURCH_WIND_COVERAGE_AUTHORED overlapping canopy grains");
+    }
     // Run after tools/rain_impact.py. Saves both the normal sequence and a
     // repeatable constant-weather route; no foreground editor or Play mode.
     public static void UpdateWeather()
@@ -47,7 +65,7 @@ public static partial class ChurchSequenceAuthoring
         var wind=actor.Target("wind").GetComponent<RaytracedAudioSource>();wind.loop=true;
         var canopy=wind.GetComponent<AudioSourcePlane>();if(canopy==null)canopy=wind.gameObject.AddComponent<AudioSourcePlane>();
         wind.transform.position=new Vector3(0,6,-15);canopy.size=new Vector2(80,70);
-        canopy.seed=317;canopy.samples=24;canopy.burstPeriodSamples=4096;canopy.burstDurationSamples=22050;canopy.oneShotImpacts=false;
+        canopy.seed=317;ConfigureWindCoverage(canopy);canopy.oneShotImpacts=false;
         var leaves=Object.FindAnyObjectByType<EnvironmentPresentation>().foliage;
         var mask=new Texture2D(160,140,TextureFormat.RFloat,false,true){name="Canopy rustle density",wrapMode=TextureWrapMode.Clamp};
         for(int y=0;y<mask.height;y++)for(int x=0;x<mask.width;x++)
