@@ -102,7 +102,7 @@ class TakeActivity:
             for byte in self.scene['objects'][obj]['id'].encode('utf-16le'):
                 key = ((key ^ byte) * 16777619) & 0xffffffff
             key = hash32(key ^ p['seed'])
-            mask = p['mask']
+            mask = [float(np.float32(x)) for x in p['mask']]
             total, remaining = sum(mask), sum(x > 0 for x in mask)
             cumulative, previous, cdf = 0.0, 0, []
             for density in mask:
@@ -115,7 +115,7 @@ class TakeActivity:
             changes = [(e[0], e[3]) for e in self.events if e[2] == source and e[3] != 2]
             changes.append((int(self.meta['durationSamples']) + 1, 1))
             for end, action in changes:
-                if start is not None and total > 0:
+                if start is not None and total > 0 and self.power[source][-1] > 0:
                     period = p['burstPeriodSamples']
                     for index in range((end - start + period - 1) // period):
                         rnd = lambda prop: emission_random(key, start, index, prop)
@@ -160,7 +160,7 @@ class TakeActivity:
         if source in self.births:
             # Area glow represents the emitter's scheduled level. Dots below
             # show actual seeded births, never listener amplitude or ray hits.
-            return gain > 0, min(1, gain / max(1e-12, self.max_gain[source]))
+            return gain > 0 and bool(self.births[source][0]), min(1, gain / max(1e-12, self.max_gain[source]))
         power = self.power[source]
         length = len(power) - 1
         end = offset + sample - start + 1

@@ -69,6 +69,8 @@ python tools/capture_sequence.py --project <isolated-runner> --output <audio> \
 
 The reusable capture accepts a scene, route, tail and resolution. `ChurchPresentationCapture.PrepareWeatherProbes` produces separately authenticated rain-only/wind-only takes plus a four-second preflight from the same recorded poses. These change neither geometry nor emission seeds. `ChurchSequenceAuthoring.UpdateWeather` regenerates the saved sources, mask and comparison scene in an isolated batch project.
 
+The [completed shelter comparison](benchmarks/weather-shelter-2026-10-25/README.md) passes 44 selected regression cases and byte-identical compact replay. With one playback gain, its closed-interior window averages 17.90 dB below the exterior; the exterior holds before/after the walk differ by 0.17 dB. The raw mix peaks at 0.69614 with no full-scale exceedances. Numeric working storage is 1.69 GiB for this preview profile; it remains an expensive offline render. The audit also fixed a recorder bug that omitted sub-tolerance nonzero turn inputs.
+
 ## Seeded rain bursts — 24 October 2026
 
 The renderer now supports seeded finite bursts on the existing masked plane. Each burst gets a new weighted-mask position and clip offset, then keeps its world position through its delayed tail. CPU/GPU spectral synthesis and live/offline scheduling share the same event clocks. Transport and DSP now use per-source/listener ranges, so point sources no longer reserve the largest plane's direct-site capacity.

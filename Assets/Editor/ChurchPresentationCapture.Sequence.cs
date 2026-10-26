@@ -25,11 +25,11 @@ public static partial class ChurchPresentationCapture
         bool takeOnly=Argument("-sequenceTakeOnly")=="1";
         bool firstPerson=Argument("-sequenceFirstPerson")=="1";
         int firstFrame=int.TryParse(Argument("-sequenceFirstFrame"),out var first)?first:0;
-        int endFrame=int.TryParse(Argument("-sequenceEndFrame"),out var end)?end:2130;
+        int endFrame=int.TryParse(Argument("-sequenceEndFrame"),out var end)?end:int.MaxValue;
         double workFraction=double.TryParse(Argument("-sequenceWorkFraction"),System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture,out var fraction)?fraction:.2;
-        if(firstFrame<0||endFrame<=firstFrame||endFrame>2130||!double.IsFinite(workFraction)||workFraction<=0||workFraction>1)
-            throw new ArgumentException("Invalid frame range or work fraction; use [0,2130) and (0,1].");
+        if(firstFrame<0||endFrame<=firstFrame||!double.IsFinite(workFraction)||workFraction<=0||workFraction>1)
+            throw new ArgumentException("Invalid frame range or work fraction; use a nonnegative half-open interval and (0,1].");
         bool weatherRoute=Argument("-sequenceRoute")=="weather";
         double tail=double.TryParse(Argument("-sequenceTail"),out var tailValue)?tailValue:11;
         if(!double.IsFinite(tail)||tail<0)throw new ArgumentException("Invalid sequence tail.");
@@ -67,6 +67,7 @@ public static partial class ChurchPresentationCapture
             }
             double duration=actor.Definition.duration+tail;int frames=(int)(duration*30);float min=1,max=0;
             endFrame=Math.Min(endFrame,frames);
+            if(firstFrame>=frames)throw new ArgumentException("First frame is past the sequence end.");
             float[] checkpoints={0,3,6,8.03f,12,15.5f,19.5f,25,30,36,41,45.03f,45.17f,49,55,60,68};
             int checkpoint=0;string frameDirectory=Path.Combine(directory,"frames");Directory.CreateDirectory(frameDirectory);
             double workSeconds=0,idleSeconds=0;int renderedFrames=0;
@@ -191,7 +192,7 @@ public static partial class ChurchPresentationCapture
         var delta=target-session.player.position;delta.y=0;
         var velocity=delta.normalized*Mathf.Min(1.6f,delta.magnitude/Time.fixedDeltaTime);
         var local=session.player.InverseTransformDirection(velocity)/session.Walker.speed;
-        float yaw=time<6||time>=31?60:delta.sqrMagnitude>.04f?Mathf.Atan2(delta.x,delta.z)*Mathf.Rad2Deg:session.player.eulerAngles.y;
+        float yaw=time<6||time>=31?120:delta.sqrMagnitude>.04f?Mathf.Atan2(delta.x,delta.z)*Mathf.Rad2Deg:session.player.eulerAngles.y;
         float turn=Mathf.Clamp(Mathf.DeltaAngle(session.player.eulerAngles.y,yaw),-2,2);
         return new SceneRecording.Input {movement=time>=36?Vector2.zero:new Vector2(local.x,local.z),
             look=new Vector2(time>=36?0:turn,0),interact=Math.Abs(time-9)<.005||Math.Abs(time-13)<.005||Math.Abs(time-25)<.005};

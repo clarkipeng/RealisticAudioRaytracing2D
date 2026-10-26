@@ -1,0 +1,42 @@
+{
+  "movie": {
+    "file": "weather-shelter.mp4",
+    "sha256": "e6bfbb7b6a3f700cffb4a8aef1abdf31bae6c4360786d8cff2cf96770ae7145b",
+    "bytes": 6011174,
+    "seconds": 38,
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "audioSampleRate": 44100,
+    "audioChannels": 1,
+    "masterGain": 1.0,
+    "dspTrimSamples": 144,
+    "decodedAacPeak": 0.6898692846298218
+  },
+  "take": ".context/weather-fix/capture-v3/take",
+  "render": ".context/weather-fix/audio",
+  "picture": {
+    "capture": ".context/weather-fix/capture-v3",
+    "frames": 1140,
+    "holdAfter": 36,
+    "sceneHash": "904cb86410d3d0f617f277a4f8fea85d5d99c54b0f1d7034e697fc0b438cef17",
+    "stateHash": "c6c2b82b409005fcc5abfea970a5574670c011efa63f5dc50fe9fd692c403419",
+    "eventHash": "dcc3c0fddf4cbaba4a10d9cc81a7f559c03d421325aab336db68a16a110ff764",
+    "cameraMatchesHead": true
+  },
+  "windOnly": {
+    "file": "wind-shelter.wav",
+    "sha256": "5a2a4377dc8fab5f20f10346079485d8365e7399aaf5ba4b05592c5a13d75673",
+    "bytes": 6703292,
+    "seconds": 38,
+    "audioSampleRate": 44100,
+    "audioChannels": 1,
+    "masterGain": 1.0,
+    "dspTrimSamples": 144,
+    "peak": 0.08126784861087799,
+    "overFullScale": 0,
+    "take": ".context/weather-fix/capture-v3/wind-take",
+    "render": ".context/weather-fix/wind-audio",
+    "note": "Separately traced source-only probe; source-index compaction changes transport RNG, so this is not an exact extracted mix stem."
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "sampleRate": 44100,
+  "duration": 38.01673469387755,
+  "peak": 0.08126784861087799,
+  "overFullScale": 0,
+  "rms": 0.0037615271967224033,
+  "geometryHash": "ae3764e138c4da135b3f802dabc7cf5a3b754d854aa5b4958e8b5514ae2bf38f",
+  "stateHash": "c6c2b82b409005fcc5abfea970a5574670c011efa63f5dc50fe9fd692c403419",
+  "eventHash": "a71222ea89ef6e1192841af891dc3a2822ad3739c643dc6d326b70c7eca6869a",
+  "sceneHash": "8147097f58f72f42b3ada06a40c65bc105eb5805ad5c655ee41a621d8481bb3b",
+  "workingNumericBytes": 204589426,
+  "renderWallSeconds": 189.3660682,
+  "sha256": "e25e558f89154a4aff17d1ae48db993bcba422e22d132a6f4fbc89769912fc86",
+  "windows": {
+    "outside": {
+      "seconds": [
+        1,
+        5
+      ],
+      "rms": 0.0073981707823103475,
+      "dBFS": -42.617512949574696,
+      "peak": 0.08126784861087799,
+      "quarterSecondRmsMin": 1.4412568327549327e-06,
+      "quarterSecondRmsMax": 0.014887460071026006,
+      "lowBandPower80To1000": 3.6701556319190245e-05,
+      "highBandPower1000To10000": 1.5612817751148977e-05
+    },
+    "closedInterior": {
+      "seconds": [
+        17,
+        21
+      ],
+      "rms": 1.7479125484439804e-06,
+      "dBFS": -115.14960599556892,
+      "peak": 9.591233720129821e-06,
+      "quarterSecondRmsMin": 8.798613484692138e-07,
+      "quarterSecondRmsMax": 2.561811186828576e-06,
+      "lowBandPower80To1000": 2.3114334290940084e-12,
+      "highBandPower1000To10000": 7.547247232960108e-13
+    },
+    "outsideReturn": {
+      "seconds": [
+        32,
+        35.5
+      ],
+      "rms": 0.004300828471995969,
+      "dBFS": -47.32895755743303,
+      "peak": 0.050416044890880585,
+      "quarterSecondRmsMin": 1.3267437144255937e-07,
+      "quarterSecondRmsMax": 0.008720430042209962,
+      "lowBandPower80To1000": 1.0543415382312397e-05,
+      "highBandPower1000To10000": 5.994607315169169e-06
+    }
+  },
+  "insideVsOutsideDb": -72.53209304599423
+}

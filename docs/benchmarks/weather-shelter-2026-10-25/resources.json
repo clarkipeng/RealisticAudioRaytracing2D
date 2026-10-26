@@ -1,0 +1,35 @@
+{
+  "capture-v2": {
+    "wallSeconds": 652.7604967910011,
+    "peakResidentMiB": 1121.90625,
+    "workFraction": 0.2,
+    "renderedFrames": 1081,
+    "renderWorkSeconds": 106.6798082,
+    "renderIdleSeconds": 513.3986792999998,
+    "minimumNiceAfterLaunch": 19
+  },
+  "capture-v3": {
+    "wallSeconds": 36.19591975000003,
+    "peakResidentMiB": 1057.6875,
+    "workFraction": 0.2,
+    "renderedFrames": 1,
+    "renderWorkSeconds": 0.1738461,
+    "renderIdleSeconds": 0.7936987,
+    "minimumNiceAfterLaunch": 19
+  },
+  "mixedAudio": {
+    "wallSeconds": 1572.317827625,
+    "peakResidentMiB": 1119.25,
+    "workingNumericBytes": 1815791620,
+    "renderWallSeconds": 1546.676898,
+    "minimumNiceAfterLaunch": 19
+  },
+  "note": "Priority measurement excludes the initial taskpolicy/nice wrapper sample before Unity starts.",
+  "windAudio": {
+    "wallSeconds": 215.17408291599895,
+    "peakResidentMiB": 1432.765625,
+    "workingNumericBytes": 204589426,
+    "renderWallSeconds": 189.3660682,
+    "minimumNiceAfterLaunch": 19
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "source": "../capture-v2",
+  "framesReused": 1080,
+  "sourceStateHash": "c6c2b82b409005fcc5abfea970a5574670c011efa63f5dc50fe9fd692c403419",
+  "targetStateHash": "c6c2b82b409005fcc5abfea970a5574670c011efa63f5dc50fe9fd692c403419",
+  "identicalEvents": true,
+  "identicalViewBytes": true,
+  "identicalFirstImage": true
+}

@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--output', required=True, type=Path, help='New capture directory')
     parser.add_argument('--unity', default='/Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity')
     parser.add_argument('--first-frame', type=int, default=0)
-    parser.add_argument('--end-frame', type=int, default=2130)
+    parser.add_argument('--end-frame', type=int, help='Exclusive frame limit; defaults to the sequence end')
     parser.add_argument('--work-fraction', type=float, default=.2)
     parser.add_argument('--max-resident-mib', type=int, default=3072)
     parser.add_argument('--first-person', action='store_true')
@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--take-only', action='store_true')
     parser.add_argument('--render-job', type=Path, help='Render a saved audio job with the same process guard')
     args = parser.parse_args()
-    if args.max_resident_mib <= 0 or not 0 < args.work_fraction <= 1 or not 0 <= args.first_frame < args.end_frame <= 2130:
+    if args.max_resident_mib <= 0 or not 0 < args.work_fraction <= 1 or args.first_frame < 0 or (args.end_frame is not None and args.end_frame <= args.first_frame):
         parser.error('Invalid resource budget or frame interval.')
     output = args.output.resolve()
     if output.exists():
@@ -38,7 +38,7 @@ def main():
     command = [nice, '-n', '19', args.unity, '-batchmode', '-quit', '-force-metal', '-disable-audio',
                '-job-worker-count', '1', '-projectPath', str(args.project.resolve()), '-executeMethod',
                'ChurchPresentationCapture.CaptureSequence', '-sequenceOutput', str(output),
-               '-sequenceFirstFrame', str(args.first_frame), '-sequenceEndFrame', str(args.end_frame),
+               '-sequenceFirstFrame', str(args.first_frame), '-sequenceEndFrame', str(args.end_frame if args.end_frame is not None else 2147483647),
                '-sequenceWorkFraction', str(args.work_fraction), '-logFile', str(output.with_suffix('.log'))]
     if args.render_job:
         job = json.loads(args.render_job.read_text())
