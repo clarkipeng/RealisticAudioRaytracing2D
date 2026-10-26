@@ -345,6 +345,11 @@ float AudioRead(uint source,int at,AudioPath path)
             // The full epoch comparison rejects an old burst after a restart.
             if(clock.w>path.birthHigh || (clock.w==path.birthHigh && clock.z>path.birthLow))return 0;
             int age=AudioDifference(AudioBlockSample,uint2(path.birthLow,path.birthHigh))+at;
+            if((clip.w&0x80000000u)!=0)
+            {
+                if(age<0 || age>=(int)clip.y)return 0;
+                return AudioClips[clip.x+(uint)age]*asfloat(clock.y);
+            }
             if(age<=0 || age>=(int)clip.w-2)return 0;
             float window=.5-.5*cos(2*AUDIO_PI*age/(clip.w-2));
             uint index=((clock.x%clip.y)+(phase&0x7fffffffu))%clip.y;

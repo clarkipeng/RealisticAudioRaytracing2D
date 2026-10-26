@@ -19,6 +19,12 @@ def main():
     parser.add_argument('--work-fraction', type=float, default=.2)
     parser.add_argument('--max-resident-mib', type=int, default=3072)
     parser.add_argument('--first-person', action='store_true')
+    parser.add_argument('--scene', help='Unity scene asset path')
+    parser.add_argument('--route', choices=['walkthrough', 'weather'], default='walkthrough')
+    parser.add_argument('--tail-seconds', type=float, default=11)
+    parser.add_argument('--height', type=int, default=1080)
+    parser.add_argument('--take-only', action='store_true')
+    parser.add_argument('--render-job', type=Path, help='Render a saved audio job with the same process guard')
     args = parser.parse_args()
     if args.max_resident_mib <= 0 or not 0 < args.work_fraction <= 1 or not 0 <= args.first_frame < args.end_frame <= 2130:
         parser.error('Invalid resource budget or frame interval.')
@@ -34,6 +40,23 @@ def main():
                'ChurchPresentationCapture.CaptureSequence', '-sequenceOutput', str(output),
                '-sequenceFirstFrame', str(args.first_frame), '-sequenceEndFrame', str(args.end_frame),
                '-sequenceWorkFraction', str(args.work_fraction), '-logFile', str(output.with_suffix('.log'))]
+    if args.render_job:
+        job = json.loads(args.render_job.read_text())
+        job['workFraction'] = args.work_fraction
+        job['take'] = str((args.render_job.parent / job['take']).resolve())
+        job['output'] = str(output)
+        guarded = output.with_suffix('.job.json')
+        guarded.write_text(json.dumps(job, indent=2)+'\n')
+        method = command.index('-executeMethod')
+        command = command[:method] + ['-executeMethod', 'TakeBatch.Render', '-takeJob', str(guarded),
+                                     '-logFile', str(output.with_suffix('.log'))]
+    else:
+        command += ['-sequenceRoute', args.route, '-sequenceTail', str(args.tail_seconds),
+                    '-sequenceHeight', str(args.height)]
+        if args.scene:
+            command += ['-sequenceScene', args.scene]
+        if args.take_only:
+            command += ['-sequenceTakeOnly', '1']
     if args.first_person:
         command += ['-sequenceFirstPerson', '1']
     if shutil.which('taskpolicy'):

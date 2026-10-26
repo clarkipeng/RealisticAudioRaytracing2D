@@ -8,7 +8,7 @@ using UnityEngine;
 using Object=UnityEngine.Object;
 
 // Original reusable props are saved as mesh assets. No geometry generation in gameplay.
-public static class ChurchSequenceAuthoring
+public static partial class ChurchSequenceAuthoring
 {
     const string Folder="Assets/External/Church/Sequence";
     static T Save<T>(T asset,string name) where T:Object

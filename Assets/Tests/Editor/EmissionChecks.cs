@@ -24,6 +24,44 @@ public partial class TakeChecks
     }
 
     [Test,Category("Core")]
+    public void ImpactReadsTheWholeClipOnceWithoutExcerptOrAddedWindow()
+    {
+        var pcm=new[]{.4f,-.8f,.2f,.1f,0f};var signal=BurstSignal(pcm,100);
+        signal.BurstDuration=pcm.Length;signal.OneShot=true;
+        for(long sample=98;sample<112;sample++)
+        {
+            long age=sample-102;float expected=age>=0&&age<pcm.Length?pcm[age]*.2f:0;
+            Assert.That(signal.Read(sample,Emission.Burst,102),Is.EqualTo(expected));
+        }
+        signal.Append(new AcousticTake.VoiceEvent{sample=104,action=AcousticTake.VoiceAction.Stop});
+        Assert.That(signal.Read(104L,Emission.Burst,102),Is.Zero);
+        signal.Append(new AcousticTake.VoiceEvent{sample=105,gain=1,loop=true});
+        Assert.That(signal.Read(105L,Emission.Burst,102),Is.Zero);
+    }
+
+    [Test,Category("Core")]
+    public void ImpactEnergyAndCoverageDoNotInflateOtherSources()
+    {
+        var scene=Scene();scene.sources=new[]{scene.sources[0],new AcousticTake.SourceDefinition{objectIndex=0,clipIndex=0}};
+        var p=BurstPlane(16);p.generatorVersion=2;p.burstDurationSamples=5;scene.planes=new[]{p};
+        var settings=BurstSettings();settings.raysPerBin=1;
+        var layout=new RayTransport.Layout(scene,settings);
+        Assert.That(layout.RayCounts[0],Is.EqualTo(16*settings.FrequencyBins));
+        Assert.That(layout.RayCounts[1],Is.EqualTo(settings.FrequencyBins));
+        var pcm=new[]{0f,.4f,-.2f,.1f,0f};var signals=new[]{BurstSignal(pcm),BurstSignal(pcm)};
+        var batch=new Emission.Batch(scene,settings,8192,1);
+        batch.Prepare(signals,64,1,(_,pose)=>Array.Copy(States(),pose,pose.Length));
+        Assert.That(batch.Ranges[0].count,Is.GreaterThan(0));
+        double energy=pcm.Sum(x=>(double)x*x);var mass=new Emission.PlaneSampler(p).Mass;
+        for(int i=0;i<batch.Ranges[0].count;i++)
+        {
+            Assert.That(batch.Clocks[i].phase,Is.EqualTo(Emission.Burst));
+            Assert.That(batch.Points[i].w*batch.Points[i].w*energy/p.burstPeriodSamples,Is.EqualTo(mass).Within(1e-6));
+        }
+        Assert.Throws<InvalidDataException>(()=>AudioSourcePlane.ValidateEvent(scene,new AcousticTake.VoiceEvent{loop=true,clipOffset=1}));
+    }
+
+    [Test,Category("Core")]
     public void EmissionVersionOneIntegerGoldenVectors()
     {
         uint key=Emission.SourceKey("rain/source-1",19);Assert.That(key,Is.EqualTo(864995555u));
@@ -89,7 +127,8 @@ public partial class TakeChecks
         }
         Assert.That(Emission.Random(1,epoch,3,0),Is.Not.EqualTo(Emission.Random(1,epoch,3+(1L<<32),0)));
         Assert.That(Emission.SourceKey("source-a",1),Is.Not.EqualTo(Emission.SourceKey("source-b",1)));
-        settings.raysPerBin=1;Assert.Throws<InvalidOperationException>(()=>single.Prepare(signals,epoch,1,Pose));
+        settings.raysPerBin=1;single.Prepare(signals,epoch,1,Pose);
+        Assert.That(settings.SourceRaysPerBin(scene,0),Is.EqualTo(p.samples));
     }
 
     [Test,Category("Core")]
@@ -109,18 +148,21 @@ public partial class TakeChecks
         Assert.Throws<InvalidDataException>(()=>AcousticTake.ReadManifest(path));
     }
 
-    [TestCase(TakeRender.DelayFilter.Linear,64,1),TestCase(TakeRender.DelayFilter.WindowedSinc,64,1)]
-    [TestCase(TakeRender.DelayFilter.Linear,128,1),TestCase(TakeRender.DelayFilter.WindowedSinc,128,1)]
-    [TestCase(TakeRender.DelayFilter.Linear,64,0),TestCase(TakeRender.DelayFilter.WindowedSinc,64,0)]
-    [TestCase(TakeRender.DelayFilter.Linear,128,0),TestCase(TakeRender.DelayFilter.WindowedSinc,128,0),Category("GPU")]
-    public void EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(TakeRender.DelayFilter filter,int step,int bounces)
+    [TestCase(TakeRender.DelayFilter.Linear,64,1,false),TestCase(TakeRender.DelayFilter.WindowedSinc,64,1,false)]
+    [TestCase(TakeRender.DelayFilter.Linear,128,1,false),TestCase(TakeRender.DelayFilter.WindowedSinc,128,1,false)]
+    [TestCase(TakeRender.DelayFilter.Linear,64,0,false),TestCase(TakeRender.DelayFilter.WindowedSinc,64,0,false)]
+    [TestCase(TakeRender.DelayFilter.Linear,128,0,false),TestCase(TakeRender.DelayFilter.WindowedSinc,128,0,false)]
+    [TestCase(TakeRender.DelayFilter.Linear,64,1,true),TestCase(TakeRender.DelayFilter.WindowedSinc,128,1,true)]
+    [TestCase(TakeRender.DelayFilter.Linear,64,0,true),TestCase(TakeRender.DelayFilter.WindowedSinc,128,0,true),Category("GPU")]
+    public void EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(TakeRender.DelayFilter filter,int step,int bounces,bool oneShot)
     {
         var shader=RequireGpu();const int rate=8192;var scene=Scene();scene.planes=new[]{BurstPlane()};
         var pcm=new float[257];var random=new System.Random(37);for(int i=0;i<pcm.Length;i++)pcm[i]=(float)(random.NextDouble()*2-1);
+        if(oneShot){scene.planes[0].generatorVersion=2;scene.planes[0].burstDurationSamples=pcm.Length;}
         var events=new[]{new AcousticTake.VoiceEvent{gain=.2f,loop=true},
             new AcousticTake.VoiceEvent{sample=311,action=AcousticTake.VoiceAction.Gain,gain=.1f},
             new AcousticTake.VoiceEvent{sample=499,action=AcousticTake.VoiceAction.Stop},
-            new AcousticTake.VoiceEvent{sample=573,gain=.3f,loop=true,clipOffset=51}};
+            new AcousticTake.VoiceEvent{sample=573,gain=.3f,loop=true,clipOffset=oneShot?0:51}};
         long[] observations={0,19,137,298,443,601,787,1000};
         string takePath=Path.Combine(directory,"burst-take");var states=States();states[1].position=new Vector3(0,1,2);
         using(var writer=new AcousticTake.Writer(takePath,rate,scene,Array.Empty<AcousticTake.Primitive>(),new[]{pcm}))
@@ -129,6 +171,7 @@ public partial class TakeChecks
             foreach(var e in events)writer.Append(e);writer.Complete();
         }
         using var take=AcousticTake.Open(takePath);var settings=BurstSettings();settings.delayFilter=filter;settings.responseStepSamples=step;
+        if(oneShot)settings.raysPerBin=1;
         settings.maxBounces=bounces;if(bounces==0)settings.raysPerBin=1; // All direct events still receive coverage.
         float[] expected=null;
         foreach(var mode in new[]{(TakeRender.AudioBackend.CpuReference,1),(TakeRender.AudioBackend.Gpu,1),(TakeRender.AudioBackend.Gpu,3)})
@@ -203,6 +246,42 @@ public partial class TakeChecks
             var point=batch.Points[n];Vector3 image=point;image.y=-image.y;
             var clock=batch.Clocks[n];long birth=(long)(((ulong)clock.high<<32)|clock.low);
             Assert.That(sums[birth],Is.EqualTo(point.w/Vector3.Distance(image,states[1].position)).Within(1e-5));
+        }
+    }
+
+    [Test,Category("GPU")]
+    public void ImpactAndPointMirrorDispatchUseTheirOwnRayCounts()
+    {
+        var scene=Scene(3);scene.sources=new[]{scene.sources[0],new AcousticTake.SourceDefinition{objectIndex=1,clipIndex=0}};
+        scene.listeners=new[]{2};scene.objects[3].primitiveCount=1;
+        var plane=BurstPlane();plane.generatorVersion=2;plane.burstDurationSamples=4;plane.burstPeriodSamples=32;scene.planes=new[]{plane};
+        scene.materials=new[]{new AcousticTake.MaterialDefinition{frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f}}};
+        var geometry=new[]{new AcousticTake.Primitive{objectIndex=3,a=new Vector3(-10,0,-10),b=new Vector3(10,0,-10),c=new Vector3(0,0,10)}};
+        var state=States(3);state[0].position=new Vector3(-1,1,0);state[1].position=new Vector3(2,1,0);state[2].position=new Vector3(0,2,0);
+        state[1].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Source;
+        state[3].position=Vector3.zero;state[3].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+        var settings=BurstSettings();settings.raysPerBin=1;var layout=new RayTransport.Layout(scene,settings);
+        var clip=new[]{0f,1f,-1f,0f};var signals=new[]{BurstSignal(clip),BurstSignal(clip)};
+        void Pose(long sample,AcousticTake.State[] output)=>Array.Copy(state,output,state.Length);
+        var batch=new Emission.Batch(scene,settings,8192,1);batch.Prepare(signals,0,1,Pose);
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8192);
+        solver.PrepareEmissions(signals,0,1,Pose);solver.Solve(state,new TakeRender.DirectPath[2]);
+        foreach(int bin in new[]{0,settings.FrequencyBins-1})for(int pair=0;pair<2;pair++)
+        {
+            int rays=settings.SourceRaysPerBin(scene,pair),sites=pair==0?plane.samples:1;
+            int first=layout.Ranges[pair].x+sites*settings.FrequencyBins+bin*rays*2;
+            var sums=new Dictionary<long,float>();
+            for(int ray=0;ray<rays;ray++)
+            {
+                var path=solver.RayPaths[first+ray*2];sums.TryGetValue(path.Birth,out float old);sums[path.Birth]=old+path.pressureGain;
+            }
+            if(pair==1)Assert.That(sums[0],Is.EqualTo(1/Vector3.Distance(new Vector3(2,-1,0),state[2].position)).Within(1e-5));
+            else for(int n=0;n<batch.Ranges[0].count;n++)
+            {
+                var point=batch.Points[n];Vector3 image=point;image.y=-image.y;var clock=batch.Clocks[n];
+                long birth=(long)(((ulong)clock.high<<32)|clock.low);
+                Assert.That(sums[birth],Is.EqualTo(point.w/Vector3.Distance(image,state[2].position)).Within(1e-5));
+            }
         }
     }
 

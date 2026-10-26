@@ -177,6 +177,7 @@ public static class TakeBatch
         public TakeRender.Settings comparison;
         public TakeComparison.ReferenceCheck referenceCheck;
         public TakeRender.Settings settings = new TakeRender.Settings();
+        public double workFraction=.2;
     }
 
     public static Job ParseJob(string json)
@@ -186,6 +187,7 @@ public static class TakeBatch
         if(job==null || string.IsNullOrEmpty(job.take) || string.IsNullOrEmpty(job.output) || job.settings==null)
             throw new ArgumentException("Job requires take/output paths and render settings.");
         if(job.referenceCheck!=null && job.comparison==null)throw new ArgumentException("A reference check requires a comparison.");
+        if(!double.IsFinite(job.workFraction)||job.workFraction<=0||job.workFraction>1)throw new ArgumentException("Work fraction must be in (0,1].");
         return job;
     }
 
@@ -210,7 +212,14 @@ public static class TakeBatch
                     shader=AssetDatabase.LoadAssetAtPath<ComputeShader>(job.shader);
                     if (shader==null) throw new ArgumentException("Cannot load job shader asset: "+job.shader);
                 }
-                object report=job.comparison==null ? (object)TakeRender.RenderDirect(take,job.settings,output,null,shader):TakeComparison.Run(take,job.settings,job.comparison,output,shader,null,job.referenceCheck);
+                var clock=System.Diagnostics.Stopwatch.StartNew();
+                Action<float> pace=_=>
+                {
+                    // Progress runs after the batch's GPU readback completes.
+                    int idle=(int)Math.Min(int.MaxValue,Math.Ceiling(clock.Elapsed.TotalMilliseconds*(1/job.workFraction-1)));
+                    System.Threading.Thread.Sleep(idle);clock.Restart();
+                };
+                object report=job.comparison==null ? (object)TakeRender.RenderDirect(take,job.settings,output,pace,shader):TakeComparison.Run(take,job.settings,job.comparison,output,shader,pace,job.referenceCheck);
                 Debug.Log(JsonUtility.ToJson(report,true));
             }
             if (Application.isBatchMode) EditorApplication.Exit(0);

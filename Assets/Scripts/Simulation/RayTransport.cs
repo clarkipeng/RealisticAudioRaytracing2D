@@ -13,20 +13,23 @@ internal sealed class RayTransport : IDisposable
     internal sealed class Layout
     {
         internal readonly Vector2Int[] Ranges,DirectSites;
-        internal readonly int[] Owners;
+        internal readonly int[] Owners,RayCounts;
         internal readonly int Capacity,MaximumSlots;
         internal Layout(AcousticTake.Scene scene,TakeRender.Settings settings)
         {
             Ranges=new Vector2Int[checked(scene.sources.Length*scene.listeners.Length)];
+            RayCounts=new int[Ranges.Length];
             var direct=new List<Vector2Int>();
             for(int s=0;s<scene.sources.Length;s++)
             {
                 int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
-                int slots=checked(settings.SpectralSlotsPerPair+(sites-1)*settings.FrequencyBins);
+                int rays=settings.maxBounces==0?0:checked(settings.FrequencyBins*settings.SourceRaysPerBin(scene,s));
+                int slots=checked(sites*settings.FrequencyBins+rays*(settings.maxBounces+1));
                 MaximumSlots=Math.Max(MaximumSlots,slots);
                 for(int l=0;l<scene.listeners.Length;l++)
                 {
                     int pair=s*scene.listeners.Length+l;Ranges[pair]=new Vector2Int(Capacity,slots);Capacity=checked(Capacity+slots);
+                    RayCounts[pair]=rays;
                     for(int n=0;n<sites;n++)direct.Add(new Vector2Int(pair,n));
                 }
             }
@@ -79,7 +82,7 @@ internal sealed class RayTransport : IDisposable
     public int PathsPerFrame { get; }
     public int SlotsPerPair { get; }
     internal ComputeBuffer Buffer => pathBuffer;
-    public long CpuBytes => Paths.Length * (long)PathStride + enabledPairs.Length * 4L + everActive.Length + emissions.NumericBytes + layout.Owners.Length*4L + (layout.Ranges.Length+layout.DirectSites.Length)*8L;
+    public long CpuBytes => Paths.Length * (long)PathStride + enabledPairs.Length * 4L + everActive.Length + emissions.NumericBytes + (layout.Owners.Length+layout.RayCounts.Length)*4L + (layout.Ranges.Length+layout.DirectSites.Length)*8L;
     public long GpuBytes { get; }
     public RayTransport(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
                         TakeRender.Settings settings, ComputeShader shader, ComputeBuffer primitives,
@@ -470,7 +473,13 @@ internal sealed class RayTransport : IDisposable
         if(rayCount>0)
         {
             commands.BeginSample("Acoustics.GPU.Trace");
-            commands.DispatchCompute(shader,traceKernel,(frames*pairs*rayCount+63)/64,1,1);
+            for(int pair=0;pair<pairs;pair++)
+            {
+                commands.SetComputeIntParam(shader,"RayTracePair",pair);
+                commands.SetComputeIntParam(shader,"RaysPerPair",layout.RayCounts[pair]);
+                commands.SetComputeIntParam(shader,"RaysPerBin",layout.RayCounts[pair]/frequencyBins);
+                commands.DispatchCompute(shader,traceKernel,(checked(frames*layout.RayCounts[pair])+63)/64,1,1);
+            }
             commands.EndSample("Acoustics.GPU.Trace");
         }
         Graphics.ExecuteCommandBuffer(commands);commands.Clear();

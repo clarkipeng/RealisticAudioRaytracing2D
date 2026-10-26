@@ -80,7 +80,7 @@ internal sealed class GpuAudio : IDisposable
                 if(pcm==null || pcm.Length==0)throw new InvalidOperationException("Rain plane requires decoded clip PCM.");
                 if(!clipOffsets.TryGetValue(pcm,out int first)){first=clipData.Count;clipOffsets.Add(pcm,first);clipData.AddRange(pcm);}
                 planeRows[plane.source]=planeCount;
-                clipInfo[plane.source]=new ClipInfo{first=first,length=pcm.Length,row=planeCount++,enabled=checked(1+plane.burstDurationSamples)};
+                clipInfo[plane.source]=new ClipInfo{first=first,length=pcm.Length,row=planeCount++,enabled=checked(1+plane.burstDurationSamples)|(plane.generatorVersion==2?int.MinValue:0)};
             }
             Buffer("AudioClipInfo",clipInfo.Length,16).SetData(clipInfo);
             var clips=Buffer("AudioClips",Math.Max(1,clipData.Count),4);if(clipData.Count>0)clips.SetData(clipData);

@@ -30,7 +30,10 @@ public static partial class ChurchPresentationCapture
             System.Globalization.CultureInfo.InvariantCulture,out var fraction)?fraction:.2;
         if(firstFrame<0||endFrame<=firstFrame||endFrame>2130||!double.IsFinite(workFraction)||workFraction<=0||workFraction>1)
             throw new ArgumentException("Invalid frame range or work fraction; use [0,2130) and (0,1].");
-        EditorSceneManager.OpenScene(ScenePath);
+        bool weatherRoute=Argument("-sequenceRoute")=="weather";
+        double tail=double.TryParse(Argument("-sequenceTail"),out var tailValue)?tailValue:11;
+        if(!double.IsFinite(tail)||tail<0)throw new ArgumentException("Invalid sequence tail.");
+        string scene=Argument("-sequenceScene");EditorSceneManager.OpenScene(string.IsNullOrEmpty(scene)?ScenePath:scene);
         var oldMode=Physics.simulationMode;float oldStep=Time.fixedDeltaTime;SceneRecording recording=null;
         int oldAa=QualitySettings.antiAliasing;var oldShadows=QualitySettings.shadows;
         var oldResolution=QualitySettings.shadowResolution;float oldDistance=QualitySettings.shadowDistance;
@@ -48,7 +51,9 @@ public static partial class ChurchPresentationCapture
             var head=session.player.GetComponentInChildren<Camera>(true).transform;
             camera=CreateThirdPersonCamera();camera.farClipPlane=260;
             if(firstPerson)camera.fieldOfView=70;
-            int width=storyboard?1280:1920,height=storyboard?720:1080;
+            int height=int.TryParse(Argument("-sequenceHeight"),out var pixels)?pixels:storyboard?720:1080;
+            if(height<180||height>2160||height%18!=0)throw new ArgumentException("Use a 16:9 height divisible by 18.");
+            int width=height*16/9;
             target=new RenderTexture(width,height,24,RenderTextureFormat.ARGB32){antiAliasing=4};texture=new Texture2D(width,height,TextureFormat.RGB24,false);camera.targetTexture=target;
             environment.Evaluate(0,camera);
             if(firstPerson)CaptureSequenceMap(directory,session);
@@ -60,7 +65,8 @@ public static partial class ChurchPresentationCapture
                 manager.RecordingFinalizing+=_=>recording.Complete(true);
                 manager.BeginTakeRecording(Path.Combine(directory,"take"));actor.BeginAudio(manager.sampleRate,manager.RecordSourceEventAt);
             }
-            double duration=71;int frames=(int)(duration*30);float min=1,max=0;
+            double duration=actor.Definition.duration+tail;int frames=(int)(duration*30);float min=1,max=0;
+            endFrame=Math.Min(endFrame,frames);
             float[] checkpoints={0,3,6,8.03f,12,15.5f,19.5f,25,30,36,41,45.03f,45.17f,49,55,60,68};
             int checkpoint=0;string frameDirectory=Path.Combine(directory,"frames");Directory.CreateDirectory(frameDirectory);
             double workSeconds=0,idleSeconds=0;int renderedFrames=0;
@@ -75,7 +81,7 @@ public static partial class ChurchPresentationCapture
                     double time=frame/30.0;
                     while((session.Tick+1)*(double)step<=time+1e-7)
                     {
-                        var input=WalkthroughInput(session,session.Tick*(double)step);
+                        var input=weatherRoute?WeatherInput(session,session.Tick*(double)step):WalkthroughInput(session,session.Tick*(double)step);
                         recording?.BeforeTick(session.Tick,input,step);session.Step(input,step);Physics.Simulate(step);avatar.ManualUpdate(step);
                         if(manager.IsRecordingTake)
                         {
@@ -105,12 +111,12 @@ public static partial class ChurchPresentationCapture
             }
             if(manager.IsRecordingTake)manager.CaptureSimulationObservation(true);
             var settings=JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(manager.directSettings));
-            settings.maximumResponsesPerBatch=4;settings.tailSamples=11*manager.sampleRate;
+            settings.maximumResponsesPerBatch=1;settings.tailSamples=(int)Math.Ceiling(tail*manager.sampleRate);
             File.WriteAllText(Path.Combine(directory,"render-job.json"),"{\"take\":\"take\",\"output\":\"audio\",\"shader\":\""+AssetDatabase.GetAssetPath(manager.directShader)+"\",\"settings\":"+JsonUtility.ToJson(settings)+"}");
             File.WriteAllText(Path.Combine(directory,"summary.json"),JsonUtility.ToJson(new SequenceSummary{frames=takeOnly?0:storyboard?checkpoint:frames,
                 width=width,height=height,seconds=duration,finalPosition=session.player.position,maxBounces=settings.maxBounces,sourceCount=manager.takeSources.Count,
                 renderedFrames=renderedFrames,firstFrame=firstFrame,endFrame=endFrame,workFraction=workFraction,renderWorkSeconds=workSeconds,renderIdleSeconds=idleSeconds,
-                listener=firstPerson?"Player head; picture camera uses the same head pose":"Player head; independent of picture camera",minLuma=min,maxLuma=max},true));
+                route=weatherRoute?"weather":"walkthrough",listener=firstPerson?"Player head; picture camera uses the same head pose":"Player head; independent of picture camera",minLuma=min,maxLuma=max},true));
             Debug.Log("CHURCH_SEQUENCE_CAPTURE "+directory);
         }
         finally
@@ -158,7 +164,7 @@ public static partial class ChurchPresentationCapture
     {
         public int frames,width,height,maxBounces,sourceCount,renderedFrames,firstFrame,endFrame;
         public double seconds,workFraction,renderWorkSeconds,renderIdleSeconds;
-        public Vector3 finalPosition;public string listener;public float minLuma,maxLuma;
+        public Vector3 finalPosition;public string listener,route;public float minLuma,maxLuma;
     }
     static SceneRecording.Input WalkthroughInput(SceneSession session,double time)
     {
@@ -177,6 +183,18 @@ public static partial class ChurchPresentationCapture
         float yaw=delta.sqrMagnitude>.04f?Mathf.Atan2(delta.x,delta.z)*Mathf.Rad2Deg:session.player.eulerAngles.y;
         float turn=Mathf.Clamp(Mathf.DeltaAngle(session.player.eulerAngles.y,yaw),-1.5f,1.5f);
         return new SceneRecording.Input{movement=time>=60?Vector2.zero:new Vector2(local.x,local.z),look=new Vector2(time>=60?0:turn,0),interact=Math.Abs(time-52)<.005};
+    }
+    static SceneRecording.Input WeatherInput(SceneSession session,double time)
+    {
+        Vector3 target=time<6?new Vector3(2,0,-40):time<13?new Vector3(0,0,-32.5f):
+            time<22?new Vector3(0,0,-29):time<26?new Vector3(0,0,-32.5f):new Vector3(2,0,-40);
+        var delta=target-session.player.position;delta.y=0;
+        var velocity=delta.normalized*Mathf.Min(1.6f,delta.magnitude/Time.fixedDeltaTime);
+        var local=session.player.InverseTransformDirection(velocity)/session.Walker.speed;
+        float yaw=time<6||time>=31?60:delta.sqrMagnitude>.04f?Mathf.Atan2(delta.x,delta.z)*Mathf.Rad2Deg:session.player.eulerAngles.y;
+        float turn=Mathf.Clamp(Mathf.DeltaAngle(session.player.eulerAngles.y,yaw),-2,2);
+        return new SceneRecording.Input {movement=time>=36?Vector2.zero:new Vector2(local.x,local.z),
+            look=new Vector2(time>=36?0:turn,0),interact=Math.Abs(time-9)<.005||Math.Abs(time-13)<.005||Math.Abs(time-25)<.005};
     }
     static void PositionSequenceCamera(Camera camera,Transform player,SceneSequenceActor actor,double seconds)
     {

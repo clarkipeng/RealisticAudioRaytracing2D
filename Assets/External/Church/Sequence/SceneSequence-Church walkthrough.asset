@@ -87,13 +87,13 @@ MonoBehaviour:
     kind: 1
     start: 23
     end: 60
-    gain: 6
+    gain: 0.06
   - id: courtyard-rain
     target: rain
     kind: 0
     start: 33
     end: 60
-    gain: 0.1
+    gain: 0.006
   poses:
   - target: bird
     keys:

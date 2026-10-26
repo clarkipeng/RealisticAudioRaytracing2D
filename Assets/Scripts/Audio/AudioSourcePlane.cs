@@ -16,6 +16,8 @@ public sealed class AudioSourcePlane : MonoBehaviour
     public int burstPeriodSamples;
     [Min(4), Tooltip("Hann-windowed burst length in capture-rate samples. Samples above bounds retained bursts; overflow is an error.")]
     public int burstDurationSamples = 2400;
+    [Tooltip("Each sampled emission plays the complete clip once from its beginning. Duration follows the decoded clip; no random excerpt or extra Hann envelope.")]
+    public bool oneShotImpacts;
 
     public AcousticTake.EmissionPlane Export(int source, AcousticTake.Dimension dimension)
     {
@@ -26,6 +28,9 @@ public sealed class AudioSourcePlane : MonoBehaviour
             throw new InvalidOperationException(name + ": a rain plane requires a looping PCM clip.");
         if (mask != null && !mask.isReadable)
             throw new InvalidOperationException(name + ": enable Read/Write on the rain mask.");
+        if(oneShotImpacts && burstPeriodSamples<=0)
+            throw new InvalidOperationException(name+": one-shot impacts require a positive emission period.");
+        int rate=audio.rayTraceManager!=null?audio.rayTraceManager.sampleRate:audio.clip.frequency;
         var inverse = Quaternion.Inverse(transform.rotation);
         var pixels = mask == null ? new[] { Color.white } : mask.GetPixels();
         var result = new AcousticTake.EmissionPlane { source = source, samples = samples, seed = seed,
@@ -33,15 +38,15 @@ public sealed class AudioSourcePlane : MonoBehaviour
             v = inverse * transform.TransformVector((dimension == AcousticTake.Dimension.Planar2D ? Vector3.up : Vector3.forward) * size.y),
             width = mask == null ? 1 : mask.width, height = mask == null ? 1 : mask.height,
             mask = Array.ConvertAll(pixels, p => p.r),
-            generatorVersion = burstPeriodSamples == 0 ? 0 : 1, burstPeriodSamples = burstPeriodSamples,
-            burstDurationSamples = burstPeriodSamples == 0 ? 0 : burstDurationSamples };
+            generatorVersion = burstPeriodSamples == 0 ? 0 : oneShotImpacts?2:1, burstPeriodSamples = burstPeriodSamples,
+            burstDurationSamples = burstPeriodSamples == 0 ? 0 : oneShotImpacts?Mathf.RoundToInt(audio.clip.samples/((float)audio.clip.frequency/rate)):burstDurationSamples };
         Validate(result);
         return result;
     }
 
     internal static void Validate(AcousticTake.EmissionPlane p)
     {
-        if (p == null || (p.generatorVersion != 0 && p.generatorVersion != 1) ||
+        if (p == null || (p.generatorVersion < 0 || p.generatorVersion > 2) ||
             (p.generatorVersion == 0 ? p.burstPeriodSamples != 0 || p.burstDurationSamples != 0 : p.burstPeriodSamples <= 0 || p.burstDurationSamples < 4) || p.samples < 1 || p.width < 1 || p.height < 1 || p.mask == null ||
             (long)p.width * p.height != p.mask.Length || !float.IsFinite(p.u.sqrMagnitude + p.v.sqrMagnitude) ||
             !float.IsFinite(Vector3.Cross(p.u, p.v).sqrMagnitude) || !(Vector3.Cross(p.u, p.v).sqrMagnitude > 0) ||
@@ -85,6 +90,8 @@ public sealed class AudioSourcePlane : MonoBehaviour
     {
         if (e.action==AcousticTake.VoiceAction.Play && !e.loop && scene.planes!=null && Array.Exists(scene.planes,p=>p.source==e.sourceIndex))
             throw new InvalidDataException("Rain planes require looping Play events.");
+        if(e.action==AcousticTake.VoiceAction.Play && e.clipOffset!=0 && scene.planes!=null && Array.Exists(scene.planes,p=>p.source==e.sourceIndex&&p.generatorVersion==2))
+            throw new InvalidDataException("One-shot impacts begin at the start of their clip.");
     }
 
     void OnDrawGizmosSelected()

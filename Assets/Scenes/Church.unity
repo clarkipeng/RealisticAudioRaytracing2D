@@ -5808,7 +5808,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
-  clip: {fileID: 8300000, guid: 4e37e23ab74314c6b8f8de6d9ff9c92f, type: 3}
+  clip: {fileID: 8300000, guid: 4028c368f8bf142e7ad2754adad07025, type: 3}
   streamed: 0
   mutedListenerPlusOne: 0
   loop: 1
@@ -5828,10 +5828,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Acoustics::AudioSourcePlane
   size: {x: 58, y: 86}
   mask: {fileID: 2800000, guid: f5085036c63944a98ab2d28fc1f1833d, type: 3}
-  samples: 8
+  samples: 192
   seed: 1
-  burstPeriodSamples: 0
+  burstPeriodSamples: 344
   burstDurationSamples: 2400
+  oneShotImpacts: 1
 --- !u!1 &949677265
 GameObject:
   m_ObjectHideFlags: 0
@@ -8091,6 +8092,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1309288166}
   - component: {fileID: 1309288167}
+  - component: {fileID: 1309288168}
   m_Layer: 0
   m_Name: wind
   m_TagString: Untagged
@@ -8107,7 +8109,7 @@ Transform:
   m_GameObject: {fileID: 1309288165}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 25, y: 5, z: -28}
+  m_LocalPosition: {x: 0, y: 6, z: -15}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -8132,6 +8134,25 @@ MonoBehaviour:
   loop: 1
   gain: 1
   disableUnityAudioSources: 1
+--- !u!114 &1309288168
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1309288165}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ea92477bc2b4fca8ac8454e9276e84b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::AudioSourcePlane
+  size: {x: 80, y: 70}
+  mask: {fileID: 2800000, guid: e60efef16b3054e489f0b18c44d28a41, type: 2}
+  samples: 24
+  seed: 317
+  burstPeriodSamples: 4096
+  burstDurationSamples: 22050
+  oneShotImpacts: 0
 --- !u!1 &1310516960
 GameObject:
   m_ObjectHideFlags: 0
@@ -13305,19 +13326,19 @@ MonoBehaviour:
   monitorLive: 1
   directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
   directSettings:
-    responseStepSamples: 1024
+    responseStepSamples: 2048
     speedOfSound: 343
     referenceDistance: 1
     minimumDistance: 0.1
-    tailSamples: 132300
+    tailSamples: 88200
     transitionSamples: 512
     delayFilter: 1
     listenerOutput: 0
     sincRadius: 16
-    maximumDelaySeconds: 10
+    maximumDelaySeconds: 1.25
     maximumSignalEvents: 4096
     maximumPendingObservations: 16
-    maximumResponsesPerBatch: 64
+    maximumResponsesPerBatch: 1
     useBvh: 1
     transport: 1
     synthesis: 1
@@ -13328,8 +13349,8 @@ MonoBehaviour:
     raysPerPair: 0
     diffractionFactor: 0
     airAbsorption: 1
-    fftSize: 1024
-    spectralHop: 256
+    fftSize: 128
+    spectralHop: 32
   monitorListener: 0
   monitorLeadSamples: 16384
   monitorCapacitySamples: 96000

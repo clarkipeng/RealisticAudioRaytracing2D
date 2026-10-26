@@ -25,7 +25,13 @@ internal static class Emission
     internal static float Window(long age,int duration) => age<=0 || age>=duration-1 ? 0 : (float)(.5-.5*Math.Cos(2*Math.PI*age/(duration-1)));
     internal static void Configure(AcousticTake.Scene scene,TakeRender.Signal[] signals)
     {
-        if(scene.planes!=null)foreach(var p in scene.planes)signals[p.source].BurstDuration=p.burstDurationSamples;
+        if(scene.planes!=null)foreach(var p in scene.planes)
+        {
+            signals[p.source].BurstDuration=p.burstDurationSamples;
+            signals[p.source].OneShot=p.generatorVersion==2;
+            if(p.generatorVersion==2 && signals[p.source].Clip.Length!=p.burstDurationSamples)
+                throw new InvalidOperationException("One-shot duration must match the complete decoded clip.");
+        }
     }
 
     // Cell mass is density times physical area. A CDF avoids rejection loops on
@@ -107,7 +113,7 @@ internal static class Emission
             for(int f=0;f<frames;f++)for(int s=0,at=f*PointsPerFrame;s<planes.Length;s++)
             {
                 var p=planes[s];int count=p?.samples??1;
-                Ranges[f*planes.Length+s]=new Range{first=at,count=p?.generatorVersion==1?0:count,seed=p?.seed??0,mode=p==null?0:p.generatorVersion==0?1:2};
+                Ranges[f*planes.Length+s]=new Range{first=at,count=p!=null&&p.generatorVersion!=0?0:count,seed=p?.seed??0,mode=p==null?0:p.generatorVersion==0?1:2};
                 for(int n=0;n<count;n++)Points[at+n]=p==null?new Vector4(0,0,0,1):p.generatorVersion==0?AudioSourcePlane.Sample(p,n):default;
                 at+=count;
             }
@@ -130,10 +136,11 @@ internal static class Emission
                 {
                     if(float.IsNaN(weights[s]))
                     {
-                        double power=0;foreach(float value in signal.Clip)power+=(double)value*value;power/=signal.Clip.Length;
+                        double energy=0;foreach(float value in signal.Clip)energy+=(double)value*value;
+                        double power=energy/signal.Clip.Length;
                         if(!double.IsFinite(power))throw new InvalidOperationException("Non-finite burst clip.");
                         double windowEnergy=3.0*(p.burstDurationSamples-1)/8;
-                        weights[s]=power==0?0:(float)Math.Sqrt(p.burstPeriodSamples/(power*windowEnergy));
+                        weights[s]=power==0?0:(float)Math.Sqrt(p.burstPeriodSamples/(p.generatorVersion==2?energy:power*windowEnergy));
                     }
                     float weight=weights[s];
                     if(!float.IsFinite(weight))throw new InvalidOperationException("Burst clip normalization exceeds finite pressure range.");
@@ -145,7 +152,7 @@ internal static class Emission
                         {
                             long birth=Birth(keys[s],epoch.start,index,p.burstPeriodSamples);
                             if(birth>=end || birth<=from-p.burstDurationSamples)continue;
-                            if(range.count>=p.samples || (settings.maxBounces>0 && range.count>=settings.RaysPerBin))
+                            if(range.count>=p.samples || (settings.maxBounces>0 && range.count>=settings.SourceRaysPerBin(scene,s)))
                                 throw new InvalidOperationException("Seeded burst coverage exceeds plane Samples or, with indirect transport enabled, Rays Per Bin. Increase the relevant bounds or reduce the delay horizon/event rate.");
                             uint key=keys[s];var local=sampler.Sample(Random(key,epoch.start,index,1),Random(key,epoch.start,index,2),Random(key,epoch.start,index,3),out double pdf);
                             if(!positions[s].TryGetValue(birth,out var world))
@@ -155,7 +162,7 @@ internal static class Emission
                             int at=range.first+range.count++;float amplitude=(float)(weight*Math.Sqrt(local.w/pdf));
                             if(!float.IsFinite(amplitude))throw new InvalidOperationException("Burst source weight exceeds finite pressure range.");
                             Points[at]=new Vector4(world.x,world.y,world.z,amplitude);
-                            Clocks[at]=new Clock{phase=Burst|(uint)Integer(Random(key,epoch.start,index,4),signal.Clip.Length),low=(uint)birth,high=(uint)(birth>>32)};
+                            Clocks[at]=new Clock{phase=p.generatorVersion==2?Burst:Burst|(uint)Integer(Random(key,epoch.start,index,4),signal.Clip.Length),low=(uint)birth,high=(uint)(birth>>32)};
                         }
                     }
                 }

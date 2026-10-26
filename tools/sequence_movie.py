@@ -2,7 +2,7 @@
 """Composite a captured first-person movie with source activity from its numeric take.
 
 Requires numpy, Pillow and ffmpeg. The map shows emission, not listener loudness.
-Fixed clip voices and masked fixed-site planes are supported; no audio is played.
+Fixed clip voices and seeded masked emission planes are supported; no audio is played.
 """
 import argparse
 import bisect
@@ -26,6 +26,20 @@ def vector(value):
 
 def rotate(q, v):
     return v + 2 * np.cross(q[:3], np.cross(q[:3], v) + q[3] * v)
+
+
+def hash32(x):
+    x &= 0xffffffff
+    x = ((x ^ (x >> 16)) * 0x7feb352d) & 0xffffffff
+    x = ((x ^ (x >> 15)) * 0x846ca68b) & 0xffffffff
+    return x ^ (x >> 16)
+
+
+def emission_random(key, epoch, index, property):
+    h = hash32(key ^ property)
+    for value in (epoch & 0xffffffff, epoch >> 32, index & 0xffffffff, index >> 32):
+        h = hash32(h ^ value)
+    return h
 
 
 class TakeActivity:
@@ -77,8 +91,45 @@ class TakeActivity:
             self.times[source], self.voices[source] = times, voices
             self.max_gain[source] = max((v[2] for v in voices if v is not None), default=1)
         self.planes = {p['source']: p for p in self.scene.get('planes', [])}
-        if any(p.get('generatorVersion', 0) != 0 for p in self.planes.values()):
-            raise ValueError('Burst planes need a burst-aware activity view; this view supports fixed sites.')
+        if any(p.get('generatorVersion', 0) not in (0, 1, 2) for p in self.planes.values()):
+            raise ValueError('Unsupported emission generator.')
+        self.births = {}
+        for source, p in self.planes.items():
+            if p.get('generatorVersion', 0) == 0 or source not in self.sources:
+                continue
+            obj = self.scene['sources'][source]['objectIndex']
+            key = 2166136261
+            for byte in self.scene['objects'][obj]['id'].encode('utf-16le'):
+                key = ((key ^ byte) * 16777619) & 0xffffffff
+            key = hash32(key ^ p['seed'])
+            mask = p['mask']
+            total, remaining = sum(mask), sum(x > 0 for x in mask)
+            cumulative, previous, cdf = 0.0, 0, []
+            for density in mask:
+                cumulative += density
+                if density > 0:
+                    remaining -= 1
+                    previous = min(2**32 - remaining, max(previous + 1, round(cumulative / total * 2**32)))
+                cdf.append(previous)
+            births, start = [], None
+            changes = [(e[0], e[3]) for e in self.events if e[2] == source and e[3] != 2]
+            changes.append((int(self.meta['durationSamples']) + 1, 1))
+            for end, action in changes:
+                if start is not None and total > 0:
+                    period = p['burstPeriodSamples']
+                    for index in range((end - start + period - 1) // period):
+                        rnd = lambda prop: emission_random(key, start, index, prop)
+                        birth = start + index * period + ((rnd(0) * period) >> 32)
+                        if birth >= end:
+                            continue
+                        cell = bisect.bisect_right(cdf, rnd(1))
+                        u = ((cell % p['width']) + (rnd(2) >> 8) / 2**24) / p['width'] - .5
+                        v = ((cell // p['width']) + (rnd(3) >> 8) / 2**24) / p['height'] - .5
+                        pose = self.poses(birth / self.rate)[obj]
+                        position = pose[:3] + rotate(pose[3:7], vector(p['u']) * u + vector(p['v']) * v)
+                        births.append((birth, position))
+                start = end if action == 0 else None
+            self.births[source] = ([b[0] for b in births], [b[1] for b in births])
 
     def poses(self, seconds):
         sample = seconds * self.rate
@@ -106,6 +157,10 @@ class TakeActivity:
         if voice is None:
             return False, 0.0
         start, offset, gain, loop = voice
+        if source in self.births:
+            # Area glow represents the emitter's scheduled level. Dots below
+            # show actual seeded births, never listener amplitude or ray hits.
+            return gain > 0, min(1, gain / max(1e-12, self.max_gain[source]))
         power = self.power[source]
         length = len(power) - 1
         end = offset + sample - start + 1
@@ -129,6 +184,7 @@ class SoundMap:
 
     def __init__(self, capture, take):
         self.take = take
+        self.route = json.loads((capture / 'summary.json').read_text()).get('route', 'walkthrough')
         self.map = json.loads((capture / 'map.json').read_text())
         self.size = 330
         self.background = ImageEnhance.Brightness(Image.open(capture / 'map.png').convert('RGBA')).enhance(.86).resize((330, 330))
@@ -189,6 +245,17 @@ class SoundMap:
             area = Image.alpha_composite(area, tint)
         md = ImageDraw.Draw(area)
         for i, source in enumerate(t.sources):
+            if source not in t.births or not activity[source][0]:
+                continue
+            times, positions = t.births[source]
+            sample = round(seconds * t.rate)
+            span = round(.12 * t.rate)
+            for index in range(bisect.bisect_left(times, sample-span), bisect.bisect_right(times, sample)):
+                x, y = self.point(positions[index])
+                color = self.COLORS[i % len(self.COLORS)]
+                radius = 1 + 2 * (1 - (sample-times[index])/span)
+                md.ellipse((x-radius, y-radius, x+radius, y+radius), fill=(*color, 255))
+        for i, source in enumerate(t.sources):
             active, level = activity[source]
             if source in t.planes:
                 continue
@@ -235,6 +302,16 @@ class SoundMap:
         panel = panel.resize((round(panel.width * scale), round(panel.height * scale)), Image.Resampling.LANCZOS)
         frame = frame.convert('RGBA')
         frame.alpha_composite(panel, (frame.width-panel.width-round(30*scale), round(30*scale)))
+        if self.route == 'weather':
+            caption = Image.new('RGBA', (630, 78))
+            cd = ImageDraw.Draw(caption)
+            cd.rounded_rectangle((0, 0, 629, 77), 12, fill=(12, 21, 29, 230))
+            location = 'OUTSIDE' if eye[2] < -35 else 'DOORWAY' if eye[2] < -32.7 else 'INSIDE THE CHURCH'
+            cd.text((18, 12), location, font=self.title, fill='white')
+            cd.text((18, 43), 'Steady weather • Rain and wind continue across the doorway' if seconds < 35.8
+                    else 'Weather ends • Remaining acoustic tail', font=self.font, fill=(191, 209, 219))
+            caption = caption.resize((round(630*scale), round(78*scale)), Image.Resampling.LANCZOS)
+            frame.alpha_composite(caption, (round(30*scale), frame.height-caption.height-round(30*scale)))
         return frame.convert('RGB')
 
 

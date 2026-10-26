@@ -50,7 +50,23 @@ public static partial class TakeRender
         }
         public int RaysPerPair => maxBounces==0 ? 0:checked(FrequencyBins*RaysPerBin);
         public int SpectralSlotsPerPair => checked(FrequencyBins+RaysPerPair*checked(maxBounces+1));
-        public int SlotsPerPair(AcousticTake.Scene scene) => checked(SpectralSlotsPerPair+(AudioSourcePlane.MaximumSamples(scene)-1)*FrequencyBins);
+        internal int SourceRaysPerBin(AcousticTake.Scene scene,int source)
+        {
+            var plane=scene.planes==null?null:Array.Find(scene.planes,p=>p.source==source);
+            // Every retained event needs an indirect launch. Keep that coverage
+            // local to its source instead of inflating unrelated pairs.
+            return plane!=null&&plane.generatorVersion!=0?Math.Max(RaysPerBin,plane.samples):RaysPerBin;
+        }
+        public int SlotsPerPair(AcousticTake.Scene scene)
+        {
+            int maximum=0;
+            for(int s=0;s<scene.sources.Length;s++)
+            {
+                int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
+                maximum=Math.Max(maximum,checked(FrequencyBins*(sites+(maxBounces==0?0:SourceRaysPerBin(scene,s)*(maxBounces+1)))));
+            }
+            return maximum;
+        }
         [Tooltip("Experimental sampled edge transport: 1 uses signed rigid-wedge contributions; 0 disables diffraction. Increase rays per bin for convergence.")]
         [Min(0)] public float diffractionFactor=1;
         public bool airAbsorption=true;
@@ -345,6 +361,7 @@ public static partial class TakeRender
     {
         internal struct ClipClock { public uint index; public float gain; public uint epochLow,epochHigh; }
         internal int BurstDuration;
+        internal bool OneShot;
         struct Voice { public long sample, start, offset; public bool playing, loop; public float gain; }
         readonly List<Voice> voices=new List<Voice>();
         readonly float[] pcm;
@@ -426,6 +443,7 @@ public static partial class TakeRender
             {
                 long age=sample-birth;
                 if(v.start>birth || age<0 || age>=BurstDuration)return 0;
+                if(OneShot)return age<pcm.Length?pcm[age]*v.gain:0;
                 return pcm[(age+v.offset+(phase&~Emission.Burst))%pcm.Length]*v.gain*Emission.Window(age,BurstDuration);
             }
             var clock=Clock(sample,v);

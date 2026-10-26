@@ -52,7 +52,7 @@ StructuredBuffer<uint4> EmissionRanges; // sample offset/count, stable seed, pla
 StructuredBuffer<float4> EmissionPoints; // local legacy site or frozen world burst position, pressure weight
 StructuredBuffer<uint4> EmissionClocks; // phase/clip offset, birth low/high, reserved
 uint EmissionFrameStride;
-uint RaysPerBin, RaySeed;
+uint RaysPerBin, RaySeed, RayTracePair;
 uint FrequencyBins, RaysPerPair, MaxBounces, EdgeCount, VolumeCount, UseAirAbsorption;
 float FrequencyStep, DiffractionFactor, MaximumPathDelay;
 // Fixed slots per captured ray avoid atomics and never truncate a path. All stores
@@ -654,10 +654,10 @@ RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequ
 }
 void TracePaths(uint index, bool is2D)
 {
-    if (index >= FrameCount * PairCount * RaysPerPair)
+    if (index >= FrameCount * RaysPerPair)
         return;
-    uint ray = index % RaysPerPair, query = index / RaysPerPair, frame = query / PairCount,
-         pair = query % PairCount;
+    uint ray = index % RaysPerPair, frame = index / RaysPerPair, pair = RayTracePair,
+         query = frame * PairCount + pair;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
          listener = Listeners[pair % ListenerCount];
     uint first = frame*RayPathsPerFrame + RayPairRanges[pair].x + RayPairRanges[pair].y - RaysPerPair*(MaxBounces+1) + ray*(MaxBounces+1);
