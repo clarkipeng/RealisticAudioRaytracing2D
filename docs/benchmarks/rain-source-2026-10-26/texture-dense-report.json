@@ -1,0 +1,308 @@
+{
+  "version": "rain-recorded-texture-audition-v1",
+  "profile": "dense",
+  "feedback": "User clarified that the rain itself still sounds weird; splash source and shelter audition are unaccepted.",
+  "scope": "Empirical dense texture audition, not individual-drop synthesis or a calibrated dry source. Recording ambience remains.",
+  "source": {
+    "title": "Rain and Thunder #1 (0124)",
+    "author": "Joseph SARDIN",
+    "license": "CC0",
+    "page": "https://bigsoundbank.com/rain-and-storm-s0124.html",
+    "inputFileSha256": "d37affc216bd76b5f1964fbafacb19644ac057b00a099d96dff061ec2b5a2643",
+    "decodedPcmSha256": "899b22a1e3db85d4a6a4e2584c66dde69a2db1faca22ae8eb4b37489a5f6afe9",
+    "usedFormat": "Original 44.1 kHz 16-bit stereo WAV, averaged to mono. Only seconds 1\u201313 are used, before the later thunder.",
+    "description": "Outdoor heavy rain; surface and microphone distance unspecified. This is an ambience, not a dry impact."
+  },
+  "bank": {
+    "responses": 16,
+    "samplesPerResponse": 22050,
+    "bytes": 1411200,
+    "startSeconds": [
+      1.0,
+      1.5,
+      2.0,
+      2.5,
+      3.0,
+      3.5,
+      4.0,
+      4.5,
+      5.0,
+      5.5,
+      6.0,
+      6.5,
+      7.0,
+      7.5,
+      8.0,
+      8.5
+    ],
+    "durationSeconds": 0.5,
+    "preprocessing": "Subtract each passage mean; no per-grain level equalization, denoising or EQ.",
+    "sha256": "a686f41d9f5e0e873c22f5f638375dd797d9930dbd035f1172498c5a399037fc"
+  },
+  "heldOutReferenceSeconds": [
+    9,
+    13
+  ],
+  "sampleRate": 44100,
+  "durationSeconds": 8,
+  "cases": [
+    {
+      "seed": 23,
+      "renderSeconds": 0.001032084008329548,
+      "partitionBitExact": true,
+      "metrics": {
+        "rms": 0.012255658405122044,
+        "rmsDbFS": -38.23326704763347,
+        "peak": 0.08609389761031651,
+        "crestDb": 16.932714437196953,
+        "excessKurtosis": 0.3128801227519551,
+        "levelP90MinusP10Db": 4.200918858783901,
+        "bandPowerFraction": [
+          0.12173864781493152,
+          0.25418235579574866,
+          0.45332814051859666,
+          0.17075085587072308
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.41396807170334315,
+            0.4484219758322216,
+            0.2992891985654155
+          ],
+          [
+            0.4139680717033432,
+            1.0,
+            0.6975830691065381,
+            0.5965476484985048
+          ],
+          [
+            0.4484219758322216,
+            0.6975830691065381,
+            1.0,
+            0.763221321907684
+          ],
+          [
+            0.2992891985654155,
+            0.5965476484985048,
+            0.7632213219076839,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.5448206951867975
+      },
+      "regionCorrelation": 0.10168615973481572
+    },
+    {
+      "seed": 47,
+      "renderSeconds": 0.0011583750019781291,
+      "partitionBitExact": true,
+      "metrics": {
+        "rms": 0.012389623120504543,
+        "rmsDbFS": -38.13883808422148,
+        "peak": 0.09013657128844789,
+        "crestDb": 17.236858762020677,
+        "excessKurtosis": 0.2759198324731029,
+        "levelP90MinusP10Db": 4.408140051758963,
+        "bandPowerFraction": [
+          0.12178174788137737,
+          0.2619880472189436,
+          0.440688412938321,
+          0.17554179196135802
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.42972650733122597,
+            0.47030623706239943,
+            0.3242459087133354
+          ],
+          [
+            0.429726507331226,
+            0.9999999999999998,
+            0.7058672867808856,
+            0.5923602961661647
+          ],
+          [
+            0.4703062370623994,
+            0.7058672867808856,
+            0.9999999999999999,
+            0.7804165542464525
+          ],
+          [
+            0.3242459087133354,
+            0.5923602961661648,
+            0.7804165542464526,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.5680988976056528
+      },
+      "regionCorrelation": 0.08604417153909302
+    },
+    {
+      "seed": 91,
+      "renderSeconds": 0.0008149170025717467,
+      "partitionBitExact": true,
+      "metrics": {
+        "rms": 0.012303365484512942,
+        "rmsDbFS": -38.19952149246605,
+        "peak": 0.09013657128844789,
+        "crestDb": 17.29754217026525,
+        "excessKurtosis": 0.36781316424907473,
+        "levelP90MinusP10Db": 4.0434140815535855,
+        "bandPowerFraction": [
+          0.10984671922429609,
+          0.2552576637570793,
+          0.4503411111750908,
+          0.18455450584353375
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.316886015661831,
+            0.33145048072649014,
+            0.19678222331355014
+          ],
+          [
+            0.316886015661831,
+            1.0,
+            0.7098587651888271,
+            0.5935508360172705
+          ],
+          [
+            0.33145048072649014,
+            0.7098587651888271,
+            1.0,
+            0.7883963417165984
+          ],
+          [
+            0.19678222331355016,
+            0.5935508360172705,
+            0.7883963417165983,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6229706979104029
+      },
+      "regionCorrelation": -0.04331717206810277
+    }
+  ],
+  "files": {
+    "authored-then-recorded-texture.wav": {
+      "seconds": 12.5,
+      "peak": 0.2796634570464295,
+      "sha256": "b2b90ac68d108ec39a6947584bc091a76e55b53e76bf36ef7729f906abfa8d2f"
+    },
+    "reference-then-recorded-texture.wav": {
+      "seconds": 8.5,
+      "peak": 0.33165010254308386,
+      "sha256": "bef8dfdb6800d4d0d0bc6f8ff9b169a58c53091b61f891d3762027acd8a75dd3"
+    },
+    "recorded-texture-seed23.wav": {
+      "seconds": 8.0,
+      "peak": 0.2796634570464295,
+      "sha256": "d80db8632bf0c993f9b21a251c1ea153783777fef63fe79514d8f2a61fbb80df"
+    },
+    "recorded-texture-seed47.wav": {
+      "seconds": 8.0,
+      "peak": 0.29279549227677953,
+      "sha256": "ee4cf39e8bec68d06192ef17d6097b9db67731cfd633ff4569d2946c4414bae2"
+    },
+    "held-out-reference.wav": {
+      "seconds": 4.0,
+      "peak": 0.33165010254308386,
+      "sha256": "1a7ea4a02911370a70df97ab304b4a2a936128668a4c5133cecc912f9a7a9c94"
+    }
+  },
+  "audition": {
+    "textureGain": 3.2483540042786703,
+    "oldGain": 6.744509439141451,
+    "referenceGain": 5.0429283341678754,
+    "levelMatching": "One fixed gain per model; seed 23 RMS matched over seconds 1\u20137; reference matched over its whole held-out excerpt. Same texture gain for all seeds. No limiter.",
+    "gapSeconds": 0.5,
+    "fadeMilliseconds": 20
+  },
+  "referenceMetrics": {
+    "rms": 0.00789436502311882,
+    "rmsDbFS": -42.05365592754283,
+    "peak": 0.065765380859375,
+    "crestDb": 18.413602718283475,
+    "excessKurtosis": 0.6368640875448173,
+    "levelP90MinusP10Db": 3.779007206577937,
+    "bandPowerFraction": [
+      0.09444431776396796,
+      0.3043564708406296,
+      0.43702237308368796,
+      0.16417683831171445
+    ],
+    "envelopeCorrelation": [
+      [
+        1.0,
+        0.14711131148864395,
+        0.04776215130227117,
+        -0.0007391866144455883
+      ],
+      [
+        0.14711131148864398,
+        1.0,
+        0.34687833891412106,
+        0.1581612669835177
+      ],
+      [
+        0.04776215130227117,
+        0.34687833891412106,
+        0.9999999999999998,
+        0.5572091123206487
+      ],
+      [
+        -0.0007391866144455883,
+        0.1581612669835177,
+        0.5572091123206487,
+        1.0
+      ]
+    ],
+    "envelopeModulationFractionBelow10Hz": 0.6348979308081509
+  },
+  "previousSourceMetrics": {
+    "rms": 0.005902685349405854,
+    "rmsDbFS": -44.57900733628382,
+    "peak": 0.02767061766839057,
+    "crestDb": 13.419384409221902,
+    "excessKurtosis": 0.13170481647910126,
+    "levelP90MinusP10Db": 2.6552246142903044,
+    "bandPowerFraction": [
+      0.1320027752017179,
+      0.39204013895920775,
+      0.36653937956403215,
+      0.10941770627504219
+    ],
+    "envelopeCorrelation": [
+      [
+        0.9999999999999998,
+        0.3044298434909857,
+        0.2506576622701734,
+        0.2742983743609576
+      ],
+      [
+        0.3044298434909856,
+        1.0,
+        0.437515997169746,
+        0.3962008623722587
+      ],
+      [
+        0.2506576622701734,
+        0.43751599716974593,
+        1.0,
+        0.75270107427845
+      ],
+      [
+        0.2742983743609576,
+        0.39620086237225866,
+        0.7527010742784501,
+        0.9999999999999999
+      ]
+    ],
+    "envelopeModulationFractionBelow10Hz": 0.551182258175236
+  }
+}

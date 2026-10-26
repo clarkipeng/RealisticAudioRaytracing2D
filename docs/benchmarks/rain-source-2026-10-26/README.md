@@ -1,6 +1,6 @@
 # Dense rain source experiment — 26 October 2026
 
-The first source experiment is implemented and exported for listening. A bounded convolution mixer reproduces the explicit dense-drop mixture to floating-point precision. It is faster at high event density and slower at low density. This verifies the source-generation optimization, not realistic rain, spatial grouping or Church acoustics. **The user rejected the first timbre as still too clicky or artificial, then said the splash revision is better.** The revision is the current candidate for the small spatial experiment, not a claim of full realism.
+The first source experiment is implemented and exported for listening. A bounded convolution mixer reproduces the explicit dense-drop mixture to floating-point precision. It is faster at high event density and slower at low density. This verifies the source-generation optimization, not realistic rain, spatial grouping or Church acoustics. **The user rejected the first timbre, initially preferred the splash revision, then clarified that the rain itself still sounds weird.** Neither authored source has passed listening. The recording-based texture experiment below is a new source-only audition; scene integration remains deferred.
 
 ## Implemented model
 
@@ -112,3 +112,33 @@ The individual-position reference is 10.09–10.56 dB quieter inside than outsid
 This energy proxy sums each event's isolated kernel energy after its direct gain; it excludes cross-event interference. Actual rendered RMS and short-window texture are reported separately. Interior visibility disagreement falls from 2.6–2.8% of all physical events at 2 m to 0.28–0.42% at 0.25 m. Counts alone are insufficient because visibility mistakes have unequal energy. Direction and delay errors also remain nonzero. These results support measuring finer groups near openings; they do not establish 0.25 m as a universal size or validate grouping reflected paths. A dedicated efficient patch renderer and its memory/cost study remain future work.
 
 The browser listening page and WAVs are under the Conductor workspace's `.context/rain-source-review/shelter/`. `outside-then-inside.wav` plays the same six-second excitation window outside, then inside, separated by 0.5 s silence. Other clips compare individual positions with 2 m or 0.25 m patches. All use one common gain, with no per-receiver normalization or limiter. Native outputs retain source and propagation tails. These are mono, stationary-receiver comparisons. The [report](spatial-report.json) records field/bank hashes, visibility, energy/direction/delay errors, levels and file hashes; the [scene](spatial-scene.json) defines all geometry. The short CPU-only job completed and exited without launching Unity or playing audio.
+
+## Source rejection and recording-based texture audition
+
+The later feedback was **“still sounds weird,” clarified as “just the rain itself.”** The spatial fixture remains useful for grouping checks, but does not establish source likeness. Its direct-only indoor sound also has nearly the same band-power proportions and much greater impulsiveness than the dry mixture: seed-23 excess kurtosis rises from 0.13 dry to 0.61 outside and 2.41 inside. These are measured limitations, not a diagnosis of the user's perceptual objection. The clarified objection is to the source, so the next audition omits shelter entirely.
+
+[`rain_texture.py`](../../../tools/rain_texture.py) tests a different representation: recorded half-second passages, selected by `(seed, region, absolute grain index)`, overlapping every quarter second with complementary sine windows. Each grain receives a seeded polarity. At most two passages contribute to a sample; irregular sample queries reproduce the same PCM exactly. No grain is individually level-normalized. This preserves recorded detail rather than approximating the waveform with the authored impact family. It is **empirical texture playback/resequencing, not individual-drop synthesis**, and does not preserve the previous model's event identities or define a rainfall rate. It is not an implementation of the full 2019/2023 rain papers or the McDermott texture model.
+
+Two recordings are kept separate:
+
+| Profile | Source and bank | Role and limits |
+|---|---|---|
+| Dense | Existing CC0 Joseph SARDIN [Rain and Thunder #1 (0124)](https://bigsoundbank.com/rain-and-storm-s0124.html), original 44.1 kHz 16-bit stereo WAV averaged to mono. Sixteen non-overlapping passages from seconds 1–9; seconds 9–13 are held out. Only the established early rain excerpt is used. | Main listening candidate. This is outdoor ambience with unknown surface/microphone position; its environment remains baked in. It must not be presented as a dry material response or routed through a room as though those acoustics were absent. |
+| Concrete | CC0 Joseph SARDIN [Rain on concrete (1289)](https://bigsoundbank.com/rain-on-concrete-s1289.html): large drops on a small concrete slab, outdoors. Sixty-four passages beginning at integer seconds 10–73; seconds 1–9 held out. | Separate sparse-impact reference/experiment, not the dense-rain replacement. Used the public MP3 preview, decoded to mono 44.1 kHz float32, not the original 24-bit WAV. Microphone distance, drop sizes and source-pressure calibration are unknown; fragments are not verified isolated dry drops. |
+
+The concrete reference is much more impulsive than the dense recording, and its resequenced outputs have excess kurtosis around 245–378. It was not smoothed, clipped or mixed into the main candidate to hide this difference. Dense outputs measure approximately 0.28–0.37 across the three seeds; this is descriptive, not a realism acceptance test. The dense bank uses 1,411,200 bytes of float32 PCM; the concrete bank uses 5,644,800 bytes. The existing authored-bank convolution remains intact as a separate experiment.
+
+Three seeds for each profile pass exact irregular-partition comparisons; the two new unit checks cover partition identity and expected overlap power. The recorded bank is small and can repeat. Measured zero-lag correlations between two regional streams reach **0.102** for dense and **0.082** for concrete in these examples. Seeded polarity does not guarantee independent spatial excitation. Region independence, source/propagation separation, weather intensity and conservation with explicitly represented nearby drops remain unresolved before integration. No geometry, acoustic material, Unity source or 32-bounce setting changed.
+
+Reproduce with the original `0124.wav` and the decoded concrete preview. Input PCM hashes are checked; an unrelated recording cannot silently receive the documented attribution:
+
+```sh
+ffmpeg -i 1289-preview.mp3 -ar 44100 -ac 1 -c:a pcm_f32le 1289-decoded.wav
+python docs/benchmarks/rain-source-2026-10-26/texture.py dense 0124.wav <new-output-directory>
+python docs/benchmarks/rain-source-2026-10-26/texture.py concrete 1289-decoded.wav <new-output-directory>/concrete
+python -m unittest discover -s tools -p 'test_rain*.py' -v
+```
+
+The concrete preview URL is `https://bigsoundbank.com/UPLOAD/mp3/1289.mp3?v=d`; its SHA-256 is `ba40d67b99bb5f00b1b89d96fa8da2e3476d4e198ff48b77c9f7e20e9cfd657a`. The [dense report](texture-dense-report.json) and [concrete report](texture-concrete-report.json) record input/PCM/bank/output hashes, exact bank ranges, gains, seeds and checks. Source material remains in `.context/`, with attribution in the browser page and reports.
+
+Delivery is the Conductor workspace's `.context/rain-source-review/recorded-texture/index.html`. The main comparison plays six seconds of the rejected authored source, 0.5 s silence, then six seconds of the recording-based dense texture. A separate reference comparison uses four seconds each. Each model has one fixed audition gain, RMS matched over the documented window; both delivered seeds share their profile's gain. There is no limiter or per-grain normalization. All ten delivered WAVs are finite and below full scale. This remains an **unaccepted listening experiment**; no claim that the rain problem is solved.
