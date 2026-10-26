@@ -5774,7 +5774,7 @@ GameObject:
   - component: {fileID: 946206405}
   - component: {fileID: 946206406}
   m_Layer: 0
-  m_Name: Rain ground
+  m_Name: Rain surfaces
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5789,7 +5789,7 @@ Transform:
   m_GameObject: {fileID: 946206403}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.06, z: -7}
+  m_LocalPosition: {x: 0, y: 100, z: -7}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -5827,12 +5827,13 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Acoustics::AudioSourcePlane
   size: {x: 58, y: 86}
-  mask: {fileID: 2800000, guid: f5085036c63944a98ab2d28fc1f1833d, type: 3}
+  mask: {fileID: 0}
   samples: 192
   seed: 1
   burstPeriodSamples: 344
   burstDurationSamples: 2400
   oneShotImpacts: 1
+  projectImpacts: 1
 --- !u!1 &949677265
 GameObject:
   m_ObjectHideFlags: 0
@@ -8153,6 +8154,7 @@ MonoBehaviour:
   burstPeriodSamples: 4096
   burstDurationSamples: 22050
   oneShotImpacts: 0
+  projectImpacts: 0
 --- !u!1 &1310516960
 GameObject:
   m_ObjectHideFlags: 0

@@ -7,7 +7,7 @@ using UnityEngine;
 public sealed class AudioSourcePlane : MonoBehaviour
 {
     public Vector2 size = new Vector2(10, 10);
-    [Tooltip("Readable linear grayscale texture: white emits, black is sheltered. Empty means white.")]
+    [Tooltip("Readable linear grayscale texture: white samples rain, black excludes it. Empty means white.")]
     public Texture2D mask;
     [Min(1), Tooltip("Fixed spatial sites in legacy mode; maximum retained events in burst mode.")]
     public int samples = 8;
@@ -18,6 +18,8 @@ public sealed class AudioSourcePlane : MonoBehaviour
     public int burstDurationSamples = 2400;
     [Tooltip("Each sampled emission plays the complete clip once from its beginning. Duration follows the decoded clip; no random excerpt or extra Hann envelope.")]
     public bool oneShotImpacts;
+    [Tooltip("Project each one-shot impact vertically down onto the first active acoustic surface at its event time. Place the plane above the scene; misses stay silent.")]
+    public bool projectImpacts;
 
     public AcousticTake.EmissionPlane Export(int source, AcousticTake.Dimension dimension)
     {
@@ -30,6 +32,8 @@ public sealed class AudioSourcePlane : MonoBehaviour
             throw new InvalidOperationException(name + ": enable Read/Write on the rain mask.");
         if(oneShotImpacts && burstPeriodSamples<=0)
             throw new InvalidOperationException(name+": one-shot impacts require a positive emission period.");
+        if(projectImpacts && (!oneShotImpacts || dimension!=AcousticTake.Dimension.Spatial3D))
+            throw new InvalidOperationException(name+": surface projection requires spatial one-shot impacts.");
         int rate=audio.rayTraceManager!=null?audio.rayTraceManager.sampleRate:audio.clip.frequency;
         var inverse = Quaternion.Inverse(transform.rotation);
         var pixels = mask == null ? new[] { Color.white } : mask.GetPixels();
@@ -38,7 +42,7 @@ public sealed class AudioSourcePlane : MonoBehaviour
             v = inverse * transform.TransformVector((dimension == AcousticTake.Dimension.Planar2D ? Vector3.up : Vector3.forward) * size.y),
             width = mask == null ? 1 : mask.width, height = mask == null ? 1 : mask.height,
             mask = Array.ConvertAll(pixels, p => p.r),
-            generatorVersion = burstPeriodSamples == 0 ? 0 : oneShotImpacts?2:1, burstPeriodSamples = burstPeriodSamples,
+            generatorVersion = burstPeriodSamples == 0 ? 0 : oneShotImpacts?(projectImpacts?3:2):1, burstPeriodSamples = burstPeriodSamples,
             burstDurationSamples = burstPeriodSamples == 0 ? 0 : oneShotImpacts?Mathf.RoundToInt(audio.clip.samples/((float)audio.clip.frequency/rate)):burstDurationSamples };
         Validate(result);
         return result;
@@ -46,7 +50,7 @@ public sealed class AudioSourcePlane : MonoBehaviour
 
     internal static void Validate(AcousticTake.EmissionPlane p)
     {
-        if (p == null || (p.generatorVersion < 0 || p.generatorVersion > 2) ||
+        if (p == null || (p.generatorVersion < 0 || p.generatorVersion > 3) ||
             (p.generatorVersion == 0 ? p.burstPeriodSamples != 0 || p.burstDurationSamples != 0 : p.burstPeriodSamples <= 0 || p.burstDurationSamples < 4) || p.samples < 1 || p.width < 1 || p.height < 1 || p.mask == null ||
             (long)p.width * p.height != p.mask.Length || !float.IsFinite(p.u.sqrMagnitude + p.v.sqrMagnitude) ||
             !float.IsFinite(Vector3.Cross(p.u, p.v).sqrMagnitude) || !(Vector3.Cross(p.u, p.v).sqrMagnitude > 0) ||
@@ -90,7 +94,7 @@ public sealed class AudioSourcePlane : MonoBehaviour
     {
         if (e.action==AcousticTake.VoiceAction.Play && !e.loop && scene.planes!=null && Array.Exists(scene.planes,p=>p.source==e.sourceIndex))
             throw new InvalidDataException("Rain planes require looping Play events.");
-        if(e.action==AcousticTake.VoiceAction.Play && e.clipOffset!=0 && scene.planes!=null && Array.Exists(scene.planes,p=>p.source==e.sourceIndex&&p.generatorVersion==2))
+        if(e.action==AcousticTake.VoiceAction.Play && e.clipOffset!=0 && scene.planes!=null && Array.Exists(scene.planes,p=>p.source==e.sourceIndex&&p.generatorVersion>=2))
             throw new InvalidDataException("One-shot impacts begin at the start of their clip.");
     }
 

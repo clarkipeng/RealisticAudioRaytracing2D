@@ -1,0 +1,70 @@
+{
+  "unityPassed": 47,
+  "unityRuns": [
+    {
+      "name": "tests",
+      "total": 45,
+      "passed": 45,
+      "duration": 19.0990892,
+      "cases": [
+        "TakeChecks.EmissionBatchPreservesBirthsAcrossPartitionQualityAndLongClocks",
+        "TakeChecks.EmissionCandidateIntervalsMatchExhaustiveBirthEnumeration",
+        "TakeChecks.EmissionClockKeepsWindowClipOffsetGainAndRestartSeparate",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,1,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,64,1,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,128,1,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,1,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,0,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,64,0,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,128,0,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,0,False)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,1,True)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,1,True)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,0,True)",
+        "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,0,True)",
+        "TakeChecks.EmissionPackedDspKeepsDistinctBirthsAndPointSources(128,2)",
+        "TakeChecks.EmissionPackedDspKeepsDistinctBirthsAndPointSources(2048,1)",
+        "TakeChecks.EmissionPackedTransportKeepsFrameSourceAndListenerOffsets",
+        "TakeChecks.EmissionTakeAuthenticatesGeneratorAndPreservesVersionFive",
+        "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,False)",
+        "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,False)",
+        "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,True)",
+        "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,True)",
+        "TakeChecks.EmissionVersionOneIntegerGoldenVectors",
+        "TakeChecks.EmissionWeightedMaskHasCorrectMassPdfAndEmptySupport",
+        "TakeChecks.GpuBatches",
+        "TakeChecks.ImpactAndPointMirrorDispatchUseTheirOwnRayCounts",
+        "TakeChecks.ImpactEnergyAndCoverageDoNotInflateOtherSources",
+        "TakeChecks.ImpactReadsTheWholeClipOnceWithoutExcerptOrAddedWindow",
+        "TakeChecks.MirrorChecks",
+        "TakeChecks.PlaneClipOffsetsPreserveEventTimesAndLoopPhase",
+        "TakeChecks.PlaneDirectPathsUseMaskedRotatedPositionsAndSharedSourcePhases",
+        "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Mono,Linear)",
+        "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Binaural,Linear)",
+        "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(2048,Mono,Linear)",
+        "TakeChecks.PlaneGpuSynthesisMatchesCpuWithMovementAndSourceEvents(128,Mono,WindowedSinc)",
+        "TakeChecks.PlaneMaskWeightsPowerAndPreservesSamplePrefixes",
+        "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Planar2D)",
+        "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Spatial3D)",
+        "TakeChecks.PlaneTakeAuthenticatesMaskAndRejectsLegacyExtension",
+        "TakeChecks.ProjectedImpactBirthsFreezeAndKeepEnergyAcrossBatches",
+        "TakeChecks.ProjectedImpactCpuGpuLiveAndBatchAgree(Linear)",
+        "TakeChecks.ProjectedImpactCpuGpuLiveAndBatchAgree(WindowedSinc)",
+        "TakeChecks.ProjectedImpactFirstSurfaceHandlesRoofsWindingMotionAndFlags",
+        "TakeChecks.ProjectedImpactGeneratorIsAuthenticatedAndRequiresSpatialOneShots"
+      ]
+    },
+    {
+      "name": "transmission",
+      "total": 2,
+      "passed": 2,
+      "duration": 0.608435,
+      "cases": [
+        "TakeChecks.ProjectedImpactRoofUsesMaterialTransmission(False)",
+        "TakeChecks.ProjectedImpactRoofUsesMaterialTransmission(True)"
+      ]
+    }
+  ],
+  "pythonPassed": 3,
+  "pythonCommand": "python -m unittest discover -s tools -p test_sequence_movie.py -v"
+}

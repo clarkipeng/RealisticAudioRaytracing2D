@@ -159,9 +159,58 @@ internal sealed class DirectBvh
         }
         return false;
     }
-    bool Intersects(Node node,Vector3 origin,Vector3 direction)
+    internal struct Hit { internal int primitive; internal Vector3 position,normal; internal float distance; }
+    // Birth-time queries reuse immutable local trees. They are independent of
+    // acoustic ray budgets and never consult the foreground Physics scene.
+    internal bool Raycast(Vector3 origin,Vector3 direction,AcousticTake.State[] state,out Hit hit)
     {
-        double near=0,far=1;
+        if(planar)throw new InvalidOperationException("Surface impact queries require triangles.");
+        hit=new Hit{primitive=-1,distance=float.PositiveInfinity};
+        int depth=0,index=0;
+        while(index<topCount)
+        {
+            var node=Nodes[index];
+            if(Intersects(node,origin,direction,hit.distance))
+            {
+                if(node.count==0){stack[depth++]=(int)node.right;index=(int)node.left;continue;}
+                var pose=state[node.first];
+                if((pose.flags&(AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry))==(AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry))
+                    RaycastMesh((int)node.left,pose,origin,direction,ref hit);
+            }
+            if(depth==0)break;index=stack[--depth];
+        }
+        if(hit.primitive<0)return false;
+        hit.position=origin+direction*hit.distance;return true;
+    }
+    void RaycastMesh(int root,AcousticTake.State pose,Vector3 origin,Vector3 direction,ref Hit hit)
+    {
+        var inverse=Quaternion.Inverse(pose.rotation);var o=inverse*(origin-pose.position);var d=inverse*direction;
+        int depth=0,index=root;
+        while(true)
+        {
+            var node=Nodes[index];
+            if(Intersects(node,o,d,hit.distance))
+            {
+                if(node.count==0){meshStack[depth++]=(int)node.right;index=(int)node.left;continue;}
+                for(uint j=0;j<node.count;j++)
+                {
+                    int id=Indices[node.first+j];var p=local[id];var e1=p.b-p.a;var e2=p.c-p.a;
+                    var h=Vector3.Cross(d,e2);double det=Vector3.Dot(e1,h);
+                    if(Math.Abs(det)<1e-12)continue;
+                    var s=o-p.a;double u=Vector3.Dot(s,h)/det;if(u<0||u>1)continue;
+                    var q=Vector3.Cross(s,e1);double v=Vector3.Dot(d,q)/det;if(v<0||u+v>1)continue;
+                    float t=(float)(Vector3.Dot(e2,q)/det);
+                    if(t<0||t>hit.distance||!float.IsFinite(t)||(t==hit.distance&&id>=hit.primitive))continue;
+                    var normal=pose.rotation*Vector3.Cross(e1,e2).normalized;if(Vector3.Dot(normal,direction)>0)normal=-normal;
+                    hit=new Hit{primitive=id,distance=t,normal=normal};
+                }
+            }
+            if(depth==0)break;index=meshStack[--depth];
+        }
+    }
+    bool Intersects(Node node,Vector3 origin,Vector3 direction,double limit=1)
+    {
+        double near=0,far=limit;
         for(int axis=0;axis<(planar?2:3);axis++)
         {
             if(direction[axis]==0){if(origin[axis]<node.min[axis]||origin[axis]>node.max[axis])return false;continue;}

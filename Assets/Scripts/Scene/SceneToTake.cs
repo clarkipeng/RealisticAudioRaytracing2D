@@ -191,20 +191,20 @@ public static class SceneToTake
             readonly uint updates;
             readonly Vector2 size;
             readonly int samples,seed,id,period,duration;
-            readonly bool enabled,oneShot;
+            readonly bool enabled,oneShot,project;
             public PlaneSnapshot(Transform source)
             {
                 plane=source.GetComponent<AudioSourcePlane>();id=Identity(plane);
                 if(plane==null)return;
                 mask=plane.mask;updates=mask==null?0:mask.updateCount;size=plane.size;
                 samples=plane.samples;seed=plane.seed;enabled=plane.enabled;period=plane.burstPeriodSamples;duration=plane.burstDurationSamples;
-                oneShot=plane.oneShotImpacts;
+                oneShot=plane.oneShotImpacts;project=plane.projectImpacts;
             }
             public void Validate(Transform source)
             {
                 if(Identity(source.GetComponent<AudioSourcePlane>())!=id)Changed();
                 if(plane!=null && (plane.enabled!=enabled || plane.size!=size || plane.samples!=samples || plane.seed!=seed ||
-                    plane.burstPeriodSamples!=period || plane.burstDurationSamples!=duration || plane.oneShotImpacts!=oneShot || plane.mask!=mask || (mask!=null && mask.updateCount!=updates)))Changed();
+                    plane.burstPeriodSamples!=period || plane.burstDurationSamples!=duration || plane.oneShotImpacts!=oneShot || plane.projectImpacts!=project || plane.mask!=mask || (mask!=null && mask.updateCount!=updates)))Changed();
             }
         }
         sealed class BindingSnapshot

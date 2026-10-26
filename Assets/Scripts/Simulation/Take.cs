@@ -674,6 +674,8 @@ public sealed class AcousticTake : IDisposable
         if(scene.planes!=null)foreach(var plane in scene.planes)
         {
             AudioSourcePlane.Validate(plane);
+            if(plane.generatorVersion==3 && scene.dimension!=Dimension.Spatial3D)
+                throw new InvalidDataException("Projected impacts require spatial geometry.");
             if(plane.source<0 || plane.source>=scene.sources.Length || scene.sources[plane.source].streamed || !planeSources.Add(plane.source))
                 throw new InvalidDataException("Invalid emission plane source binding.");
         }

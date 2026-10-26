@@ -42,6 +42,58 @@ def emission_random(key, epoch, index, property):
     return h
 
 
+class SurfaceProjection:
+    """Vertical first-surface queries for HUD dots; audio uses the C# BVH.
+
+    Cache transformed triangles per object. The broad phase rejects objects by
+    their horizontal bounds; moving objects use the recorded birth-time pose.
+    """
+    def __init__(self, directory, scene):
+        payload = (directory / 'geometry.bin').read_bytes()
+        if hashlib.sha256(payload).hexdigest() != scene['geometryHash'] or len(payload) % 44:
+            raise ValueError('Geometry hash/length mismatch.')
+        geometry = np.frombuffer(payload, dtype=[('vertices', '<f4', (3, 3)), ('owner', '<i4'), ('material', '<i4')])
+        self.local = {int(owner): (np.flatnonzero(geometry['owner'] == owner), geometry['vertices'][geometry['owner'] == owner])
+                      for owner in np.unique(geometry['owner'])}
+        self.cache = {}
+
+    def down(self, origin, poses):
+        best, best_id, position = -math.inf, math.inf, None
+        for owner, (ids, local) in self.local.items():
+            pose = poses[owner]
+            if int(np.float32(pose[19]).view(np.uint32)) & 3 != 3:
+                continue
+            key = pose[:7].tobytes()
+            cached = self.cache.get(owner)
+            if cached is None or cached[0] != key:
+                triangles = pose[:3] + rotate(pose[3:7], local)
+                a = triangles[:, 0]
+                e1, e2 = triangles[:, 1] - a, triangles[:, 2] - a
+                cached = (key, triangles.min(axis=(0, 1)), triangles.max(axis=(0, 1)), a, e1, e2)
+                self.cache[owner] = cached
+            _, low, high, a, e1, e2 = cached
+            if origin[0] < low[0] or origin[0] > high[0] or origin[2] < low[2] or origin[2] > high[2] or origin[1] < low[1] or high[1] < best:
+                continue
+            det = e1[:, 0] * e2[:, 2] - e1[:, 2] * e2[:, 0]
+            nonvertical = abs(det) >= 1e-12
+            dx, dz = origin[0] - a[:, 0], origin[2] - a[:, 2]
+            u = np.divide(dx * e2[:, 2] - dz * e2[:, 0], det, out=np.zeros_like(det), where=nonvertical)
+            v = np.divide(e1[:, 0] * dz - e1[:, 2] * dx, det, out=np.zeros_like(det), where=nonvertical)
+            y = a[:, 1] + u * e1[:, 1] + v * e2[:, 1]
+            candidates = np.flatnonzero(nonvertical & (u >= 0) & (v >= 0) & (u + v <= 1) & (y <= origin[1]) & (y >= best))
+            if not len(candidates):
+                continue
+            index = candidates[np.argmax(y[candidates])]
+            if y[index] == best and ids[index] >= best_id:
+                continue
+            best, best_id = y[index], ids[index]
+            normal = np.cross(e1[index], e2[index]); normal /= np.linalg.norm(normal)
+            if normal[1] < 0:
+                normal = -normal
+            position = np.array([origin[0], best, origin[2]]) + normal * .001
+        return position
+
+
 class TakeActivity:
     def __init__(self, directory):
         self.directory = Path(directory)
@@ -91,8 +143,9 @@ class TakeActivity:
             self.times[source], self.voices[source] = times, voices
             self.max_gain[source] = max((v[2] for v in voices if v is not None), default=1)
         self.planes = {p['source']: p for p in self.scene.get('planes', [])}
-        if any(p.get('generatorVersion', 0) not in (0, 1, 2) for p in self.planes.values()):
+        if any(p.get('generatorVersion', 0) not in (0, 1, 2, 3) for p in self.planes.values()):
             raise ValueError('Unsupported emission generator.')
+        projection = SurfaceProjection(self.directory, self.scene) if any(p.get('generatorVersion') == 3 for p in self.planes.values()) else None
         self.births = {}
         for source, p in self.planes.items():
             if p.get('generatorVersion', 0) == 0 or source not in self.sources:
@@ -125,8 +178,13 @@ class TakeActivity:
                         cell = bisect.bisect_right(cdf, rnd(1))
                         u = ((cell % p['width']) + (rnd(2) >> 8) / 2**24) / p['width'] - .5
                         v = ((cell // p['width']) + (rnd(3) >> 8) / 2**24) / p['height'] - .5
-                        pose = self.poses(birth / self.rate)[obj]
+                        poses = self.poses(birth / self.rate)
+                        pose = poses[obj]
                         position = pose[:3] + rotate(pose[3:7], vector(p['u']) * u + vector(p['v']) * v)
+                        if p.get('generatorVersion') == 3:
+                            position = projection.down(position, poses)
+                            if position is None:
+                                continue
                         births.append((birth, position))
                 start = end if action == 0 else None
             self.births[source] = ([b[0] for b in births], [b[1] for b in births])

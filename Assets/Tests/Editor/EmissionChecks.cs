@@ -155,19 +155,27 @@ public partial class TakeChecks
     [TestCase(TakeRender.DelayFilter.Linear,64,1,true),TestCase(TakeRender.DelayFilter.WindowedSinc,128,1,true)]
     [TestCase(TakeRender.DelayFilter.Linear,64,0,true),TestCase(TakeRender.DelayFilter.WindowedSinc,128,0,true),Category("GPU")]
     public void EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(TakeRender.DelayFilter filter,int step,int bounces,bool oneShot)
+        => CheckBurstAudio(filter,step,bounces,oneShot);
+
+    [TestCase(TakeRender.DelayFilter.Linear),TestCase(TakeRender.DelayFilter.WindowedSinc),Category("GPU")]
+    public void ProjectedImpactCpuGpuLiveAndBatchAgree(TakeRender.DelayFilter filter) => CheckBurstAudio(filter,64,0,true,true);
+
+    void CheckBurstAudio(TakeRender.DelayFilter filter,int step,int bounces,bool oneShot,bool project=false)
     {
-        var shader=RequireGpu();const int rate=8192;var scene=Scene();scene.planes=new[]{BurstPlane()};
+        var shader=RequireGpu();const int rate=8192;var scene=Scene(project?2:1);scene.listeners=new[]{1};scene.planes=new[]{BurstPlane()};
         var pcm=new float[257];var random=new System.Random(37);for(int i=0;i<pcm.Length;i++)pcm[i]=(float)(random.NextDouble()*2-1);
-        if(oneShot){scene.planes[0].generatorVersion=2;scene.planes[0].burstDurationSamples=pcm.Length;}
+        if(oneShot){scene.planes[0].generatorVersion=project?3:2;scene.planes[0].burstDurationSamples=pcm.Length;}
+        var geometry=project?ImpactQuad(2,2,10):Array.Empty<AcousticTake.Primitive>();
+        if(project){scene.objects[2].primitiveCount=2;scene.materials=new[]{new AcousticTake.MaterialDefinition{frequencies=new[]{0f},absorption=new[]{1f}}};}
         var events=new[]{new AcousticTake.VoiceEvent{gain=.2f,loop=true},
             new AcousticTake.VoiceEvent{sample=311,action=AcousticTake.VoiceAction.Gain,gain=.1f},
             new AcousticTake.VoiceEvent{sample=499,action=AcousticTake.VoiceAction.Stop},
             new AcousticTake.VoiceEvent{sample=573,gain=.3f,loop=true,clipOffset=oneShot?0:51}};
         long[] observations={0,19,137,298,443,601,787,1000};
-        string takePath=Path.Combine(directory,"burst-take");var states=States();states[1].position=new Vector3(0,1,2);
-        using(var writer=new AcousticTake.Writer(takePath,rate,scene,Array.Empty<AcousticTake.Primitive>(),new[]{pcm}))
+        string takePath=Path.Combine(directory,"burst-take");var states=States(project?2:1);if(project){states[2].position=Vector3.zero;states[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;}states[1].position=new Vector3(0,project?3:1,2);
+        using(var writer=new AcousticTake.Writer(takePath,rate,scene,geometry,new[]{pcm}))
         {
-            foreach(long sample in observations){states[0].position=new Vector3(sample*.0001f,0,0);writer.Append(sample,states);}
+            foreach(long sample in observations){states[0].position=new Vector3(sample*.0001f,project?4:0,0);writer.Append(sample,states);}
             foreach(var e in events)writer.Append(e);writer.Complete();
         }
         using var take=AcousticTake.Open(takePath);var settings=BurstSettings();settings.delayFilter=filter;settings.responseStepSamples=step;
@@ -184,7 +192,7 @@ public partial class TakeChecks
         }
         // Independent flat-response oracle: sum windowed PCM at each frozen
         // site's physical delay, removing only the declared renderer latency.
-        var signals=TakeRender.Signal.FromTake(take,new[]{pcm});var sourceBatch=new Emission.Batch(scene,settings,rate,1);
+        var signals=TakeRender.Signal.FromTake(take,new[]{pcm});var sourceBatch=new Emission.Batch(scene,settings,rate,1,geometry);
         var sites=new Dictionary<long,(Vector4 point,Emission.Batch.Clock clock)>();
         void Pose(long sample,AcousticTake.State[] target)=>take.Evaluate(Math.Min(sample,1000),target);
         for(long sample=0;sample<expected.Length;sample+=64)
@@ -204,7 +212,7 @@ public partial class TakeChecks
         }
         AssertBurstAudio(analytic,expected);
         var rendered=new List<float>();Action<long,float[],int> collect=(sample,block,count)=>{for(int n=0;n<count;n++)rendered.Add(block[n]);};
-        var left=States();var right=States();take.ReadStoredFrame(0,left);
+        var left=States(project?2:1);var right=States(project?2:1);take.ReadStoredFrame(0,left);
         using(var live=new TakeRender.Live(scene,take.Geometry,new[]{pcm},rate,settings,null,0,0,shader))
         {
             live.Prepare(left);live.Append(events[0]);live.Observe(0,0,left,left,collect);int e=1;

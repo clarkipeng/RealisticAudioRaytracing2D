@@ -1,0 +1,8 @@
+{
+  "wallSeconds": 54.202458875006414,
+  "peakResidentMiB": 806.6875,
+  "minimumNiceAfterLaunch": 19,
+  "residentLimitMiB": 3072,
+  "exitCode": 0,
+  "note": "One background Unity worker: import, one captured picture, full 36 s numeric route and CPU emission audit. No full-scene audio render."
+}

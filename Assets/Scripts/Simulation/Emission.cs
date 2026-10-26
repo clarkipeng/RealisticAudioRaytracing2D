@@ -6,6 +6,7 @@ using UnityEngine;
 // quality, listeners and submission boundaries never enter this key.
 internal static class Emission
 {
+    internal const float SurfaceOffset=.001f; // Air side, above the transport ray epsilon; part of generator v3.
     internal const uint Burst = 0x80000000u;
     internal static bool HasBursts(AcousticTake.Scene scene) => scene.planes != null && Array.Exists(scene.planes,p=>p.generatorVersion!=0);
     internal static uint SourceKey(string id, int seed)
@@ -28,8 +29,8 @@ internal static class Emission
         if(scene.planes!=null)foreach(var p in scene.planes)
         {
             signals[p.source].BurstDuration=p.burstDurationSamples;
-            signals[p.source].OneShot=p.generatorVersion==2;
-            if(p.generatorVersion==2 && signals[p.source].Clip.Length!=p.burstDurationSamples)
+            signals[p.source].OneShot=p.generatorVersion>=2;
+            if(p.generatorVersion>=2 && signals[p.source].Clip.Length!=p.burstDurationSamples)
                 throw new InvalidOperationException("One-shot duration must match the complete decoded clip.");
         }
     }
@@ -92,21 +93,28 @@ internal static class Emission
         readonly AcousticTake.EmissionPlane[] planes;
         readonly uint[] keys;
         readonly float[] weights;
-        readonly Dictionary<long,Vector3>[] positions;
+        struct Placement { internal Vector3 position; internal bool valid; }
+        readonly Dictionary<long,Placement>[] positions;
+        readonly DirectBvh surfaces;
         readonly List<long> expired=new List<long>();
         readonly AcousticTake.State[] pose;
         readonly long history;
         internal readonly int PointsPerFrame,FrameStride;
-        internal long NumericBytes => (long)Ranges.Length*16+(long)Points.Length*32+(long)pose.Length*80+keys.Length*8L;
-        internal Batch(AcousticTake.Scene scene,TakeRender.Settings settings,int rate,int frames)
+        internal long NumericBytes => (long)Ranges.Length*16+(long)Points.Length*32+(long)pose.Length*80+keys.Length*8L+(surfaces?.NumericBytes??0);
+        internal Batch(AcousticTake.Scene scene,TakeRender.Settings settings,int rate,int frames,AcousticTake.Primitive[] geometry=null)
         {
             this.scene=scene;this.settings=settings;FrameStride=HasBursts(scene)?scene.sources.Length:0;if(FrameStride==0)frames=1;history=settings.HistorySamples(rate)+2L*settings.responseStepSamples;
             planes=new AcousticTake.EmissionPlane[scene.sources.Length];samplers=new PlaneSampler[planes.Length];keys=new uint[planes.Length];weights=new float[planes.Length];Array.Fill(weights,float.NaN);
-            positions=new Dictionary<long,Vector3>[planes.Length];
+            positions=new Dictionary<long,Placement>[planes.Length];
+            if(scene.planes!=null && Array.Exists(scene.planes,p=>p.generatorVersion==3))
+            {
+                if(scene.dimension!=AcousticTake.Dimension.Spatial3D || geometry==null)throw new InvalidOperationException("Projected impacts require spatial numeric geometry.");
+                surfaces=new DirectBvh(scene,geometry);
+            }
             if(scene.planes!=null)foreach(var p in scene.planes)
             {
                 planes[p.source]=p;
-                if(p.generatorVersion!=0){samplers[p.source]=new PlaneSampler(p);positions[p.source]=new Dictionary<long,Vector3>();keys[p.source]=SourceKey(scene.objects[scene.sources[p.source].objectIndex].id,p.seed);}
+                if(p.generatorVersion!=0){samplers[p.source]=new PlaneSampler(p);positions[p.source]=new Dictionary<long,Placement>();keys[p.source]=SourceKey(scene.objects[scene.sources[p.source].objectIndex].id,p.seed);}
             }
             for(int s=0;s<planes.Length;s++)PointsPerFrame=checked(PointsPerFrame+(planes[s]?.samples??1));
             Points=new Vector4[checked(PointsPerFrame*frames)];Clocks=new Clock[Points.Length];Ranges=new Range[checked(planes.Length*frames)];pose=new AcousticTake.State[scene.objects.Length];
@@ -140,7 +148,7 @@ internal static class Emission
                         double power=energy/signal.Clip.Length;
                         if(!double.IsFinite(power))throw new InvalidOperationException("Non-finite burst clip.");
                         double windowEnergy=3.0*(p.burstDurationSamples-1)/8;
-                        weights[s]=power==0?0:(float)Math.Sqrt(p.burstPeriodSamples/(p.generatorVersion==2?energy:power*windowEnergy));
+                        weights[s]=power==0?0:(float)Math.Sqrt(p.burstPeriodSamples/(p.generatorVersion>=2?energy:power*windowEnergy));
                     }
                     float weight=weights[s];
                     if(!float.IsFinite(weight))throw new InvalidOperationException("Burst clip normalization exceeds finite pressure range.");
@@ -152,17 +160,27 @@ internal static class Emission
                         {
                             long birth=Birth(keys[s],epoch.start,index,p.burstPeriodSamples);
                             if(birth>=end || birth<=from-p.burstDurationSamples)continue;
+                            uint key=keys[s];var local=sampler.Sample(Random(key,epoch.start,index,1),Random(key,epoch.start,index,2),Random(key,epoch.start,index,3),out double pdf);
+                            if(!positions[s].TryGetValue(birth,out var placement))
+                            {
+                                evaluate(birth,pose);var state=pose[scene.sources[s].objectIndex];
+                                placement=new Placement{position=state.position+state.rotation*(Vector3)local,valid=true};
+                                if(p.generatorVersion==3)
+                                {
+                                    surfaces.Update(pose);
+                                    placement.valid=surfaces.Raycast(placement.position,Vector3.down,pose,out var hit);
+                                    if(placement.valid)placement.position=hit.position+hit.normal*SurfaceOffset;
+                                }
+                                positions[s].Add(birth,placement);
+                            }
+                            if(!placement.valid)continue; // A miss consumes rainfall, not an impact slot; never resample.
                             if(range.count>=p.samples || (settings.maxBounces>0 && range.count>=settings.SourceRaysPerBin(scene,s)))
                                 throw new InvalidOperationException("Seeded burst coverage exceeds plane Samples or, with indirect transport enabled, Rays Per Bin. Increase the relevant bounds or reduce the delay horizon/event rate.");
-                            uint key=keys[s];var local=sampler.Sample(Random(key,epoch.start,index,1),Random(key,epoch.start,index,2),Random(key,epoch.start,index,3),out double pdf);
-                            if(!positions[s].TryGetValue(birth,out var world))
-                            {
-                                evaluate(birth,pose);var state=pose[scene.sources[s].objectIndex];world=state.position+state.rotation*(Vector3)local;positions[s].Add(birth,world);
-                            }
+                            var world=placement.position;
                             int at=range.first+range.count++;float amplitude=(float)(weight*Math.Sqrt(local.w/pdf));
                             if(!float.IsFinite(amplitude))throw new InvalidOperationException("Burst source weight exceeds finite pressure range.");
                             Points[at]=new Vector4(world.x,world.y,world.z,amplitude);
-                            Clocks[at]=new Clock{phase=p.generatorVersion==2?Burst:Burst|(uint)Integer(Random(key,epoch.start,index,4),signal.Clip.Length),low=(uint)birth,high=(uint)(birth>>32)};
+                            Clocks[at]=new Clock{phase=p.generatorVersion>=2?Burst:Burst|(uint)Integer(Random(key,epoch.start,index,4),signal.Clip.Length),low=(uint)birth,high=(uint)(birth>>32)};
                         }
                     }
                 }

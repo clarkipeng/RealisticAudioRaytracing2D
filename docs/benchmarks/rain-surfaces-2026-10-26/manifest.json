@@ -1,0 +1,13 @@
+{
+  "take": ".context/roof-impacts/capture/take",
+  "frameCount": 1802,
+  "durationSamples": 1588481,
+  "sampleRate": 44100,
+  "sources": 10,
+  "generatorVersion": 3,
+  "impactsSha256": "9b7ec7941fa9466f68832f3c0bd13c51ea543750bc0bfd55b01f7e9a34525aa1",
+  "sceneHash": "ba2e72ea617b03ab00f3f857daffbe582b48657e54786d3d5171a570aaa3207f",
+  "stateHash": "00050753b6bf2ec971b3135a251901624bbf61409d810cf5a15ce3a881cc7483",
+  "eventHash": "dcc3c0fddf4cbaba4a10d9cc81a7f559c03d421325aab336db68a16a110ff764",
+  "geometryHash": "ae3764e138c4da135b3f802dabc7cf5a3b754d854aa5b4958e8b5514ae2bf38f"
+}

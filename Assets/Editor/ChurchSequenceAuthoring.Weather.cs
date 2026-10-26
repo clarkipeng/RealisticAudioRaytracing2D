@@ -7,6 +7,27 @@ using Object=UnityEngine.Object;
 
 public static partial class ChurchSequenceAuthoring
 {
+    static void ConfigureSurfaceRain(RaytracedAudioSource rain)
+    {
+        rain.name="Rain surfaces";
+        rain.transform.position=new Vector3(0,100,-7);
+        var drops=rain.GetComponent<AudioSourcePlane>();
+        drops.oneShotImpacts=true;drops.projectImpacts=true;drops.mask=null;
+        // This mask now describes incoming rainfall. Geometry supplies shelter.
+        drops.burstPeriodSamples=344;drops.samples=192;
+    }
+    public static void UpdateRainSurfaces()
+    {
+        if(!Application.isBatchMode||Application.isPlaying)throw new InvalidOperationException("Author offscreen in batch mode.");
+        foreach(string path in new[]{"Assets/Scenes/Church.unity","Assets/Scenes/ChurchWeatherComparison.unity"})
+        {
+            EditorSceneManager.OpenScene(path);
+            var actor=Object.FindAnyObjectByType<SceneSequenceActor>();
+            ConfigureSurfaceRain(actor.Target("rain").GetComponent<RaytracedAudioSource>());
+            EditorSceneManager.MarkSceneDirty(actor.gameObject.scene);EditorSceneManager.SaveScene(actor.gameObject.scene);
+        }
+        Debug.Log("CHURCH_SURFACE_RAIN_AUTHORED first acoustic surface from above");
+    }
     // Run after tools/rain_impact.py. Saves both the normal sequence and a
     // repeatable constant-weather route; no foreground editor or Play mode.
     public static void UpdateWeather()
@@ -22,8 +43,7 @@ public static partial class ChurchSequenceAuthoring
         var actor=Object.FindAnyObjectByType<SceneSequenceActor>();var session=Object.FindAnyObjectByType<SceneSession>();
         var rain=actor.Target("rain").GetComponent<RaytracedAudioSource>();
         rain.clip=AssetDatabase.LoadAssetAtPath<AudioClip>(path);rain.loop=true;
-        var drops=rain.GetComponent<AudioSourcePlane>();drops.oneShotImpacts=true;
-        drops.burstPeriodSamples=344;drops.samples=192;
+        ConfigureSurfaceRain(rain);
         var wind=actor.Target("wind").GetComponent<RaytracedAudioSource>();wind.loop=true;
         var canopy=wind.GetComponent<AudioSourcePlane>();if(canopy==null)canopy=wind.gameObject.AddComponent<AudioSourcePlane>();
         wind.transform.position=new Vector3(0,6,-15);canopy.size=new Vector2(80,70);
@@ -64,6 +84,6 @@ public static partial class ChurchSequenceAuthoring
         EditorSceneManager.MarkSceneDirty(session.gameObject.scene);
         EditorSceneManager.SaveScene(session.gameObject.scene,"Assets/Scenes/ChurchWeatherComparison.unity");
         AssetDatabase.SaveAssets();
-        Debug.Log("CHURCH_WEATHER_AUTHORED ground impacts + canopy grains + steady shelter comparison");
+        Debug.Log("CHURCH_WEATHER_AUTHORED first-surface impacts + canopy grains + steady shelter comparison");
     }
 }

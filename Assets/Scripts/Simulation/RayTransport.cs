@@ -110,7 +110,7 @@ internal sealed class RayTransport : IDisposable
             commands = new CommandBuffer {name="Acoustics GPU transport"};
             pairRanges=new ComputeBuffer(layout.Ranges.Length,8);pairRanges.SetData(layout.Ranges);
             directSites=new ComputeBuffer(layout.DirectSites.Length,8);directSites.SetData(layout.DirectSites);
-            emissions=new Emission.Batch(scene,settings,rate,maximumFrames);
+            emissions=new Emission.Batch(scene,settings,rate,maximumFrames,geometry);
             emissionRanges=new ComputeBuffer(emissions.Ranges.Length,16);emissionRanges.SetData(emissions.Ranges);
             emissionPoints=new ComputeBuffer(emissions.Points.Length,16);emissionPoints.SetData(emissions.Points);
             emissionClocks=new ComputeBuffer(emissions.Clocks.Length,16);emissionClocks.SetData(emissions.Clocks);
