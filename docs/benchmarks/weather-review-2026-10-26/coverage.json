@@ -1,0 +1,53 @@
+{
+    "candidates": [
+        {
+            "name": "wind-baseline",
+            "period": 4096,
+            "duration": 22050,
+            "capacity": 24,
+            "sites": 65,
+            "visibleOutside": 8,
+            "visibleInside": 0,
+            "minOutsidePower": 0.0,
+            "maxOutsidePower": 56.491027166031617,
+            "meanOutsidePower": 12.891770996908681
+        },
+        {
+            "name": "wind-long",
+            "period": 4096,
+            "duration": 88200,
+            "capacity": 40,
+            "sites": 65,
+            "visibleOutside": 8,
+            "visibleInside": 0,
+            "minOutsidePower": 0.34400275824489509,
+            "maxOutsidePower": 28.011373184791048,
+            "meanOutsidePower": 10.388781277978787
+        },
+        {
+            "name": "wind-dense",
+            "period": 2048,
+            "duration": 88200,
+            "capacity": 80,
+            "sites": 130,
+            "visibleOutside": 20,
+            "visibleInside": 0,
+            "minOutsidePower": 6.074369733168955,
+            "maxOutsidePower": 24.41183223057027,
+            "meanOutsidePower": 14.396365975391325
+        },
+        {
+            "name": "wind-slow",
+            "period": 4096,
+            "duration": 176400,
+            "capacity": 64,
+            "sites": 65,
+            "visibleOutside": 8,
+            "visibleInside": 0,
+            "minOutsidePower": 6.07352806423309,
+            "maxOutsidePower": 14.003733971679529,
+            "meanOutsidePower": 7.7442639279483809
+        }
+    ],
+    "interpretation": "Expected direct power envelope from visibility, Hann weights and inverse distance; not rendered sound or transmission."
+}

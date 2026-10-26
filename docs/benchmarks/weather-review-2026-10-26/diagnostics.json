@@ -1,0 +1,229 @@
+{
+  "windowSeconds": [
+    2,
+    5.5
+  ],
+  "levels": "RMS dBFS, not calibrated SPL",
+  "renders": {
+    "wind-baseline": {
+      "sceneHash": "9bc889e4df3904035c2c5ce5736d7609248ac88dd2544af9c30dbecf3fb65940",
+      "stateHash": "bdfe56bef66e2140096fc2f2755349c63cd5328e17fe80e932b1910a96682bc2",
+      "eventHash": "35856ca1cb915e10dd0c3fd1c9d4d95048051afbf227d77be64e45987ffc0c8c",
+      "geometryHash": "ae3764e138c4da135b3f802dabc7cf5a3b754d854aa5b4958e8b5514ae2bf38f",
+      "workingNumericBytes": 384560154,
+      "renderWallSeconds": 42.3095113,
+      "launcherWallSeconds": 66.30814337500487,
+      "peakResidentMiB": 932.828125,
+      "minimumNiceAfterLaunch": 19,
+      "listeners": [
+        {
+          "file": "listener-0.wav",
+          "sha256": "8164dc7f86d6c4413d92a3e2d561e2b38157abae45837c2327383b74d6bc0261",
+          "peak": 0.08126784861087799,
+          "overFullScale": 0,
+          "rms": 0.0085722369445499,
+          "dBFS": -41.338116663270654,
+          "quarterSecondDb": [
+            -37.64449923431584,
+            -69.36841107858747,
+            -116.40313348692521,
+            -90.10236879784279,
+            -42.67958525437941,
+            -44.18201882656008,
+            -114.56414900267062,
+            -111.74649462830722,
+            -76.92608391243867,
+            -38.034626047392685,
+            -37.65146766546959,
+            -36.543587806178394,
+            -41.12461287430015,
+            -38.642281732271606
+          ],
+          "quarterSecondRangeDb": 79.85954568074682,
+          "quarterSecondP90MinusP10Db": 76.07226292669964,
+          "lowBandPower80To1000": 4.978699284279604e-05,
+          "highBandPower1000To10000": 2.1166326336083058e-05
+        },
+        {
+          "file": "listener-1.wav",
+          "sha256": "255d96481ce06ed7bee1f60ec0b88f061fbc10281c0b76a7a54f20f01fa8c68d",
+          "peak": 1.2478983990149572e-05,
+          "overFullScale": 0,
+          "rms": 2.0434207741086997e-06,
+          "dBFS": -113.79284391495099,
+          "quarterSecondDb": [
+            -112.79284295637636,
+            -116.71652189515541,
+            -115.97562852493154,
+            -116.87148791226096,
+            -115.92752142793317,
+            -115.93524421756155,
+            -112.27954302298485,
+            -110.11213698019232,
+            -112.5734790010314,
+            -115.00822239815955,
+            -112.32323733532498,
+            -112.44296195402538,
+            -116.41078762640146,
+            -114.94885704037513
+          ],
+          "quarterSecondRangeDb": 6.759350932068642,
+          "quarterSecondP90MinusP10Db": 4.3321502978423325,
+          "lowBandPower80To1000": 3.167212028173763e-12,
+          "highBandPower1000To10000": 9.835158079460852e-13
+        }
+      ]
+    },
+    "wind-dense": {
+      "sceneHash": "0eb961d756ad1e3d3479da213d80f0d49c93b11d8acefdbfc064c22e99d61352",
+      "stateHash": "bdfe56bef66e2140096fc2f2755349c63cd5328e17fe80e932b1910a96682bc2",
+      "eventHash": "35856ca1cb915e10dd0c3fd1c9d4d95048051afbf227d77be64e45987ffc0c8c",
+      "geometryHash": "ae3764e138c4da135b3f802dabc7cf5a3b754d854aa5b4958e8b5514ae2bf38f",
+      "workingNumericBytes": 1224153370,
+      "renderWallSeconds": 78.6194738,
+      "launcherWallSeconds": 104.4495223749982,
+      "peakResidentMiB": 740.03125,
+      "minimumNiceAfterLaunch": 19,
+      "listeners": [
+        {
+          "file": "listener-0.wav",
+          "sha256": "85b36637d309d6fa5b1bd4319cda0addcdaf4637a28681f063ba14015036eebd",
+          "peak": 0.04505398869514465,
+          "overFullScale": 0,
+          "rms": 0.008593173443452352,
+          "dBFS": -41.31692844755767,
+          "quarterSecondDb": [
+            -45.34579642599376,
+            -47.731256209101744,
+            -48.60873902662732,
+            -45.28529015485611,
+            -41.013567054461944,
+            -38.55445657662657,
+            -38.421825236168544,
+            -40.1012249408261,
+            -42.824052589277045,
+            -42.421157763986315,
+            -41.51346542841062,
+            -40.345396951320076,
+            -39.411134046555034,
+            -40.12136889804335
+          ],
+          "quarterSecondRangeDb": 10.186913790458775,
+          "quarterSecondP90MinusP10Db": 8.204158456564237,
+          "lowBandPower80To1000": 5.112175412908222e-05,
+          "highBandPower1000To10000": 2.177562480042853e-05
+        },
+        {
+          "file": "listener-1.wav",
+          "sha256": "6141ee9e88cc14932c91592624babb53f98cb6c1c1a038ca2d288e96114d1462",
+          "peak": 9.066810889635235e-06,
+          "overFullScale": 0,
+          "rms": 1.9049474437210444e-06,
+          "dBFS": -114.40234003458927,
+          "quarterSecondDb": [
+            -114.73489244605142,
+            -116.86476433817941,
+            -116.92137314798323,
+            -114.93486490792372,
+            -113.75401462804398,
+            -113.39336700066328,
+            -113.34521512871036,
+            -113.94293687042051,
+            -113.87474767425147,
+            -114.2616090483989,
+            -113.82021184884167,
+            -114.188588118788,
+            -113.96219604215034,
+            -115.42801104534915
+          ],
+          "quarterSecondRangeDb": 3.5761580192728673,
+          "quarterSecondP90MinusP10Db": 2.9321770614528475,
+          "lowBandPower80To1000": 2.7295077739475008e-12,
+          "highBandPower1000To10000": 8.789351781616927e-13
+        }
+      ]
+    },
+    "rain-outside": {
+      "sceneHash": "34b7f2ff92e13ab822823c758180f24f307d08b8a3abec2194676b3cc488ce64",
+      "stateHash": "94d76a8df0bccd080e1bd83d5df9d74a0c668effe2a4b99b901188f9268743e9",
+      "eventHash": "2e220873ea80d8f42ac9451c88ce77ec50e622cc2d0d8015707047dcbcff7a92",
+      "geometryHash": "ae3764e138c4da135b3f802dabc7cf5a3b754d854aa5b4958e8b5514ae2bf38f",
+      "workingNumericBytes": 1461934718,
+      "renderWallSeconds": 209.5291038,
+      "launcherWallSeconds": 237.18073666699638,
+      "peakResidentMiB": 1067.109375,
+      "minimumNiceAfterLaunch": 19,
+      "listeners": [
+        {
+          "file": "listener-0.wav",
+          "sha256": "e3915aa20b1d897cb3e146e757408b059c47076f1fb0aa942709e2ec9af2de2b",
+          "peak": 0.5990663766860962,
+          "overFullScale": 0,
+          "rms": 0.017690957643802033,
+          "dBFS": -35.04497314603171,
+          "quarterSecondDb": [
+            -36.87832489225737,
+            -35.16826770555226,
+            -33.34917127437692,
+            -29.194628962070944,
+            -39.79361354375287,
+            -46.12543885064903,
+            -32.84640382679391,
+            -44.44224060358873,
+            -33.26127857363967,
+            -32.79287952365316,
+            -40.95893815736272,
+            -43.79571381963406,
+            -37.90215534340662,
+            -36.199924174747224
+          ],
+          "quarterSecondRangeDb": 16.93080988857809,
+          "quarterSecondP90MinusP10Db": 11.439345753806947,
+          "lowBandPower80To1000": 6.2357087323086895e-06,
+          "highBandPower1000To10000": 0.00012935341186353708
+        }
+      ]
+    },
+    "rain-inside": {
+      "sceneHash": "34b7f2ff92e13ab822823c758180f24f307d08b8a3abec2194676b3cc488ce64",
+      "stateHash": "42cc668943f2e754d97ca0d9a3ceb30229845e8c927369a5e6ac42cac463f85b",
+      "eventHash": "2e220873ea80d8f42ac9451c88ce77ec50e622cc2d0d8015707047dcbcff7a92",
+      "geometryHash": "ae3764e138c4da135b3f802dabc7cf5a3b754d854aa5b4958e8b5514ae2bf38f",
+      "workingNumericBytes": 1461934718,
+      "renderWallSeconds": 247.1788163,
+      "launcherWallSeconds": 279.19753079200746,
+      "peakResidentMiB": 666.203125,
+      "minimumNiceAfterLaunch": 19,
+      "listeners": [
+        {
+          "file": "listener-0.wav",
+          "sha256": "0bf4db67fb4d0b3ac8264c6e3cc3badb3f9abca9512e5fb9616c4527e83ad9c4",
+          "peak": 0.12645366787910461,
+          "overFullScale": 0,
+          "rms": 0.0013078133738618997,
+          "dBFS": -57.669084516025315,
+          "quarterSecondDb": [
+            -114.06675115801963,
+            -116.16007433381314,
+            -111.62272083723477,
+            -108.26357954154246,
+            -57.32891346982065,
+            -72.40646354241834,
+            -120.7211982771264,
+            -64.60993694321272,
+            -111.5969292439916,
+            -79.57114505098686,
+            -66.77743997196154,
+            -62.44204047743818,
+            -70.65268132150138,
+            -46.81621641815502
+          ],
+          "quarterSecondRangeDb": 73.90498185897138,
+          "quarterSecondP90MinusP10Db": 56.66922580896918,
+          "lowBandPower80To1000": 2.1127423427733896e-07,
+          "highBandPower1000To10000": 8.479178465256399e-07
+        }
+      ]
+    }
+  }
+}

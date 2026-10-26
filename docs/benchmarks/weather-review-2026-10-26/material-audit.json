@@ -1,0 +1,158 @@
+{
+  "builder": "Assets/Editor/TakeDemo.cs:31 assigns timber to non-frame doors and masonry to all other imported collision meshes.",
+  "objects": [
+    {
+      "object": "CopperRoof",
+      "primitiveStart": 24,
+      "primitiveCount": 1138
+    },
+    {
+      "object": "StoneBrickWalls",
+      "primitiveStart": 5098,
+      "primitiveCount": 7631
+    },
+    {
+      "object": "StoneRoof",
+      "primitiveStart": 12729,
+      "primitiveCount": 456
+    },
+    {
+      "object": "Stone floor and courtyard",
+      "primitiveStart": 16193,
+      "primitiveCount": 12
+    },
+    {
+      "object": "FrontDoorRight",
+      "primitiveStart": 16205,
+      "primitiveCount": 22
+    },
+    {
+      "object": "FrontDoorLeft",
+      "primitiveStart": 17275,
+      "primitiveCount": 22
+    }
+  ],
+  "materials": [
+    {
+      "name": "Church wood",
+      "interpolation": "linear-hz-clamped-v1",
+      "frequencies": [
+        125.0,
+        8000.0
+      ],
+      "absorption": [
+        0.11999999731779099,
+        0.30000001192092896
+      ],
+      "scattering": [
+        0.25,
+        0.25
+      ],
+      "transmission": [
+        0.0006630420684814453,
+        0.0004072972806170583
+      ],
+      "ior": [
+        0.09486981481313705,
+        0.1023314818739891
+      ],
+      "damping": [
+        0.10999999940395355,
+        0.31303074955940247
+      ],
+      "admittanceReal": [],
+      "admittanceImag": []
+    },
+    {
+      "name": "Church stone",
+      "interpolation": "linear-hz-clamped-v1",
+      "frequencies": [
+        125.0,
+        8000.0
+      ],
+      "absorption": [
+        0.02500000037252903,
+        0.054999999701976776
+      ],
+      "scattering": [
+        0.11999999731779099,
+        0.11999999731779099
+      ],
+      "transmission": [
+        0.00012958049774169922,
+        7.95994492364116e-05
+      ],
+      "ior": [
+        0.06353908777236938,
+        0.06853654235601425
+      ],
+      "damping": [
+        0.027500007301568985,
+        0.07825770974159241
+      ],
+      "admittanceReal": [],
+      "admittanceImag": []
+    },
+    {
+      "name": "Church glass",
+      "interpolation": "linear-hz-clamped-v1",
+      "frequencies": [
+        125.0,
+        8000.0
+      ],
+      "absorption": [
+        0.03999999910593033,
+        0.02500000037252903
+      ],
+      "scattering": [
+        0.02500000037252903,
+        0.02500000037252903
+      ],
+      "transmission": [
+        0.00011789798736572266,
+        7.242304855026305e-05
+      ],
+      "ior": [
+        0.060224246233701706,
+        0.06496098637580872
+      ],
+      "damping": [
+        0.013750003650784492,
+        0.039128854870796204
+      ],
+      "admittanceReal": [],
+      "admittanceImag": []
+    },
+    {
+      "name": "Church ground",
+      "interpolation": "linear-hz-clamped-v1",
+      "frequencies": [
+        125.0,
+        8000.0
+      ],
+      "absorption": [
+        0.3499999940395355,
+        0.800000011920929
+      ],
+      "scattering": [
+        0.550000011920929,
+        0.550000011920929
+      ],
+      "transmission": [
+        0.0012729763984680176,
+        0.00078197120456025
+      ],
+      "ior": [
+        0.3643805980682373,
+        0.3930397629737854
+      ],
+      "damping": [
+        0.23375001549720764,
+        0.6651903986930847
+      ],
+      "admittanceReal": [],
+      "admittanceImag": []
+    }
+  ],
+  "decision": "Keep the current illustrative propagation coefficients. A visual mesh name alone does not specify the roof assembly or measured impact/transmission response; no fabricated copper calibration was applied."
+}

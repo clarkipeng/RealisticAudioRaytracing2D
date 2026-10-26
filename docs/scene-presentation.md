@@ -9,11 +9,11 @@ Open `Assets/Scenes/Church.unity`. The scene supports both styles through **Chur
 
 Both use the same collision proxies, acoustic objects, input, movement and networking. Visual materials are separate from acoustic coefficients. The same small image effect supplies exposure in stops, contrast, saturation and vignette. Material pairs are serialized in the scene, so replacing a style does not destroy the other style's references on reload. No render-pipeline migration or package dependency was added.
 
-## Current scope — 25 October 2026
+## Current scope — 26 October 2026
 
 **Sequenced walkthrough:** [sequence and code organization](simulation-contracts.md#sequenced-church-walkthrough-and-environment-behavior-planned) now has an implementation in the saved Church scene: a visible character, animated tower bell, calling robin, rising wind/clouds, rain and lightning/thunder. `Assets/External/Church/Sequence/SceneSequence-Church walkthrough.asset` holds the timeline. The scene has ten registered acoustic sources, including its existing organ and four voice slots; only the five sequence-owned sources play during the demonstration. [Shared abstractions and future behavior](simulation-contracts.md#shared-abstractions-and-future-behavior) retains the extension backlog for contacts, local weather, overlap and late join.
 
-`SceneSequence` compiles sample-timed commands and evaluates weather/poses at absolute time. `SceneSequenceActor` connects it to the existing session and isolated replay. `BellPresentation`, `BirdPresentation` and `EnvironmentPresentation` animate their visuals without emitting audio. The bell's measured PCM strikes drive its swing, the bird's measured envelope drives its beak, and shared wind drives foliage, rain drift and rustle gain. Visual rain uses a static 128 × 192 collider-height map, separate from the acoustic ground mask. Wetness accumulates and remains after rain stops. The rain plane now emits seeded one-shot ground impacts; wind grains are sampled across a canopy-density mask.
+`SceneSequence` compiles sample-timed commands and evaluates weather/poses at absolute time. `SceneSequenceActor` connects it to the existing session and isolated replay. `BellPresentation`, `BirdPresentation` and `EnvironmentPresentation` animate their visuals without emitting audio. The bell's measured PCM strikes drive its swing, the bird's measured envelope drives its beak, and shared wind drives foliage, rain drift and rustle gain. Visual rain uses a static 128 × 192 collider-height map, separate from acoustic impact projection. Wetness accumulates and remains after rain stops. The rain plane emits seeded one-shot impacts on the first acoustic surface; wind grains are sampled across a canopy-density mask.
 
 The first sequence is single-player. Its world authority and late-join adapter, spatial weather regions, drying/runoff, physical drop excitation, object radiation and automatic bird reactions are deferred. Trees have visual foliage rather than water or acoustic leaf simulation. Thunder is still a point-source recording; its visible channel does not claim a distributed coherent acoustic channel. Recordings retain their original environmental acoustics.
 
@@ -58,6 +58,14 @@ Projection shares the existing BVH and spectral transport. Its result is cached 
 Run `ChurchSequenceAuthoring.UpdateRainSurfaces` in an isolated batch editor to upgrade the two saved scenes without rebuilding the sequence. `UpdateWeather` also authors this configuration. The previous 25 October film remains a ground-only result; its levels do not measure this revision.
 
 The [first-surface audit](benchmarks/rain-surfaces-2026-10-26/README.md) passes 47 Unity cases and 3 HUD cases. A fresh Church take contains 4,615 impacts, including 1,332 roof hits, with no duplicate ground impacts. Its independently reconstructed minimap births match, within 0.109 mm position error. The Church snapshot assigns stone acoustics to all struck surfaces, including the mesh named CopperRoof; material-specific timbre remains work.
+
+## Weather sound review and wind coverage — 26 October 2026
+
+Both scenes now use 2 s canopy grains every 2,048 samples, with 80 retained slots, instead of 0.5 s grains every 4,096 samples with 24 slots. At 44.1 kHz this provides about 43 overlapping grains rather than five. The source clip, mask, seed, gain and gust envelope are unchanged. `ChurchSequenceAuthoring.UpdateWindCoverage` updates the saved scenes without rebuilding their sequence.
+
+The [matched stationary review](benchmarks/weather-review-2026-10-26/README.md) finds outside wind level unchanged within 0.02 dB while its quarter-second P90−P10 level spread drops from 76.07 to 8.20 dB. Two-receiver numeric storage increases from 0.358 to 1.140 GiB; this remains an offline preview. The eight-second comparison uses labeled reference stills and an animated emission map, with four seconds outside followed by the same excitation inside, at one playback gain.
+
+Rain averages 22.63 dB quieter inside in the measured window, but large delayed peaks remain. Changing only the transport seed moves the largest indoor peak and raises it from 0.12645 to 0.35236, with identical drops and geometry. Indirect transport stability remains unresolved. Indoor wind is also extremely attenuated; the placeholder stone assignments are not a calibrated roof/building model. The review adds neither structural vibration nor a listening-gain workaround.
 
 ## Droplet rain and distributed wind — 25 October 2026
 

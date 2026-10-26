@@ -1,0 +1,45 @@
+{
+  "seconds": 8,
+  "sampleRate": 44100,
+  "masterGain": 1,
+  "cropSeconds": [
+    2,
+    6
+  ],
+  "sequence": [
+    "outside",
+    "closed interior"
+  ],
+  "edgeFadeMilliseconds": 15,
+  "mixedPeak": 0.5987966060638428,
+  "picture": "Two reference stills from the previous capture; receiver position/heading checked. This is not a new walking film.",
+  "audio": "Sum of independently traced rain and wind sources. No per-segment normalization.",
+  "files": {
+    "roof-weather-comparison.mp4": {
+      "bytes": 388477,
+      "sha256": "d0c8c7de3d75f90723d90dd9acad9f30c81274a9a68cb387cd32c362b803724b"
+    },
+    "roof-weather-comparison.wav": {
+      "bytes": 1411258,
+      "sha256": "81e3271300f3bef9e330a58dcec9a85dc6f515c5a50a22f22713713482322808"
+    },
+    "wind-before-after.wav": {
+      "bytes": 1411258,
+      "sha256": "f72fd92fdb347e982b43da0750969fbebdc0de4e4e8e40028b0559ce68b64300"
+    },
+    "wind-outside-inside.wav": {
+      "bytes": 1411258,
+      "sha256": "cd38f0db634e3ce42717e0e8421f02c30db0c1b889fd976f55d90306161f4727"
+    },
+    "roof-weather-preview.png": {
+      "bytes": 391829,
+      "sha256": "180ab70a17cf600d5fcbce13adc3fff0a6b82ceab3177a0e8dbb33828e9e12d2"
+    }
+  },
+  "decodedAac": {
+    "sampleRate": 44100,
+    "samples": 353280,
+    "peak": 0.6193739771842957,
+    "overFullScale": 0
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "verifiedSame": [
+    "sceneHash",
+    "takeStateHash",
+    "takeEventHash",
+    "takeSourceHash",
+    "sampleRate",
+    "dspLatencySamples",
+    "outputSamples",
+    "provenance",
+    "audioShaderDependencyHash"
+  ],
+  "changedSettings": [
+    "seed"
+  ],
+  "windowSeconds": [
+    2,
+    5.5
+  ],
+  "inputTake": "rain-inside-take",
+  "renders": [
+    {
+      "seed": 0,
+      "sha256": "0bf4db67fb4d0b3ac8264c6e3cc3badb3f9abca9512e5fb9616c4527e83ad9c4",
+      "peak": 0.12645366787910461,
+      "peakSeconds": 7.005986394557823,
+      "overFullScale": 0,
+      "windowRmsDbFS": -57.669084516025315,
+      "workingNumericBytes": 1461934718,
+      "renderWallSeconds": 247.1788163
+    },
+    {
+      "seed": 1,
+      "sha256": "934d92199ce26d7f40acd8b58df49a5b4036d5f243d818796e68ea90272eda0a",
+      "peak": 0.35235777497291565,
+      "peakSeconds": 5.7424489795918365,
+      "overFullScale": 0,
+      "windowRmsDbFS": -56.317619072179255,
+      "workingNumericBytes": 1461934718,
+      "renderWallSeconds": 258.2404583
+    }
+  ],
+  "largestPeakCrossChecks": [
+    {
+      "seed": 0,
+      "peakSeconds": 7.005986394557823,
+      "otherSeedPeakWithin10ms": 0.0
+    },
+    {
+      "seed": 1,
+      "peakSeconds": 5.7424489795918365,
+      "otherSeedPeakWithin10ms": 4.134394657739904e-06
+    }
+  ],
+  "fullCorrelation": 7.673607261697636e-07,
+  "fullDifferenceRms": 0.004426913826174504,
+  "interpretation": "Two-seed sensitivity diagnostic, not a convergence study or a physical reference."
+}
