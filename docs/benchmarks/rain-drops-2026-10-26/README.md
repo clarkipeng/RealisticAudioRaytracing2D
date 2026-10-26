@@ -5,6 +5,14 @@ raindrop SFX that can accumulate into rain. The old comparison was reopened;
 there is still no clarification about whether both halves or only the cache
 half sounded bad. No previous source or propagation audition is accepted.
 
+**Listening result: rejected.** The user called the recorded-drop audition
+"horrible". Neither material is approved for integration. This rules out this
+particular bank/cropping/layering result, not every possible per-drop model;
+the precise audible failure has not been isolated. Stop tuning these snippets.
+The next source review should start with a purpose-built library's published
+demo. The PMSFX product page was opened with its embedded SoundCloud playlist
+and demonstration video; playback and purchase were not initiated.
+
 ## Search results
 
 Checked 2026-10-26. Product descriptions establish intended use, not a listening
@@ -67,7 +75,7 @@ Separate players expose six bank snippets and the full source recording with
 playback gain adjustment. No audio autoplays. All output samples were checked
 finite and below 0.51 full-scale peak. This demonstrates literal accumulation
 of empirical snippets; whether it sounds like useful rain remains a listening
-question. Runtime sources, transport, bounce count and vibration scope are
+question; this particular audition has now failed. Runtime sources, transport, bounce count and vibration scope are
 unchanged.
 
 ## Reproduce

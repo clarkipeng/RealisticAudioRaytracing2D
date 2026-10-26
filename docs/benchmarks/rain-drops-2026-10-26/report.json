@@ -1,7 +1,7 @@
 {
   "seed": 42,
   "sample_rate": 44100,
-  "status": "awaiting listening",
+  "status": "rejected",
   "method": "mono overlap-add of recorded impact snippets; no added ambience or room response",
   "rates_are": "sample triggers per second, not physical rainfall units",
   "sources": {
@@ -255,5 +255,6 @@
       "rms": 0.007028267409277833,
       "peak": 0.39999999999999997
     }
-  }
+  },
+  "listening_feedback": "horrible"
 }
