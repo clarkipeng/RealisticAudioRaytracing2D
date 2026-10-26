@@ -1,6 +1,6 @@
 # Dense rain source experiment — 26 October 2026
 
-The first source experiment is implemented and exported for listening. A bounded convolution mixer reproduces the explicit dense-drop mixture to floating-point precision. It is faster at high event density and slower at low density. This verifies the source-generation optimization, not realistic rain, spatial grouping or Church acoustics. Listening acceptance is pending.
+The first source experiment is implemented and exported for listening. A bounded convolution mixer reproduces the explicit dense-drop mixture to floating-point precision. It is faster at high event density and slower at low density. This verifies the source-generation optimization, not realistic rain, spatial grouping or Church acoustics. **The user rejected the first timbre as still too clicky or artificial.** A second audition is described below; acceptance remains pending.
 
 ## Implemented model
 
@@ -58,4 +58,31 @@ python docs/benchmarks/rain-source-2026-10-26/run.py <new-output-directory>
 
 The command refuses an existing output directory, exports banks and native/audition WAVs, verifies numerical agreement, records measurements/hashes, and draws the chart. It never plays audio. The retained [report](report.json) contains all seeds, native metrics, timings, source-bank/event hashes, provenance and audition gains. Three tests and the 18-case experiment were run after the final kernel change.
 
-Listen to both candidate families before promoting their timbre. A small spatial/shelter comparison remains next: per-drop positions versus fixed patches, with directions, delays and occlusion accounted for. Source generation is now independent of ray count, but there is no ray renderer in this experiment. Existing Church files, 32-bounce settings, material assignments and rain clip are unchanged. The known indirect-transport spikes and missing roof radiation remain unresolved. No Unity process, foreground window, audio-device playback or persistent worker was started.
+Listen to both candidate families before promoting their timbre. A small spatial/shelter comparison follows an accepted source: per-drop positions versus fixed patches, with directions, delays and occlusion accounted for. Source generation is now independent of ray count, but there is no ray renderer in this experiment. Existing Church files, 32-bounce settings, material assignments and rain clip are unchanged. The known indirect-transport spikes and missing roof radiation remain unresolved. No Unity process, foreground window, audio-device playback or persistent worker was started.
+
+## Revision after the listening rejection
+
+The first hard-surface bank has fast noise onsets with most energy in short transients. `make_splash_bank()` tests a quieter initial hit, a longer low-frequency component and irregular secondary noisy splashes. It retains 32 variants and the same size probabilities. Every event sample, voice index and gain is identical between the two profiles for a given seed/intensity. Response support increases from 80 to 120 ms; no room response, background recording, gain limiter or extra drops are added. This is an authored sound-design hypothesis, not a measured splash or material response. Water has not been revised.
+
+The new [revision runner](revise.py) preserves the first experiment and its report:
+
+```sh
+python docs/benchmarks/rain-source-2026-10-26/revise.py <new-output-directory>
+```
+
+It renders three seeds at three intensities, verifies unchanged event schedules, and compares explicit and compact synthesis. Maximum absolute error over those nine cases is **1.32 × 10⁻¹⁶**. The three unit checks also pass with the longer bank included. This revision does not repeat the timing benchmark; the earlier speed ratios must not be attributed to its longer responses.
+
+For seed 23 at intensity 1, excess kurtosis falls from 0.49 to 0.13, crest factor from 15.02 to 13.42 dB, and 10 ms P90−P10 level spread from 3.81 to 2.66 dB. The 125–500 Hz band fraction rises from 4.6% to 13.2%; the 2–8 kHz fraction falls from 61.4% to 36.7%. These describe reduced impulsiveness and a changed spectrum. They do not establish rain likeness. The real recording's level spread is 4.60 dB: this candidate may be too smooth. A listening result must resolve that, not another numerical acceptance threshold.
+
+Files are in the Conductor workspace's `.context/rain-source-review/splash-revision/`:
+
+| File | Contents |
+|---|---|
+| `previous-then-splash-revision.wav` | Six seconds of rejected v1, 0.5 s silence, six seconds of the revision. |
+| `recorded-then-splash-revision.wav` | Six seconds of the same real recording, 0.5 s silence, six seconds of the revision. |
+| `splash-revision-seed23.wav` | Eight seconds of revised rain plus its tail. |
+| `splash-revision-seed47.wav` | Another realization at the same intensity and gain. |
+
+The comparison uses one fixed audition gain per profile, matched over seconds 1–7 at seed 23/intensity 1. V1 retains its previous gain of 6.016105854351045. V2 uses 6.58628604961807 for both delivered seeds; the recording uses 0.676870800937255. No per-drop normalization or dynamic gain is applied. Exported float32 WAVs are finite with peaks below 0.271. Native PCM and bank are retained locally; hashes, metrics, gains and provenance are in [revision-report.json](revision-report.json). The recording is a texture reference with unknown surface/recording acoustics as described above, not isolated source data.
+
+The previous source was **rejected**, not accepted because its mixer or metrics passed. The revision is **awaiting listening**. If it trades clicks for featureless hiss, the next source experiment should use suitable isolated measured surface responses or an explicitly empirical texture model, rather than continuing to tune arbitrary transients and call them physical rain. The [2019 rain paper](https://haonancheng.cn/attaches/2019%20SIGGRAPH.pdf) supplements impact models with recording-derived material textures; it does not establish that our authored bank is adequate. Scene integration remains deferred.

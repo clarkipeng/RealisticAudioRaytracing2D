@@ -27,13 +27,13 @@ class RainSourceChecks(unittest.TestCase):
         self.assertNotEqual(full.tobytes(), other.tobytes())
 
     def test_authored_bank_renders_across_short_and_long_blocks(self):
-        bank = rain.make_bank('water')
-        events = rain.events(bank, 7, 0, 0, 4410, .5)
-        reference = rain.explicit(bank, events, 4410)
-        for block in [511, 2048, 4096]:
-            actual = rain.compact(bank, events, 4410, block)
-            assert_allclose(actual, reference, atol=2e-16, rtol=1e-12)
-        self.assertGreater(np.max(abs(reference[4410:])), 0)
+        for bank in [rain.make_bank('water'), rain.make_splash_bank()]:
+            events = rain.events(bank, 7, 0, 0, 4410, .5)
+            reference = rain.explicit(bank, events, 4410)
+            for block in [511, 2048, 4096]:
+                actual = rain.compact(bank, events, 4410, block)
+                assert_allclose(actual, reference, atol=2e-16, rtol=1e-12)
+            self.assertGreater(np.max(abs(reference[4410:])), 0)
 
 
 if __name__ == '__main__':

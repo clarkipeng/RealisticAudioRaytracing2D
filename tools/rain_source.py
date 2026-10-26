@@ -88,6 +88,59 @@ def make_bank(surface, rate=RATE):
         responses=descriptions))
 
 
+def make_splash_bank(rate=RATE):
+    """Second hard/wet audition: subdued onset plus irregular noisy splashes.
+
+    Same size classes/weights as v1 allow exactly the same event schedule.
+    These envelopes are authored hypotheses, not measured splash responses,
+    material parameters, reverb or a fit to the reference recording.
+    """
+    if rate < 32000:
+        raise ValueError('Use a sample rate of at least 32 kHz.')
+    duration = .12
+    t = np.arange(round(rate*duration))/rate
+    filters = [butter(2, band, fs=rate, btype='bandpass', output='sos')
+               for band in [(100, 1400), (450, 6500), (2500, 14000)]]
+    fade = np.ones(len(t))
+    fade[-round(.025*rate):] = np.cos(np.linspace(0, np.pi/2, round(.025*rate)))**2
+    shapes, weights, descriptions = [], [], []
+    for size, fraction in zip([.7, 1.1, 1.7, 2.6], [.60, .28, .10, .02]):
+        for variant in range(8):
+            rng = np.random.default_rng(np.random.SeedSequence([907, round(size*100), variant]))
+            body, middle, bright = [sosfilt(f, rng.standard_normal(len(t))) for f in filters]
+            scale = np.sqrt(size)
+
+            def envelope(delay, attack, decay):
+                age = np.maximum(0, t-delay)
+                return -np.expm1(-age/attack)*np.exp(-age/decay)
+
+            onset = envelope(0, .0007*scale, .0022*scale)
+            wash = envelope(rng.uniform(.001, .003), rng.uniform(.0015, .003)*scale,
+                            rng.uniform(.012, .022)*scale)
+            splashes = np.zeros(len(t))
+            count = int(rng.integers(4, 10))
+            for _ in range(count):
+                delay = rng.uniform(.002, .035)*scale
+                splashes += rng.uniform(.4, 1.)*envelope(
+                    delay, rng.uniform(.0006, .002)*scale, rng.uniform(.003, .010)*scale)
+            splashes /= np.sqrt(count)
+            shape = (.16*middle*onset + .8*body*wash +
+                     .5*middle*splashes + .18*bright*(.3*wash+splashes))
+            shape *= fade
+            correction = (onset+wash+splashes)*fade
+            shape -= shape.sum()*correction/correction.sum()
+            shape *= size**1.5
+            shape[0] = shape[-1] = 0
+            shapes.append(shape)
+            weights.append(fraction/8)
+            descriptions.append(dict(sizeClassMm=size, variant=variant, secondarySplashes=count))
+    return Bank(np.array(shapes), np.array(weights), dict(
+        version='rain-splash-audition-v2', surface='hard-wet', sampleRate=rate,
+        durationSeconds=duration, responses=descriptions,
+        scope='Authored source audition; uncalibrated splash timing, spectrum and gain. No room response.',
+        sizeDistribution='Same illustrative four-class mixture and probabilities as v1.'))
+
+
 def events(bank, seed, region, start, end, intensity=1., rate=RATE):
     """Stable absolute one-second blocks; arbitrary query/batch boundaries agree.
 
