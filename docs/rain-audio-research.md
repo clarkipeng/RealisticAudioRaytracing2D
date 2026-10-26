@@ -8,6 +8,10 @@ Research review, 26 October 2026. Recommendation and experiments, not an impleme
 
 **Latest feedback supersedes that candidate status:** the user said it still sounds weird and clarified that the problem is the rain itself. The authored sources remain unaccepted. A [recording-based texture audition](benchmarks/rain-source-2026-10-26/README.md#source-rejection-and-recording-based-texture-audition) now compares seeded passage resequencing with the rejected source. It is empirical playback with recording acoustics retained, not a physical-drop model or a dry-source integration. The new concrete reference is sparse and peaky; it is kept separate from dense rain.
 
+**Small propagation trial:** at the user's request to try precomputation/interpolation, a [fixed-room bake experiment](benchmarks/rain-cache-2026-10-26/README.md) compares fresh mirror responses, raw response blending and matched delay/gain interpolation up to 32 bounces. It tests approximation behavior with one unchanged rain signal; it changes neither the source model nor the production renderer and does not establish a runtime speedup.
+
+**That audition was also rejected as sounding bad.** Fine-cache and fresh rain outputs differ by 1.95% relative RMS, but numerical similarity is not a listening pass. The fixture uses a single emitter in a closed ideal box, not rain distributed over actual exposed surfaces. It remains an interpolation control; source and scene realism are unaccepted.
+
 The best candidate for this project is a hybrid: model rainfall as many varied surface impacts, synthesize the dense component in bounded world-space regions, and preserve distinguishable impacts where spatial detail matters. Use the existing geometry/transport for shelter and propagation. Evaluate this against a small explicit-drop reference before choosing the runtime representation. A bank of convincing sounds solves a different problem from a stable spatial estimator; both need attention.
 
 ## What the literature establishes

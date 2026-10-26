@@ -1,0 +1,521 @@
+{
+  "scope": "Interpolation experiment in an ideal closed shoebox; not Church, a moving walk, dynamic doors or a runtime speedup benchmark.",
+  "roomMetres": [
+    8.0,
+    6.0,
+    3.0
+  ],
+  "axes": "x/y horizontal, z up",
+  "reflectionPressure": 0.65,
+  "maxBounces": 32,
+  "reflectedPaths": 45824,
+  "sampleRate": 44100,
+  "checks": [
+    "six analytic first-order image distances/gains",
+    "swapped-endpoint reciprocity",
+    "interpolation partition of unity and exact grid-node selection"
+  ],
+  "direct": "Calculated exactly for each query, excluded from the bake.",
+  "interpolation": "Bilinear source \u00d7 bilinear receiver. Same image index matches reflected paths. Compare raw IR blending with delay/gain interpolation.",
+  "sourceBounds": [
+    [
+      1.0,
+      2.0
+    ],
+    [
+      2.0,
+      3.0
+    ]
+  ],
+  "receiverBounds": [
+    [
+      4.0,
+      5.0
+    ],
+    [
+      2.5,
+      3.5
+    ]
+  ],
+  "inputSha256": "40d6703acc73aff47ec2e0444e945c49690f1bc4f35b5364786bc1b6116aa55b",
+  "inputNote": "Existing recording-based dense-rain test signal, unchanged across methods; not a new rain model.",
+  "cases": [
+    {
+      "spacingMetres": 1.0,
+      "source": [
+        1.8,
+        2.2,
+        0.08
+      ],
+      "receiver": [
+        4.3,
+        2.9,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007080958006554283,
+      "cacheInterpolationSeconds": 0.0008603750029578805,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.14955406033430416,
+      "reflectedGainRelativeRms": 0.0039524104312145866,
+      "raw": {
+        "relativeImpulseL2": 0.866440123450755,
+        "energyDifferenceDb": -2.012727135448993,
+        "bandEnergyDifferenceDb": [
+          -4.455152359786932,
+          -1.9048156733483268,
+          -1.8827936955533655,
+          -2.026105496311458
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.0992306350782513,
+        "energyDifferenceDb": 0.11144496593557013,
+        "bandEnergyDifferenceDb": [
+          -0.454075424426866,
+          -0.03877430203529765,
+          -0.027358077621554934,
+          0.19421614572592147
+        ]
+      }
+    },
+    {
+      "spacingMetres": 1.0,
+      "source": [
+        1.15,
+        2.8,
+        0.08
+      ],
+      "receiver": [
+        4.85,
+        3.2,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007114207997801714,
+      "cacheInterpolationSeconds": 0.0009233750024577603,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.09510718636234039,
+      "reflectedGainRelativeRms": 0.002383598738238165,
+      "raw": {
+        "relativeImpulseL2": 0.9688271522896243,
+        "energyDifferenceDb": -3.092843038044894,
+        "bandEnergyDifferenceDb": [
+          -6.413094011521066,
+          -3.5736853536523445,
+          -2.7436430714661557,
+          -3.019231455125758
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.2184170518523285,
+        "energyDifferenceDb": -0.08264914432067698,
+        "bandEnergyDifferenceDb": [
+          -0.17695727600503663,
+          -0.7720148161314572,
+          0.0892622748201563,
+          0.1859959068568545
+        ]
+      }
+    },
+    {
+      "spacingMetres": 1.0,
+      "source": [
+        1.42,
+        2.37,
+        0.08
+      ],
+      "receiver": [
+        4.64,
+        2.68,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007068834005622193,
+      "cacheInterpolationSeconds": 0.0008661250030854717,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.13178240436873892,
+      "reflectedGainRelativeRms": 0.005446309773258378,
+      "raw": {
+        "relativeImpulseL2": 0.9206495328131078,
+        "energyDifferenceDb": -2.9262040285713753,
+        "bandEnergyDifferenceDb": [
+          -3.9089196747966652,
+          -4.759682814722751,
+          -1.9315950876315813,
+          -3.5722092796569904
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.0599539476502924,
+        "energyDifferenceDb": -0.008368656543409701,
+        "bandEnergyDifferenceDb": [
+          -0.23322013194297403,
+          -0.6339436663097188,
+          0.7103782528824985,
+          -0.2612478441952709
+        ]
+      }
+    },
+    {
+      "spacingMetres": 1.0,
+      "source": [
+        1.67,
+        2.72,
+        0.08
+      ],
+      "receiver": [
+        4.18,
+        3.38,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007175249993451871,
+      "cacheInterpolationSeconds": 0.0010060000058729202,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.12514669036489112,
+      "reflectedGainRelativeRms": 0.003698524572634736,
+      "raw": {
+        "relativeImpulseL2": 0.8986568543529349,
+        "energyDifferenceDb": -1.9453366995591792,
+        "bandEnergyDifferenceDb": [
+          -4.670669893300682,
+          -1.0512078424053548,
+          -1.7873509758503054,
+          -1.9951644770937653
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.1386641454581217,
+        "energyDifferenceDb": 0.05282791204570793,
+        "bandEnergyDifferenceDb": [
+          -0.3274614525068974,
+          -0.2736090152415494,
+          0.22898290177420302,
+          0.03535213456705517
+        ]
+      }
+    },
+    {
+      "spacingMetres": 0.5,
+      "source": [
+        1.8,
+        2.2,
+        0.08
+      ],
+      "receiver": [
+        4.3,
+        2.9,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007472375000361353,
+      "cacheInterpolationSeconds": 0.0009198749903589487,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.042204118608063015,
+      "reflectedGainRelativeRms": 0.001271371782572736,
+      "raw": {
+        "relativeImpulseL2": 0.836776714419667,
+        "energyDifferenceDb": -2.750897625420094,
+        "bandEnergyDifferenceDb": [
+          -3.516449857640519,
+          -2.449558221738177,
+          -3.003711609673119,
+          -2.674015314054431
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.0072597241215826,
+        "energyDifferenceDb": -0.013290684615788863,
+        "bandEnergyDifferenceDb": [
+          -0.08975867615110852,
+          -0.5710142420545736,
+          0.22165491273797577,
+          -0.026478642068487518
+        ]
+      }
+    },
+    {
+      "spacingMetres": 0.5,
+      "source": [
+        1.15,
+        2.8,
+        0.08
+      ],
+      "receiver": [
+        4.85,
+        3.2,
+        1.6
+      ],
+      "freshResponseSeconds": 0.0075198330014245585,
+      "cacheInterpolationSeconds": 0.0008954579971032217,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.03231346298773589,
+      "reflectedGainRelativeRms": 0.0009198630995736389,
+      "raw": {
+        "relativeImpulseL2": 0.8726949591988213,
+        "energyDifferenceDb": -4.17485297862565,
+        "bandEnergyDifferenceDb": [
+          -5.850028188470173,
+          -4.794829621147328,
+          -3.5595480663836816,
+          -4.601079383461195
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.1466666571846489,
+        "energyDifferenceDb": -0.01291866414264429,
+        "bandEnergyDifferenceDb": [
+          -0.04912672752387774,
+          -0.37420297218291265,
+          -0.05539353593992714,
+          0.042944663062120046
+        ]
+      }
+    },
+    {
+      "spacingMetres": 0.5,
+      "source": [
+        1.42,
+        2.37,
+        0.08
+      ],
+      "receiver": [
+        4.64,
+        2.68,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007359000010183081,
+      "cacheInterpolationSeconds": 0.0009072920074686408,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.03104733140685288,
+      "reflectedGainRelativeRms": 0.000797865230851657,
+      "raw": {
+        "relativeImpulseL2": 0.895803421071775,
+        "energyDifferenceDb": -3.168076618042466,
+        "bandEnergyDifferenceDb": [
+          -3.580496406488858,
+          -4.582443053150043,
+          -2.036583518368623,
+          -4.028728875043165
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.047814113003961,
+        "energyDifferenceDb": 0.01566693017141244,
+        "bandEnergyDifferenceDb": [
+          -0.053812396413158256,
+          -0.4698789679934867,
+          0.42183962196687513,
+          -0.2805387914700512
+        ]
+      }
+    },
+    {
+      "spacingMetres": 0.5,
+      "source": [
+        1.67,
+        2.72,
+        0.08
+      ],
+      "receiver": [
+        4.18,
+        3.38,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007244583001011051,
+      "cacheInterpolationSeconds": 0.0009012090013129637,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.04305644074983233,
+      "reflectedGainRelativeRms": 0.0011663685929219352,
+      "raw": {
+        "relativeImpulseL2": 0.8625445586414331,
+        "energyDifferenceDb": -2.6470712861403642,
+        "bandEnergyDifferenceDb": [
+          -3.6322112754458837,
+          -1.5151534387953938,
+          -2.770186454582231,
+          -2.617735805879238
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 1.03672478251583,
+        "energyDifferenceDb": -0.03812776487613298,
+        "bandEnergyDifferenceDb": [
+          -0.09465517777444574,
+          -0.6318350051494452,
+          0.2175463079195334,
+          -0.006107802683037558
+        ]
+      }
+    },
+    {
+      "spacingMetres": 0.1,
+      "source": [
+        1.8,
+        2.2,
+        0.08
+      ],
+      "receiver": [
+        4.3,
+        2.9,
+        1.6
+      ],
+      "freshResponseSeconds": 0.007724541996140033,
+      "cacheInterpolationSeconds": 0.0008874159975675866,
+      "timingNote": "Lookup timing excludes conversion of interpolated paths into the IR; not comparable to the full fresh-response time.",
+      "delayWeightedRmsMs": 0.0019564598223960213,
+      "reflectedGainRelativeRms": 5.334793380392101e-05,
+      "raw": {
+        "relativeImpulseL2": 0.6020791139540842,
+        "energyDifferenceDb": -2.5926310063604556,
+        "bandEnergyDifferenceDb": [
+          -0.33984335992551107,
+          -2.32869888482451,
+          -2.8536246588865404,
+          -2.821100160724424
+        ]
+      },
+      "aligned": {
+        "relativeImpulseL2": 0.11942486876730196,
+        "energyDifferenceDb": 0.023518446055987102,
+        "bandEnergyDifferenceDb": [
+          -0.003722675661147562,
+          -0.03542937982220828,
+          0.044725512350278815,
+          0.02078434162882784
+        ]
+      }
+    }
+  ],
+  "caches": [
+    {
+      "spacingMetres": 1.0,
+      "sourceSamples": 4,
+      "listenerSamples": 4,
+      "bakeSeconds": 0.1142672499991022,
+      "sourceBounds": [
+        [
+          1.0,
+          2.0
+        ],
+        [
+          2.0,
+          3.0
+        ]
+      ],
+      "receiverBounds": [
+        [
+          4.0,
+          5.0
+        ],
+        [
+          2.5,
+          3.5
+        ]
+      ],
+      "pathBytes": 5865472,
+      "rawIrBytes": 2822464
+    },
+    {
+      "spacingMetres": 0.5,
+      "sourceSamples": 9,
+      "listenerSamples": 9,
+      "bakeSeconds": 0.6732882500073174,
+      "sourceBounds": [
+        [
+          1.0,
+          2.0
+        ],
+        [
+          2.0,
+          3.0
+        ]
+      ],
+      "receiverBounds": [
+        [
+          4.0,
+          5.0
+        ],
+        [
+          2.5,
+          3.5
+        ]
+      ],
+      "pathBytes": 29693952,
+      "rawIrBytes": 14288724
+    },
+    {
+      "spacingMetres": 0.1,
+      "sourceSamples": 4,
+      "listenerSamples": 4,
+      "bakeSeconds": 0.11638508400938008,
+      "sourceBounds": [
+        [
+          1.75,
+          1.85
+        ],
+        [
+          2.1500000000000004,
+          2.25
+        ]
+      ],
+      "receiverBounds": [
+        [
+          4.25,
+          4.35
+        ],
+        [
+          2.85,
+          2.9499999999999997
+        ]
+      ],
+      "pathBytes": 5865472,
+      "rawIrBytes": 2822464
+    }
+  ],
+  "files": {
+    "fresh.wav": {
+      "seconds": 6.0,
+      "peak": 0.1381722837604901,
+      "sha256": "c7217c794ab547278fa144f7b6c4019cbf8b0ec8e4c16cd4c94fba2bced4c7ee"
+    },
+    "aligned-1m.wav": {
+      "seconds": 6.0,
+      "peak": 0.13940620606207635,
+      "sha256": "480554a5f74aeb54317bcd6558292be974509a960c9aad40816294a883e2b3ec"
+    },
+    "raw-1m.wav": {
+      "seconds": 6.0,
+      "peak": 0.13338651233935217,
+      "sha256": "800871f7944f18114dff36f213231ba05b54d3ef4808c01a4583dd8c72e9e726"
+    },
+    "aligned-0.5m.wav": {
+      "seconds": 6.0,
+      "peak": 0.13962157185400384,
+      "sha256": "8d73e324e5f7c27b374ce7edcefad8656ff963ee9f02fd904854d8b2981bdad3"
+    },
+    "raw-0.5m.wav": {
+      "seconds": 6.0,
+      "peak": 0.12975205505740534,
+      "sha256": "1e90b3ecf59dac4006ec0c1341ffe828865be97ef194ca4c0977cee55cd5586f"
+    },
+    "aligned-0.1m.wav": {
+      "seconds": 6.0,
+      "peak": 0.13793606673874337,
+      "sha256": "b648be86bf9e52dc8ab0d0e128da54d27b645e2b500500a6572982f7967365cb"
+    },
+    "raw-0.1m.wav": {
+      "seconds": 6.0,
+      "peak": 0.1296749053176371,
+      "sha256": "a03434336049e74524266158c327e176001e54f70d35674704159e4b3fd239f9"
+    },
+    "fresh-then-cached.wav": {
+      "seconds": 12.5,
+      "peak": 0.1381722837604901,
+      "sha256": "7949dc4a16b49bce877eacab0e555d35559bf93cdbf40392d21a2ea2b36f8302"
+    },
+    "fresh-then-raw-blend.wav": {
+      "seconds": 12.5,
+      "peak": 0.1381722837604901,
+      "sha256": "acc11b056478cff828364a4430124262a7dc7f746020fbdfab71f9e7f87c0192"
+    }
+  },
+  "auditionGain": 2.299698670112541,
+  "audition": "One common gain for all methods; five-second dry signal plus one-second IR tail, no per-method normalization or limiter."
+}

@@ -1,0 +1,21 @@
+{
+  "feedback": "User said the audition sounds bad; which half is pending clarification.",
+  "sameDrySignal": true,
+  "freshPeak": 0.13817228376865387,
+  "cachePeak": 0.137936070561409,
+  "aligned10cm": {
+    "relativeAudioRmsError": 0.019490421823983976,
+    "differenceDbRelativeToReference": -34.20357523011946,
+    "levelDifferenceDb": 0.0004328905018340587,
+    "correlation": 0.9998100665959607,
+    "maximumSampleError": 0.008828863268718123
+  },
+  "raw1m": {
+    "relativeAudioRmsError": 0.29331211196667806,
+    "differenceDbRelativeToReference": -10.653400059742124,
+    "levelDifferenceDb": -0.20802186598971006,
+    "correlation": 0.9562267900224956,
+    "maximumSampleError": 0.07241767458617687
+  },
+  "interpretation": "Numerical similarity does not establish perceptual similarity or realistic room/source timbre. No listening acceptance."
+}
