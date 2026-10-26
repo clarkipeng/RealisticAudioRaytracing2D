@@ -1,0 +1,198 @@
+{
+  "version": "rain-direct-shelter-v1",
+  "speedOfSound": 343.0,
+  "domainXZ": [
+    [
+      -10.0,
+      10.0
+    ],
+    [
+      -10.0,
+      10.0
+    ]
+  ],
+  "roofXZ": [
+    [
+      -4.25,
+      0.25
+    ],
+    [
+      -3.25,
+      3.25
+    ]
+  ],
+  "roofTop": 3.25,
+  "sourceOffset": 0.001,
+  "surfaces": [
+    {
+      "name": "roof",
+      "x": [
+        -4.25,
+        0.25
+      ],
+      "z": [
+        -3.25,
+        3.25
+      ],
+      "height": 3.25
+    },
+    {
+      "name": "west ground",
+      "x": [
+        -10.0,
+        -4.25
+      ],
+      "z": [
+        -10.0,
+        10.0
+      ],
+      "height": 0
+    },
+    {
+      "name": "east ground",
+      "x": [
+        0.25,
+        10.0
+      ],
+      "z": [
+        -10.0,
+        10.0
+      ],
+      "height": 0
+    },
+    {
+      "name": "south ground",
+      "x": [
+        -4.25,
+        0.25
+      ],
+      "z": [
+        -10.0,
+        -3.25
+      ],
+      "height": 0
+    },
+    {
+      "name": "north ground",
+      "x": [
+        -4.25,
+        0.25
+      ],
+      "z": [
+        3.25,
+        10.0
+      ],
+      "height": 0
+    }
+  ],
+  "walls": [
+    {
+      "center": [
+        -2.0,
+        3.125,
+        0
+      ],
+      "half": [
+        2.25,
+        0.125,
+        3.25
+      ]
+    },
+    {
+      "center": [
+        -4.125,
+        1.5,
+        0
+      ],
+      "half": [
+        0.125,
+        1.5,
+        3.25
+      ]
+    },
+    {
+      "center": [
+        -2.0,
+        1.5,
+        -3.125
+      ],
+      "half": [
+        2.25,
+        1.5,
+        0.125
+      ]
+    },
+    {
+      "center": [
+        -2.0,
+        1.5,
+        3.125
+      ],
+      "half": [
+        2.25,
+        1.5,
+        0.125
+      ]
+    },
+    {
+      "center": [
+        0.125,
+        1.15,
+        -2.0
+      ],
+      "half": [
+        0.125,
+        1.15,
+        1.25
+      ]
+    },
+    {
+      "center": [
+        0.125,
+        1.15,
+        2.0
+      ],
+      "half": [
+        0.125,
+        1.15,
+        1.25
+      ]
+    },
+    {
+      "center": [
+        0.125,
+        2.65,
+        0
+      ],
+      "half": [
+        0.125,
+        0.35,
+        3.25
+      ]
+    }
+  ],
+  "receivers": {
+    "outside": [
+      3.0,
+      1.6,
+      0.0
+    ],
+    "inside": [
+      -2.0,
+      1.6,
+      0.0
+    ],
+    "doorway_edge": [
+      -0.1,
+      1.6,
+      0.65
+    ],
+    "roof_edge": [
+      0.4,
+      1.6,
+      2.9
+    ]
+  },
+  "sourceModel": "Same uncalibrated splash response on roof and ground; no structural radiation.",
+  "propagation": "Direct visibility only; opaque slabs, 1/r pressure, nearest-sample delay, mono."
+}

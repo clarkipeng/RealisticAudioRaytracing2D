@@ -1,0 +1,3242 @@
+{
+  "version": "rain-direct-shelter-v1",
+  "seconds": 8,
+  "sampleRate": 44100,
+  "scope": "Direct sound in an ideal opaque shelter; not a Church render, moving walk or complete room model.",
+  "sourceFeedback": "User said the splash revision is better; selected as the current comparison candidate, not fully realistic.",
+  "bankHash": "1cfc9528ff5ac9921c8ba0882a162f6acdd1624dd9101e665f8e33994559f017",
+  "seeds": [
+    23,
+    47,
+    91
+  ],
+  "patchWidthsMetres": [
+    2.0,
+    1.0,
+    0.5,
+    0.25
+  ],
+  "grouping": "Same events and first-hit surfaces; replace positions with surface-clipped patch centers only.",
+  "delayQuantization": "Nearest sample; maximum travel-delay rounding error 0.5/44100 s.",
+  "cases": [
+    {
+      "seed": 23,
+      "receiver": "outside",
+      "patchWidthMetres": 0,
+      "visibleEvents": 18588,
+      "metrics": {
+        "rms": 0.0009209049459916576,
+        "rmsDbFS": -60.71570389034591,
+        "peak": 0.00618919199254457,
+        "crestDb": 16.548382990023455,
+        "excessKurtosis": 0.6086423427855561,
+        "levelP90MinusP10Db": 4.50295024532916,
+        "bandPowerFraction": [
+          0.13095719317835108,
+          0.3981832990607313,
+          0.3628802934036328,
+          0.1079792143572848
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6503960671574919,
+            0.4558652485759435,
+            0.4560394869612082
+          ],
+          [
+            0.6503960671574919,
+            1.0,
+            0.6529835098202371,
+            0.6439597824235079
+          ],
+          [
+            0.45586524857594357,
+            0.652983509820237,
+            1.0,
+            0.9308978541792656
+          ],
+          [
+            0.4560394869612083,
+            0.643959782423508,
+            0.9308978541792656,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6998176723267958
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "outside",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 18216,
+      "metrics": {
+        "rms": 0.0009150787180411188,
+        "rmsDbFS": -60.770830898115584,
+        "peak": 0.00591008769652257,
+        "crestDb": 16.20270940180927,
+        "excessKurtosis": 0.5703269478775259,
+        "levelP90MinusP10Db": 4.426359725862213,
+        "bandPowerFraction": [
+          0.1294790946211453,
+          0.4005596868193736,
+          0.3623072136691345,
+          0.10765400489034661
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6322123809344812,
+            0.4704273033151646,
+            0.46273893497889
+          ],
+          [
+            0.6322123809344812,
+            1.0,
+            0.6338046429598323,
+            0.6284444225617976
+          ],
+          [
+            0.4704273033151645,
+            0.6338046429598323,
+            1.0,
+            0.9277077059275266
+          ],
+          [
+            0.46273893497889,
+            0.6284444225617976,
+            0.9277077059275266,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6637241596486557
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.018526604703387187,
+        "missedReferenceEnergyFraction": 0.011168355944316767,
+        "isolatedEventEnergyDifferenceDb": -0.038810653346280026,
+        "visibleWeightedDelayRmsMs": 1.4128998135388895,
+        "visibleWeightedDirectionRmsDegrees": 13.549890971840433
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "outside",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 18570,
+      "metrics": {
+        "rms": 0.000917150609767705,
+        "rmsDbFS": -60.75118681723913,
+        "peak": 0.006492778924854442,
+        "crestDb": 16.999799130507114,
+        "excessKurtosis": 0.6051739761051098,
+        "levelP90MinusP10Db": 4.419765424364428,
+        "bandPowerFraction": [
+          0.13111302273273612,
+          0.3987986977433061,
+          0.3622611030368388,
+          0.10782717648711901
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6512225531326191,
+            0.4520565207239319,
+            0.46079915728714715
+          ],
+          [
+            0.6512225531326191,
+            1.0,
+            0.5902920066130442,
+            0.5998882013364846
+          ],
+          [
+            0.4520565207239318,
+            0.5902920066130442,
+            1.0,
+            0.925717947705774
+          ],
+          [
+            0.46079915728714715,
+            0.5998882013364846,
+            0.925717947705774,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6912128616761698
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.009232112781485871,
+        "missedReferenceEnergyFraction": 0.0034982213054922198,
+        "isolatedEventEnergyDifferenceDb": -0.03315174320766782,
+        "visibleWeightedDelayRmsMs": 0.6975439756298495,
+        "visibleWeightedDirectionRmsDegrees": 6.839597916874679
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "outside",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 18635,
+      "metrics": {
+        "rms": 0.0009135678818603559,
+        "rmsDbFS": -60.78518354483692,
+        "peak": 0.005614814103567872,
+        "crestDb": 15.77189118730777,
+        "excessKurtosis": 0.574258159423704,
+        "levelP90MinusP10Db": 4.5260601582615365,
+        "bandPowerFraction": [
+          0.1311642792578519,
+          0.3928912357941491,
+          0.36728495594371346,
+          0.10865952900428556
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.646846877564768,
+            0.4731111398954305,
+            0.4623404495584071
+          ],
+          [
+            0.646846877564768,
+            1.0,
+            0.6417187581168907,
+            0.6434543882358263
+          ],
+          [
+            0.4731111398954305,
+            0.6417187581168907,
+            1.0,
+            0.9341151336665426
+          ],
+          [
+            0.4623404495584071,
+            0.6434543882358265,
+            0.9341151336665428,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7040437355553746
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.005146279084274219,
+        "missedReferenceEnergyFraction": 0.0017563169442111216,
+        "isolatedEventEnergyDifferenceDb": -0.012285946356405225,
+        "visibleWeightedDelayRmsMs": 0.342592512709144,
+        "visibleWeightedDirectionRmsDegrees": 3.6278243683983344
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "outside",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 18590,
+      "metrics": {
+        "rms": 0.0009196993116831908,
+        "rmsDbFS": -60.72708277095125,
+        "peak": 0.005601124236896541,
+        "crestDb": 15.692586885637363,
+        "excessKurtosis": 0.5573940502351928,
+        "levelP90MinusP10Db": 4.451439822917159,
+        "bandPowerFraction": [
+          0.1307802305643231,
+          0.39776284525697164,
+          0.3629272528551562,
+          0.10852967132354906
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6509906639127664,
+            0.4646298853964843,
+            0.4506801842543301
+          ],
+          [
+            0.6509906639127665,
+            1.0,
+            0.6522822325205608,
+            0.6373043460556636
+          ],
+          [
+            0.4646298853964843,
+            0.652282232520561,
+            0.9999999999999999,
+            0.9278688005176798
+          ],
+          [
+            0.4506801842543301,
+            0.6373043460556634,
+            0.9278688005176798,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7072157983465284
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0027446821782795834,
+        "missedReferenceEnergyFraction": 0.0011491378525793651,
+        "isolatedEventEnergyDifferenceDb": -0.0010992631392911492,
+        "visibleWeightedDelayRmsMs": 0.17530030346650277,
+        "visibleWeightedDirectionRmsDegrees": 1.6888282539494806
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "inside",
+      "patchWidthMetres": 0,
+      "visibleEvents": 3748,
+      "metrics": {
+        "rms": 0.00028835550548425505,
+        "rmsDbFS": -70.80143504642068,
+        "peak": 0.0025174269036804075,
+        "crestDb": 18.82057243002715,
+        "excessKurtosis": 2.412810331866547,
+        "levelP90MinusP10Db": 7.859989066146042,
+        "bandPowerFraction": [
+          0.1311638618757104,
+          0.3970215790259881,
+          0.3624688653612666,
+          0.10934569373703487
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.830035168954965,
+            0.6738015710478077,
+            0.6699053539568486
+          ],
+          [
+            0.830035168954965,
+            1.0,
+            0.8038835808435182,
+            0.7913530731931847
+          ],
+          [
+            0.6738015710478077,
+            0.8038835808435182,
+            1.0,
+            0.9792819317176408
+          ],
+          [
+            0.6699053539568485,
+            0.7913530731931847,
+            0.9792819317176409,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7554941874973852
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "inside",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 4397,
+      "metrics": {
+        "rms": 0.00033061726695161816,
+        "rmsDbFS": -69.6134893706464,
+        "peak": 0.002445326131608369,
+        "crestDb": 17.380225148734393,
+        "excessKurtosis": 1.678100244044046,
+        "levelP90MinusP10Db": 7.719990718231671,
+        "bandPowerFraction": [
+          0.13028748429287057,
+          0.3994820746289588,
+          0.362716262476533,
+          0.10751417860163763
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8048480798204456,
+            0.6147218056104227,
+            0.6147491910968069
+          ],
+          [
+            0.8048480798204457,
+            1.0,
+            0.7734644234849991,
+            0.762087121783336
+          ],
+          [
+            0.6147218056104227,
+            0.7734644234849991,
+            1.0,
+            0.969794490186065
+          ],
+          [
+            0.6147491910968069,
+            0.7620871217833362,
+            0.9697944901860649,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7549296754883886
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.028288940178404342,
+        "missedReferenceEnergyFraction": 0.02795618327609231,
+        "isolatedEventEnergyDifferenceDb": 1.4029100764028526,
+        "visibleWeightedDelayRmsMs": 1.6403970094189306,
+        "visibleWeightedDirectionRmsDegrees": 6.5169535522314295
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "inside",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 3891,
+      "metrics": {
+        "rms": 0.0002857995214695291,
+        "rmsDbFS": -70.87877005417018,
+        "peak": 0.002775742044254714,
+        "crestDb": 19.746352128716076,
+        "excessKurtosis": 2.119836531006923,
+        "levelP90MinusP10Db": 7.372494250717523,
+        "bandPowerFraction": [
+          0.13499261538322196,
+          0.39705497647200255,
+          0.3602554430764376,
+          0.10769696506833791
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7984018027318998,
+            0.6588137839439198,
+            0.6453245310143847
+          ],
+          [
+            0.7984018027318999,
+            1.0,
+            0.7974953865775707,
+            0.7840538242739666
+          ],
+          [
+            0.6588137839439199,
+            0.7974953865775706,
+            1.0,
+            0.971176498889
+          ],
+          [
+            0.6453245310143848,
+            0.7840538242739666,
+            0.971176498889,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7349808326119334
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.011508951406649617,
+        "missedReferenceEnergyFraction": 0.07403000730984002,
+        "isolatedEventEnergyDifferenceDb": -0.0366619055845554,
+        "visibleWeightedDelayRmsMs": 0.7914612877196335,
+        "visibleWeightedDirectionRmsDegrees": 3.205334467834829
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "inside",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 3759,
+      "metrics": {
+        "rms": 0.0002855046999868269,
+        "rmsDbFS": -70.88773475981326,
+        "peak": 0.0023165660816122846,
+        "crestDb": 18.18462862499983,
+        "excessKurtosis": 2.3074532820135225,
+        "levelP90MinusP10Db": 7.544112776942853,
+        "bandPowerFraction": [
+          0.1336091095670853,
+          0.4007530724410007,
+          0.3577943112428583,
+          0.1078435067490557
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.8263823434114604,
+            0.6755838396579906,
+            0.6841041345919727
+          ],
+          [
+            0.8263823434114604,
+            1.0,
+            0.8006921620520375,
+            0.8071209621370896
+          ],
+          [
+            0.6755838396579906,
+            0.8006921620520375,
+            0.9999999999999999,
+            0.9722488232684499
+          ],
+          [
+            0.6841041345919728,
+            0.8071209621370896,
+            0.9722488232684499,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7489574092425443
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.006518620173414011,
+        "missedReferenceEnergyFraction": 0.05003910179840059,
+        "isolatedEventEnergyDifferenceDb": -0.0029851897138992744,
+        "visibleWeightedDelayRmsMs": 0.41367922768761106,
+        "visibleWeightedDirectionRmsDegrees": 1.804494480142738
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "inside",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 3806,
+      "metrics": {
+        "rms": 0.0002882266961231583,
+        "rmsDbFS": -70.8053159290089,
+        "peak": 0.002233713232478109,
+        "crestDb": 17.7858642683749,
+        "excessKurtosis": 2.0312702698407827,
+        "levelP90MinusP10Db": 7.694102313559625,
+        "bandPowerFraction": [
+          0.1335625707871082,
+          0.39824207648521526,
+          0.3604164230768673,
+          0.10777892965080918
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8297408215742108,
+            0.6551132219734873,
+            0.6677973821120258
+          ],
+          [
+            0.8297408215742109,
+            1.0,
+            0.7863151954460844,
+            0.7890725843137965
+          ],
+          [
+            0.6551132219734873,
+            0.7863151954460844,
+            1.0,
+            0.9732073769234021
+          ],
+          [
+            0.6677973821120257,
+            0.7890725843137966,
+            0.973207376923402,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7310949296558543
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0030565778803568087,
+        "missedReferenceEnergyFraction": 0.024319533443757365,
+        "isolatedEventEnergyDifferenceDb": 0.07944501863583349,
+        "visibleWeightedDelayRmsMs": 0.20032355148005562,
+        "visibleWeightedDirectionRmsDegrees": 0.8751439252352278
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0,
+      "visibleEvents": 8659,
+      "metrics": {
+        "rms": 0.0005205915735418889,
+        "rmsDbFS": -65.67005731592548,
+        "peak": 0.004825000945341891,
+        "crestDb": 19.340005371311243,
+        "excessKurtosis": 1.5709418531271417,
+        "levelP90MinusP10Db": 6.462492297355048,
+        "bandPowerFraction": [
+          0.13016619093466208,
+          0.4001505854098068,
+          0.3626949134335385,
+          0.10698831022199268
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7914838249687022,
+            0.638466927070518,
+            0.6425007471649816
+          ],
+          [
+            0.7914838249687022,
+            1.0,
+            0.758781701846273,
+            0.7532865165739585
+          ],
+          [
+            0.638466927070518,
+            0.758781701846273,
+            1.0,
+            0.9622345502030274
+          ],
+          [
+            0.6425007471649816,
+            0.7532865165739584,
+            0.9622345502030275,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7235971153179068
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 8743,
+      "metrics": {
+        "rms": 0.0005669239043853858,
+        "rmsDbFS": -64.92950461132563,
+        "peak": 0.003955524059238153,
+        "crestDb": 16.87358521987205,
+        "excessKurtosis": 1.2262028896681318,
+        "levelP90MinusP10Db": 6.546504889601174,
+        "bandPowerFraction": [
+          0.13159825825507834,
+          0.3996385700442478,
+          0.36211133657024647,
+          0.10665183513042734
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7921136008466441,
+            0.594156271404744,
+            0.5873850174950963
+          ],
+          [
+            0.7921136008466441,
+            1.0,
+            0.7344562457832029,
+            0.7188119807061791
+          ],
+          [
+            0.594156271404744,
+            0.7344562457832029,
+            1.0,
+            0.9583085464726931
+          ],
+          [
+            0.5873850174950964,
+            0.7188119807061791,
+            0.9583085464726931,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7254669534921931
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.02676065123822594,
+        "missedReferenceEnergyFraction": 0.030855955879133104,
+        "isolatedEventEnergyDifferenceDb": 0.8260604438653464,
+        "visibleWeightedDelayRmsMs": 1.4785831074109461,
+        "visibleWeightedDirectionRmsDegrees": 11.541027131770209
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 8665,
+      "metrics": {
+        "rms": 0.0005178833374450267,
+        "rmsDbFS": -65.71536123791947,
+        "peak": 0.004201645128594804,
+        "crestDb": 18.183748619111967,
+        "excessKurtosis": 1.5238646250757544,
+        "levelP90MinusP10Db": 6.179675217237417,
+        "bandPowerFraction": [
+          0.13074178330799277,
+          0.39845661949756794,
+          0.3623569058007776,
+          0.10844469139366171
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7681115371888532,
+            0.6315477779625035,
+            0.6380441108241843
+          ],
+          [
+            0.7681115371888533,
+            1.0,
+            0.7822709285587939,
+            0.7765005985231295
+          ],
+          [
+            0.6315477779625035,
+            0.7822709285587939,
+            1.0,
+            0.9587589659149
+          ],
+          [
+            0.6380441108241843,
+            0.7765005985231295,
+            0.9587589659149001,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7461864259271975
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.011477761836441894,
+        "missedReferenceEnergyFraction": 0.029229370108319185,
+        "isolatedEventEnergyDifferenceDb": 0.008413392721038804,
+        "visibleWeightedDelayRmsMs": 0.7186723103680956,
+        "visibleWeightedDirectionRmsDegrees": 5.619594993795308
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 8692,
+      "metrics": {
+        "rms": 0.0005244156922651926,
+        "rmsDbFS": -65.60648642498552,
+        "peak": 0.004619702270660451,
+        "crestDb": 18.898766168247448,
+        "excessKurtosis": 1.4317848859430944,
+        "levelP90MinusP10Db": 6.645189354107515,
+        "bandPowerFraction": [
+          0.13156460342358606,
+          0.39685510989858575,
+          0.3624073281949345,
+          0.10917295848289378
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7969690314830534,
+            0.637767189747678,
+            0.6470461783474971
+          ],
+          [
+            0.7969690314830534,
+            1.0,
+            0.7526496733808095,
+            0.7531525262994574
+          ],
+          [
+            0.637767189747678,
+            0.7526496733808095,
+            1.0,
+            0.9674978902064602
+          ],
+          [
+            0.6470461783474972,
+            0.7531525262994574,
+            0.9674978902064602,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7494474119304311
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.005832449628844115,
+        "missedReferenceEnergyFraction": 0.007805595974753917,
+        "isolatedEventEnergyDifferenceDb": 0.09983224362403029,
+        "visibleWeightedDelayRmsMs": 0.38312875992135526,
+        "visibleWeightedDirectionRmsDegrees": 3.021747371425186
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 8657,
+      "metrics": {
+        "rms": 0.0005228301818028114,
+        "rmsDbFS": -65.63278699061081,
+        "peak": 0.0050902719623919365,
+        "crestDb": 19.767606718331518,
+        "excessKurtosis": 1.6188711370483135,
+        "levelP90MinusP10Db": 6.661401101044149,
+        "bandPowerFraction": [
+          0.13062454365118287,
+          0.3989516824196127,
+          0.36258657760341473,
+          0.1078371963257897
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999998,
+            0.7909456377840215,
+            0.6278102162989383,
+            0.6371274370616481
+          ],
+          [
+            0.7909456377840214,
+            1.0,
+            0.7484943008562419,
+            0.7500175069639623
+          ],
+          [
+            0.6278102162989383,
+            0.7484943008562419,
+            0.9999999999999999,
+            0.9665386633421206
+          ],
+          [
+            0.6371274370616481,
+            0.7500175069639623,
+            0.9665386633421207,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7270463225246999
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0031189570207722536,
+        "missedReferenceEnergyFraction": 0.01788836838056009,
+        "isolatedEventEnergyDifferenceDb": 0.008649532194747121,
+        "visibleWeightedDelayRmsMs": 0.1802200024897236,
+        "visibleWeightedDirectionRmsDegrees": 1.4639463041931202
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0,
+      "visibleEvents": 16358,
+      "metrics": {
+        "rms": 0.0007807052711636454,
+        "rmsDbFS": -62.15025776714313,
+        "peak": 0.0058399194036879935,
+        "crestDb": 17.47839483687366,
+        "excessKurtosis": 0.7996279716589143,
+        "levelP90MinusP10Db": 5.107064628528853,
+        "bandPowerFraction": [
+          0.12877080002302985,
+          0.3941031927952189,
+          0.36803640643797986,
+          0.10908960074377139
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7116419012503425,
+            0.5054793893742167,
+            0.5262868064895783
+          ],
+          [
+            0.7116419012503425,
+            1.0,
+            0.6475363161789981,
+            0.6599024539760642
+          ],
+          [
+            0.5054793893742167,
+            0.6475363161789981,
+            0.9999999999999999,
+            0.941501317269591
+          ],
+          [
+            0.5262868064895783,
+            0.6599024539760642,
+            0.941501317269591,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6853810849901809
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 16238,
+      "metrics": {
+        "rms": 0.0007799901091265036,
+        "rmsDbFS": -62.158218089242084,
+        "peak": 0.005629165360270595,
+        "crestDb": 17.16709821966137,
+        "excessKurtosis": 0.8614686636531119,
+        "levelP90MinusP10Db": 5.2200189758331845,
+        "bandPowerFraction": [
+          0.13015185548622896,
+          0.3994324002561758,
+          0.3626741497728512,
+          0.10774159448474406
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.7065738789983602,
+            0.5377446536661517,
+            0.551275284866183
+          ],
+          [
+            0.7065738789983601,
+            1.0,
+            0.6935497727546326,
+            0.7177211294175733
+          ],
+          [
+            0.5377446536661517,
+            0.6935497727546327,
+            1.0,
+            0.9407333735818811
+          ],
+          [
+            0.551275284866183,
+            0.7177211294175733,
+            0.9407333735818811,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6915942134368439
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.00860832137733142,
+        "missedReferenceEnergyFraction": 0.018543104405680733,
+        "isolatedEventEnergyDifferenceDb": -0.036061481379573795,
+        "visibleWeightedDelayRmsMs": 1.419835486710023,
+        "visibleWeightedDirectionRmsDegrees": 12.87698507738409
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 16265,
+      "metrics": {
+        "rms": 0.0007822919959137254,
+        "rmsDbFS": -62.13262226503438,
+        "peak": 0.0057106054324865116,
+        "crestDb": 17.266265347812855,
+        "excessKurtosis": 0.9513710223194347,
+        "levelP90MinusP10Db": 5.259993226959743,
+        "bandPowerFraction": [
+          0.13297656398876717,
+          0.4007161471443598,
+          0.35994055883780923,
+          0.1063667300290638
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7234609912957166,
+            0.5251724423725068,
+            0.5419761518658532
+          ],
+          [
+            0.7234609912957167,
+            1.0,
+            0.6953126628643486,
+            0.6992317450814389
+          ],
+          [
+            0.5251724423725068,
+            0.6953126628643486,
+            1.0,
+            0.9376279514503284
+          ],
+          [
+            0.5419761518658531,
+            0.6992317450814388,
+            0.9376279514503283,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.696365270133057
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.005395795645935999,
+        "missedReferenceEnergyFraction": 0.012201918667148268,
+        "isolatedEventEnergyDifferenceDb": -0.04918756080540764,
+        "visibleWeightedDelayRmsMs": 0.7034860192443783,
+        "visibleWeightedDirectionRmsDegrees": 6.689895709800717
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 16301,
+      "metrics": {
+        "rms": 0.0007847805505949997,
+        "rmsDbFS": -62.1050353743852,
+        "peak": 0.005972462874077919,
+        "crestDb": 17.62810454991197,
+        "excessKurtosis": 0.8536255198368359,
+        "levelP90MinusP10Db": 5.49445366713713,
+        "bandPowerFraction": [
+          0.13086104871902826,
+          0.40009953459975817,
+          0.3604565327620548,
+          0.10858288391915871
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6953099636053685,
+            0.5360863527459416,
+            0.5442641290739283
+          ],
+          [
+            0.6953099636053685,
+            1.0,
+            0.6778193351753626,
+            0.674193396169292
+          ],
+          [
+            0.5360863527459416,
+            0.6778193351753627,
+            1.0,
+            0.9475979105557988
+          ],
+          [
+            0.5442641290739283,
+            0.674193396169292,
+            0.9475979105557988,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6906781816988753
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.004148212837627097,
+        "missedReferenceEnergyFraction": 0.007334286761583305,
+        "isolatedEventEnergyDifferenceDb": 0.031914920756580804,
+        "visibleWeightedDelayRmsMs": 0.3584949440352436,
+        "visibleWeightedDirectionRmsDegrees": 3.28264271563371
+      }
+    },
+    {
+      "seed": 23,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 16360,
+      "metrics": {
+        "rms": 0.0007854293179238585,
+        "rmsDbFS": -62.097857834805446,
+        "peak": 0.00515534838913918,
+        "crestDb": 16.34301822377492,
+        "excessKurtosis": 0.843554718958992,
+        "levelP90MinusP10Db": 5.420237583099279,
+        "bandPowerFraction": [
+          0.13078398689755869,
+          0.3981702388236589,
+          0.3617702533428561,
+          0.10927552093592628
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7308805343088697,
+            0.5585105992055068,
+            0.5416803146650765
+          ],
+          [
+            0.7308805343088698,
+            1.0,
+            0.6791554920305172,
+            0.6739025544658563
+          ],
+          [
+            0.5585105992055067,
+            0.6791554920305172,
+            1.0,
+            0.9406109837920166
+          ],
+          [
+            0.5416803146650765,
+            0.6739025544658563,
+            0.9406109837920166,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7014523277277389
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.002432786476202358,
+        "missedReferenceEnergyFraction": 0.0020656017760890782,
+        "isolatedEventEnergyDifferenceDb": 0.0426703106612318,
+        "visibleWeightedDelayRmsMs": 0.17765282694184367,
+        "visibleWeightedDirectionRmsDegrees": 1.675682528614273
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "outside",
+      "patchWidthMetres": 0,
+      "visibleEvents": 18767,
+      "metrics": {
+        "rms": 0.000924468577384394,
+        "rmsDbFS": -60.682156917797336,
+        "peak": 0.0059445488414044635,
+        "crestDb": 16.16453491060546,
+        "excessKurtosis": 0.6376481442164081,
+        "levelP90MinusP10Db": 4.30634818866244,
+        "bandPowerFraction": [
+          0.12429616687023476,
+          0.39978933299801905,
+          0.36719213092237496,
+          0.1087223692093712
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6297572534658856,
+            0.4596545332114402,
+            0.4599189722323774
+          ],
+          [
+            0.6297572534658856,
+            1.0,
+            0.6545996483684011,
+            0.6463574831542973
+          ],
+          [
+            0.4596545332114402,
+            0.654599648368401,
+            1.0,
+            0.936330863551931
+          ],
+          [
+            0.4599189722323774,
+            0.6463574831542974,
+            0.936330863551931,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6274955528142535
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "outside",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 18351,
+      "metrics": {
+        "rms": 0.0009211422089769729,
+        "rmsDbFS": -60.71346633620785,
+        "peak": 0.00602123689343609,
+        "crestDb": 16.307180615903825,
+        "excessKurtosis": 0.5779435008456622,
+        "levelP90MinusP10Db": 4.584435584430217,
+        "bandPowerFraction": [
+          0.12784731435537994,
+          0.39948033268375627,
+          0.36373324402379925,
+          0.10893910893706456
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.598764546085437,
+            0.45106477525660166,
+            0.4492697943032492
+          ],
+          [
+            0.598764546085437,
+            0.9999999999999998,
+            0.6381928090423955,
+            0.6238765862114579
+          ],
+          [
+            0.45106477525660166,
+            0.6381928090423955,
+            0.9999999999999999,
+            0.9353526985651595
+          ],
+          [
+            0.4492697943032492,
+            0.6238765862114579,
+            0.9353526985651596,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6593296641770016
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.01957798564281053,
+        "missedReferenceEnergyFraction": 0.010395755927138648,
+        "isolatedEventEnergyDifferenceDb": -0.005869176873396883,
+        "visibleWeightedDelayRmsMs": 1.3797144148324352,
+        "visibleWeightedDirectionRmsDegrees": 13.670286017652305
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "outside",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 18713,
+      "metrics": {
+        "rms": 0.0009224352925343228,
+        "rmsDbFS": -60.70128178426516,
+        "peak": 0.0063703735915030995,
+        "crestDb": 16.78457983119396,
+        "excessKurtosis": 0.5990100852341196,
+        "levelP90MinusP10Db": 4.44415109850096,
+        "bandPowerFraction": [
+          0.12707518819720434,
+          0.4036781045965744,
+          0.36143403097108184,
+          0.10781267623513939
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5782632327662933,
+            0.4684637847845792,
+            0.47540669195916446
+          ],
+          [
+            0.5782632327662933,
+            0.9999999999999998,
+            0.6496232842117693,
+            0.6406217719567671
+          ],
+          [
+            0.4684637847845792,
+            0.6496232842117692,
+            0.9999999999999999,
+            0.9307423131631476
+          ],
+          [
+            0.47540669195916446,
+            0.6406217719567671,
+            0.9307423131631476,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6204706887616953
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.010068678330588271,
+        "missedReferenceEnergyFraction": 0.003513879776203073,
+        "isolatedEventEnergyDifferenceDb": -0.01662271370776338,
+        "visibleWeightedDelayRmsMs": 0.7004333990056717,
+        "visibleWeightedDirectionRmsDegrees": 6.914110802452838
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "outside",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 18798,
+      "metrics": {
+        "rms": 0.0009248740296951711,
+        "rmsDbFS": -60.67834830595024,
+        "peak": 0.005891031160422659,
+        "crestDb": 16.082174704529628,
+        "excessKurtosis": 0.6562919176296025,
+        "levelP90MinusP10Db": 4.6021208223097645,
+        "bandPowerFraction": [
+          0.1258717258467609,
+          0.39992580201151035,
+          0.36582913618810575,
+          0.10837333595362304
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6123243594788763,
+            0.4498787738244578,
+            0.4814974838541181
+          ],
+          [
+            0.6123243594788763,
+            1.0,
+            0.6711833624709264,
+            0.6711959523225124
+          ],
+          [
+            0.44987877382445773,
+            0.6711833624709265,
+            0.9999999999999998,
+            0.944721359071894
+          ],
+          [
+            0.4814974838541182,
+            0.6711959523225123,
+            0.9447213590718939,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6431497732860538
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.005749091022095155,
+        "missedReferenceEnergyFraction": 0.00204609289197427,
+        "isolatedEventEnergyDifferenceDb": -0.004114257532714965,
+        "visibleWeightedDelayRmsMs": 0.3531040233912738,
+        "visibleWeightedDirectionRmsDegrees": 3.605198383621568
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "outside",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 18774,
+      "metrics": {
+        "rms": 0.0009238513239126436,
+        "rmsDbFS": -60.68795828987571,
+        "peak": 0.0067879039943991425,
+        "crestDb": 17.32267211365017,
+        "excessKurtosis": 0.6581413122798199,
+        "levelP90MinusP10Db": 4.494923795092916,
+        "bandPowerFraction": [
+          0.12552239827150186,
+          0.4025722577521284,
+          0.36403481728882536,
+          0.1078705266875444
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6174800187813774,
+            0.4266118462263078,
+            0.4535270078283314
+          ],
+          [
+            0.6174800187813774,
+            0.9999999999999998,
+            0.634351615836446,
+            0.6389043182427319
+          ],
+          [
+            0.4266118462263078,
+            0.6343516158364461,
+            1.0,
+            0.9389343834730471
+          ],
+          [
+            0.45352700782833144,
+            0.6389043182427319,
+            0.9389343834730471,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6173337648413129
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.002330712576525063,
+        "missedReferenceEnergyFraction": 0.0004645471687632323,
+        "isolatedEventEnergyDifferenceDb": 0.001157039381721634,
+        "visibleWeightedDelayRmsMs": 0.17496901282532237,
+        "visibleWeightedDirectionRmsDegrees": 1.68416004932288
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "inside",
+      "patchWidthMetres": 0,
+      "visibleEvents": 3717,
+      "metrics": {
+        "rms": 0.0002881570058254619,
+        "rmsDbFS": -70.80741634314461,
+        "peak": 0.002003059393488652,
+        "crestDb": 16.84129288150701,
+        "excessKurtosis": 1.6931045041311998,
+        "levelP90MinusP10Db": 7.497490415446364,
+        "bandPowerFraction": [
+          0.12969592510178785,
+          0.3994773597141016,
+          0.3624461816853981,
+          0.10838053349871243
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8004496170945677,
+            0.6463461307160104,
+            0.647363578350783
+          ],
+          [
+            0.8004496170945677,
+            0.9999999999999998,
+            0.7675901930461053,
+            0.7776105484670327
+          ],
+          [
+            0.6463461307160104,
+            0.7675901930461053,
+            1.0,
+            0.9730425790301716
+          ],
+          [
+            0.6473635783507828,
+            0.7776105484670327,
+            0.9730425790301714,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6966153120023673
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "inside",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 4275,
+      "metrics": {
+        "rms": 0.00032841204691274283,
+        "rmsDbFS": -69.67161840670555,
+        "peak": 0.0024421907581539557,
+        "crestDb": 17.427210075361607,
+        "excessKurtosis": 1.8451994250094907,
+        "levelP90MinusP10Db": 7.7439277839821585,
+        "bandPowerFraction": [
+          0.1281027651288996,
+          0.4014464779243711,
+          0.36185384429550993,
+          0.10859691265121933
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7969995877639505,
+            0.5705395253249327,
+            0.5743786814130325
+          ],
+          [
+            0.7969995877639505,
+            0.9999999999999998,
+            0.7553859641673748,
+            0.7482322035793106
+          ],
+          [
+            0.5705395253249326,
+            0.7553859641673748,
+            1.0,
+            0.9707979793646585
+          ],
+          [
+            0.5743786814130325,
+            0.7482322035793106,
+            0.9707979793646586,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.701625644435558
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.02641474253395071,
+        "missedReferenceEnergyFraction": 0.03391216675130427,
+        "isolatedEventEnergyDifferenceDb": 1.0634058725325368,
+        "visibleWeightedDelayRmsMs": 1.565499357289855,
+        "visibleWeightedDirectionRmsDegrees": 6.214842934355074
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "inside",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 3838,
+      "metrics": {
+        "rms": 0.0002902450126663151,
+        "rmsDbFS": -70.74470468175213,
+        "peak": 0.002331852940463451,
+        "crestDb": 18.098727840549127,
+        "excessKurtosis": 1.8246726603258363,
+        "levelP90MinusP10Db": 7.581058250814323,
+        "bandPowerFraction": [
+          0.13318894811803683,
+          0.3930207763825049,
+          0.36500638733460533,
+          0.10878388816485292
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.826936511798033,
+            0.617900047026638,
+            0.6231699094405141
+          ],
+          [
+            0.826936511798033,
+            1.0,
+            0.7499658330238576,
+            0.747251072860133
+          ],
+          [
+            0.617900047026638,
+            0.7499658330238574,
+            0.9999999999999999,
+            0.9716067087588682
+          ],
+          [
+            0.6231699094405141,
+            0.747251072860133,
+            0.9716067087588682,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6700946425736489
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.011032039528885297,
+        "missedReferenceEnergyFraction": 0.04012959373933122,
+        "isolatedEventEnergyDifferenceDb": 0.09616222889585654,
+        "visibleWeightedDelayRmsMs": 0.8059133664788365,
+        "visibleWeightedDirectionRmsDegrees": 3.080930652990638
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "inside",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 3709,
+      "metrics": {
+        "rms": 0.00028849917329856756,
+        "rmsDbFS": -70.79710853975838,
+        "peak": 0.002103861875468445,
+        "crestDb": 17.257453014687318,
+        "excessKurtosis": 1.8238021414028998,
+        "levelP90MinusP10Db": 7.61391250105892,
+        "bandPowerFraction": [
+          0.131878050926907,
+          0.39589945276855704,
+          0.3642584457785708,
+          0.10796405052596514
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8285460732608066,
+            0.6444763913187427,
+            0.6473697101223369
+          ],
+          [
+            0.8285460732608065,
+            1.0,
+            0.7699146920223677,
+            0.7703352511245868
+          ],
+          [
+            0.6444763913187427,
+            0.7699146920223677,
+            0.9999999999999999,
+            0.972656901057832
+          ],
+          [
+            0.6473697101223369,
+            0.7703352511245869,
+            0.972656901057832,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6808607958374122
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.005842319525156158,
+        "missedReferenceEnergyFraction": 0.020229683250074054,
+        "isolatedEventEnergyDifferenceDb": 0.0221422949083779,
+        "visibleWeightedDelayRmsMs": 0.3980804936150787,
+        "visibleWeightedDirectionRmsDegrees": 1.7124237276599852
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "inside",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 3764,
+      "metrics": {
+        "rms": 0.00028960941343727186,
+        "rmsDbFS": -70.76374651956543,
+        "peak": 0.002351744080603873,
+        "crestDb": 18.191547710940323,
+        "excessKurtosis": 1.7239609207002369,
+        "levelP90MinusP10Db": 7.301554794647146,
+        "bandPowerFraction": [
+          0.13202882760540072,
+          0.39792782868633353,
+          0.3621071110420869,
+          0.10793623266617884
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8144388160212965,
+            0.6504121036074788,
+            0.6521849254152187
+          ],
+          [
+            0.8144388160212965,
+            1.0,
+            0.7738007234293878,
+            0.7760623444619034
+          ],
+          [
+            0.6504121036074788,
+            0.7738007234293878,
+            1.0,
+            0.9725394023130972
+          ],
+          [
+            0.6521849254152187,
+            0.7760623444619033,
+            0.9725394023130972,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6961095055329486
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0028279312595170763,
+        "missedReferenceEnergyFraction": 0.002518086523571193,
+        "isolatedEventEnergyDifferenceDb": 0.0704170617238791,
+        "visibleWeightedDelayRmsMs": 0.19799285887407314,
+        "visibleWeightedDirectionRmsDegrees": 0.8190081919689808
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0,
+      "visibleEvents": 8607,
+      "metrics": {
+        "rms": 0.0005111983682783252,
+        "rmsDbFS": -65.82821082190902,
+        "peak": 0.004142394565395234,
+        "crestDb": 18.173240088300037,
+        "excessKurtosis": 1.2498620200247856,
+        "levelP90MinusP10Db": 5.70174254494912,
+        "bandPowerFraction": [
+          0.1318907182560683,
+          0.3961079137757562,
+          0.3638058312075965,
+          0.10819553676057904
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999998,
+            0.7600617439635581,
+            0.5792938020358637,
+            0.5842120789820778
+          ],
+          [
+            0.760061743963558,
+            0.9999999999999999,
+            0.7551858284301932,
+            0.748831349463426
+          ],
+          [
+            0.5792938020358637,
+            0.7551858284301932,
+            1.0,
+            0.9620487476084739
+          ],
+          [
+            0.5842120789820778,
+            0.7488313494634259,
+            0.962048747608474,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6376867526503904
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 8655,
+      "metrics": {
+        "rms": 0.0005581897054006508,
+        "rmsDbFS": -65.06436354787998,
+        "peak": 0.004124992860642929,
+        "crestDb": 17.37282757245431,
+        "excessKurtosis": 1.6650321449006693,
+        "levelP90MinusP10Db": 6.486655599454778,
+        "bandPowerFraction": [
+          0.12796445314278415,
+          0.3989527526945728,
+          0.3645648450096654,
+          0.10851794915297755
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.795548552037516,
+            0.5901940789317587,
+            0.6101040984314812
+          ],
+          [
+            0.7955485520375158,
+            0.9999999999999999,
+            0.7284210871555858,
+            0.724105536736338
+          ],
+          [
+            0.5901940789317587,
+            0.728421087155586,
+            1.0,
+            0.9652141292356727
+          ],
+          [
+            0.6101040984314812,
+            0.724105536736338,
+            0.9652141292356727,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7144549900400818
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.025606762174088693,
+        "missedReferenceEnergyFraction": 0.03715850708841606,
+        "isolatedEventEnergyDifferenceDb": 0.6110828119242453,
+        "visibleWeightedDelayRmsMs": 1.4951531283647392,
+        "visibleWeightedDirectionRmsDegrees": 10.197139483170904
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 8586,
+      "metrics": {
+        "rms": 0.0005138510940868206,
+        "rmsDbFS": -65.78325428879255,
+        "peak": 0.004605127118109108,
+        "crestDb": 19.04808674462418,
+        "excessKurtosis": 1.3174570027420351,
+        "levelP90MinusP10Db": 5.684188282174617,
+        "bandPowerFraction": [
+          0.12766113392376435,
+          0.3997717731474953,
+          0.36337716193836056,
+          0.1091899309903798
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7624602147581185,
+            0.5739409577566537,
+            0.5835202639664937
+          ],
+          [
+            0.7624602147581184,
+            1.0,
+            0.7191469345769024,
+            0.7147135163365922
+          ],
+          [
+            0.5739409577566537,
+            0.7191469345769023,
+            1.0,
+            0.9548043205735802
+          ],
+          [
+            0.5835202639664937,
+            0.7147135163365921,
+            0.9548043205735803,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6480780714531554
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.011342801205755306,
+        "missedReferenceEnergyFraction": 0.04593496064294592,
+        "isolatedEventEnergyDifferenceDb": -0.006100775807585585,
+        "visibleWeightedDelayRmsMs": 0.7524308941668686,
+        "visibleWeightedDirectionRmsDegrees": 5.097050835947259
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 8628,
+      "metrics": {
+        "rms": 0.0005154930770860046,
+        "rmsDbFS": -65.75554325566111,
+        "peak": 0.003719945593736564,
+        "crestDb": 17.166275018284118,
+        "excessKurtosis": 1.2410500096746162,
+        "levelP90MinusP10Db": 5.845539205830356,
+        "bandPowerFraction": [
+          0.13225015460717254,
+          0.4011841761113941,
+          0.3601360435176229,
+          0.10642962576381038
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7766786138274535,
+            0.5785778938197159,
+            0.5934852951411579
+          ],
+          [
+            0.7766786138274535,
+            1.0,
+            0.7143190188912643,
+            0.7162348059803412
+          ],
+          [
+            0.5785778938197159,
+            0.7143190188912643,
+            1.0,
+            0.9553553482392981
+          ],
+          [
+            0.5934852951411579,
+            0.7162348059803412,
+            0.9553553482392981,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6444854953728345
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.00593554802821716,
+        "missedReferenceEnergyFraction": 0.024887810179721682,
+        "isolatedEventEnergyDifferenceDb": 0.003112771305940581,
+        "visibleWeightedDelayRmsMs": 0.37912906055447926,
+        "visibleWeightedDirectionRmsDegrees": 2.7860885164966134
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 8625,
+      "metrics": {
+        "rms": 0.0005122446180890148,
+        "rmsDbFS": -65.81045191657425,
+        "peak": 0.003482154848715247,
+        "crestDb": 16.647413515539178,
+        "excessKurtosis": 1.187444827299645,
+        "levelP90MinusP10Db": 5.687107118269175,
+        "bandPowerFraction": [
+          0.13031714842562053,
+          0.39883837516031373,
+          0.36318259778944084,
+          0.10766187862462491
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7486976764110871,
+            0.5718222859858265,
+            0.5862176472880742
+          ],
+          [
+            0.7486976764110871,
+            1.0,
+            0.7530185457811709,
+            0.7586386880555243
+          ],
+          [
+            0.5718222859858265,
+            0.7530185457811709,
+            1.0,
+            0.9578081195986391
+          ],
+          [
+            0.5862176472880741,
+            0.7586386880555243,
+            0.9578081195986392,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6328415465575622
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0027968550918300757,
+        "missedReferenceEnergyFraction": 0.003834773860729367,
+        "isolatedEventEnergyDifferenceDb": 0.0005315980363280021,
+        "visibleWeightedDelayRmsMs": 0.1895809419288088,
+        "visibleWeightedDirectionRmsDegrees": 1.36500653660294
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0,
+      "visibleEvents": 16540,
+      "metrics": {
+        "rms": 0.0007848557639154947,
+        "rmsDbFS": -62.1042029591364,
+        "peak": 0.0056757261378495225,
+        "crestDb": 17.184631597980626,
+        "excessKurtosis": 0.7881939212134061,
+        "levelP90MinusP10Db": 4.940856812203101,
+        "bandPowerFraction": [
+          0.12716965929677743,
+          0.4020440370312384,
+          0.3633458579068185,
+          0.10744044576516566
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6458669116852416,
+            0.49135112440086226,
+            0.49895354483999654
+          ],
+          [
+            0.6458669116852416,
+            1.0,
+            0.6739762383944284,
+            0.6546429391691628
+          ],
+          [
+            0.49135112440086226,
+            0.6739762383944284,
+            1.0,
+            0.9458787697037527
+          ],
+          [
+            0.49895354483999654,
+            0.6546429391691629,
+            0.9458787697037527,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6551407976117181
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 16424,
+      "metrics": {
+        "rms": 0.0007839439371169057,
+        "rmsDbFS": -62.11429988588648,
+        "peak": 0.004990107163183011,
+        "crestDb": 16.076497330936686,
+        "excessKurtosis": 0.7677749941710532,
+        "levelP90MinusP10Db": 5.021161144421619,
+        "bandPowerFraction": [
+          0.12748175461693834,
+          0.401362307929053,
+          0.3630000186296725,
+          0.10815591882433616
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7032815005866888,
+            0.48195107335241605,
+            0.47396599966189396
+          ],
+          [
+            0.7032815005866888,
+            1.0,
+            0.6411746315955313,
+            0.6121969762443757
+          ],
+          [
+            0.481951073352416,
+            0.6411746315955315,
+            0.9999999999999999,
+            0.9458149095797109
+          ],
+          [
+            0.47396599966189396,
+            0.6121969762443759,
+            0.9458149095797109,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6291741629137757
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.00888778395848224,
+        "missedReferenceEnergyFraction": 0.02075019623061559,
+        "isolatedEventEnergyDifferenceDb": -0.04729772229864279,
+        "visibleWeightedDelayRmsMs": 1.421507127728432,
+        "visibleWeightedDirectionRmsDegrees": 13.894975610954438
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 16460,
+      "metrics": {
+        "rms": 0.0007886867159173695,
+        "rmsDbFS": -62.06190948124466,
+        "peak": 0.0058073133628790494,
+        "crestDb": 17.341414705535673,
+        "excessKurtosis": 0.8122848014779684,
+        "levelP90MinusP10Db": 5.039708158898598,
+        "bandPowerFraction": [
+          0.125456545358057,
+          0.40515632530128093,
+          0.36248566949102573,
+          0.10690145984963645
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.6820022970071933,
+            0.4961857317005611,
+            0.5024264516449756
+          ],
+          [
+            0.6820022970071933,
+            1.0,
+            0.6533144975621482,
+            0.6488128779666456
+          ],
+          [
+            0.496185731700561,
+            0.6533144975621482,
+            1.0,
+            0.9539483311676661
+          ],
+          [
+            0.5024264516449756,
+            0.6488128779666454,
+            0.9539483311676661,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6207344835096248
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.005593710183660151,
+        "missedReferenceEnergyFraction": 0.009929201591221124,
+        "isolatedEventEnergyDifferenceDb": -0.013192830769358491,
+        "visibleWeightedDelayRmsMs": 0.699048203717204,
+        "visibleWeightedDirectionRmsDegrees": 7.215692715326952
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 16495,
+      "metrics": {
+        "rms": 0.0007892920138891085,
+        "rmsDbFS": -62.055245827876945,
+        "peak": 0.005961724523251204,
+        "crestDb": 17.562683917307528,
+        "excessKurtosis": 0.8371298145842201,
+        "levelP90MinusP10Db": 4.896561909648838,
+        "bandPowerFraction": [
+          0.12710438884358752,
+          0.4040272939691438,
+          0.36183285135643567,
+          0.10703546583083304
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.674705311454692,
+            0.523801564805803,
+            0.5264815791168002
+          ],
+          [
+            0.6747053114546921,
+            1.0,
+            0.6712994714277974,
+            0.6632411336116125
+          ],
+          [
+            0.523801564805803,
+            0.6712994714277974,
+            1.0,
+            0.9408976099794053
+          ],
+          [
+            0.5264815791168002,
+            0.6632411336116125,
+            0.9408976099794053,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6350294375627331
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.003884520960875105,
+        "missedReferenceEnergyFraction": 0.004029527782841887,
+        "isolatedEventEnergyDifferenceDb": 0.013358187355518872,
+        "visibleWeightedDelayRmsMs": 0.3580313305969897,
+        "visibleWeightedDirectionRmsDegrees": 3.6408600460850344
+      }
+    },
+    {
+      "seed": 47,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 16531,
+      "metrics": {
+        "rms": 0.0007848394659557103,
+        "rmsDbFS": -62.10438332826453,
+        "peak": 0.005671287049695067,
+        "crestDb": 17.17801591758753,
+        "excessKurtosis": 0.7433718334546846,
+        "levelP90MinusP10Db": 5.049535926452322,
+        "bandPowerFraction": [
+          0.12758450589748754,
+          0.40233127325008733,
+          0.3620597504394877,
+          0.1080244704129374
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6634570801831381,
+            0.4910164038461242,
+            0.4851158018996018
+          ],
+          [
+            0.6634570801831382,
+            1.0,
+            0.6539954555953256,
+            0.6315973385568227
+          ],
+          [
+            0.49101640384612416,
+            0.6539954555953256,
+            1.0,
+            0.9472495501624456
+          ],
+          [
+            0.4851158018996019,
+            0.6315973385568227,
+            0.9472495501624456,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6321306835203738
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0030143882656390813,
+        "missedReferenceEnergyFraction": 0.004232113506130872,
+        "isolatedEventEnergyDifferenceDb": 0.017333105201098396,
+        "visibleWeightedDelayRmsMs": 0.17598071015682248,
+        "visibleWeightedDirectionRmsDegrees": 1.8280761495085975
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "outside",
+      "patchWidthMetres": 0,
+      "visibleEvents": 18658,
+      "metrics": {
+        "rms": 0.0009004696189687622,
+        "rmsDbFS": -60.9106187060128,
+        "peak": 0.006074761946219151,
+        "crestDb": 16.58120398115117,
+        "excessKurtosis": 0.569625279422004,
+        "levelP90MinusP10Db": 4.184634914968747,
+        "bandPowerFraction": [
+          0.128850612543627,
+          0.3974847508896162,
+          0.3638296408107678,
+          0.10983499575598903
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.5499623375732465,
+            0.3955695078065652,
+            0.4195839147448176
+          ],
+          [
+            0.5499623375732465,
+            1.0,
+            0.6550452577423569,
+            0.6516772473868547
+          ],
+          [
+            0.39556950780656513,
+            0.655045257742357,
+            1.0,
+            0.923147778535846
+          ],
+          [
+            0.4195839147448176,
+            0.6516772473868547,
+            0.923147778535846,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6594560701440235
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "outside",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 18274,
+      "metrics": {
+        "rms": 0.0008941314037297619,
+        "rmsDbFS": -60.97197303076818,
+        "peak": 0.005138514733136246,
+        "crestDb": 15.188725152239211,
+        "excessKurtosis": 0.5425855756657856,
+        "levelP90MinusP10Db": 4.152878887400007,
+        "bandPowerFraction": [
+          0.13106169294615913,
+          0.3943544894209593,
+          0.36538236732383655,
+          0.10920145030904503
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5776893058932911,
+            0.4571479657313316,
+            0.4540448607989563
+          ],
+          [
+            0.5776893058932913,
+            1.0,
+            0.6289068246841801,
+            0.6074942067734533
+          ],
+          [
+            0.4571479657313316,
+            0.6289068246841801,
+            1.0,
+            0.9302379887843678
+          ],
+          [
+            0.45404486079895634,
+            0.6074942067734533,
+            0.9302379887843678,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6174349081341712
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.020152862267976916,
+        "missedReferenceEnergyFraction": 0.010092637333835273,
+        "isolatedEventEnergyDifferenceDb": -0.07649606012918403,
+        "visibleWeightedDelayRmsMs": 1.3985637744056862,
+        "visibleWeightedDirectionRmsDegrees": 13.362741018936854
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "outside",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 18635,
+      "metrics": {
+        "rms": 0.0008976954249956022,
+        "rmsDbFS": -60.93741976288402,
+        "peak": 0.00598564617888518,
+        "crestDb": 16.479640591319363,
+        "excessKurtosis": 0.674074386204564,
+        "levelP90MinusP10Db": 4.270771352862752,
+        "bandPowerFraction": [
+          0.12964610029935922,
+          0.39467252107485945,
+          0.36610941088674476,
+          0.10957196773903657
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6574102843972338,
+            0.46035989234171176,
+            0.46994806768149866
+          ],
+          [
+            0.6574102843972339,
+            1.0,
+            0.6447714090163615,
+            0.6476722917056473
+          ],
+          [
+            0.46035989234171176,
+            0.6447714090163615,
+            1.0,
+            0.9316654893980175
+          ],
+          [
+            0.4699480676814986,
+            0.6476722917056472,
+            0.9316654893980175,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6293221285238084
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.010513180471065356,
+        "missedReferenceEnergyFraction": 0.0027826451884684724,
+        "isolatedEventEnergyDifferenceDb": -0.019513976714905436,
+        "visibleWeightedDelayRmsMs": 0.6992483456018389,
+        "visibleWeightedDirectionRmsDegrees": 7.104230887623153
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "outside",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 18695,
+      "metrics": {
+        "rms": 0.0009011430814877624,
+        "rmsDbFS": -60.90412494474391,
+        "peak": 0.00544565407569967,
+        "crestDb": 15.625125948552851,
+        "excessKurtosis": 0.6584216861187451,
+        "levelP90MinusP10Db": 4.464496062901958,
+        "bandPowerFraction": [
+          0.12944294398115855,
+          0.3979534480385104,
+          0.36366059409209034,
+          0.10894301388824068
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5844317248569134,
+            0.43947115151400473,
+            0.437744304830953
+          ],
+          [
+            0.5844317248569134,
+            1.0,
+            0.6793673671983034,
+            0.6596121299492557
+          ],
+          [
+            0.4394711515140047,
+            0.6793673671983034,
+            1.0,
+            0.9327900484239822
+          ],
+          [
+            0.437744304830953,
+            0.6596121299492557,
+            0.9327900484239822,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6403868152764783
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.006582436437373265,
+        "missedReferenceEnergyFraction": 0.002969354205192872,
+        "isolatedEventEnergyDifferenceDb": -0.008793028891040755,
+        "visibleWeightedDelayRmsMs": 0.35284304427148727,
+        "visibleWeightedDirectionRmsDegrees": 3.5963656223847273
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "outside",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 18667,
+      "metrics": {
+        "rms": 0.0009006660236612549,
+        "rmsDbFS": -60.90872440171968,
+        "peak": 0.006445438884079413,
+        "crestDb": 17.09377429693367,
+        "excessKurtosis": 0.5672573839294253,
+        "levelP90MinusP10Db": 4.189166999523131,
+        "bandPowerFraction": [
+          0.12870494175698416,
+          0.40090101252604243,
+          0.3615816262473965,
+          0.10881241946957693
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.5347494964550217,
+            0.4178629544725531,
+            0.42461163958603576
+          ],
+          [
+            0.5347494964550216,
+            1.0,
+            0.6425440122224401,
+            0.6401914470018273
+          ],
+          [
+            0.41786295447255317,
+            0.6425440122224401,
+            0.9999999999999999,
+            0.9350950310025737
+          ],
+          [
+            0.42461163958603576,
+            0.6401914470018273,
+            0.9350950310025739,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6446595638128251
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0034004055529558573,
+        "missedReferenceEnergyFraction": 0.0011877705239101977,
+        "isolatedEventEnergyDifferenceDb": -0.006201328331063977,
+        "visibleWeightedDelayRmsMs": 0.17673463766268133,
+        "visibleWeightedDirectionRmsDegrees": 1.7383233562289715
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "inside",
+      "patchWidthMetres": 0,
+      "visibleEvents": 3649,
+      "metrics": {
+        "rms": 0.00026706211789045384,
+        "rmsDbFS": -71.46775422444121,
+        "peak": 0.00208708057630112,
+        "crestDb": 17.85853854995185,
+        "excessKurtosis": 1.4712497812018972,
+        "levelP90MinusP10Db": 7.046299826411996,
+        "bandPowerFraction": [
+          0.1271898440385995,
+          0.3938872474860808,
+          0.3685678504651868,
+          0.11035505801013297
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7452039345605761,
+            0.6275674534174107,
+            0.6254387111958654
+          ],
+          [
+            0.7452039345605761,
+            1.0,
+            0.7456346568570333,
+            0.7411433145186924
+          ],
+          [
+            0.6275674534174108,
+            0.7456346568570332,
+            1.0,
+            0.968917911389941
+          ],
+          [
+            0.6254387111958652,
+            0.7411433145186923,
+            0.968917911389941,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7318158140948392
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "inside",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 4282,
+      "metrics": {
+        "rms": 0.00032193894611798086,
+        "rmsDbFS": -69.84452963926006,
+        "peak": 0.002557954646227256,
+        "crestDb": 18.0023864384548,
+        "excessKurtosis": 1.7610999083342174,
+        "levelP90MinusP10Db": 7.07036235445041,
+        "bandPowerFraction": [
+          0.1286086115389403,
+          0.4011610226452281,
+          0.3612469933016715,
+          0.10898337251416004
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.7921996577860461,
+            0.6270570638837268,
+            0.6199077767379021
+          ],
+          [
+            0.792199657786046,
+            0.9999999999999998,
+            0.7410118767137832,
+            0.7315716068887387
+          ],
+          [
+            0.6270570638837268,
+            0.7410118767137831,
+            1.0,
+            0.9710146607924668
+          ],
+          [
+            0.6199077767379021,
+            0.7315716068887388,
+            0.9710146607924667,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7374498609476406
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.027484011854624863,
+        "missedReferenceEnergyFraction": 0.027908346258131694,
+        "isolatedEventEnergyDifferenceDb": 1.4332210253465298,
+        "visibleWeightedDelayRmsMs": 1.5922800446493794,
+        "visibleWeightedDirectionRmsDegrees": 6.443596450466183
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "inside",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 3770,
+      "metrics": {
+        "rms": 0.00026792352091206293,
+        "rmsDbFS": -71.43978316315352,
+        "peak": 0.002192140600524924,
+        "crestDb": 18.2571512768625,
+        "excessKurtosis": 1.3746074197346259,
+        "levelP90MinusP10Db": 6.68434064985118,
+        "bandPowerFraction": [
+          0.12993914617178232,
+          0.3947434059039244,
+          0.3664650377567035,
+          0.1088524101675897
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7577572004647886,
+            0.5794078070220576,
+            0.6084230346569046
+          ],
+          [
+            0.7577572004647886,
+            1.0,
+            0.7327771585610783,
+            0.7401703412042162
+          ],
+          [
+            0.5794078070220576,
+            0.7327771585610783,
+            1.0,
+            0.9697211067790549
+          ],
+          [
+            0.6084230346569046,
+            0.7401703412042162,
+            0.969721106779055,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6519113340029261
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.013383247543284979,
+        "missedReferenceEnergyFraction": 0.05789382138815432,
+        "isolatedEventEnergyDifferenceDb": 0.0201273296419288,
+        "visibleWeightedDelayRmsMs": 0.8057491989684435,
+        "visibleWeightedDirectionRmsDegrees": 3.2622999896956553
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "inside",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 3641,
+      "metrics": {
+        "rms": 0.00026960783887914724,
+        "rmsDbFS": -71.3853496958155,
+        "peak": 0.0021118349006040787,
+        "crestDb": 17.878548952603108,
+        "excessKurtosis": 1.5366063169386726,
+        "levelP90MinusP10Db": 6.951250904843434,
+        "bandPowerFraction": [
+          0.13109004195566584,
+          0.3912921419762443,
+          0.368616883711909,
+          0.10900093235618087
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7906515313983207,
+            0.6107586470935753,
+            0.6205047791778925
+          ],
+          [
+            0.7906515313983207,
+            0.9999999999999999,
+            0.7464539005197174,
+            0.7461319268031269
+          ],
+          [
+            0.6107586470935754,
+            0.7464539005197174,
+            1.0,
+            0.9724730768663955
+          ],
+          [
+            0.6205047791778924,
+            0.7461319268031269,
+            0.9724730768663955,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.7039375116359117
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.006364061768834815,
+        "missedReferenceEnergyFraction": 0.02303632567289099,
+        "isolatedEventEnergyDifferenceDb": 0.0651803098197527,
+        "visibleWeightedDelayRmsMs": 0.4043273868370444,
+        "visibleWeightedDirectionRmsDegrees": 1.7023060059008335
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "inside",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 3713,
+      "metrics": {
+        "rms": 0.0002693671457603058,
+        "rmsDbFS": -71.39310751042828,
+        "peak": 0.0019749061422125124,
+        "crestDb": 17.304036720940815,
+        "excessKurtosis": 1.403994186525697,
+        "levelP90MinusP10Db": 7.05610665002861,
+        "bandPowerFraction": [
+          0.12832621767575414,
+          0.3956026060797222,
+          0.3654496692510269,
+          0.11062150699349668
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.8042283238209232,
+            0.6238799799185364,
+            0.6430120207016456
+          ],
+          [
+            0.8042283238209232,
+            1.0,
+            0.7245000748784411,
+            0.73014339882359
+          ],
+          [
+            0.6238799799185364,
+            0.7245000748784411,
+            1.0,
+            0.9693008798294226
+          ],
+          [
+            0.6430120207016456,
+            0.7301433988235901,
+            0.9693008798294226,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6831125471320197
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.00418031508345032,
+        "missedReferenceEnergyFraction": 0.010863162693614311,
+        "isolatedEventEnergyDifferenceDb": 0.10112943981369696,
+        "visibleWeightedDelayRmsMs": 0.1971937409567408,
+        "visibleWeightedDirectionRmsDegrees": 0.8367333094373356
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0,
+      "visibleEvents": 8662,
+      "metrics": {
+        "rms": 0.0004911786021092522,
+        "rmsDbFS": -66.17521122448332,
+        "peak": 0.0038381043750861927,
+        "crestDb": 17.857546843559515,
+        "excessKurtosis": 1.0756529719682435,
+        "levelP90MinusP10Db": 5.547291103437033,
+        "bandPowerFraction": [
+          0.1318205814903508,
+          0.394975492526686,
+          0.36445033561460877,
+          0.10875359036835451
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.7367343992619237,
+            0.5995298325654772,
+            0.6137380904080495
+          ],
+          [
+            0.7367343992619237,
+            1.0,
+            0.7079068515160591,
+            0.7105413736933857
+          ],
+          [
+            0.5995298325654772,
+            0.7079068515160591,
+            1.0,
+            0.9593998411961705
+          ],
+          [
+            0.6137380904080495,
+            0.7105413736933857,
+            0.9593998411961705,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6822622919576135
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 8804,
+      "metrics": {
+        "rms": 0.0005469266186869853,
+        "rmsDbFS": -65.2414187836482,
+        "peak": 0.004348669455262709,
+        "crestDb": 18.008546742836323,
+        "excessKurtosis": 1.5774035808642752,
+        "levelP90MinusP10Db": 6.10226161254058,
+        "bandPowerFraction": [
+          0.13142253075326987,
+          0.3980738395251324,
+          0.3624550059632498,
+          0.10804862375834785
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999998,
+            0.7544157573340387,
+            0.5672438047386046,
+            0.5762287738145607
+          ],
+          [
+            0.7544157573340385,
+            1.0,
+            0.7344090149620655,
+            0.7294398188027764
+          ],
+          [
+            0.5672438047386046,
+            0.7344090149620653,
+            1.0,
+            0.9620884453290627
+          ],
+          [
+            0.5762287738145607,
+            0.7294398188027764,
+            0.9620884453290627,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.75120389593861
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.027016066136328187,
+        "missedReferenceEnergyFraction": 0.033762145491647154,
+        "isolatedEventEnergyDifferenceDb": 0.8029015646965318,
+        "visibleWeightedDelayRmsMs": 1.5019272299902542,
+        "visibleWeightedDirectionRmsDegrees": 10.660593216764143
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 8673,
+      "metrics": {
+        "rms": 0.0004909197728003511,
+        "rmsDbFS": -66.17978950894381,
+        "peak": 0.003376859760414308,
+        "crestDb": 16.75005000774694,
+        "excessKurtosis": 1.062090179523195,
+        "levelP90MinusP10Db": 5.501101900336707,
+        "bandPowerFraction": [
+          0.13137698779454102,
+          0.3929412910059862,
+          0.3661895459154875,
+          0.10949217528398522
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7213985442972571,
+            0.5562352046004446,
+            0.5645324560167194
+          ],
+          [
+            0.7213985442972572,
+            0.9999999999999999,
+            0.7171087138667938,
+            0.7100007649174553
+          ],
+          [
+            0.5562352046004447,
+            0.7171087138667939,
+            1.0,
+            0.9558565621162332
+          ],
+          [
+            0.5645324560167194,
+            0.7100007649174553,
+            0.9558565621162333,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.653459575406326
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.01151146467009827,
+        "missedReferenceEnergyFraction": 0.02526858581897988,
+        "isolatedEventEnergyDifferenceDb": 0.02367254604877142,
+        "visibleWeightedDelayRmsMs": 0.7639596859476956,
+        "visibleWeightedDirectionRmsDegrees": 5.2816177836726785
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 8694,
+      "metrics": {
+        "rms": 0.000494064321990395,
+        "rmsDbFS": -66.12433013622288,
+        "peak": 0.0040783494450494975,
+        "crestDb": 18.334018829679472,
+        "excessKurtosis": 1.129685021950758,
+        "levelP90MinusP10Db": 5.84033051092068,
+        "bandPowerFraction": [
+          0.13489294596340473,
+          0.3932739056102381,
+          0.36375590078611425,
+          0.10807724764024297
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7329268761734063,
+            0.5941745722045388,
+            0.593871313128147
+          ],
+          [
+            0.7329268761734063,
+            1.0,
+            0.7231663296370316,
+            0.7241318023214104
+          ],
+          [
+            0.5941745722045388,
+            0.7231663296370315,
+            1.0,
+            0.9542570442844728
+          ],
+          [
+            0.593871313128147,
+            0.7241318023214104,
+            0.9542570442844728,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6566391234850906
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0066760255810326,
+        "missedReferenceEnergyFraction": 0.01981173278064872,
+        "isolatedEventEnergyDifferenceDb": 0.05359966259070861,
+        "visibleWeightedDelayRmsMs": 0.3828578076233914,
+        "visibleWeightedDirectionRmsDegrees": 2.7618874962151745
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "doorway_edge",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 8656,
+      "metrics": {
+        "rms": 0.0004893550887995742,
+        "rmsDbFS": -66.20751782193744,
+        "peak": 0.003490895699155568,
+        "crestDb": 17.06625528542879,
+        "excessKurtosis": 1.0009280703927237,
+        "levelP90MinusP10Db": 5.668233894209749,
+        "bandPowerFraction": [
+          0.13183309862453965,
+          0.3912759454152528,
+          0.3676949555985787,
+          0.10919600036162894
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.7377475519950047,
+            0.57563048347747,
+            0.5926448752125011
+          ],
+          [
+            0.7377475519950046,
+            1.0,
+            0.727384676668455,
+            0.7312780370859255
+          ],
+          [
+            0.57563048347747,
+            0.7273846766684551,
+            1.0,
+            0.9551429196728511
+          ],
+          [
+            0.5926448752125011,
+            0.7312780370859256,
+            0.9551429196728511,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6721279288992607
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0027452815473405084,
+        "missedReferenceEnergyFraction": 0.009012754407462964,
+        "isolatedEventEnergyDifferenceDb": 0.017390445582248844,
+        "visibleWeightedDelayRmsMs": 0.18479710062106425,
+        "visibleWeightedDirectionRmsDegrees": 1.3933218355344241
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0,
+      "visibleEvents": 16441,
+      "metrics": {
+        "rms": 0.0007715470752152091,
+        "rmsDbFS": -62.25275141450568,
+        "peak": 0.005886325019742435,
+        "crestDb": 17.649636183721068,
+        "excessKurtosis": 0.9415964172109428,
+        "levelP90MinusP10Db": 4.888787951345094,
+        "bandPowerFraction": [
+          0.12437069918653004,
+          0.39842080436700256,
+          0.36705034175539325,
+          0.11015815469107423
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6931014509349104,
+            0.47417116029766526,
+            0.49025519696028796
+          ],
+          [
+            0.6931014509349104,
+            1.0,
+            0.6837371401209605,
+            0.6698803161003009
+          ],
+          [
+            0.47417116029766526,
+            0.6837371401209605,
+            1.0,
+            0.949489772465199
+          ],
+          [
+            0.49025519696028796,
+            0.669880316100301,
+            0.949489772465199,
+            0.9999999999999998
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6431474681699447
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 2.0,
+      "visibleEvents": 16327,
+      "metrics": {
+        "rms": 0.0007554381249514693,
+        "rmsDbFS": -62.43602202537683,
+        "peak": 0.00526138457236358,
+        "crestDb": 16.858022965525688,
+        "excessKurtosis": 0.7987106751485009,
+        "levelP90MinusP10Db": 4.75851750018969,
+        "bandPowerFraction": [
+          0.1284122017220496,
+          0.3908915854961997,
+          0.370699977913652,
+          0.10999623486809883
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6419210641228132,
+            0.5037464473407688,
+            0.47971399136921844
+          ],
+          [
+            0.6419210641228132,
+            1.0,
+            0.6900196768982084,
+            0.6680850674477982
+          ],
+          [
+            0.5037464473407689,
+            0.6900196768982084,
+            1.0,
+            0.9422747774717473
+          ],
+          [
+            0.47971399136921844,
+            0.668085067447798,
+            0.9422747774717471,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6334636070733342
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.008610201216658868,
+        "missedReferenceEnergyFraction": 0.029576864319042478,
+        "isolatedEventEnergyDifferenceDb": -0.09078118550145367,
+        "visibleWeightedDelayRmsMs": 1.4050072685887074,
+        "visibleWeightedDirectionRmsDegrees": 12.816078384095675
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 1.0,
+      "visibleEvents": 16389,
+      "metrics": {
+        "rms": 0.0007575120087764656,
+        "rmsDbFS": -62.4122095587174,
+        "peak": 0.005325663014206663,
+        "crestDb": 16.939683211212678,
+        "excessKurtosis": 0.6997023803286786,
+        "levelP90MinusP10Db": 4.80747560501765,
+        "bandPowerFraction": [
+          0.1317225222503845,
+          0.39503920588723573,
+          0.3643629726970416,
+          0.10887529916533814
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.6778885347000249,
+            0.5413653646817496,
+            0.5402654733661008
+          ],
+          [
+            0.6778885347000249,
+            0.9999999999999999,
+            0.6951343779531999,
+            0.6910016818359568
+          ],
+          [
+            0.5413653646817496,
+            0.6951343779531999,
+            1.0,
+            0.9431600787459602
+          ],
+          [
+            0.5402654733661008,
+            0.6910016818359568,
+            0.9431600787459602,
+            0.9999999999999999
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6523026631212641
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0049290282327250036,
+        "missedReferenceEnergyFraction": 0.03879195450740318,
+        "isolatedEventEnergyDifferenceDb": -0.1561237270865097,
+        "visibleWeightedDelayRmsMs": 0.7272280407789933,
+        "visibleWeightedDirectionRmsDegrees": 6.216775570896884
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0.5,
+      "visibleEvents": 16396,
+      "metrics": {
+        "rms": 0.0007594355103466425,
+        "rmsDbFS": -62.39018199204044,
+        "peak": 0.005724067821787438,
+        "crestDb": 17.544277409426027,
+        "excessKurtosis": 0.8004552094420805,
+        "levelP90MinusP10Db": 4.803953017086677,
+        "bandPowerFraction": [
+          0.12715491376916319,
+          0.3975939788525553,
+          0.3662796571555132,
+          0.10897145022276826
+        ],
+        "envelopeCorrelation": [
+          [
+            1.0,
+            0.655542399025443,
+            0.43846717059978435,
+            0.4499601986519231
+          ],
+          [
+            0.6555423990254429,
+            1.0,
+            0.7028293844056885,
+            0.6859760666604853
+          ],
+          [
+            0.4384671705997844,
+            0.7028293844056884,
+            0.9999999999999999,
+            0.9429601630888662
+          ],
+          [
+            0.44996019865192316,
+            0.6859760666604853,
+            0.9429601630888662,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6486082221823034
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0034627983153954142,
+        "missedReferenceEnergyFraction": 0.02996024444162224,
+        "isolatedEventEnergyDifferenceDb": -0.11363814882477508,
+        "visibleWeightedDelayRmsMs": 0.3580332286447549,
+        "visibleWeightedDirectionRmsDegrees": 3.326685359147472
+      }
+    },
+    {
+      "seed": 91,
+      "receiver": "roof_edge",
+      "patchWidthMetres": 0.25,
+      "visibleEvents": 16431,
+      "metrics": {
+        "rms": 0.000770121753338725,
+        "rmsDbFS": -62.26881218166387,
+        "peak": 0.005586059797275064,
+        "crestDb": 17.210923789585127,
+        "excessKurtosis": 0.9211375506510415,
+        "levelP90MinusP10Db": 4.852024679591253,
+        "bandPowerFraction": [
+          0.1266602919928196,
+          0.39513160740204417,
+          0.3681786402107041,
+          0.11002946039443204
+        ],
+        "envelopeCorrelation": [
+          [
+            0.9999999999999999,
+            0.6851864106875595,
+            0.4917944374949085,
+            0.5020074709045429
+          ],
+          [
+            0.6851864106875595,
+            1.0,
+            0.6839438302319303,
+            0.6864982486801293
+          ],
+          [
+            0.4917944374949084,
+            0.6839438302319303,
+            0.9999999999999999,
+            0.949770131806984
+          ],
+          [
+            0.5020074709045429,
+            0.6864982486801293,
+            0.949770131806984,
+            1.0
+          ]
+        ],
+        "envelopeModulationFractionBelow10Hz": 0.6412255144609031
+      },
+      "error": {
+        "visibilityMismatchFraction": 0.0018093901107471533,
+        "missedReferenceEnergyFraction": 0.010073303001285774,
+        "isolatedEventEnergyDifferenceDb": -0.023861413955121626,
+        "visibleWeightedDelayRmsMs": 0.18081752182560692,
+        "visibleWeightedDirectionRmsDegrees": 1.6238109842727375
+      }
+    }
+  ],
+  "fields": [
+    {
+      "seed": 23,
+      "eventCount": 32062,
+      "sha256": "b266889b9dbfd807c73820f9ab6caf8b80b029d935078bb0254e467bf697e9f6",
+      "roofImpacts": 2342
+    },
+    {
+      "seed": 47,
+      "eventCount": 32179,
+      "sha256": "add01ad25e443ee40248afa4d6bce61be1d56cb079226a82fa1703b193da942a",
+      "roofImpacts": 2330
+    },
+    {
+      "seed": 91,
+      "eventCount": 32055,
+      "sha256": "e10c990bd10bc16546041ae72fab1fb1f362f8eaf27c74cf023d04073f248c38",
+      "roofImpacts": 2285
+    }
+  ],
+  "files": {
+    "outside-then-inside.wav": {
+      "seconds": 12.5,
+      "peak": 0.33683650268499893,
+      "sha256": "015c164f474d730da6a68f3754cc265d33f0edba030a7606b5409841ba8068de"
+    },
+    "outside-individual-then-2m-patches.wav": {
+      "seconds": 12.5,
+      "peak": 0.33683650268499893,
+      "sha256": "9fdd20c87beb7b9adf07a66927237f2dbc44002331a9c371dc65942f570b93d9"
+    },
+    "inside-individual-then-2m-patches.wav": {
+      "seconds": 12.5,
+      "peak": 0.13700678134113123,
+      "sha256": "df9b274e86b9556f9ebac1fb6b31bc0c32ab716ba42a16d79f857ccea20357c4"
+    },
+    "inside-individual-then-025m-patches.wav": {
+      "seconds": 12.5,
+      "peak": 0.13700678134113123,
+      "sha256": "5c99a898c2b2f1d0c828d71ca771a08ce979c6ec910e7f7f9f11e1763acaf3c0"
+    },
+    "outside.wav": {
+      "seconds": 8.20299319727891,
+      "peak": 0.33683650268499893,
+      "sha256": "a9a7cbc3c65b6f6b82f895c7ae863a0e0a2448fe6804be92df7793110533831f"
+    },
+    "inside.wav": {
+      "seconds": 8.20299319727891,
+      "peak": 0.13700678134113123,
+      "sha256": "57a0b59c697a151588315014aa2853db5e0b0a13e7f7208fe8be2d2dd020bfaf"
+    }
+  },
+  "audition": {
+    "gain": 54.423340411922645,
+    "cropSeconds": [
+      1,
+      7
+    ],
+    "gapSeconds": 0.5,
+    "fadeMilliseconds": 20,
+    "levelMatching": "One common gain for all receivers and patch sizes; no inside boost, per-clip normalization or limiter."
+  },
+  "memoryScope": "Offline source/geometry arrays only; not a Unity memory or realtime benchmark."
+}

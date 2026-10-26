@@ -1,6 +1,6 @@
 # Dense rain source experiment — 26 October 2026
 
-The first source experiment is implemented and exported for listening. A bounded convolution mixer reproduces the explicit dense-drop mixture to floating-point precision. It is faster at high event density and slower at low density. This verifies the source-generation optimization, not realistic rain, spatial grouping or Church acoustics. **The user rejected the first timbre as still too clicky or artificial.** A second audition is described below; acceptance remains pending.
+The first source experiment is implemented and exported for listening. A bounded convolution mixer reproduces the explicit dense-drop mixture to floating-point precision. It is faster at high event density and slower at low density. This verifies the source-generation optimization, not realistic rain, spatial grouping or Church acoustics. **The user rejected the first timbre as still too clicky or artificial, then said the splash revision is better.** The revision is the current candidate for the small spatial experiment, not a claim of full realism.
 
 ## Implemented model
 
@@ -85,4 +85,30 @@ Files are in the Conductor workspace's `.context/rain-source-review/splash-revis
 
 The comparison uses one fixed audition gain per profile, matched over seconds 1–7 at seed 23/intensity 1. V1 retains its previous gain of 6.016105854351045. V2 uses 6.58628604961807 for both delivered seeds; the recording uses 0.676870800937255. No per-drop normalization or dynamic gain is applied. Exported float32 WAVs are finite with peaks below 0.271. Native PCM and bank are retained locally; hashes, metrics, gains and provenance are in [revision-report.json](revision-report.json). The recording is a texture reference with unknown surface/recording acoustics as described above, not isolated source data.
 
-The previous source was **rejected**, not accepted because its mixer or metrics passed. The revision is **awaiting listening**. If it trades clicks for featureless hiss, the next source experiment should use suitable isolated measured surface responses or an explicitly empirical texture model, rather than continuing to tune arbitrary transients and call them physical rain. The [2019 rain paper](https://haonancheng.cn/attaches/2019%20SIGGRAPH.pdf) supplements impact models with recording-derived material textures; it does not establish that our authored bank is adequate. Scene integration remains deferred.
+The previous source was **rejected**, not accepted because its mixer or metrics passed. After listening in the browser, the user said the revision **is better**. Keep it as the current candidate while testing space and shelter; that feedback does not establish measured surface realism. If later listening finds featureless hiss, use suitable isolated measured surface responses or an explicitly empirical texture model rather than calling further arbitrary transient tuning physical rain. The [2019 rain paper](https://haonancheng.cn/attaches/2019%20SIGGRAPH.pdf) supplements impact models with recording-derived material textures; it does not establish that our authored bank is adequate. Church integration remains deferred.
+
+## Direct-sound shelter and grouping check
+
+[`tools/rain_spatial.py`](../../../tools/rain_spatial.py) adds a small independent fixture with a 20 × 20 m rain catchment, an opaque roof/wall shelter and a 1.5 m wide, 2.3 m high doorway. This is a direct-path diagnostic, **not the Unity renderer, a moving walkthrough or a complete interior sound model**. It includes 1/r pressure attenuation, travel delay rounded to the nearest sample, and segment/box visibility. It omits reflection, diffraction, material transmission, head filtering and roof vibration. Church's existing 32-bounce configuration is untouched.
+
+Rain lands on the roof first, or on exposed ground. No impacts occur on the sheltered ground. Source positions are reconstructed by absolute time block and remain identical under irregular queries. For each seed, all receiver and patch comparisons use the same events, gains, waveforms and first-hit surfaces. Patch centers are clipped to the five exposed surface regions, preserving the ground/roof boundary. Only the transfer position changes. The benchmark recomputes direct transfer per event to isolate position-grouping error; it is not yet a cached per-patch transport implementation or a performance result.
+
+The reference retains individual positions. Alternatives group at 2, 1, 0.5 and 0.25 m widths. Three seeds and four receiver positions give 60 rendered cases. Controls verify inverse-distance amplitude, causal sample delay, roof blockage, the open doorway, partition-invariant source positions and patch containment. All six source/spatial tests pass:
+
+```sh
+python -m unittest discover -s tools -p 'test_rain*.py' -v
+python docs/benchmarks/rain-source-2026-10-26/spatial.py <new-output-directory>
+```
+
+The individual-position reference is 10.09–10.56 dB quieter inside than outside over seconds 1–7, with no indoor gain adjustment. This is the direct airborne route through the opening, not a prediction of real building attenuation. Roof impacts have no direct path to the interior; hearing a real roof from below still needs the omitted mechanisms.
+
+| Receiver | 2 m patches: isolated-event energy error | 0.25 m patches: isolated-event energy error |
+|---|---:|---:|
+| Outside | −0.08 to −0.01 dB | −0.006 to +0.001 dB |
+| Inside | +1.06 to +1.43 dB | +0.07 to +0.10 dB |
+| Doorway edge | +0.61 to +0.83 dB | +0.001 to +0.017 dB |
+| Roof edge | −0.09 to −0.04 dB | −0.024 to +0.043 dB |
+
+This energy proxy sums each event's isolated kernel energy after its direct gain; it excludes cross-event interference. Actual rendered RMS and short-window texture are reported separately. Interior visibility disagreement falls from 2.6–2.8% of all physical events at 2 m to 0.28–0.42% at 0.25 m. Counts alone are insufficient because visibility mistakes have unequal energy. Direction and delay errors also remain nonzero. These results support measuring finer groups near openings; they do not establish 0.25 m as a universal size or validate grouping reflected paths. A dedicated efficient patch renderer and its memory/cost study remain future work.
+
+The browser listening page and WAVs are under the Conductor workspace's `.context/rain-source-review/shelter/`. `outside-then-inside.wav` plays the same six-second excitation window outside, then inside, separated by 0.5 s silence. Other clips compare individual positions with 2 m or 0.25 m patches. All use one common gain, with no per-receiver normalization or limiter. Native outputs retain source and propagation tails. These are mono, stationary-receiver comparisons. The [report](spatial-report.json) records field/bank hashes, visibility, energy/direction/delay errors, levels and file hashes; the [scene](spatial-scene.json) defines all geometry. The short CPU-only job completed and exited without launching Unity or playing audio.
