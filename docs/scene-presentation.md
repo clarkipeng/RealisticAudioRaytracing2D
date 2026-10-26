@@ -27,6 +27,28 @@ Church retains **Maximum bounces = 32** under Raytraced/Spectral, with its exist
 
 Zero bounces remains available as an optional diagnostic mode. [Implementation and limits](simulation-contracts.md#direct-sound-without-room-reverberation-2026-10-24) · [Historical zero-bounce verification at `f65f212`](benchmarks/direct-sound-2026-10-24/README.md). Those renders used zero bounces; they do not measure the restored 32-bounce profile. Earlier sections below retain their historical settings and measurements.
 
+## First-person sound map — 25 October 2026
+
+[Finished render and validation](benchmarks/church-first-person-2026-10-25/README.md).
+
+The alternate walkthrough keeps the picture camera at the gameplay head pose for the full route, with the avatar hidden except for its shadow. Pass `-sequenceFirstPerson 1` to `ChurchPresentationCapture.CaptureSequence`; the capture additionally writes a north-up `map.png`, its world bounds in `map.json`, and each frame's eye position/forward vector in `view.csv`. The original cinematic view remains available without that flag. Capture now defaults to a 20% frame-work duty cycle: it sleeps between image renders without changing simulation time. `-sequenceFirstFrame` and `-sequenceEndFrame` select a half-open image range while still recording the full numeric take and camera poses. This supports resuming an interrupted capture without redrawing completed frames.
+
+`tools/sequence_movie.py` composites the minimap from those files and the captured numeric take. A white arrow and viewing cone show the camera's position/heading. Numbered point markers follow recorded source motion, glow during emission, and correspond to a source list with distance and relative activity bars. Rain appears as its recorded masked emission area, with covered ground excluded. Idle sources remain dim so their locations are still visible. Indicators represent source emission before travel delay, not received loudness or reflected arrival direction.
+
+The compositor reads the existing Play/Gain/Stop events, clip offsets/looping, source PCM and recorded poses; it introduces no new simulation scheduler. It verifies take/clip hashes and requires matching scene/state/event hashes before reusing a rendered WAV. The view currently supports fixed-clip sources and fixed-site masked planes; it omits streamed voice slots and rejects burst-plane takes. The static map shows the initial scene footprint; moving source markers and the player update throughout.
+
+```sh
+python tools/capture_sequence.py --project <isolated-runner> \
+  --output <first-person-capture> --first-person --end-frame 1801
+python tools/sequence_movie.py <first-person-capture> \
+  --audio <matching-render>/audio --gain 1.5490401048868632 \
+  --hold-after 60 --output <first-person-capture>/church-first-person.mp4
+```
+
+Use an environment with NumPy, Pillow and `ffmpeg` on PATH. `--preview-only --take <reference-take>` can overlay sparse storyboard frames without encoding. The supplied gain is the uniform listening gain used for the current Church film; omit it to use unity gain for another take. Full encoding requires contiguous captured frames and checks that every picture camera position equals the captured head position. `--hold-after 60` holds the final image for the stationary ending while the HUD continues to update; it rejects a moving camera during the hold. Omit this flag and render through frame 2129 for an entirely fresh image sequence.
+
+Use `tools/capture_sequence.py` for background exports: it applies `nice 19`, macOS background task policy where available, one Unity job worker, the 20% frame-work budget, and a 3 GiB resident-memory stop guard for its own process. It terminates its worker when interrupted and writes a resource report. The compositor also lowers its CPU priority and uses one encoder thread. Startup/import/simulation work is still subject to process priority rather than the image duty cycle; the 20% value is not a hard system-wide CPU or GPU utilization limit. The existing full-quality audio job can use about 7.62 GiB of numeric storage and is not run by this launcher. This camera-only revision reuses the verified WAV.
+
 ## Seeded rain bursts — 24 October 2026
 
 The renderer now supports seeded finite bursts on the existing masked plane. Each burst gets a new weighted-mask position and clip offset, then keeps its world position through its delayed tail. CPU/GPU spectral synthesis and live/offline scheduling share the same event clocks. Transport and DSP now use per-source/listener ranges, so point sources no longer reserve the largest plane's direct-site capacity.

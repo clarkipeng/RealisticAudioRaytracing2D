@@ -23,6 +23,13 @@ public static partial class ChurchPresentationCapture
         if(Directory.Exists(directory))throw new IOException("Capture output already exists.");Directory.CreateDirectory(directory);
         bool storyboard=Argument("-sequenceStoryboard")=="1";
         bool takeOnly=Argument("-sequenceTakeOnly")=="1";
+        bool firstPerson=Argument("-sequenceFirstPerson")=="1";
+        int firstFrame=int.TryParse(Argument("-sequenceFirstFrame"),out var first)?first:0;
+        int endFrame=int.TryParse(Argument("-sequenceEndFrame"),out var end)?end:2130;
+        double workFraction=double.TryParse(Argument("-sequenceWorkFraction"),System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,out var fraction)?fraction:.2;
+        if(firstFrame<0||endFrame<=firstFrame||endFrame>2130||!double.IsFinite(workFraction)||workFraction<=0||workFraction>1)
+            throw new ArgumentException("Invalid frame range or work fraction; use [0,2130) and (0,1].");
         EditorSceneManager.OpenScene(ScenePath);
         var oldMode=Physics.simulationMode;float oldStep=Time.fixedDeltaTime;SceneRecording recording=null;
         int oldAa=QualitySettings.antiAliasing;var oldShadows=QualitySettings.shadows;
@@ -37,11 +44,14 @@ public static partial class ChurchPresentationCapture
             session.GetComponent<ChurchVisualPreset>().Apply(ChurchVisualPreset.Preset.PolishedLowPoly);
             session.InitializeSimulation();var actor=session.actors.OfType<SceneSequenceActor>().Single();
             var environment=FindObject<EnvironmentPresentation>();var bell=FindObject<BellPresentation>();var bird=FindObject<BirdPresentation>();
-            var avatar=session.player.GetComponent<ChurchAvatarPresenter>();avatar.Initialize();avatar.animator.Rebind();avatar.animator.Update(0);avatar.SetVisible(true);
+            var avatar=session.player.GetComponent<ChurchAvatarPresenter>();avatar.Initialize();avatar.animator.Rebind();avatar.animator.Update(0);avatar.SetVisible(!firstPerson);
+            var head=session.player.GetComponentInChildren<Camera>(true).transform;
             camera=CreateThirdPersonCamera();camera.farClipPlane=260;
+            if(firstPerson)camera.fieldOfView=70;
             int width=storyboard?1280:1920,height=storyboard?720:1080;
             target=new RenderTexture(width,height,24,RenderTextureFormat.ARGB32){antiAliasing=4};texture=new Texture2D(width,height,TextureFormat.RGB24,false);camera.targetTexture=target;
             environment.Evaluate(0,camera);
+            if(firstPerson)CaptureSequenceMap(directory,session);
             if(!storyboard)
             {
                 manager.monitorLive=false;
@@ -53,11 +63,15 @@ public static partial class ChurchPresentationCapture
             double duration=71;int frames=(int)(duration*30);float min=1,max=0;
             float[] checkpoints={0,3,6,8.03f,12,15.5f,19.5f,25,30,36,41,45.03f,45.17f,49,55,60,68};
             int checkpoint=0;string frameDirectory=Path.Combine(directory,"frames");Directory.CreateDirectory(frameDirectory);
+            double workSeconds=0,idleSeconds=0;int renderedFrames=0;
             using(var route=new StreamWriter(Path.Combine(directory,"route.csv")))
+            using(var view=new StreamWriter(Path.Combine(directory,"view.csv")))
             {
                 route.WriteLine("tick,seconds,x,y,z,grounded");
+                view.WriteLine("frame,seconds,x,y,z,forwardX,forwardY,forwardZ,headDistance");
                 for(int frame=0;frame<=frames;frame++)
                 {
+                    var work=System.Diagnostics.Stopwatch.StartNew();
                     double time=frame/30.0;
                     while((session.Tick+1)*(double)step<=time+1e-7)
                     {
@@ -73,9 +87,18 @@ public static partial class ChurchPresentationCapture
                     if(frame==frames)break;
                     if(takeOnly)continue;
                     if(storyboard&&(checkpoint>=checkpoints.Length||time<checkpoints[checkpoint]))continue;
-                    PositionSequenceCamera(camera,session.player,actor,time);
+                    if(firstPerson)camera.transform.SetPositionAndRotation(head.position,head.rotation);
+                    else PositionSequenceCamera(camera,session.player,actor,time);
+                    var eye=camera.transform.position;var forward=camera.transform.forward;
+                    view.WriteLine(FormattableString.Invariant($"{frame},{time:R},{eye.x:R},{eye.y:R},{eye.z:R},{forward.x:R},{forward.y:R},{forward.z:R},{Vector3.Distance(eye,head.position):R}"));
+                    if(frame<firstFrame||frame>=endFrame)continue;
                     environment.Evaluate(time,camera);bell.Evaluate(time);bird.Evaluate(time);
                     CaptureFrame(camera,target,texture,Path.Combine(frameDirectory,$"frame_{frame:0000}.png"),ref min,ref max);
+                    renderedFrames++;workSeconds+=work.Elapsed.TotalSeconds;
+                    // Output remains 30 fps on the simulation clock. Yield wall time
+                    // between renders so an offline export cannot monopolize the GPU.
+                    int idle=(int)Math.Min(int.MaxValue,Math.Ceiling(work.Elapsed.TotalMilliseconds*(1/workFraction-1)));
+                    var rest=System.Diagnostics.Stopwatch.StartNew();System.Threading.Thread.Sleep(idle);idleSeconds+=rest.Elapsed.TotalSeconds;
                     if(storyboard)checkpoint++;
                     if(frame%300==0)Debug.Log("Church sequence frame "+frame+" / "+frames);
                 }
@@ -86,7 +109,8 @@ public static partial class ChurchPresentationCapture
             File.WriteAllText(Path.Combine(directory,"render-job.json"),"{\"take\":\"take\",\"output\":\"audio\",\"shader\":\""+AssetDatabase.GetAssetPath(manager.directShader)+"\",\"settings\":"+JsonUtility.ToJson(settings)+"}");
             File.WriteAllText(Path.Combine(directory,"summary.json"),JsonUtility.ToJson(new SequenceSummary{frames=takeOnly?0:storyboard?checkpoint:frames,
                 width=width,height=height,seconds=duration,finalPosition=session.player.position,maxBounces=settings.maxBounces,sourceCount=manager.takeSources.Count,
-                listener="Player head; independent of picture camera",minLuma=min,maxLuma=max},true));
+                renderedFrames=renderedFrames,firstFrame=firstFrame,endFrame=endFrame,workFraction=workFraction,renderWorkSeconds=workSeconds,renderIdleSeconds=idleSeconds,
+                listener=firstPerson?"Player head; picture camera uses the same head pose":"Player head; independent of picture camera",minLuma=min,maxLuma=max},true));
             Debug.Log("CHURCH_SEQUENCE_CAPTURE "+directory);
         }
         finally
@@ -98,7 +122,44 @@ public static partial class ChurchPresentationCapture
             if(target!=null)UnityEngine.Object.DestroyImmediate(target);if(texture!=null)UnityEngine.Object.DestroyImmediate(texture);
         }
     }
-    [Serializable] sealed class SequenceSummary {public int frames,width,height,maxBounces,sourceCount;public double seconds;public Vector3 finalPosition;public string listener;public float minLuma,maxLuma;}
+    // A static north-up scene image; the movie compositor adds recorded source
+    // activity, moving poses and masked emission areas without another scheduler.
+    static void CaptureSequenceMap(string directory,SceneSession session)
+    {
+        var bounds=new Bounds(session.player.position,Vector3.zero);
+        foreach(var source in session.manager.takeSources)
+        {
+            if(source.streamed)continue;
+            bounds.Encapsulate(source.transform.position);
+            var plane=source.GetComponent<AudioSourcePlane>();
+            if(plane==null)continue;
+            foreach(float x in new[]{-.5f,.5f})foreach(float z in new[]{-.5f,.5f})
+                bounds.Encapsulate(plane.transform.TransformPoint(new Vector3(x*plane.size.x,0,z*plane.size.y)));
+        }
+        float span=Mathf.Max(bounds.size.x,bounds.size.z)+20;
+        var map=CreateThirdPersonCamera();var target=new RenderTexture(768,768,24);var texture=new Texture2D(768,768,TextureFormat.RGB24,false);
+        bool fog=RenderSettings.fog;
+        try
+        {
+            RenderSettings.fog=false;map.orthographic=true;map.orthographicSize=span*.5f;map.aspect=1;
+            map.transform.SetPositionAndRotation(new Vector3(bounds.center.x,150,bounds.center.z),Quaternion.Euler(90,0,0));
+            map.farClipPlane=300;map.targetTexture=target;float min=1,max=0;
+            CaptureFrame(map,target,texture,Path.Combine(directory,"map.png"),ref min,ref max);
+            File.WriteAllText(Path.Combine(directory,"map.json"),JsonUtility.ToJson(new SequenceMap{centerX=bounds.center.x,centerZ=bounds.center.z,span=span},true));
+        }
+        finally
+        {
+            RenderSettings.fog=fog;RenderTexture.active=null;UnityEngine.Object.DestroyImmediate(map.gameObject);
+            UnityEngine.Object.DestroyImmediate(target);UnityEngine.Object.DestroyImmediate(texture);
+        }
+    }
+    [Serializable] sealed class SequenceMap {public float centerX,centerZ,span;}
+    [Serializable] sealed class SequenceSummary
+    {
+        public int frames,width,height,maxBounces,sourceCount,renderedFrames,firstFrame,endFrame;
+        public double seconds,workFraction,renderWorkSeconds,renderIdleSeconds;
+        public Vector3 finalPosition;public string listener;public float minLuma,maxLuma;
+    }
     static SceneRecording.Input WalkthroughInput(SceneSession session,double time)
     {
         // Waypoint steering supplies ordinary controller input; the character is never teleported.

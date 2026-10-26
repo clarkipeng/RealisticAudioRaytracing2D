@@ -1,0 +1,178 @@
+{
+  "pid": 22373,
+  "exitCode": 0,
+  "wallSeconds": 56.268888292000156,
+  "userCpuSeconds": 43.888647,
+  "systemCpuSeconds": 13.191641,
+  "maximumResidentBytes": 1012170752,
+  "samples": [
+    {
+      "seconds": 0.0,
+      "rssBytes": 1196032,
+      "cpuPercent": 0.0,
+      "nice": 0
+    },
+    {
+      "seconds": 2.01,
+      "rssBytes": 161628160,
+      "cpuPercent": 60.2,
+      "nice": 19
+    },
+    {
+      "seconds": 4.02,
+      "rssBytes": 309133312,
+      "cpuPercent": 70.1,
+      "nice": 19
+    },
+    {
+      "seconds": 6.03,
+      "rssBytes": 397836288,
+      "cpuPercent": 9.2,
+      "nice": 19
+    },
+    {
+      "seconds": 8.04,
+      "rssBytes": 294141952,
+      "cpuPercent": 0.9,
+      "nice": 19
+    },
+    {
+      "seconds": 10.05,
+      "rssBytes": 249872384,
+      "cpuPercent": 0.4,
+      "nice": 19
+    },
+    {
+      "seconds": 12.05,
+      "rssBytes": 146751488,
+      "cpuPercent": 0.4,
+      "nice": 19
+    },
+    {
+      "seconds": 14.06,
+      "rssBytes": 106496000,
+      "cpuPercent": 0.4,
+      "nice": 19
+    },
+    {
+      "seconds": 16.07,
+      "rssBytes": 575094784,
+      "cpuPercent": 76.1,
+      "nice": 19
+    },
+    {
+      "seconds": 18.08,
+      "rssBytes": 575389696,
+      "cpuPercent": 91.2,
+      "nice": 19
+    },
+    {
+      "seconds": 20.09,
+      "rssBytes": 837255168,
+      "cpuPercent": 97.4,
+      "nice": 19
+    },
+    {
+      "seconds": 22.1,
+      "rssBytes": 721567744,
+      "cpuPercent": 168.2,
+      "nice": 19
+    },
+    {
+      "seconds": 24.12,
+      "rssBytes": 716980224,
+      "cpuPercent": 91.5,
+      "nice": 19
+    },
+    {
+      "seconds": 26.13,
+      "rssBytes": 817496064,
+      "cpuPercent": 140.4,
+      "nice": 19
+    },
+    {
+      "seconds": 28.14,
+      "rssBytes": 795131904,
+      "cpuPercent": 160.1,
+      "nice": 19
+    },
+    {
+      "seconds": 30.15,
+      "rssBytes": 762707968,
+      "cpuPercent": 95.1,
+      "nice": 19
+    },
+    {
+      "seconds": 32.16,
+      "rssBytes": 755466240,
+      "cpuPercent": 97.6,
+      "nice": 19
+    },
+    {
+      "seconds": 34.17,
+      "rssBytes": 633978880,
+      "cpuPercent": 97.2,
+      "nice": 19
+    },
+    {
+      "seconds": 36.18,
+      "rssBytes": 578912256,
+      "cpuPercent": 85.8,
+      "nice": 19
+    },
+    {
+      "seconds": 38.19,
+      "rssBytes": 614973440,
+      "cpuPercent": 108.8,
+      "nice": 19
+    },
+    {
+      "seconds": 40.2,
+      "rssBytes": 494436352,
+      "cpuPercent": 99.2,
+      "nice": 19
+    },
+    {
+      "seconds": 42.21,
+      "rssBytes": 455426048,
+      "cpuPercent": 99.2,
+      "nice": 19
+    },
+    {
+      "seconds": 44.21,
+      "rssBytes": 454852608,
+      "cpuPercent": 108.9,
+      "nice": 19
+    },
+    {
+      "seconds": 46.22,
+      "rssBytes": 325107712,
+      "cpuPercent": 102.5,
+      "nice": 19
+    },
+    {
+      "seconds": 48.25,
+      "rssBytes": 334823424,
+      "cpuPercent": 71.0,
+      "nice": 19
+    },
+    {
+      "seconds": 50.25,
+      "rssBytes": 172294144,
+      "cpuPercent": 3.3,
+      "nice": 19
+    },
+    {
+      "seconds": 52.26,
+      "rssBytes": 233422848,
+      "cpuPercent": 81.9,
+      "nice": 19
+    },
+    {
+      "seconds": 54.26,
+      "rssBytes": 435470336,
+      "cpuPercent": 51.1,
+      "nice": 19
+    }
+  ]
+}

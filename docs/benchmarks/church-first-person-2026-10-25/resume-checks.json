@@ -1,0 +1,25 @@
+{
+  "earlierNumericPayloadIsExactPrefix": true,
+  "reusedImageFrames": 1710,
+  "resumedImageFrames": 91,
+  "overlapComparison": [
+    {
+      "frame": 1710,
+      "maxChannelDifference": 0,
+      "meanChannelDifference": 0.0
+    },
+    {
+      "frame": 1711,
+      "maxChannelDifference": 0,
+      "meanChannelDifference": 0.0
+    },
+    {
+      "frame": 1712,
+      "maxChannelDifference": 0,
+      "meanChannelDifference": 0.0
+    }
+  ],
+  "heldImageFromSeconds": 60,
+  "encodedSeconds": 71,
+  "renderDutyFraction": 0.18505916943514733
+}

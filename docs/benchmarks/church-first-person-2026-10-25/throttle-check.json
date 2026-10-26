@@ -1,0 +1,22 @@
+{
+    "frames": 2130,
+    "width": 1920,
+    "height": 1080,
+    "maxBounces": 32,
+    "sourceCount": 10,
+    "renderedFrames": 3,
+    "firstFrame": 1710,
+    "endFrame": 1713,
+    "seconds": 71.0,
+    "workFraction": 0.2,
+    "renderWorkSeconds": 0.7404923999999999,
+    "renderIdleSeconds": 3.2317837999999998,
+    "finalPosition": {
+        "x": -1.8189894035458565e-12,
+        "y": 1.0799999237060547,
+        "z": -29.0
+    },
+    "listener": "Player head; picture camera uses the same head pose",
+    "minLuma": 0.07143764942884445,
+    "maxLuma": 0.9705536961555481
+}

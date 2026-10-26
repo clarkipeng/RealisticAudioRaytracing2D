@@ -1,0 +1,24 @@
+{
+  "frames": 2130,
+  "capturedImageFrames": 1801,
+  "heldImageFromSeconds": 60,
+  "fps": 30,
+  "seconds": 71,
+  "sameNumericScenePosesEventsSourcePcmAndRoute": true,
+  "stateHash": "a72da0e21a50bf654d1cec9e2c4218336424aced647a4b37984716cd851f9da9",
+  "eventHash": "77aab8374f38d568da73ff6c100dd6481e68f1f701e6846c64985d21fb4d3a59",
+  "maximumHeadDistance": 0,
+  "maximumRecordedListenerPositionDifference": 1.9125042229847747e-06,
+  "maximumRecordedListenerForwardDifference": 8.044911326154311e-08,
+  "activityChecksPassed": 17,
+  "sourceIndicators": 5,
+  "rainMaskResolution": [
+    128,
+    192
+  ],
+  "decodedAudioFinite": true,
+  "decodedAudioPeak": 0.8302194476127625,
+  "clippedSamples": 0,
+  "movieBytes": 19120222,
+  "movieSha256": "53c47e89f357b39d5aa6b2147fe58467471fadd8c957575f99b867324646444d"
+}

@@ -1,0 +1,102 @@
+{
+  "passed": 17,
+  "checks": [
+    {
+      "source": 0,
+      "seconds": 3.99,
+      "active": false,
+      "level": 0.0
+    },
+    {
+      "source": 0,
+      "seconds": 4.1,
+      "active": true,
+      "level": 1
+    },
+    {
+      "source": 0,
+      "seconds": 21,
+      "active": false,
+      "level": 0.0
+    },
+    {
+      "source": 8,
+      "seconds": 15.2,
+      "active": true,
+      "level": 0.01580877251836869
+    },
+    {
+      "source": 8,
+      "seconds": 18.2,
+      "active": false,
+      "level": 0.0
+    },
+    {
+      "source": 8,
+      "seconds": 19.2,
+      "active": true,
+      "level": 0.01580877251836869
+    },
+    {
+      "source": 8,
+      "seconds": 22.2,
+      "active": false,
+      "level": 0.0
+    },
+    {
+      "source": 9,
+      "seconds": 22.99,
+      "active": false,
+      "level": 0.0
+    },
+    {
+      "source": 9,
+      "seconds": 23.1,
+      "active": true,
+      "level": 0.05305925210621505
+    },
+    {
+      "source": 6,
+      "seconds": 32.999,
+      "active": false,
+      "level": 0.0
+    },
+    {
+      "source": 6,
+      "seconds": 33,
+      "active": true,
+      "level": 0.03650052315377359
+    },
+    {
+      "source": 6,
+      "seconds": 34,
+      "active": true,
+      "level": 0.08128053877245897
+    },
+    {
+      "source": 6,
+      "seconds": 44,
+      "active": true,
+      "level": 0.5267495009903256
+    },
+    {
+      "source": 7,
+      "seconds": 44.99,
+      "active": false,
+      "level": 0.0
+    },
+    {
+      "source": 7,
+      "seconds": 45.1,
+      "active": true,
+      "level": 0.012378599171624066
+    },
+    {
+      "source": 7,
+      "seconds": 56.3,
+      "active": false,
+      "level": 0.0
+    }
+  ],
+  "allSourcesSilentAt60": true
+}

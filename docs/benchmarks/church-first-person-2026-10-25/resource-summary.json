@@ -1,0 +1,13 @@
+{
+  "wallSeconds": 130.48591433300044,
+  "renderWorkSeconds": 16.172291299999998,
+  "enforcedIdleSeconds": 71.2175492,
+  "renderDutyFraction": 0.18505916943514733,
+  "peakSampledResidentBytes": 1059504128,
+  "residentLimitMiB": 3072,
+  "exitCode": 0,
+  "gpuAudioRerendered": false,
+  "backgroundPolicy": "macOS taskpolicy -b plus nice 19",
+  "encoderThreads": 1,
+  "observedAtLagInvestigation": "This project renderer was absent; the separate LaserGame Unity editor was sampled near 160% CPU. This does not establish a sole cause of system lag."
+}
