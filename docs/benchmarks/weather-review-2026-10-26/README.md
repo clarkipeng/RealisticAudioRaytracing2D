@@ -2,6 +2,8 @@
 
 The short comparison renders current first-surface rain and canopy wind at matched outdoor and closed-interior receiver positions. Wind's sparse grain coverage was improved in both Church scenes. Rain's indoor transients remain a separate concern; these results do not validate realistic rain or a calibrated building response.
 
+**Listening outcome:** the user rejected the rain as unrealistic. The source uses the same synthetic 24 ms noise tick for every impact, with only about 128 weighted events/s across 4,988 m². The transport checks below do not establish perceptual rain quality. The [source-model correction](../../simulation-contracts.md#rain-quality-rejection-and-source-model-correction--26-october-2026) separates dense impact excitation from ray budget and requires a dry-source listening check before another scene render. That replacement is not implemented by this review.
+
 ## Matched probes
 
 [WeatherReview.cs](WeatherReview.cs) derives six-second source-only numeric takes from the first-surface capture. Scene geometry is held at the recorded 18 s pose, after the door closes. The outdoor receiver uses the recorded 1 s head pose, and the interior receiver uses the 18 s head pose. Both hear the same source events, gains and emissions. Rain is rendered separately at each receiver; wind uses two simultaneous receivers. These are stationary comparisons, not another walking take. They preserve geometry, source IDs, source PCM and original gain commands; each derivative has its own authenticated metadata.
