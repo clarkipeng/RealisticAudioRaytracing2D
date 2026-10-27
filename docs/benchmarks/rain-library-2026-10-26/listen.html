@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rain library audition · Acoustic Lab</title>
+<style>
+:root{color-scheme:dark;--bg:#10141b;--panel:#181e28;--line:#343e4d;--text:#e8edf5;--muted:#adb9cb;--accent:#1accff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:820px;margin:auto;padding:38px 24px 50px}.eyebrow{color:var(--accent);font:600 12px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase}h1{font-size:clamp(30px,5vw,42px);letter-spacing:-.035em;line-height:1.16;margin:14px 0}h2{font-size:21px;line-height:1.3;margin:0 0 10px}h3{font-size:17px}p{color:var(--muted);margin:10px 0 16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;margin:20px 0}.primary{border-color:var(--accent)}.small{font-size:13px}audio{display:block;width:100%;margin:18px 0 10px}details{margin:24px 0}summary{cursor:pointer}footer{font-size:13px;border-top:1px solid var(--line);padding-top:20px;color:var(--muted)}a{color:var(--accent)}li{margin:10px 0}.status{color:var(--accent);font-size:13px;min-height:21px}@media(max-width:480px){main{padding:25px 16px}.card{padding:18px}}
+</style></head><body><main>
+<div class="eyebrow">Acoustic Lab / source listening</div>
+<h1>Start with the library’s rain.</h1>
+<p>Four free samples from <strong>PMSFX — Rain Designer</strong>, released in Sonniss’s GDC 2020 bundle. First, judge the publisher’s finished rain sound.</p>
+<section class="card primary"><h2>Start here · Moderate rain</h2>
+<p>The publisher’s finished rain mix. A 12-second excerpt, keeping its stereo image and relative dynamics.</p>
+<audio controls preload="metadata" src="rain.wav" aria-label="PMSFX moderate rain, twelve-second excerpt"></audio>
+<p class="status" aria-live="polite">Ready · press play to listen</p>
+</section>
+<details><summary>Hear the three separate layers from the free selection</summary>
+<section class="card"><h3>Background wash</h3><p class="small">A continuous background layer. This is one ingredient, not a finished rain mix.</p><audio controls preload="metadata" src="background.wav" aria-label="PMSFX background wash"></audio></section>
+<section class="card"><h3>Tarp / foliage texture</h3><p class="small">The library’s designed surface texture, with multiple drops already combined.</p><audio controls preload="metadata" src="tarp.wav" aria-label="PMSFX tarp and foliage rain texture"></audio></section>
+<section class="card"><h3>Iron plate texture</h3><p class="small">A designed layer with the metal surface’s character already recorded.</p><audio controls preload="metadata" src="iron.wav" aria-label="PMSFX iron plate rain texture"></audio></section>
+</details>
+<section class="card"><h2>Hear the individual-drop collection</h2>
+<p>The free files above contain finished textures. To hear the larger collection’s source material, open the publisher’s player and choose its second track: <strong>Construction Kit and Source</strong>.</p>
+<p><a href="https://pmsfx.gumroad.com/l/raindesigner">Open publisher demos</a> · <a href="https://soundcloud.com/phil-michalski-1/sets/pm-rain-designer">Open SoundCloud playlist</a></p>
+<p class="small">The full pack has not been purchased. This audition does not establish that single drops alone can reproduce the finished mix.</p>
+</section>
+<footer>Private project audition. All excerpts use seconds 5–17, the publisher’s original levels and short edge fades; no EQ, compression, added ambience or scene propagation. Source files are 96 kHz / 24-bit stereo, converted to 44.1 kHz / 16-bit for playback. <a href="https://sonniss.com/gameaudiogdc/">Sonniss free bundle</a> · <a href="https://sonniss.com/gdc-bundle-license/">License</a> · <a href="report.json">Provenance and measurements</a></footer>
+</main><script>
+const players=[...document.querySelectorAll('audio')];
+for(const player of players){player.addEventListener('play',()=>{for(const other of players)if(other!==player)other.pause();});player.addEventListener('error',()=>{const p=document.createElement('p');p.textContent='Could not load this sample.';player.after(p);});}
+const main=players[0],status=document.querySelector('.status');
+for(const e of ['play','pause','ended'])main.addEventListener(e,()=>status.textContent=main.ended?'Finished · publisher’s moderate rain':main.paused?'Paused':'Playing · publisher’s moderate rain');
+</script></body></html>

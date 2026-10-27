@@ -1,0 +1,142 @@
+{
+  "status": "awaiting listening",
+  "author": "PMSFX / Phil Michalski",
+  "collection": "Rain Designer selections in Sonniss GDC 2020",
+  "license": "https://sonniss.com/gdc-bundle-license/",
+  "archive": "https://sonniss.com/gameaudiogdc/",
+  "official_tracklist": "https://docs.google.com/spreadsheets/d/1QqIcxJ7y0Acq3HAj9qQvFgvyeBjJ_7JvX8-GguUHIVk/edit",
+  "processing": {
+    "start_s": 5,
+    "duration_s": 12,
+    "gain": 1.0,
+    "edge_fades_s": 0.02,
+    "output": "44.1 kHz stereo PCM16"
+  },
+  "purpose": "source-quality audition only; no drop extraction, synthesis or propagation",
+  "files": {
+    "rain": {
+      "file": "PM_RD_RAIN_8_MODERATE_DRIPPY.wav",
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_RAIN_8_MODERATE_DRIPPY.wav",
+      "bytes": 32427202,
+      "sha256": "bde8c266a247b9843a8813cf52e587d135e9c94dba201d00ca11908a49047488",
+      "official_tracklist_row": [
+        "PM_RD_RAIN_8_MODERATE_DRIPPY.wav",
+        " Rain Designer",
+        "PMSFX ",
+        "https://sonniss.com/sound-effects/rain-designer/"
+      ],
+      "original_format": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "pcm_s24le",
+            "sample_rate": "96000",
+            "channels": 2,
+            "bits_per_sample": 24
+          }
+        ],
+        "format": {
+          "duration": "56.000000"
+        }
+      },
+      "excerpt": "rain.wav",
+      "excerpt_sha256": "f1bef049038bb2fa3b7f7f67cf5e676502d966f3dca68055731aa9a85dd30b3c",
+      "excerpt_peak": 0.191436767578125,
+      "excerpt_rms": 0.008776170581070936
+    },
+    "background": {
+      "file": "PM_RD_DESIGNED_CONSTANT_BACKING_NOISE_5.wav",
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_DESIGNED_CONSTANT_BACKING_NOISE_5.wav",
+      "bytes": 40491038,
+      "sha256": "286567608e43281618393da41926bbf2f14d2f3f99dc060e35357c0cb89ef6e8",
+      "official_tracklist_row": [
+        "PM_RD_DESIGNED_CONSTANT_BACKING_NOISE_5.wav",
+        " Rain Designer",
+        "PMSFX ",
+        "https://sonniss.com/sound-effects/rain-designer/"
+      ],
+      "original_format": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "pcm_s24le",
+            "sample_rate": "96000",
+            "channels": 2,
+            "bits_per_sample": 24
+          }
+        ],
+        "format": {
+          "duration": "70.000000"
+        }
+      },
+      "excerpt": "background.wav",
+      "excerpt_sha256": "2fc555f27a242d0a0977019ced77fb5f56544d63f502e5f44b824bbe350770dd",
+      "excerpt_peak": 0.0191650390625,
+      "excerpt_rms": 0.0026142004261602955
+    },
+    "tarp": {
+      "file": "PM_RD_DESIGNED_DRIPPY_ON_TARP_FOLIAGE_2.wav",
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_DESIGNED_DRIPPY_ON_TARP_FOLIAGE_2.wav",
+      "bytes": 37105312,
+      "sha256": "a292c769bb805c2a1ca1f6462fe6b2d19057b3a03c2e5a4667460e5e96f4cbfd",
+      "official_tracklist_row": [
+        "PM_RD_DESIGNED_DRIPPY_ON_TARP_FOLIAGE_2.wav",
+        " Rain Designer",
+        "PMSFX ",
+        "https://sonniss.com/sound-effects/rain-designer/"
+      ],
+      "original_format": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "pcm_s24le",
+            "sample_rate": "96000",
+            "channels": 2,
+            "bits_per_sample": 24
+          }
+        ],
+        "format": {
+          "duration": "64.115521"
+        }
+      },
+      "excerpt": "tarp.wav",
+      "excerpt_sha256": "154c0a48216b2bff61f18c968ec9efbb529a899d57d5cdc408c308672e50a93e",
+      "excerpt_peak": 0.628570556640625,
+      "excerpt_rms": 0.011063888610971665
+    },
+    "iron": {
+      "file": "PM_RD_DESIGNED_DRIPPY_ON_IRON_PLATE_3.wav",
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_DESIGNED_DRIPPY_ON_IRON_PLATE_3.wav",
+      "bytes": 56723672,
+      "sha256": "19c431eae089f860c419734c02eb6fe505b03691f975272acb63d42db6491251",
+      "official_tracklist_row": [
+        "PM_RD_DESIGNED_DRIPPY_ON_IRON_PLATE_3.wav",
+        " Rain Designer",
+        "PMSFX ",
+        "https://sonniss.com/sound-effects/rain-designer/"
+      ],
+      "original_format": {
+        "programs": [],
+        "stream_groups": [],
+        "streams": [
+          {
+            "codec_name": "pcm_s24le",
+            "sample_rate": "96000",
+            "channels": 2,
+            "bits_per_sample": 24
+          }
+        ],
+        "format": {
+          "duration": "98.176750"
+        }
+      },
+      "excerpt": "iron.wav",
+      "excerpt_sha256": "f6fabc676ed59a7ca41b7b1bb194923ecfe0b20bce297aaad0ef9753e2568a25",
+      "excerpt_peak": 0.761810302734375,
+      "excerpt_rms": 0.01901092543645449
+    }
+  }
+}
