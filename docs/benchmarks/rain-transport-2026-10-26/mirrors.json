@@ -1,0 +1,90 @@
+{
+  "scope": "Static first specular bounce only; exact fixture enumeration versus native primitive sampling; excludes other reflected/scattered paths.",
+  "primitiveCount": 84,
+  "stops": {
+    "outside": {
+      "validMirrorPaths": 48,
+      "selectedPaths": {
+        "r1-s0": 0,
+        "r2-s0": 0,
+        "r2-s1": 1
+      },
+      "exactMirrorRms": 0.0038984978562338992,
+      "sampled": {
+        "r1-s0": {
+          "mirrorRms": 0.0,
+          "levelAboveExactDb": null,
+          "nativeIndirectRms": 0.00017354024464223458,
+          "nativeIndirectMinusPredictedRelativeRms": 1.0,
+          "nativeIndirectCorrelation": null
+        },
+        "r2-s0": {
+          "mirrorRms": 0.0,
+          "levelAboveExactDb": null
+        },
+        "r2-s1": {
+          "mirrorRms": 0.02508524632759361,
+          "levelAboveExactDb": 16.170421405027938
+        }
+      }
+    },
+    "canopy": {
+      "validMirrorPaths": 73,
+      "selectedPaths": {
+        "r1-s0": 2,
+        "r2-s0": 2,
+        "r2-s1": 2
+      },
+      "exactMirrorRms": 0.00802992731942971,
+      "sampled": {
+        "r1-s0": {
+          "mirrorRms": 0.14336397943653628,
+          "levelAboveExactDb": 25.034568660842403,
+          "nativeIndirectRms": 0.14336140116771826,
+          "nativeIndirectMinusPredictedRelativeRms": 0.0016282705229394615,
+          "nativeIndirectCorrelation": 0.9999986745531321
+        },
+        "r2-s0": {
+          "mirrorRms": 0.07168198971826814,
+          "levelAboveExactDb": 19.013968747562778,
+          "nativeIndirectRms": 0.07168231083974345,
+          "nativeIndirectMinusPredictedRelativeRms": 0.00202648307210228,
+          "nativeIndirectCorrelation": 0.9999979466841148
+        },
+        "r2-s1": {
+          "mirrorRms": 0.05697251954609128,
+          "levelAboveExactDb": 17.019076233297252,
+          "nativeIndirectRms": 0.056974714123621574,
+          "nativeIndirectMinusPredictedRelativeRms": 0.0015184153331669048,
+          "nativeIndirectCorrelation": 0.9999988479046489
+        }
+      }
+    },
+    "inside": {
+      "validMirrorPaths": 17,
+      "selectedPaths": {
+        "r1-s0": 0,
+        "r2-s0": 0,
+        "r2-s1": 0
+      },
+      "exactMirrorRms": 0.0026667971236104286,
+      "sampled": {
+        "r1-s0": {
+          "mirrorRms": 0.0,
+          "levelAboveExactDb": null,
+          "nativeIndirectRms": 0.00013258104155723692,
+          "nativeIndirectMinusPredictedRelativeRms": 1.0,
+          "nativeIndirectCorrelation": null
+        },
+        "r2-s0": {
+          "mirrorRms": 0.0,
+          "levelAboveExactDb": null
+        },
+        "r2-s1": {
+          "mirrorRms": 0.0,
+          "levelAboveExactDb": null
+        }
+      }
+    }
+  }
+}

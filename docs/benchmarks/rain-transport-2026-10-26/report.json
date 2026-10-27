@@ -1,0 +1,1811 @@
+{
+  "status": "Fails full-scale stability; not promoted to production",
+  "inputs": {
+    "sourceSeed": 23,
+    "sourceCount": 98,
+    "sampleRate": 44100,
+    "emissionGain": 0.005615637901146715,
+    "warmupSeconds": 1,
+    "walkSeconds": 18,
+    "sources": [
+      {
+        "position": {
+          "x": -5.25,
+          "y": 3.251,
+          "z": -2.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-000.f32",
+        "sha256": "983d0d6407a35b8f056bfd09e24679256b05be7bfa9cc2e6a20bb106e931ae07"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 3.251,
+          "z": -0.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-001.f32",
+        "sha256": "5f5acf994e2a477b2830ee94f960c2f1a5bafa19110d9850c6cf6e7339562aa3"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 3.251,
+          "z": 1.75
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-002.f32",
+        "sha256": "5b256d2c0dd022b4eb1415f8685e6b6f1ac09250da8691fde271045d18f776b1"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 3.251,
+          "z": 3.0
+        },
+        "area": 1.0,
+        "profile": "iron",
+        "gain": 0.005615637901146715,
+        "file": "source-003.f32",
+        "sha256": "1d6a31ceab126b1cf82219606676159fdbb926c513d0d922c38b6a1a31462e11"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 3.251,
+          "z": -2.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-004.f32",
+        "sha256": "50592ea76f557fe384fa4c0e03d61a671d4e2d0f413d6b86ac6e47556b5f216a"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 3.251,
+          "z": -0.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-005.f32",
+        "sha256": "ff201faa8dc499d5b1c945336dcb116626596161cc61f16770face5f707bc7ab"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 3.251,
+          "z": 1.75
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-006.f32",
+        "sha256": "94490611b4d48ee9cbbfe1f5ffa8c603419ebef483fdb9c5b25a47e8cab0b9f3"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 3.251,
+          "z": 3.0
+        },
+        "area": 1.0,
+        "profile": "iron",
+        "gain": 0.005615637901146715,
+        "file": "source-007.f32",
+        "sha256": "9ea76bc32b2198d7a0ade656550486790cbfca473389810e23f173efe912f16b"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 3.251,
+          "z": -2.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-008.f32",
+        "sha256": "1e7c1eafca27a1bbb8c89f3bd00ab342760aecf0f38e5b7dd0be3d5331dfc651"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 3.251,
+          "z": -0.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-009.f32",
+        "sha256": "1112577a7a434d5a14ee9bcd7b4ad8f79adb84faeba90b4892b7f6205b59c62f"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 3.251,
+          "z": 1.75
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-010.f32",
+        "sha256": "6931e47ab6232505bd9bfd1664d0811a471db6516881c624e36d9dc616b5bba8"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 3.251,
+          "z": 3.0
+        },
+        "area": 1.0,
+        "profile": "iron",
+        "gain": 0.005615637901146715,
+        "file": "source-011.f32",
+        "sha256": "d0e8e95f37abe1f24ca4586b2885651133e1f8025a763ceb91dff03fb2c159aa"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 3.251,
+          "z": -2.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-012.f32",
+        "sha256": "a3972cd8d1fef4155e3f8c34f97f2429bd0907a5a0cc43167e192fb86624e371"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 3.251,
+          "z": -0.25
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-013.f32",
+        "sha256": "0c2a124e6d30192555bd5acabf457492512386e42abb65d1f7e88c6ac2213bc4"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 3.251,
+          "z": 1.75
+        },
+        "area": 4.0,
+        "profile": "iron",
+        "gain": 0.01123127580229343,
+        "file": "source-014.f32",
+        "sha256": "367560d8a4258e5b9846666a4970ec6a5749d82505cfa451bd93fdbfca829177"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 3.251,
+          "z": 3.0
+        },
+        "area": 1.0,
+        "profile": "iron",
+        "gain": 0.005615637901146715,
+        "file": "source-015.f32",
+        "sha256": "50ad722d008ff6932ed39837ae6a5975dcb233354823a40cd7fb5ce4cebca0f8"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 3.251,
+          "z": -2.25
+        },
+        "area": 1.0,
+        "profile": "iron",
+        "gain": 0.005615637901146715,
+        "file": "source-016.f32",
+        "sha256": "c9277c7eea4892d6281b17f9c3f6fdf980916187e6aae7a853d136a903ea5ec2"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 3.251,
+          "z": -0.25
+        },
+        "area": 1.0,
+        "profile": "iron",
+        "gain": 0.005615637901146715,
+        "file": "source-017.f32",
+        "sha256": "196fa08e0faecef8be7c4b04b2776224ca1c94997450e30b6a64e744f33d64b5"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 3.251,
+          "z": 1.75
+        },
+        "area": 1.0,
+        "profile": "iron",
+        "gain": 0.005615637901146715,
+        "file": "source-018.f32",
+        "sha256": "6493a3812dea8dc7d2c466d8d4b8ec3c1b0c8e355bdcb20cf90cdafa2c935a38"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 3.251,
+          "z": 3.0
+        },
+        "area": 0.25,
+        "profile": "iron",
+        "gain": 0.0028078189505733576,
+        "file": "source-019.f32",
+        "sha256": "d0b798c21c39509421118dc4805ad80b0966adb43800f3aaffe79e91ed92c6b1"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-020.f32",
+        "sha256": "f96a52678ac566ca303a1850efd2a89f70bcc3da8cda675d3c56866e47a008bc"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-021.f32",
+        "sha256": "69fb25c95ab2dd9c4a0f149edba5fef696b3d3dcca6e8d2f4a58cec0214fdf53"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": -3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-022.f32",
+        "sha256": "b9d4e4c2fb41935328e2f9f13d0299e3e303ab7a325edd49841ea794b3f57766"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": -1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-023.f32",
+        "sha256": "2e89ad729e6d86d8813195c9fa8bcefa4a35892ab3cbedfa18504181ab59c74c"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": 1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-024.f32",
+        "sha256": "84faa1c5ae7ffa13c357799df83859fdd29f76c9b777ad46840a238f6cbd61ea"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": 3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-025.f32",
+        "sha256": "1bb93d46253e51c75f06ff1de39f322461720120a2a66b84739830cc373a5a19"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": 5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-026.f32",
+        "sha256": "c7a0061750a24b81659d27f69c2ceb3216872a2971ad182d690b28857316c7dc"
+      },
+      {
+        "position": {
+          "x": -9.0,
+          "y": 0.001,
+          "z": 7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-027.f32",
+        "sha256": "a5870fcb93a5525d01fd8457a28e7c95396081a177cc2b8329d401b414357111"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-028.f32",
+        "sha256": "9a2e9b5cdf5460a53602ae43c00fe415434c7281fe844bce9e1a8cc80d60031c"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-029.f32",
+        "sha256": "9e8a5ec621ae2608c819e27fa3ca143493724f9e5676173121e6e41571a0cc93"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": -3.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-030.f32",
+        "sha256": "a929e77a25c2b493bbcb3750f747c52086c0b6340ad07b94af7c0b5dfe0f6dbe"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": -1.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-031.f32",
+        "sha256": "48e02614d8e9f6dc008c84534705f889e802de41324d9585f840412fd8bcbdf6"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": 1.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-032.f32",
+        "sha256": "c5e9894acdb0f54f7ebe354b8db94d945994659c30f22b2fe8277f6ace01853d"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": 3.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-033.f32",
+        "sha256": "65aed70f21be21f64a9567e7131c214402191866e18ee6b21f57dbba2bdf35e2"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": 5.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-034.f32",
+        "sha256": "c669858f478e716251dd1613d0fd96d16f5bf06c25b949509054689138fcea5d"
+      },
+      {
+        "position": {
+          "x": -7.125,
+          "y": 0.001,
+          "z": 7.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-035.f32",
+        "sha256": "264b2fe81addfc7854e86723f905f20a01fd48e5c2e69d480d4396739d008fc9"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-036.f32",
+        "sha256": "b67e1db57769eb57debce6d96be48d8120f067a4adce43dbac9a859f78db01f0"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-037.f32",
+        "sha256": "c1ef86feae4ee7377ec2cd9d6af6f4ee5bb578949fbccce0b9be230049d45f13"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": -3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-038.f32",
+        "sha256": "da952e63b271ffccb1ed10049ca8f59ffb80a83aa1237fff08ac0a3c95cbb2bd"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": -1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-039.f32",
+        "sha256": "8cecb90a36fcf614f7f7bed2e7230e4f8df4e405866d1500e55c2bbcae3b0d79"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": 1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-040.f32",
+        "sha256": "4fbcb14b92c1ecdb44f8162489bc9fac6c6786274c10d67fbf6ed872581f6581"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": 3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-041.f32",
+        "sha256": "bd1c77a41deef0b69ba625951e599f1223b8e12480299ee4b7719b9a67cc2bb3"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": 5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-042.f32",
+        "sha256": "acb9341e01abbf0896487c6d2f8b7217f358e830e049703910a9ace13ef9fa32"
+      },
+      {
+        "position": {
+          "x": 3.25,
+          "y": 0.001,
+          "z": 7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-043.f32",
+        "sha256": "6440f2d43bfd575ed687c3817b6c317eb9f765dee73a045cac754c38b30ace27"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-044.f32",
+        "sha256": "95d8e3187bbd0ea4819be1bf0b2ac8d5ff84bbcacf8198e8b5ca32866507930c"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-045.f32",
+        "sha256": "4fb062749aabc53b7a76e9eded263105fac406e276f3bc067f37d362e95ad8b4"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": -3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-046.f32",
+        "sha256": "b68313648fcbf2f62a667e63fa1fe6e211aaed3210f0d76537c1aa3d7c3d03c1"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": -1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-047.f32",
+        "sha256": "60e128b375bd7e4626fbe01f63cb3f37e871d1467d823d8d6714b74e2a3428fd"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": 1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-048.f32",
+        "sha256": "1822b6697e9748331f543b031915c9a380b2fd0be4e590b480e76d2b962318dd"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": 3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-049.f32",
+        "sha256": "e8807f121e055857dd249cc2c7605a3e29fc1bef423cd12d7b0297db1b47ef85"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": 5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-050.f32",
+        "sha256": "8071dc4082df2d8f113daea65ee001c3fe1188604a0a8acb5287eea4fe5141a5"
+      },
+      {
+        "position": {
+          "x": 5.25,
+          "y": 0.001,
+          "z": 7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-051.f32",
+        "sha256": "f5d7f7c1bcff44fafc3b3824691753afb18f8bd3cdecdf89f208cd90ed78fa83"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-052.f32",
+        "sha256": "fe31bc784d1aaa9795c72893ae83df28cece47f452810fd856935fa9b3afeaa0"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-053.f32",
+        "sha256": "0124cc0127bf1368d3b1c9be36e8ec0a54217b75f12d3f0e82a4b6c597a5472b"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": -3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-054.f32",
+        "sha256": "b2855f0393596d43157c046e56d81616bdd75b17e58b3dce58871242d5c9923c"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": -1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-055.f32",
+        "sha256": "55143c57c8fae15fe23a42cb21e8659dbbe17b8743b12369f4ca88b1a6aeed27"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": 1.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-056.f32",
+        "sha256": "75e166b3bf41cefc8910ac5f5b44332f1731eaca10767c8b2f3459a35ba9de06"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": 3.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-057.f32",
+        "sha256": "7c42944dcb607ce65a76470138ac5938bdaed38cd58c28b7bb29ba52766e8e12"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": 5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-058.f32",
+        "sha256": "a4e1e04b07a3c09e50e51947220b15bb28ee3e7f8e416ba87086ef5584b32fad"
+      },
+      {
+        "position": {
+          "x": 7.25,
+          "y": 0.001,
+          "z": 7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-059.f32",
+        "sha256": "5da9c93da4c69a76b9ea34b6013111d36c162e33edcadd44a2387f045d5e27cf"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-060.f32",
+        "sha256": "3c46ff1633ec5d726138a7d5cf8a342f097ca10b06b532536a04f8d61c07d694"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-061.f32",
+        "sha256": "d6b1b17cb5930a042cf6136e53945c0fda6c7a55bfe40f28519a45fcbd91c74b"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": -3.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-062.f32",
+        "sha256": "7e549358af7843fae94474d097b878784f46d634ec66c69d2302d470f36f98c3"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": -1.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-063.f32",
+        "sha256": "006c83b3e9f9d5dbbda6f501c9f8db6f1961322a8c72b08880ce29e934ad3bb8"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": 1.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-064.f32",
+        "sha256": "e41dbccc4cd379d2c910ef1610c5f2db1a03d356924d4c0c5483126f3ba411b3"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": 3.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-065.f32",
+        "sha256": "622abff4225d4b2bdfa4453b3df9e11881f1b399232e9b681a6f8068ae4e9112"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": 5.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-066.f32",
+        "sha256": "d84541cf04fc07a9f626fe3d35b4be22b74422be91862ad32aa89f202cc1b93a"
+      },
+      {
+        "position": {
+          "x": 9.125,
+          "y": 0.001,
+          "z": 7.0
+        },
+        "area": 3.5,
+        "profile": "rain",
+        "gain": 0.010505896517136659,
+        "file": "source-067.f32",
+        "sha256": "3a16d4b80d3d33ab9b740e98952d4680fac26c4497f0560f0cbbcfb639702c65"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-068.f32",
+        "sha256": "72bd6995d253e7a2ec5a18995c0efe4e9619e47c2a6eb5c359a99605d42da48f"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-069.f32",
+        "sha256": "07b0d805debed538cda6225657f04a2fec89938940bd69e052b8058615643d97"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 0.001,
+          "z": -3.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-070.f32",
+        "sha256": "091e65ac904f678c8a6cfc4d7ec946ad3ca03630526f9a1c7633fd0f7ff85fb1"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-071.f32",
+        "sha256": "b137a4174fcb31537bee9de8f7f5cd6f3162ed97f671f50fc54ffc0c211eeffa"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-072.f32",
+        "sha256": "5049e8e73f4670be130ff0d5e016989810e7a59f8b342900a342aa55c9c47177"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 0.001,
+          "z": -3.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-073.f32",
+        "sha256": "4d748651f61cea3e9d4c3c3d8e40bca2807298121c93b78847e9f4aec380c441"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-074.f32",
+        "sha256": "95deedf4d6230dde7262391b9aa28dfbd832217b900c093b0748711552653549"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-075.f32",
+        "sha256": "b7440a38ddf6e6621fdc096ca53b5b7db4e4de471e22ffd3c73040bcb4810815"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 0.001,
+          "z": -3.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-076.f32",
+        "sha256": "571f701e71b9f2289762ed6ef9a66ca43ab5f644810880d1edd712adac5876a8"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-077.f32",
+        "sha256": "bb7e74ea92a62fe18fb6d9de21d4bf17d9c5ebd98a3f529aaf575cbed554251c"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-078.f32",
+        "sha256": "360c4955948b75b9a0f0e78397d8272a670ad28c74acc2d672b2733ac2a065da"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 0.001,
+          "z": -3.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-079.f32",
+        "sha256": "63f81dae2a134ee70bac718d34cbd31366e6c4a6e3ae846fcb88190384393208"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 0.001,
+          "z": -7.0
+        },
+        "area": 1.0,
+        "profile": "rain",
+        "gain": 0.005615637901146715,
+        "file": "source-080.f32",
+        "sha256": "8aa883bc5cc4adbde87c4cacca1003b45a8d66e7ff1d5d9833bdf25fba337ba3"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 0.001,
+          "z": -5.0
+        },
+        "area": 1.0,
+        "profile": "rain",
+        "gain": 0.005615637901146715,
+        "file": "source-081.f32",
+        "sha256": "2314a7ca0a2c4119115d4b78cb197bb24a7db43e9771d560972c408792fd1b6c"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 0.001,
+          "z": -3.625
+        },
+        "area": 0.375,
+        "profile": "rain",
+        "gain": 0.003438861859510833,
+        "file": "source-082.f32",
+        "sha256": "20f439917168c79c608254d095404cede7928ad719e3270a0482484a2e72901c"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 0.001,
+          "z": 4.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-083.f32",
+        "sha256": "e457f1f9a5748df424da8c5525d8c1502b87320d0e6ec3ccea2536cdb31a31ef"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 0.001,
+          "z": 6.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-084.f32",
+        "sha256": "bd297584e9ce8e6585826c7b078f50a3d2ffee2dd6cc30376a180ef85742828e"
+      },
+      {
+        "position": {
+          "x": -5.25,
+          "y": 0.001,
+          "z": 7.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-085.f32",
+        "sha256": "2b630655aba2c95afdd0814cdd55ace26a615d34869d96b6413c9c87ee755c6a"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 0.001,
+          "z": 4.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-086.f32",
+        "sha256": "7ab2be935ecd69c0269af1c7f3c451c12d49e782fffbcc795c56ca55745706ed"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 0.001,
+          "z": 6.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-087.f32",
+        "sha256": "ad381cddf14f2321ac7257178e352188dba1eccb70d9887eb766d1f50ef1e19f"
+      },
+      {
+        "position": {
+          "x": -3.25,
+          "y": 0.001,
+          "z": 7.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-088.f32",
+        "sha256": "2bf079541004e80256ff520d837f84358e9d3c3ad4c2dce1a960714614efe1f2"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 0.001,
+          "z": 4.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-089.f32",
+        "sha256": "7295669769496b8b9f5b56928da966d7bc5a3bce412a974653d8e1a56d37b325"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 0.001,
+          "z": 6.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-090.f32",
+        "sha256": "6a2df3217d4e34e11e34398f8705d4377dd2a68421d9c776db70ad94d288436f"
+      },
+      {
+        "position": {
+          "x": -1.25,
+          "y": 0.001,
+          "z": 7.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-091.f32",
+        "sha256": "d6ab7eb333fb9f5e16bf3a56e3f8e48b7d3de7ea0b314d04e8d37dec9228f0b7"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 0.001,
+          "z": 4.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-092.f32",
+        "sha256": "95b4ca91b4e7299cc4e64c9c1bc16ca21889112291b8048a54744e00184ce86f"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 0.001,
+          "z": 6.25
+        },
+        "area": 4.0,
+        "profile": "rain",
+        "gain": 0.01123127580229343,
+        "file": "source-093.f32",
+        "sha256": "83fbb3cf3971b6656fc1377d74698730647f7c666910de147e19ac72f866c0d6"
+      },
+      {
+        "position": {
+          "x": 0.75,
+          "y": 0.001,
+          "z": 7.625
+        },
+        "area": 1.5,
+        "profile": "rain",
+        "gain": 0.006877723719021666,
+        "file": "source-094.f32",
+        "sha256": "5dc6ad5c59ebb8f2f22971cca860715030e8c95b1ff04cdfcf14e8e41297a7a3"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 0.001,
+          "z": 4.25
+        },
+        "area": 1.0,
+        "profile": "rain",
+        "gain": 0.005615637901146715,
+        "file": "source-095.f32",
+        "sha256": "8f310db1182bb6b035feb5976c8c5e1243ea6492ad2d9b9ca5da1fd5440765ef"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 0.001,
+          "z": 6.25
+        },
+        "area": 1.0,
+        "profile": "rain",
+        "gain": 0.005615637901146715,
+        "file": "source-096.f32",
+        "sha256": "fcb42165ef1bf770e742842a648e2e1f264f879cf3f8767373b2dd9afec56cb3"
+      },
+      {
+        "position": {
+          "x": 2.0,
+          "y": 0.001,
+          "z": 7.625
+        },
+        "area": 0.375,
+        "profile": "rain",
+        "gain": 0.003438861859510833,
+        "file": "source-097.f32",
+        "sha256": "6d2cc022a4d04494bfc962b4fb7f2a521db53c92cdf12e3d54144f3f38b4789f"
+      }
+    ],
+    "inputs": {
+      "rain": {
+        "file": "PM_RD_RAIN_8_MODERATE_DRIPPY.wav",
+        "sha256": "bde8c266a247b9843a8813cf52e587d135e9c94dba201d00ca11908a49047488",
+        "monoRms": 0.011342997944186748,
+        "source": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_RAIN_8_MODERATE_DRIPPY.wav",
+        "normalization": "One RMS value for the complete recording; no per-grain gain."
+      },
+      "iron": {
+        "file": "PM_RD_DESIGNED_DRIPPY_ON_IRON_PLATE_3.wav",
+        "sha256": "19c431eae089f860c419734c02eb6fe505b03691f975272acb63d42db6491251",
+        "monoRms": 0.02129696737242568,
+        "source": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_DESIGNED_DRIPPY_ON_IRON_PLATE_3.wav",
+        "normalization": "One RMS value for the complete recording; no per-grain gain."
+      }
+    },
+    "audits": {
+      "outside": {
+        "centroidPower": 9.174086581563543
+      },
+      "canopy": {
+        "centroidPower": 4.203485427672938
+      },
+      "inside": {
+        "centroidPower": 0.4643556668777108
+      }
+    },
+    "centroidVsAreaPowerErrorDb": {
+      "min": -0.48048557663940217,
+      "max": 0.37961222274984197
+    },
+    "limits": "Point approximation; mono; empirical uncalibrated textures; illustrative flat material; no ground reflecting geometry, diffraction, transmission or structural radiation."
+  },
+  "renders": {
+    "direct": {
+      "settings": {
+        "responseStepSamples": 1472,
+        "speedOfSound": 343.0,
+        "referenceDistance": 1.0,
+        "minimumDistance": 0.10000000149011612,
+        "tailSamples": 66150,
+        "transitionSamples": 0,
+        "delayFilter": 1,
+        "listenerOutput": 0,
+        "sincRadius": 16,
+        "maximumDelaySeconds": 1.25,
+        "maximumSignalEvents": 4096,
+        "maximumPendingObservations": 16,
+        "maximumResponsesPerBatch": 1,
+        "useBvh": true,
+        "transport": 1,
+        "synthesis": 1,
+        "audioBackend": 0,
+        "raysPerBin": 1,
+        "maxBounces": 0,
+        "seed": 0,
+        "raysPerPair": 0,
+        "diffractionFactor": 0.0,
+        "airAbsorption": false,
+        "fftSize": 128,
+        "spectralHop": 32
+      },
+      "stops": {
+        "outside": {
+          "rms": 0.01674617389574933,
+          "dBFS": -35.52168806600341
+        },
+        "canopy": {
+          "rms": 0.011273453143035666,
+          "dBFS": -38.958860718544756
+        },
+        "inside": {
+          "rms": 0.003770284598638332,
+          "dBFS": -48.47251731974022
+        }
+      },
+      "auditionSeconds": 18,
+      "warmupSeconds": 1,
+      "originalWalkStartSeconds": 0,
+      "peak": 0.11304827779531479,
+      "fullRenderPeak": 0.11304827779531479,
+      "fullRenderSamplesOverFullScale": 0,
+      "peakTimeSeconds": 5.189659863945578,
+      "quarterSecondRms": [
+        0.016904281640269487,
+        0.016917594758972417,
+        0.016397425291552893,
+        0.017188210041094356,
+        0.016602066794096267,
+        0.01678685849533008,
+        0.016509337163948253,
+        0.016792588376970487,
+        0.016350501077992602,
+        0.017025806232148038,
+        0.016424513842028254,
+        0.0165883195206074,
+        0.017042814961350922,
+        0.017609386468478032,
+        0.016093224977202832,
+        0.016654903594036985,
+        0.016407045035817504,
+        0.015584102846131362,
+        0.015911460272719478,
+        0.014984684085579708,
+        0.01496408793757619,
+        0.013348643589303726,
+        0.01304371230822128,
+        0.012727315325594823,
+        0.012408204506807893,
+        0.011960890506038732,
+        0.011842504100482341,
+        0.011793737563557094,
+        0.010674496077651481,
+        0.010949437706880316,
+        0.010923424151258939,
+        0.011082069504113206,
+        0.011145123080225843,
+        0.011917036331118448,
+        0.01118083889382245,
+        0.011202132464968479,
+        0.01139586047332802,
+        0.011141325886710733,
+        0.011065248681756285,
+        0.011775529645398446,
+        0.011729988037892923,
+        0.01253704272603564,
+        0.011366707411260878,
+        0.011080540311872548,
+        0.010093328152534976,
+        0.009940225003959044,
+        0.009492508891469643,
+        0.009245246731748659,
+        0.007875414228622963,
+        0.006986158179393318,
+        0.005568926715890988,
+        0.004823190888821454,
+        0.004654790602538119,
+        0.004331671076586952,
+        0.004493679098008958,
+        0.0039054663861473157,
+        0.0037834193479061536,
+        0.0035907256571149166,
+        0.003747719297459866,
+        0.0036080223663182633,
+        0.003634556976158796,
+        0.0036404276344057657,
+        0.0038645753317241697,
+        0.003665535690771283,
+        0.0036885922328645762,
+        0.0038578979721708125,
+        0.003935066128627779,
+        0.003775270565994225,
+        0.0035794308271655164,
+        0.0036720060842953695,
+        0.0036390359674816778,
+        0.003677416292894891
+      ],
+      "maxAdjacentQuarterLevelChangeDb": 1.9693382358134244,
+      "workingNumericBytes": 372627716,
+      "preparedPcmBytes": 328456800,
+      "peakSampledRssBytes": 758464512,
+      "renderWallSeconds": 430.07523449999997,
+      "launcherWallSeconds": 463.9583896250115,
+      "solveSeconds": 1.9862799999999987,
+      "audioSeconds": 61.22708690000008,
+      "gpuAudio": {
+        "responseUpdates": 616,
+        "reusedResponses": 373,
+        "filterBytes": 13147680,
+        "materialFilters": 11653,
+        "inputFfts": 1202966,
+        "pathCapacity": 6370,
+        "activeGroups": 14,
+        "peakGroups": 63,
+        "readbacks": 615,
+        "readbackSeconds": 16.61488200000002,
+        "maximumReadbackSeconds": 0.0860905,
+        "maximumConsumeDelaySeconds": 6.21e-05
+      },
+      "tailCoversResponseSupport": true,
+      "nativeSha256": "639df60c78d6fc5a1cf5db345b9d94f87b88415562834ee2f37fd46cd0739541",
+      "provenance": {
+        "solverContract": "integrated-edge-pressure-preview-v10",
+        "dspContract": "gpu-path-clock-complex-spectral-v4",
+        "csharpModule": "523f5e52-f275-41b9-a198-4dba0bfb1611",
+        "shaderName": "Transport",
+        "shaderDependencyHash": "68c50994bc8191004022dc8c69f0c710",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      }
+    },
+    "r1-s0": {
+      "settings": {
+        "responseStepSamples": 1472,
+        "speedOfSound": 343.0,
+        "referenceDistance": 1.0,
+        "minimumDistance": 0.10000000149011612,
+        "tailSamples": 66150,
+        "transitionSamples": 0,
+        "delayFilter": 1,
+        "listenerOutput": 0,
+        "sincRadius": 16,
+        "maximumDelaySeconds": 1.25,
+        "maximumSignalEvents": 4096,
+        "maximumPendingObservations": 16,
+        "maximumResponsesPerBatch": 1,
+        "useBvh": true,
+        "transport": 1,
+        "synthesis": 1,
+        "audioBackend": 0,
+        "raysPerBin": 1,
+        "maxBounces": 32,
+        "seed": 0,
+        "raysPerPair": 0,
+        "diffractionFactor": 0.0,
+        "airAbsorption": false,
+        "fftSize": 128,
+        "spectralHop": 32
+      },
+      "stops": {
+        "outside": {
+          "rms": 0.016746416308458256,
+          "dBFS": -35.52156233251884
+        },
+        "canopy": {
+          "rms": 0.14372825487647745,
+          "dBFS": -16.849156950367895
+        },
+        "inside": {
+          "rms": 0.00377264391995963,
+          "dBFS": -48.467083672785904
+        }
+      },
+      "auditionSeconds": 18,
+      "warmupSeconds": 1,
+      "originalWalkStartSeconds": 0,
+      "peak": 1.8543422222137451,
+      "fullRenderPeak": 1.8543422222137451,
+      "fullRenderSamplesOverFullScale": 27,
+      "peakTimeSeconds": 10.70077097505669,
+      "quarterSecondRms": [
+        0.016908032918852938,
+        0.016922963121262194,
+        0.01639826373398244,
+        0.01718926574632249,
+        0.01660402349014256,
+        0.016783990296012487,
+        0.0165118968014554,
+        0.016796574099173796,
+        0.016358176520783946,
+        0.017028942895353144,
+        0.016429785720199833,
+        0.016592643094658983,
+        0.01704098869262245,
+        0.017611621570564274,
+        0.01609693958550267,
+        0.01665220110132972,
+        0.016404431210627422,
+        0.015580817125045691,
+        0.01590994703670008,
+        0.01498655593248147,
+        0.014962938758449156,
+        0.013346109944486005,
+        0.013044889112466884,
+        0.05294634621491206,
+        0.1577232410221894,
+        0.1265435605366513,
+        0.1343543121462931,
+        0.11716674640653968,
+        0.13709363300658403,
+        0.14898001779295844,
+        0.1485147716458198,
+        0.14542136333022898,
+        0.13803827065769,
+        0.14273286420216091,
+        0.13782405691705404,
+        0.12752588665644984,
+        0.12713186061763845,
+        0.12683907787340354,
+        0.13341604973481697,
+        0.13049692148725997,
+        0.12637866665686448,
+        0.13838348636425601,
+        0.1303595199442141,
+        0.12281138875016546,
+        0.12931902270952234,
+        0.14387236338698167,
+        0.0917653732331808,
+        0.08414271708363834,
+        0.0763278207922764,
+        0.08803838318505385,
+        0.09492047113931769,
+        0.038794498313321435,
+        0.021816088107471078,
+        0.05371783981782446,
+        0.004498942715213626,
+        0.0039044485284860705,
+        0.003783775909164208,
+        0.0035906246829883926,
+        0.0037494439061397824,
+        0.0036105575842099134,
+        0.0036342418068853917,
+        0.003642705666815288,
+        0.0038717500008891414,
+        0.003664837250097035,
+        0.0036923766408142947,
+        0.00385697331991272,
+        0.003932912786432936,
+        0.0037788909577578292,
+        0.0035799675907029474,
+        0.0036721994801386603,
+        0.0036407143777799386,
+        0.003681241245150506
+      ],
+      "maxAdjacentQuarterLevelChangeDb": 21.54016152989425,
+      "workingNumericBytes": 1085660036,
+      "preparedPcmBytes": 328456800,
+      "peakSampledRssBytes": 950272000,
+      "renderWallSeconds": 540.3668131,
+      "launcherWallSeconds": 576.5223262500076,
+      "solveSeconds": 4.179165300000001,
+      "audioSeconds": 77.44471479999999,
+      "gpuAudio": {
+        "responseUpdates": 616,
+        "reusedResponses": 373,
+        "filterBytes": 447021120,
+        "materialFilters": 12710,
+        "inputFfts": 1313428,
+        "pathCapacity": 216580,
+        "activeGroups": 16,
+        "peakGroups": 67,
+        "readbacks": 615,
+        "readbackSeconds": 22.909986100000012,
+        "maximumReadbackSeconds": 0.2841251,
+        "maximumConsumeDelaySeconds": 0.0001428
+      },
+      "tailCoversResponseSupport": true,
+      "nativeSha256": "90f041daf0f4e8861d076bc4d81361099c6a540abee6851c9b749f89735b8226",
+      "provenance": {
+        "solverContract": "integrated-edge-pressure-preview-v10",
+        "dspContract": "gpu-path-clock-complex-spectral-v4",
+        "csharpModule": "523f5e52-f275-41b9-a198-4dba0bfb1611",
+        "shaderName": "Transport",
+        "shaderDependencyHash": "68c50994bc8191004022dc8c69f0c710",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      }
+    },
+    "r2-s0": {
+      "settings": {
+        "responseStepSamples": 1472,
+        "speedOfSound": 343.0,
+        "referenceDistance": 1.0,
+        "minimumDistance": 0.10000000149011612,
+        "tailSamples": 66150,
+        "transitionSamples": 0,
+        "delayFilter": 1,
+        "listenerOutput": 0,
+        "sincRadius": 16,
+        "maximumDelaySeconds": 1.25,
+        "maximumSignalEvents": 4096,
+        "maximumPendingObservations": 16,
+        "maximumResponsesPerBatch": 1,
+        "useBvh": true,
+        "transport": 1,
+        "synthesis": 1,
+        "audioBackend": 0,
+        "raysPerBin": 2,
+        "maxBounces": 32,
+        "seed": 0,
+        "raysPerPair": 0,
+        "diffractionFactor": 0.0,
+        "airAbsorption": false,
+        "fftSize": 128,
+        "spectralHop": 32
+      },
+      "stops": {
+        "canopy": {
+          "rms": 0.07248843435469694,
+          "dBFS": -22.794625605578467
+        }
+      },
+      "auditionSeconds": 3,
+      "warmupSeconds": 2,
+      "originalWalkStartSeconds": 7,
+      "peak": 0.772332489490509,
+      "fullRenderPeak": 0.772332489490509,
+      "fullRenderSamplesOverFullScale": 0,
+      "peakTimeSeconds": 0.20517006802721088,
+      "quarterSecondRms": [
+        0.06926827027395863,
+        0.07506319664818657,
+        0.07495627674056939,
+        0.07316697041843455,
+        0.06966494831905055,
+        0.07206412736905893,
+        0.06942465627280194,
+        0.06442519037100101,
+        0.06437056013769422,
+        0.06425508406840585,
+        0.0674478791850974,
+        0.06625710856016642
+      ],
+      "maxAdjacentQuarterLevelChangeDb": 0.697854250936043,
+      "workingNumericBytes": 1556671556,
+      "preparedPcmBytes": 86436000,
+      "peakSampledRssBytes": 929529856,
+      "renderWallSeconds": 157.7731293,
+      "launcherWallSeconds": 182.90063558300608,
+      "solveSeconds": 0.4891160999999999,
+      "audioSeconds": 24.051961400000014,
+      "gpuAudio": {
+        "responseUpdates": 196,
+        "reusedResponses": 195,
+        "filterBytes": 880894560,
+        "materialFilters": 62,
+        "inputFfts": 555396,
+        "pathCapacity": 426790,
+        "activeGroups": 62,
+        "peakGroups": 62,
+        "readbacks": 195,
+        "readbackSeconds": 8.226835600000001,
+        "maximumReadbackSeconds": 0.3065252,
+        "maximumConsumeDelaySeconds": 1.27e-05
+      },
+      "tailCoversResponseSupport": true,
+      "nativeSha256": "a677af30eda63e4df9f050f8e0c93e1b1c0557c87b4d14f2dc296022e0cfb46f",
+      "provenance": {
+        "solverContract": "integrated-edge-pressure-preview-v10",
+        "dspContract": "gpu-path-clock-complex-spectral-v4",
+        "csharpModule": "523f5e52-f275-41b9-a198-4dba0bfb1611",
+        "shaderName": "Transport",
+        "shaderDependencyHash": "68c50994bc8191004022dc8c69f0c710",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      }
+    },
+    "r2-s1": {
+      "settings": {
+        "responseStepSamples": 1472,
+        "speedOfSound": 343.0,
+        "referenceDistance": 1.0,
+        "minimumDistance": 0.10000000149011612,
+        "tailSamples": 66150,
+        "transitionSamples": 0,
+        "delayFilter": 1,
+        "listenerOutput": 0,
+        "sincRadius": 16,
+        "maximumDelaySeconds": 1.25,
+        "maximumSignalEvents": 4096,
+        "maximumPendingObservations": 16,
+        "maximumResponsesPerBatch": 1,
+        "useBvh": true,
+        "transport": 1,
+        "synthesis": 1,
+        "audioBackend": 0,
+        "raysPerBin": 2,
+        "maxBounces": 32,
+        "seed": 1,
+        "raysPerPair": 0,
+        "diffractionFactor": 0.0,
+        "airAbsorption": false,
+        "fftSize": 128,
+        "spectralHop": 32
+      },
+      "stops": {
+        "canopy": {
+          "rms": 0.058023231721918964,
+          "dBFS": -24.727961718902254
+        }
+      },
+      "auditionSeconds": 3,
+      "warmupSeconds": 2,
+      "originalWalkStartSeconds": 7,
+      "peak": 0.5212236642837524,
+      "fullRenderPeak": 0.563796877861023,
+      "fullRenderSamplesOverFullScale": 0,
+      "peakTimeSeconds": 0.1982312925170068,
+      "quarterSecondRms": [
+        0.0578237182364616,
+        0.05924783487679385,
+        0.053502751655473475,
+        0.06227151823607218,
+        0.052024330419503294,
+        0.06340318843789809,
+        0.0526272275778565,
+        0.0525164682417622,
+        0.05331666811335535,
+        0.04995759531374208,
+        0.05682279308558441,
+        0.05318636927685867
+      ],
+      "maxAdjacentQuarterLevelChangeDb": 1.7180919807266264,
+      "workingNumericBytes": 1556671556,
+      "preparedPcmBytes": 86436000,
+      "peakSampledRssBytes": 1307967488,
+      "renderWallSeconds": 158.1874383,
+      "launcherWallSeconds": 182.85261608299334,
+      "solveSeconds": 0.8741214000000002,
+      "audioSeconds": 22.897520100000015,
+      "gpuAudio": {
+        "responseUpdates": 196,
+        "reusedResponses": 195,
+        "filterBytes": 880894560,
+        "materialFilters": 58,
+        "inputFfts": 519564,
+        "pathCapacity": 426790,
+        "activeGroups": 58,
+        "peakGroups": 58,
+        "readbacks": 195,
+        "readbackSeconds": 9.5375236,
+        "maximumReadbackSeconds": 0.2867844,
+        "maximumConsumeDelaySeconds": 2.27e-05
+      },
+      "tailCoversResponseSupport": true,
+      "nativeSha256": "42d34848d793056e92b9a35e2af8104fd7cda0901781c4565a640e9f6851fff6",
+      "provenance": {
+        "solverContract": "integrated-edge-pressure-preview-v10",
+        "dspContract": "gpu-path-clock-complex-spectral-v4",
+        "csharpModule": "523f5e52-f275-41b9-a198-4dba0bfb1611",
+        "shaderName": "Transport",
+        "shaderDependencyHash": "68c50994bc8191004022dc8c69f0c710",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      }
+    }
+  },
+  "comparisons": {
+    "rayBudget": {
+      "first": "r1-s0",
+      "second": "r2-s0",
+      "scope": "Canopy only; original walk time 7..10. Level comparison uses original time 7.5..8.5.",
+      "relativeWaveformRms": 0.49827501619830994,
+      "correlation": 0.9967471710440705,
+      "stopLevelDifferenceDb": {
+        "canopy": -5.945468655210572
+      }
+    },
+    "transportSeed": {
+      "first": "r2-s0",
+      "second": "r2-s1",
+      "scope": "Canopy only; original walk time 7..10. Level comparison uses original time 7.5..8.5.",
+      "relativeWaveformRms": 1.2550925495310878,
+      "correlation": 0.044146676709659334,
+      "stopLevelDifferenceDb": {
+        "canopy": -1.9333361133237865
+      }
+    }
+  },
+  "previewAttenuationDb": 12.0,
+  "previewGain": 0.251188643150958,
+  "auditionHashes": {
+    "direct": "068a0e3595af68d7f526e00aa73e7a878a18c3cc4b5bd641e7defbe19403c875",
+    "r1-s0": "035b8a8fb250838f320ae02b0560765181676d223f5f4479f10fea6da88c2af1",
+    "r2-s0": "cea003d7bedf78c0845f127f9a304451c90df28f7aca26f1311a6558067245e0",
+    "r2-s1": "97108a49ab946ec1ee6b38346b958cb1fa989ecd8dcc55d6bc94759bec15ae12",
+    "direct-canopy": "531bc6ed8cb0bfa4464c79472929508a71e57a4970b21cdce1445d10251d93c4",
+    "r1-s0-canopy": "44cd3182b3e8ea9fc252ee2cdf8eb2850307694ff4d8fe2658d5930580555020"
+  },
+  "directOracle": {
+    "outside": {
+      "expectedRms": 0.016746171219474654,
+      "nativeRms": 0.01674617389574933,
+      "relativeRmsError": 3.2520307146831074e-05,
+      "correlation": 0.9999999994712294
+    },
+    "canopy": {
+      "expectedRms": 0.01127345154524011,
+      "nativeRms": 0.011273453143035666,
+      "relativeRmsError": 2.9841364323131563e-05,
+      "correlation": 0.9999999995547562
+    },
+    "inside": {
+      "expectedRms": 0.0037702846070246294,
+      "nativeRms": 0.003770284598638332,
+      "relativeRmsError": 7.430464428233564e-05,
+      "correlation": 0.9999999972394084
+    }
+  },
+  "sharedInputHashes": {
+    "walk": {
+      "sceneHash": "cb3af166f1c7bacf6f2f7f00fcc6cab8846ad95a13d20789fd5a41be1f55ce8a",
+      "takeStateHash": "3b8a38704fea1e805dfbaee6685d72a6927c3383932bdd3104c0885108292035",
+      "takeEventHash": "6093be6d80060e23e2c83a93c95189c9df3a68c26d1d5a95711d545bd4b99531",
+      "takeSourceHash": "",
+      "audioShaderDependencyHash": "74f7d24ecdee540c09a1a0e3a8777ac6",
+      "provenance": {
+        "solverContract": "integrated-edge-pressure-preview-v10",
+        "dspContract": "gpu-path-clock-complex-spectral-v4",
+        "csharpModule": "523f5e52-f275-41b9-a198-4dba0bfb1611",
+        "shaderName": "Transport",
+        "shaderDependencyHash": "68c50994bc8191004022dc8c69f0c710",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      }
+    },
+    "canopy": {
+      "sceneHash": "1442701105b691a0731f8b6782b9c5589d7bbd88c85187cf522599a8f6428b80",
+      "takeStateHash": "89615dd1546a58f8ad40e3d5202d541bb3b3ed3b58d47af6862439c80925606d",
+      "takeEventHash": "83e81fe3ef039957d2c84c38c2a6736c81d21772f65b1d6bef2e37d2860949ac",
+      "takeSourceHash": "",
+      "audioShaderDependencyHash": "74f7d24ecdee540c09a1a0e3a8777ac6",
+      "provenance": {
+        "solverContract": "integrated-edge-pressure-preview-v10",
+        "dspContract": "gpu-path-clock-complex-spectral-v4",
+        "csharpModule": "523f5e52-f275-41b9-a198-4dba0bfb1611",
+        "shaderName": "Transport",
+        "shaderDependencyHash": "68c50994bc8191004022dc8c69f0c710",
+        "unityVersion": "6000.4.1f1",
+        "buildGuid": "00000000000000000000000000000000"
+      }
+    }
+  },
+  "focusedSourceAlignment": {
+    "originalSourceOffsetSeconds": 6,
+    "warmupSeconds": 2,
+    "auditionSeconds": 3,
+    "originalWalkIntervalSeconds": [
+      7,
+      10
+    ],
+    "pose": "Stationary canopy; compare central second to avoid the original walk stopping at interval start."
+  }
+}
