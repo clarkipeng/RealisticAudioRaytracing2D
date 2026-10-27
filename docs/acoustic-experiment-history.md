@@ -8,6 +8,16 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**Full-wave check after first-image integration — 27 October**
+
+Fresh finite-3D measurements against the unchanged 125 Hz canopy BEM reference give **55.92% → 50.05%** whole-map complex-pressure error at two rays/bin with diffraction off. The blocked region still has **100.19% error**; 257 of 1,166 receivers return zero pressure. At a blocked indoor point near (-4.17, 1.60, -1.93) m, reference amplitude is 0.2084 and native pressure is zero. The earlier 1.03% PCM difference was against direct plus first images, not this full-wave field.
+
+At 128 rays/bin, diffraction-off error is also 50.05%; enabling the unchanged experimental edge sampler gives **294.03%**. First images improve one route family but leave missing higher/mixed paths and unstable edge sampling. The reference's last refinement changes its field by 0.43% overall / 1.36% in the shadow region. No production change or teacher-approval claim follows from this measurement.
+
+[Updated maps, before/after controls, raw fields and reproduction archive](benchmarks/wave-first-images-2026-10-27/README.md). The browser preserves common color scales and common before/after waveform axes, with selectable rays, diffraction, seed and receivers. One guarded 20%-duty worker completed all 9,328 probes and stopped; animation is opt-in.
+
+---
+
 **First reflections reach production audio — 27 October**
 
 The improved static 2.5D pressure-map prototype had remained outside the live finite-3D audio pipeline. First-order image routes now enter both live and offline synthesis as individual delayed arrivals; all existing 32-interaction surface/edge walks remain. A separate candidate budget prevents retained drop count from multiplying each drop’s reflection work. Conservative geometric sharing reduces FFT reservation without removing frequency-dependent material coefficients.

@@ -1,5 +1,9 @@
 # Cleanup validation and measured bottlenecks
 
+## Full-wave result after first-image integration — 2026-10-27
+
+[Fresh canopy comparison and evidence](benchmarks/wave-first-images-2026-10-27/README.md): at 125 Hz and two rays/bin, whole-map complex-pressure error improves **55.92% → 50.05%**, but blocked-region error remains **100.19%**, with 257/1,166 zero-pressure points. At 128 rays with diffraction enabled, error is **294.03%**. This is the independent wave comparison; the earlier 1.03% PCM control only contained direct and first-image paths. The same refined 7,904-triangle BEM field, geometry, receivers and scales are retained. 9,328 finite-output measurements complete under the resource guard. No runtime changes or full-wave fidelity claim.
+
 ## First-image runtime integration and filter storage — 2026-10-27
 
 [Matched rain comparison and reproduction evidence](benchmarks/runtime-mirrors-2026-10-27/README.md). Live/offline audio now retains first-image candidates individually and packs FFT storage by conservative geometric bounds; existing 32-interaction walks remain. Event count no longer raises the per-event reflection budget. **79 distinct focused cases pass.** Same 98-source canopy take: numeric storage **1,556.7 → 439.0 MB**, transport **0.489 → 1.248 s**, audio stage **24.052 → 28.985 s**. Single offline runs, not realtime qualification. Relative RMS difference from an independent direct/first-image control falls **488.44% → 1.035%** at unchanged source gain; this is not a full-wave accuracy score. The generalized complete-edge attempt worsened its diagnostic wave error and remains unshipped, with failed evidence retained.

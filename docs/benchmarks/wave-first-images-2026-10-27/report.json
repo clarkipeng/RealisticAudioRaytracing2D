@@ -1,0 +1,273 @@
+{
+  "scope": "Stationary 125 Hz field from rain patch 39 through the seven-box canopy with rigid surfaces. One source, no reflecting floor, no roof vibration, no broadband rain mix.",
+  "hz": 125,
+  "referenceMesh": {
+    "triangles": 7904,
+    "dofs": 3954,
+    "seconds": 141.53893745900132,
+    "iterations": 365,
+    "finalResidual": 9.998667061425035e-09,
+    "geometry": {
+      "triangles": 7904,
+      "vertices": 3954,
+      "area": 233.25,
+      "signedVolume": 28.062500000000004,
+      "unionVolume": 28.0625,
+      "closedManifold": true
+    },
+    "hz": 125,
+    "meshSize": 0.25,
+    "bemppVersion": "0.4.2",
+    "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+    "solverSha256": "3ed1d65889e6f3878a24a9a40852e3d438b12b4b42df15be487e66cb94cfadab",
+    "geometryBuilderSha256": "8d904a3974469d85969f74eb19addcc4bcd2d1f7a120555c85a50d8d3fc9b788"
+  },
+  "reference": "Independent Helmholtz boundary-element solution; exp(+iwt), exp(-ikr)/r; unit amplitude at 1 m.",
+  "renderer": "Current native GPU transport; 32 bounces, 1.25 s support; no gain fitting or output normalization.",
+  "referenceGlobalRefinementChange": 0.004299679656939406,
+  "referenceShadowRefinementChange": 0.013627781375951806,
+  "referenceSphereControlError": 0.0023200902556442214,
+  "points": 1166,
+  "shadowPoints": 293,
+  "cases": [
+    {
+      "key": "r2-s0-d0",
+      "rays": 2,
+      "seed": 0,
+      "diffraction": false,
+      "complexRelativeL2": 0.5005124679057037,
+      "amplitudeRelativeL2": 0.36177031364116485,
+      "shadowComplexRelativeL2": 1.0018585152796957,
+      "zeroPoints": 257,
+      "maxPressure": 0.6803914958816492,
+      "medianSolveMs": 0.8072
+    },
+    {
+      "key": "r2-s0-d1",
+      "rays": 2,
+      "seed": 0,
+      "diffraction": true,
+      "complexRelativeL2": 0.5001293333819766,
+      "amplitudeRelativeL2": 0.36171155943605116,
+      "shadowComplexRelativeL2": 1.0018585152796957,
+      "zeroPoints": 256,
+      "maxPressure": 0.6803914958816492,
+      "medianSolveMs": 0.81585
+    },
+    {
+      "key": "r2-s1-d0",
+      "rays": 2,
+      "seed": 1,
+      "diffraction": false,
+      "complexRelativeL2": 0.5005124679057037,
+      "amplitudeRelativeL2": 0.36177031364116485,
+      "shadowComplexRelativeL2": 1.0018585152796957,
+      "zeroPoints": 257,
+      "maxPressure": 0.6803914958816492,
+      "medianSolveMs": 0.7471
+    },
+    {
+      "key": "r2-s1-d1",
+      "rays": 2,
+      "seed": 1,
+      "diffraction": true,
+      "complexRelativeL2": 0.5001293333819766,
+      "amplitudeRelativeL2": 0.36171155943605116,
+      "shadowComplexRelativeL2": 1.0018585152796957,
+      "zeroPoints": 256,
+      "maxPressure": 0.6803914958816492,
+      "medianSolveMs": 0.7138
+    },
+    {
+      "key": "r128-s0-d0",
+      "rays": 128,
+      "seed": 0,
+      "diffraction": false,
+      "complexRelativeL2": 0.5005124679057037,
+      "amplitudeRelativeL2": 0.36177031364116485,
+      "shadowComplexRelativeL2": 1.0018585152796957,
+      "zeroPoints": 257,
+      "maxPressure": 0.6803914958816492,
+      "medianSolveMs": 1.3987
+    },
+    {
+      "key": "r128-s0-d1",
+      "rays": 128,
+      "seed": 0,
+      "diffraction": true,
+      "complexRelativeL2": 2.9403395037835343,
+      "amplitudeRelativeL2": 2.826089657779211,
+      "shadowComplexRelativeL2": 12.366420997463122,
+      "zeroPoints": 57,
+      "maxPressure": 9.059128912940965,
+      "medianSolveMs": 4.72475
+    },
+    {
+      "key": "r128-s1-d0",
+      "rays": 128,
+      "seed": 1,
+      "diffraction": false,
+      "complexRelativeL2": 0.5005124679057037,
+      "amplitudeRelativeL2": 0.36177031364116485,
+      "shadowComplexRelativeL2": 1.0018585152796957,
+      "zeroPoints": 257,
+      "maxPressure": 0.6803914958816492,
+      "medianSolveMs": 1.6531
+    },
+    {
+      "key": "r128-s1-d1",
+      "rays": 128,
+      "seed": 1,
+      "diffraction": true,
+      "complexRelativeL2": 2.9403395037835343,
+      "amplitudeRelativeL2": 2.826089657779211,
+      "shadowComplexRelativeL2": 12.366420997463122,
+      "zeroPoints": 57,
+      "maxPressure": 9.059128912940965,
+      "medianSolveMs": 4.451999999999999
+    }
+  ],
+  "float32VisibilityChanges": [
+    {
+      "point": 53,
+      "position": [
+        -4.166666666666667,
+        1.6,
+        -4.178571428571429
+      ],
+      "referenceGeometryBlocked": false,
+      "nativeGeometryBlocked": true
+    }
+  ],
+  "rendererCsvSha256": "0acff6b1dea85422d25b54d890913f5ba6c8ed6271469933f99e020263884393",
+  "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+  "referenceValidationSha256": "6b9dc0c2c4c31e6197f62790f881b7fef75bd156b486d71bf51cc286d0da3da9",
+  "provenance": {
+    "rendererFiles": {
+      "Assets/Scripts/Acoustics.asmdef": "b368dcdf9ed903f157bffc98bed71a08b7323e3e50f6cea8aa11aae63345acbd",
+      "Assets/Scripts/Demo/PlayerController.cs": "5c54c8f3f7dd55e5b51229c34fae246c05518b5bc08e5a85755019195c399f95",
+      "Assets/Scripts/Demo/ChurchAvatarPresenter.cs": "15d04103bb907853e0e46ec7a0b1e5fe86b4fb95c67f39e8142584c35199be4a",
+      "Assets/Scripts/Demo/BellPresentation.cs": "665fe11bb3e18c7f4b31a1983e165d4e7ddfc0fc13f0a527b2b950e03de167d9",
+      "Assets/Scripts/Demo/AudioSourceOverlay.cs": "8f9fa03cb7ba989ca499147571b2a71d46bfe111ae33ea70be480885349d3822",
+      "Assets/Scripts/Demo/SlidingDoor.cs": "12fbab978a2d37cc5cff8cc23eb8a74d40ed210cdf1553b4e5a943de329ca643",
+      "Assets/Scripts/Demo/Oscillator.cs": "8f681eac2702c5299f87d50832423a93f3ba50cf22765909b47d2bda75711a7e",
+      "Assets/Scripts/Demo/EnvironmentPresentation.cs": "f9fdaa63e6a86c74a6e683e15219709ff3c86e185230eccfd75cbdf2ac10a1db",
+      "Assets/Scripts/Demo/BirdPresentation.cs": "70229b7283540bc0e0a47d77691cf847829bcdf07529fb53ff43aedf3eb95abd",
+      "Assets/Scripts/Demo/MouseLook.cs": "c30b7ab73763815423737d1e50ae836ba93b0170855be394a46f2b8a87f70c38",
+      "Assets/Scripts/Demo/StationDemo.cs": "e482d1f5fbf352715080f65ce5b56b56eee799398e0fe0c21610aaa855007f3a",
+      "Assets/Scripts/Demo/SceneRecording.cs": "4dff18013937e13a92d40c6255cf92fe39f6eeba4ddc4c0501adf9b38c0458d7",
+      "Assets/Scripts/Demo/ChurchVisualPreset.cs": "1f1ccc01909440e89db0c11d127131c00692f095ad146a4682405d1cc452770e",
+      "Assets/Scripts/Demo/SceneSequenceActor.cs": "e4ec9794a8ccdd65213d334f87d43feff8e9d6eaa9ef0be7783ea47e3abff565",
+      "Assets/Scripts/Demo/ChurchPresentationGrade.cs": "b2c3c9b13b7f31e1dd9abdc565627400aae761fe89adb931bd549fc01cd860a9",
+      "Assets/Scripts/Demo/RaytraceControlPanel.cs": "8d4293259ff53e74fa439b8bb5f5a24c804c196978e647aeb5a1b84908197056",
+      "Assets/Scripts/Demo/SceneSequence.cs": "b4a2946566b46f8e7926ca9a14255580b2a34d8c9cb8c4b45eeb751d5bf99a44",
+      "Assets/Scripts/Demo/SceneSession.cs": "461cb4212c00a34381acc27f4dd3820fa88f2f013ace03933a1b5134d98d2fe2",
+      "Assets/Scripts/Demo/StationLoop.cs": "231e027e852416f2d2762de6e82b31034cc1ffc43de7c13997f8bac0a5cd32dd",
+      "Assets/Scripts/Network/MultiplayerSession.cs": "9087a4c34110f2c17cf33df991ea1cd35e41b191b09220bc986e4d9b73861b21",
+      "Assets/Scripts/Network/VoiceCodec.cs": "715206b6c8e0158a822e9329ea4ee12eee921d4d6fb8e42dda92f5f7f3f3bc0a",
+      "Assets/Scripts/Simulation/TakeRender.Live.cs": "879fbda6693c1a6681b26a80ef59d79ecadef8c2bc4646e5afabdf7bea15e5c6",
+      "Assets/Scripts/Simulation/DirectBvh.cs": "2b67ef758e2f1faf2f8e183bcf92051445f602ddf1c5e87b2fef8d5ca6564b8b",
+      "Assets/Scripts/Simulation/SpectralAudio.cs": "cc2630743b90cf5281e95a83c50ac0fbf64d013e9ec5358879bfb3c122191448",
+      "Assets/Scripts/Simulation/ImpulseResponseAudio.cs": "a03e267161e6f1fea4bde32bd31e20887af40088c7eda3342f441fe64f65f744",
+      "Assets/Scripts/Simulation/Doppler.cs": "e97d777dfa33b1fdf5a53a0c98f3be84781cfd8a833931e2bbd1a6449d499940",
+      "Assets/Scripts/Simulation/ModalBody.cs": "0ed181d9f76c2d715dcc6e23b86ab90cabf88ab7360fd89c100c515422c5f140",
+      "Assets/Scripts/Simulation/TakeComparison.cs": "65d6df8f054011c7bbb52d076b3b23c476d5b3604b0181d3aebda39f8355d9b6",
+      "Assets/Scripts/Simulation/RayTransport.cs": "d3b4e8ab9f851fcc4b183591987d29c89e4b397a68c8cec7cf2f27ec56be1e43",
+      "Assets/Scripts/Simulation/TransportSolver.cs": "3c2fed1d2acca2d2752ca695fd6c70756f90f8052f74befb5522f16e2c5d5a28",
+      "Assets/Scripts/Simulation/Emission.cs": "959eb4d3bac9fd6d27fbeca1870284f1bf7d3a2d19ffe5e30a02e494e90c2b59",
+      "Assets/Scripts/Simulation/RayTraceManager.cs": "6765040c557e3cc87a64b2dd682a84af46e592341566f800f79f75e822ac57ae",
+      "Assets/Scripts/Simulation/Take.cs": "74cb6ddb71e0b8ace11d1b7666d095ff1cd2a9543f6347077c6b72699939a2ff",
+      "Assets/Scripts/Simulation/TakeRender.cs": "14b40c1c258971367a66ff088abde921d740d3606011cd9f74ce1e51d37e4325",
+      "Assets/Scripts/Simulation/GpuAudio.cs": "58f76d943799bf02a6cd383d5ae21514aa4625f18b2eac875b9012c88bccaef6",
+      "Assets/Scripts/Audio/MicrophoneInput.cs": "8b2af980558684ef8d3c786523dad6600e2587100b7d7c53f4175d57ae85c9b8",
+      "Assets/Scripts/Audio/AudioManager.cs": "43dd3c18aebc4708a91b6b286d3e79848dccfc5e7d59a124cc4bb28309a5f05f",
+      "Assets/Scripts/Audio/AudioSourcePlane.cs": "c8a9906fd709a9bbb11811d297fffd087fb8872e0a1f5232794396ad6f92e23b",
+      "Assets/Scripts/Audio/Hrtf.cs": "3ca06a34091509740754cd117032152e99c1956742c53146b692b1b5e4070487",
+      "Assets/Scripts/Audio/RaytracedAudioSource.cs": "de9ab4c84f4f50bb9c1727d145c0d44bc6242249e47ca9bc409c658954fd9435",
+      "Assets/Scripts/Audio/SourceStream.cs": "c6077682660c2d750026ba256a6a80ea0b16f391220854d240a497637f31b424",
+      "Assets/Scripts/Scene/SceneToTake.cs": "a83635c923a82386cbee6fc457b2cda680c5ec3518f2e539833e79ae19b0f361",
+      "Assets/Scripts/Scene/AcousticSurface.cs": "10d635322d9e979961af3fe855e86372afcfa4a5e92f4162fa0507f2569b87fc",
+      "Assets/Scripts/Scene/AudioMaterial.cs": "0047dca2742bb302b8d629867ae05d8c4c120fde38e4a1332ac48ce0849c6c09",
+      "Assets/Shaders/Geometry.hlsl": "88dd35cac9d786da3e3101d25d1867d8087aae63894489f7c623a5bbc9b39433",
+      "Assets/Shaders/SequenceRain.shader": "ab1e0736d387235df3acf9891c588b1a89495420ae25b24d3540ff0e3358f516",
+      "Assets/Shaders/ChurchPresentationGrade.shader": "05a6e9c9014358186beb1b31ce9f16c2460c1de7b00e7bf3cda16d5afffaced2",
+      "Assets/Shaders/WorldText.shader": "af4a2694cd1c4f3abc5c20512b40ce6f21b8bc178742ca25a648d7b0688e32a0",
+      "Assets/Shaders/SequenceSky.shader": "1481e6e3cf00aa3f787234d96d06f2e3e59052d9f7adc34e1ba5bef215987ccd",
+      "Assets/Shaders/Transport.compute": "a9742726b5fdd2fd6b4118d258c0e4f8d178a5679ec9a8215bf3fe89f5df036a",
+      "Assets/Shaders/Transport.hlsl": "9df7b0e31386bbf29fc1eb4263fe6afd122bd579c4a6c963c5c3056c8eb34fac",
+      "Assets/Shaders/SequenceFoliage.shader": "64e4f19b60e20b734c63b8d4e485ffae3ab66a9da36f294099e2c5421cfef323",
+      "Assets/Resources/Acoustics/GpuAudio.compute": "4686273eedd9d1c8e4b2db857fae464869258f040939e61c18a451cd17dd1285",
+      "Assets/Resources/Acoustics/ATTRIBUTION.md": "a467f30bf8cd66122306e4a4fa8cd816c31513b4d08ee3ee5cbe6b0c568a0c7b",
+      "Assets/Resources/Acoustics/Kemar.bytes": "17bcb45a333962b0295d62f25135cd5ca33f931cc2d954ed3814bba32a03bc6f"
+    },
+    "fixtureSha256": "2d57f5b5dbb5ac25d8262e0fc78dbc25433f5b02017d53153ad0cd62e34a565d",
+    "originalSceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+    "measurementSceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c"
+  },
+  "resourceWallSeconds": 213.15705029200763,
+  "peakSampledRssBytes": 834207744,
+  "timingScope": "Warm transport queries including readback; excludes synthesis, startup and pacing. Four additional FFT bins are computed but not evaluated here.",
+  "limits": "Mesh changes and analytic controls are numerical evidence, not certified error bounds or measured-world truth. Wave reference is steady-state; native support/depth are finite.",
+  "comparison": {
+    "baselineCsvSha256": "282efb96d3b46a54c6f84ae446226e942097a4b537acf92c39d8a3040f04b9cc",
+    "cases": [
+      {
+        "key": "r2-s0-d0",
+        "before": 0.5592447967158077,
+        "updated": 0.5005124679057037,
+        "beforeShadow": 1.0,
+        "updatedShadow": 1.0018585152796957
+      },
+      {
+        "key": "r2-s0-d1",
+        "before": 0.5591569759086148,
+        "updated": 0.5001293333819766,
+        "beforeShadow": 1.0,
+        "updatedShadow": 1.0018585152796957
+      },
+      {
+        "key": "r2-s1-d0",
+        "before": 0.5592447967158077,
+        "updated": 0.5005124679057037,
+        "beforeShadow": 1.0,
+        "updatedShadow": 1.0018585152796957
+      },
+      {
+        "key": "r2-s1-d1",
+        "before": 0.5591569759086148,
+        "updated": 0.5001293333819766,
+        "beforeShadow": 1.0,
+        "updatedShadow": 1.0018585152796957
+      },
+      {
+        "key": "r128-s0-d0",
+        "before": 0.5205646812387404,
+        "updated": 0.5005124679057037,
+        "beforeShadow": 0.9930832673318641,
+        "updatedShadow": 1.0018585152796957
+      },
+      {
+        "key": "r128-s0-d1",
+        "before": 2.946443710773949,
+        "updated": 2.9403395037835343,
+        "beforeShadow": 12.362673367711606,
+        "updatedShadow": 12.366420997463122
+      },
+      {
+        "key": "r128-s1-d0",
+        "before": 0.5213327250337579,
+        "updated": 0.5005124679057037,
+        "beforeShadow": 1.017048238314012,
+        "updatedShadow": 1.0018585152796957
+      },
+      {
+        "key": "r128-s1-d1",
+        "before": 2.941170851735314,
+        "updated": 2.9403395037835343,
+        "beforeShadow": 12.370423224628968,
+        "updatedShadow": 12.366420997463122
+      }
+    ],
+    "scope": "Same independent wave reference and receiver grid; before/after first-image integration. No gain fitting. This is not the broadband rain mix or the first-image-only PCM control."
+  }
+}

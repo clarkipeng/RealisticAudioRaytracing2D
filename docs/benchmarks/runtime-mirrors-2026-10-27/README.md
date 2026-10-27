@@ -2,6 +2,8 @@
 
 The previous improved solver was an editor-only static 2.5D pressure-map prototype. It returned complex pressure at a receiver, not the delays, directions and event clocks needed for production audio. The finite-3D renderer used by rain still used the older primitive sampler. This change closes the **first-reflection** part of that integration gap. It does **not** integrate the complete multi-edge/mixed-route prototype.
 
+The [subsequent full-wave canopy check](../wave-first-images-2026-10-27/README.md) measures 50.05% whole-map complex-pressure error after this change, with major sheltered-field gaps remaining. The 1.03% PCM result below is a narrower first-image control.
+
 ## Accepted runtime change
 
 `ReflectionSampling.FirstImages` checks each candidate primitive's image route and retains every valid arrival separately. The candidate budget is `min(primitiveCount, max(reflectionCandidates, raysPerBin))`, with a default floor of 128. Retaining more emission events does not increase the candidates per event. Small scenes enumerate all primitives. Larger scenes retain `primitiveCount / candidateCount` probability compensation and require convergence checks. `PrimitiveBaseline` preserves the former estimator for comparisons. First images retain visibility, material phase, retarded source/mirror timing, Doppler and emission birth/phase. All existing surface/edge walk slots remain; the configured 32-interaction budget is preserved. Zero bounces remains direct-only.
