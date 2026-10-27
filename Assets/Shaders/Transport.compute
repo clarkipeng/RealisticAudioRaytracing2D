@@ -11,6 +11,10 @@
 #pragma kernel Trace2DBvh USE_BVH
 #pragma kernel Trace3D
 #pragma kernel Trace3DBvh USE_BVH
+#pragma kernel PrepareMirrors2D
+#pragma kernel PrepareMirrors2DBvh USE_BVH
+#pragma kernel PrepareMirrors3D
+#pragma kernel PrepareMirrors3DBvh USE_BVH
 #pragma multi_compile_local _ ACOUSTIC_DEBUG
 
 #include "Geometry.hlsl"
@@ -62,3 +66,7 @@ void EvaluateDirectProbe(uint pair, bool is2D)
 [numthreads(64, 1, 1)] void Trace2DBvh(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, true); }
 [numthreads(64, 1, 1)] void Trace3D(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, false); }
 [numthreads(64, 1, 1)] void Trace3DBvh(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, false); }
+[numthreads(64, 1, 1)] void PrepareMirrors2D(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, true); }
+[numthreads(64, 1, 1)] void PrepareMirrors2DBvh(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, true); }
+[numthreads(64, 1, 1)] void PrepareMirrors3D(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, false); }
+[numthreads(64, 1, 1)] void PrepareMirrors3DBvh(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, false); }

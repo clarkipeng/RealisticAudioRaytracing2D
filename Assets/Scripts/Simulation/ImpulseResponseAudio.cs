@@ -23,6 +23,7 @@ internal sealed class ImpulseResponseAudio
     }
     readonly int size,hop,fft,bins,rate,channels,listeners,pairs,slots,partitions,irLength,hrirTaps,delayRadius,latencyOffset;
     readonly TakeRender.Signal[] signals;
+    readonly RayTransport.Layout layout;
     readonly Vector2[][] history;
     readonly long[] historyKeys;
     readonly Vector2[] work,sum,native,pressureWork,earWork;
@@ -45,7 +46,7 @@ internal sealed class ImpulseResponseAudio
     {
         this.rate=rate;this.signals=signals;size=settings.fftSize;hop=settings.spectralHop;fft=checked(2*hop);bins=hop+1;
         channels=settings.ChannelsPerListener;listeners=scene.listeners.Length;pairs=checked(signals.Length*listeners);
-        slots=settings.SpectralSlotsPerPair;transition=settings.transitionSamples;
+        layout=new RayTransport.Layout(scene,settings);slots=layout.MaximumSlots;transition=settings.transitionSamples;
         hrtf=channels==2?Hrtf.Load(rate):null;hrirTaps=hrtf?.Taps??1;
         delayRadius=settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0;
         delayWeights=new float[delayRadius==0?2:checked(2*delayRadius)];
@@ -64,17 +65,17 @@ internal sealed class ImpulseResponseAudio
         for(int b=0;b<=size/2;b++)for(int n=0;n<size;n++)
         {double angle=2*Math.PI*b*n/size;cosine[b*size+n]=Math.Cos(angle);sine[b*size+n]=Math.Sin(angle);}
         groups=new Dictionary<(float,Vector4),int>(slots);groupHeads=new int[slots];next=new int[slots];
-        lastPaths=new RayTransport.Path[checked(pairs*slots)];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];
+        lastPaths=new RayTransport.Path[layout.Capacity];lastHeads=new Quaternion[listeners];lastEnabled=new bool[listeners];
         native=new Vector2[size];int padded=1;while(padded<size+hrirTaps-1)padded=checked(padded*2);
         pressureWork=new Vector2[padded];earWork=new Vector2[padded];
         prefixReal=new double[checked(channels*(hrirTaps+1))];prefixImag=new double[prefixReal.Length];
-        NumericBytes=lastPaths.LongLength*RayTransport.PathStride+lastHeads.LongLength*16+lastEnabled.Length+(groupHeads.LongLength+next.LongLength)*4+
+        NumericBytes=(layout.Owners.LongLength+layout.RayCounts.LongLength+layout.GroupLimits.LongLength)*4+(layout.Ranges.LongLength+layout.DirectSites.LongLength)*8+lastPaths.LongLength*RayTransport.PathStride+lastHeads.LongLength*16+lastEnabled.Length+(groupHeads.LongLength+next.LongLength)*4+
             (native.LongLength+pressureWork.LongLength+earWork.LongLength)*8+current.Bytes+previous.Bytes+historyKeys.LongLength*8+signals.Length*(long)historyKeys.Length*bins*8+
             (work.LongLength+sum.LongLength)*8+(impulse.LongLength+cosine.LongLength+sine.LongLength+prefixReal.LongLength+prefixImag.LongLength)*8+delayWeights.LongLength*4;
     }
     public void SetResponse(long sample,bool cut,RayTransport.Path[] paths,int offset,AcousticTake.Scene scene,AcousticTake.State[] states)
     {
-        if(paths==null || offset<0 || paths.Length-offset<checked(pairs*slots))throw new ArgumentException("Missing directional ray response.");
+        if(paths==null || offset<0 || paths.Length-offset<layout.Capacity)throw new ArgumentException("Missing directional ray response.");
         foreach(var state in states)cut|=(state.flags&AcousticTake.StateFlags.Cut)!=0;
         bool unchanged=initialized;
         for(int i=0;i<lastPaths.Length && unchanged;i++)
@@ -99,8 +100,8 @@ internal sealed class ImpulseResponseAudio
             Array.Clear(impulse,0,impulse.Length);
             var rotation=Quaternion.Inverse(states[scene.listeners[listener]].rotation);
             int first=irLength,last=0,groupCount=0;groups.Clear();
-            int pathOffset=offset+pair*slots;
-            for(int slot=0;slot<slots;slot++)
+            int pathOffset=offset+layout.Ranges[pair].x;
+            for(int slot=0;slot<layout.Ranges[pair].y;slot++)
             {
                 var path=paths[pathOffset+slot];if(path.pressureGain==0 && path.pressureImag==0)continue;
                 if(path.frequencyBin>size/2 || !float.IsFinite(path.pressureGain) || !float.IsFinite(path.pressureImag) || !float.IsFinite(path.delaySeconds) || path.delaySeconds<0 || !float.IsFinite(path.direction.sqrMagnitude))

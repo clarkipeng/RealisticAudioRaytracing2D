@@ -1,0 +1,220 @@
+{
+  "scope": "38 predetermined diagnostic probes, finite 3D two-block scene, 250 Hz, 32 interactions, 1.25 s support. Not whole-map acceptance.",
+  "decision": "Reject complete-third; first and second complete-edge attempts did not compile. mirrors-first used resampled mirrors and is not the accepted separate-arrival implementation.",
+  "indices": [
+    0,
+    31,
+    62,
+    93,
+    124,
+    155,
+    186,
+    217,
+    248,
+    279,
+    310,
+    341,
+    372,
+    403,
+    434,
+    465,
+    496,
+    527,
+    558,
+    589,
+    620,
+    651,
+    682,
+    713,
+    744,
+    775,
+    806,
+    837,
+    868,
+    899,
+    930,
+    961,
+    992,
+    1023,
+    1054,
+    1085,
+    1116,
+    1147
+  ],
+  "cases": {
+    "orders-baseline": [
+      {
+        "diffraction": 0,
+        "rays": 2,
+        "seed": 0,
+        "complexRelativeL2": 0.43606605440164414,
+        "medianSolveSeconds": 0.0010322500000000002
+      },
+      {
+        "diffraction": 0,
+        "rays": 2,
+        "seed": 1,
+        "complexRelativeL2": 0.43606605440164414,
+        "medianSolveSeconds": 0.0010389000000000002
+      },
+      {
+        "diffraction": 0,
+        "rays": 128,
+        "seed": 0,
+        "complexRelativeL2": 0.34541714198692175,
+        "medianSolveSeconds": 0.0017334
+      },
+      {
+        "diffraction": 0,
+        "rays": 128,
+        "seed": 1,
+        "complexRelativeL2": 0.32243783750701593,
+        "medianSolveSeconds": 0.0019409499999999999
+      },
+      {
+        "diffraction": 1,
+        "rays": 2,
+        "seed": 0,
+        "complexRelativeL2": 0.43606605440164414,
+        "medianSolveSeconds": 0.00107995
+      },
+      {
+        "diffraction": 1,
+        "rays": 2,
+        "seed": 1,
+        "complexRelativeL2": 0.43606605440164414,
+        "medianSolveSeconds": 0.00093415
+      },
+      {
+        "diffraction": 1,
+        "rays": 128,
+        "seed": 0,
+        "complexRelativeL2": 4.894324484286926,
+        "medianSolveSeconds": 0.0029773
+      },
+      {
+        "diffraction": 1,
+        "rays": 128,
+        "seed": 1,
+        "complexRelativeL2": 4.891718692632454,
+        "medianSolveSeconds": 0.0023331999999999997
+      }
+    ],
+    "mirrors-first": [
+      {
+        "diffraction": 0,
+        "rays": 2,
+        "seed": 0,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.0007440999999999999
+      },
+      {
+        "diffraction": 0,
+        "rays": 2,
+        "seed": 1,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.00072805
+      },
+      {
+        "diffraction": 0,
+        "rays": 128,
+        "seed": 0,
+        "complexRelativeL2": 0.3410127140098242,
+        "medianSolveSeconds": 0.0011952
+      },
+      {
+        "diffraction": 0,
+        "rays": 128,
+        "seed": 1,
+        "complexRelativeL2": 0.3410127140098242,
+        "medianSolveSeconds": 0.0022255499999999998
+      },
+      {
+        "diffraction": 1,
+        "rays": 2,
+        "seed": 0,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.0006899499999999999
+      },
+      {
+        "diffraction": 1,
+        "rays": 2,
+        "seed": 1,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.000795
+      },
+      {
+        "diffraction": 1,
+        "rays": 128,
+        "seed": 0,
+        "complexRelativeL2": 4.890260652416986,
+        "medianSolveSeconds": 0.00332625
+      },
+      {
+        "diffraction": 1,
+        "rays": 128,
+        "seed": 1,
+        "complexRelativeL2": 4.890260652416986,
+        "medianSolveSeconds": 0.0023168499999999996
+      }
+    ],
+    "complete-third": [
+      {
+        "diffraction": 0,
+        "rays": 2,
+        "seed": 0,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.00099055
+      },
+      {
+        "diffraction": 0,
+        "rays": 2,
+        "seed": 1,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.000735
+      },
+      {
+        "diffraction": 0,
+        "rays": 128,
+        "seed": 0,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.0008068999999999999
+      },
+      {
+        "diffraction": 0,
+        "rays": 128,
+        "seed": 1,
+        "complexRelativeL2": 0.34101271400982425,
+        "medianSolveSeconds": 0.0007343499999999999
+      },
+      {
+        "diffraction": 1,
+        "rays": 2,
+        "seed": 0,
+        "complexRelativeL2": 0.5399902363392974,
+        "medianSolveSeconds": 0.0014834499999999999
+      },
+      {
+        "diffraction": 1,
+        "rays": 2,
+        "seed": 1,
+        "complexRelativeL2": 6.142970980053561,
+        "medianSolveSeconds": 0.00101125
+      },
+      {
+        "diffraction": 1,
+        "rays": 128,
+        "seed": 0,
+        "complexRelativeL2": 14.002326354581959,
+        "medianSolveSeconds": 0.01268385
+      },
+      {
+        "diffraction": 1,
+        "rays": 128,
+        "seed": 1,
+        "complexRelativeL2": 4.15866797654316,
+        "medianSolveSeconds": 0.0119979
+      }
+    ]
+  }
+}

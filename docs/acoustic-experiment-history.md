@@ -8,6 +8,18 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**First reflections reach production audio — 27 October**
+
+The improved static 2.5D pressure-map prototype had remained outside the live finite-3D audio pipeline. First-order image routes now enter both live and offline synthesis as individual delayed arrivals; all existing 32-interaction surface/edge walks remain. A separate candidate budget prevents retained drop count from multiplying each drop’s reflection work. Conservative geometric sharing reduces FFT reservation without removing frequency-dependent material coefficients.
+
+On the matched 6.5-second, 98-source canopy rain take, numeric storage falls **1,556.7 → 439.0 MB**. Host-observed transport is **0.489 → 1.248 s**, audio synthesis/delivery **24.052 → 28.985 s**. These are single offline runs under 20% work pacing, not realtime or universal speed claims. At unchanged gain, the three-second output differs from an independent direct-plus-first-image PCM control by **488.44% → 1.035% relative RMS**. This control is not full-wave ground truth. The input remains recorded rain, not physically synthesized individual droplets.
+
+**79 distinct focused cases pass**, including analytic room images, every existing walk interaction through depth 32, moving clocks, event births/live/offline batching, material spectra, both FFT paths, muted listeners and an explicit capacity violation. The attempted generalized finite-3D complete-edge port failed its wave gate: seed-0 error rose 489% → 1400% on 38 diagnostic probes. It is preserved offline and absent from production. Full higher-order/mixed-route integration and physical model validation remain unfinished.
+
+[Rain waveform comparison, cost, controls, rejected approaches and source archive](benchmarks/runtime-mirrors-2026-10-27/README.md).
+
+---
+
 **Church presentation and process footage — 22 October**
 
 Both visual styles now use one authored Church scene: flat-color low-poly treatment and darker textured PBR treatment. F7/F8 switch styles; physical/acoustic materials remain separate. A CC0 rig with looping idle/run animations follows the existing controller, and a small Built-in pipeline image effect grades the camera. This is a presentation milestone, not an acoustic-fidelity result or a photorealistic art upgrade.

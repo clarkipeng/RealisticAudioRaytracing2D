@@ -59,6 +59,10 @@ public partial class TakeChecks
             Assert.That(batch.Points[i].w*batch.Points[i].w*energy/p.burstPeriodSamples,Is.EqualTo(mass).Within(1e-6));
         }
         Assert.Throws<InvalidDataException>(()=>AudioSourcePlane.ValidateEvent(scene,new AcousticTake.VoiceEvent{loop=true,clipOffset=1}));
+        scene.objects[1].primitiveCount=256;settings.reflectionCandidates=2;
+        Assert.That(settings.MirrorCandidates(scene),Is.EqualTo(2),"Event capacity must not increase the per-event reflection budget.");
+        var bounded=new RayTransport.Layout(scene,settings);
+        Assert.That(bounded.Ranges[0].y,Is.EqualTo(settings.FrequencyBins*(16*3+16*settings.maxBounces)));
     }
 
     [Test,Category("Core")]
@@ -243,9 +247,9 @@ public partial class TakeChecks
         using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8192);
         solver.PrepareEmissions(signals,0,1,Pose);solver.Solve(states,new TakeRender.DirectPath[1]);
         var sums=new Dictionary<long,float>();int first=plane.samples*settings.FrequencyBins;
-        for(int ray=0;ray<settings.RaysPerBin;ray++)
+        for(int site=0;site<batch.Ranges[0].count;site++)
         {
-            var path=solver.RayPaths[first+ray*2];Assert.That(path.emissionPhase&Emission.Burst,Is.Not.Zero);
+            var path=solver.RayPaths[first+site*settings.FrequencyBins*settings.MirrorCandidates(scene)];Assert.That(path.emissionPhase&Emission.Burst,Is.Not.Zero);
             Assert.That(path.direction.w,Is.Zero);sums.TryGetValue(path.Birth,out float old);sums[path.Birth]=old+path.pressureGain;
         }
         Assert.That(sums.Count,Is.EqualTo(4));
@@ -276,12 +280,12 @@ public partial class TakeChecks
         solver.PrepareEmissions(signals,0,1,Pose);solver.Solve(state,new TakeRender.DirectPath[2]);
         foreach(int bin in new[]{0,settings.FrequencyBins-1})for(int pair=0;pair<2;pair++)
         {
-            int rays=settings.SourceRaysPerBin(scene,pair),sites=pair==0?plane.samples:1;
-            int first=layout.Ranges[pair].x+sites*settings.FrequencyBins+bin*rays*2;
+            int sites=pair==0?plane.samples:1,candidates=settings.MirrorCandidates(scene);
+            int first=layout.Ranges[pair].x+sites*settings.FrequencyBins;
             var sums=new Dictionary<long,float>();
-            for(int ray=0;ray<rays;ray++)
+            for(int site=0;site<(pair==0?batch.Ranges[0].count:1);site++)for(int candidate=0;candidate<candidates;candidate++)
             {
-                var path=solver.RayPaths[first+ray*2];sums.TryGetValue(path.Birth,out float old);sums[path.Birth]=old+path.pressureGain;
+                var path=solver.RayPaths[first+(site*settings.FrequencyBins+bin)*candidates+candidate];sums.TryGetValue(path.Birth,out float old);sums[path.Birth]=old+path.pressureGain;
             }
             if(pair==1)Assert.That(sums[0],Is.EqualTo(1/Vector3.Distance(new Vector3(2,-1,0),state[2].position)).Within(1e-5));
             else for(int n=0;n<batch.Ranges[0].count;n++)

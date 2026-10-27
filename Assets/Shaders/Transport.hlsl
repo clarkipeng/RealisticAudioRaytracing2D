@@ -47,13 +47,14 @@ StructuredBuffer<Volume> Volumes;
 RWStructuredBuffer<RayPath> RayPaths;
 StructuredBuffer<uint> RayPairEnabled;
 StructuredBuffer<uint2> RayPairRanges,RayDirectSites;
-uint RayPathsPerFrame,RayDirectSiteCount;
+uint RayPathsPerFrame,RayDirectSiteCount,PathSlotsPerRay;
 StructuredBuffer<uint4> EmissionRanges; // sample offset/count, stable seed, plane flag
 StructuredBuffer<float4> EmissionPoints; // local legacy site or frozen world burst position, pressure weight
 StructuredBuffer<uint4> EmissionClocks; // phase/clip offset, birth low/high, reserved
 uint EmissionFrameStride;
 uint RaysPerBin, RaySeed, RayTracePair;
 uint FrequencyBins, RaysPerPair, MaxBounces, EdgeCount, VolumeCount, UseAirAbsorption;
+uint MirrorCandidateCount, MirrorSiteCapacity, UseVisibleMirrors;
 float FrequencyStep, DiffractionFactor, MaximumPathDelay;
 // Fixed slots per captured ray avoid atomics and never truncate a path. All stores
 // and selection checks compile out of the normal transport variant.
@@ -552,16 +553,16 @@ void EvaluateDirect(uint index, bool is2D)
         Arrival(a, b, time, gain, frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), identity);
     RayPaths[slot] = ApplyEmission(direct,emissionRow,sampleIndex,0);
 }
-// First-order mirror path from a sampled primitive's image source. Sampling
-// primitive IDs avoids estimating a delta reflection with a diffuse connection.
-// A cyclic stratification covers each primitive once per complete sample stratum.
+// Complete first-order image route. The caller owns candidate selection and its
+// probability correction; all visibility, material and retarded-time work is shared.
 RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequencyBin, uint sampleIndex,
-                        bool is2D, uint debugBase, float3 sourceNow, float3 sourceVelocity)
+                        bool is2D, uint debugBase, float3 sourceNow, float3 sourceVelocity,
+                        uint primitive, float samplingWeight, bool capture)
 {
     RayPath result = (RayPath)0;
     if (PrimitiveCount == 0)
         return result;
-    uint id = (sampleIndex + HashRay(source * 0x85ebca6b + listener + RaySeed)) % PrimitiveCount;
+    uint id = primitive;
     Primitive p = Primitives[id];
     State pose = States[stateOffset + p.indices.x];
     if ((pose.flags.x & 3) != 3)
@@ -642,15 +643,40 @@ RayPath FirstReflection(uint stateOffset, uint source, uint listener, uint frequ
     Travel(lengthTo, medium, frequencyBin, max(1, frequencyBin * FrequencyStep), time, gain);
     result = ApplyMaterial(Arrival(
         reflectionPoint, end, time,
-        gain * (float)PrimitiveCount / RaysPerBin * ReferenceDistance / max(MinimumDistance, lengthTo),
+        gain * samplingWeight * ReferenceDistance / max(MinimumDistance, lengthTo),
         frequencyBin, converged ? frequencyRatio : asfloat(0x7fc00000), HashRay(0x40000000u ^ id)),reflected);
-    if (result.pressureGain != 0 || result.pressureImag != 0)
+    if (capture && (result.pressureGain != 0 || result.pressureImag != 0))
     {
         DebugWrite(debugBase, 1 + 2 * sampleIndex, DebugReflection, p.indices.y, start, reflectionPoint, 0,
                    firstLength / speed, result.pressureGain);
         DebugArrival(debugBase + 1, 1 + 2 * sampleIndex, reflectionPoint, end, firstLength / speed, result);
     }
     return result;
+}
+
+// Complete mirror routes retain delay, direction, material phase and Doppler.
+// Mirror storage is bounded by the candidate budget and preserves each delay.
+void PrepareMirrors(uint index, bool is2D)
+{
+    uint capacity=MirrorCandidateCount*FrequencyBins*MirrorSiteCapacity;
+    if(index>=FrameCount*capacity)return;
+    uint candidate=index%MirrorCandidateCount, row=index/MirrorCandidateCount;
+    uint bin=row%FrequencyBins, site=(row/FrequencyBins)%MirrorSiteCapacity;
+    uint frame=row/(FrequencyBins*MirrorSiteCapacity), pair=RayTracePair;
+    uint slot=frame*RayPathsPerFrame+RayPairRanges[pair].x+MirrorSiteCapacity*FrequencyBins+index%capacity;
+    RayPaths[slot]=(RayPath)0;
+    uint emissionRow=frame*EmissionFrameStride+pair/ListenerCount;
+    uint4 plane=EmissionRanges[emissionRow];
+    if(site>=plane.y || RayPairEnabled[frame*PairCount+pair]==0 || EmissionPoints[plane.x+site].w==0 || !DebugSelected(frame*PairCount+pair,bin))return;
+    uint stateOffset=frame*ObjectCount, source=Sources[pair/ListenerCount], listener=Listeners[pair%ListenerCount];
+    uint birthSeed=plane.w==2?HashRay(EmissionClocks[plane.x+site].y)^HashRay(EmissionClocks[plane.x+site].z):0;
+    uint primitive=(candidate+HashRay(source*0x85ebca6b+listener+RaySeed+birthSeed)%PrimitiveCount)%PrimitiveCount;
+    float3 emission=EmissionPosition(stateOffset,pair/ListenerCount,site);
+    float3 velocity=plane.w==2?float3(0,0,0):PointVelocity(stateOffset+source,emission);
+    uint debug=PrimitiveCount+1+RaysPerBin*(2+2*MaxBounces)+2*candidate;
+    RayPath arrival=FirstReflection(stateOffset,source,listener,bin,candidate,is2D,debug,emission,velocity,
+        primitive,(float)PrimitiveCount/MirrorCandidateCount,true);
+    RayPaths[slot]=ApplyEmission(arrival,emissionRow,site,0);
 }
 void TracePaths(uint index, bool is2D)
 {
@@ -660,8 +686,8 @@ void TracePaths(uint index, bool is2D)
          query = frame * PairCount + pair;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
          listener = Listeners[pair % ListenerCount];
-    uint first = frame*RayPathsPerFrame + RayPairRanges[pair].x + RayPairRanges[pair].y - RaysPerPair*(MaxBounces+1) + ray*(MaxBounces+1);
-    for (uint k = 0; k <= MaxBounces; k++)
+    uint first = frame*RayPathsPerFrame + RayPairRanges[pair].x + RayPairRanges[pair].y - RaysPerPair*PathSlotsPerRay + ray*PathSlotsPerRay;
+    for (uint k = 0; k < PathSlotsPerRay; k++)
         RayPaths[first + k] = (RayPath)0;
     if (RayPairEnabled[query] == 0 || !DebugSelected(query, ray / RaysPerBin))
         return;
@@ -679,10 +705,14 @@ void TracePaths(uint index, bool is2D)
     if(EmissionPoints[plane.x+sampleIndex].w==0)return;
     float3 emission=EmissionPosition(stateOffset,sourceIndex,sampleIndex);
     float3 emissionVelocity=plane.w==2?float3(0,0,0):PointVelocity(stateOffset+source,emission);
-    RayPaths[first] = ApplyEmission(
-        FirstReflection(stateOffset, source, listener, frequencyBin, localRay+birthSeed, is2D, debugBase, emission, emissionVelocity),emissionRow,sampleIndex,raysForEmission);
-    debugBase += 2;
-    first++;
+    if(UseVisibleMirrors==0)
+    {
+        uint primitive=PrimitiveCount==0?0:(localRay+birthSeed+HashRay(source*0x85ebca6b+listener+RaySeed))%PrimitiveCount;
+        RayPath mirror=FirstReflection(stateOffset,source,listener,frequencyBin,localRay+birthSeed,is2D,debugBase,emission,emissionVelocity,
+            primitive,(float)PrimitiveCount/RaysPerBin,true);
+        RayPaths[first++]=ApplyEmission(mirror,emissionRow,sampleIndex,raysForEmission);
+    }
+    debugBase+=2;
     float frequencyHz = max(1, frequencyBin * FrequencyStep);
     float3 position = emission,
            end = States[stateOffset + listener].position.xyz;
@@ -771,9 +801,10 @@ void TracePaths(uint index, bool is2D)
                 float pressure = gain * EdgeKernel(edge, stateOffset, edgeSource, position, end, is2D) /
                                  (edgeDistance * last) * ReferenceDistance * weight *
                                  exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last);
-                RayPaths[first + bounce] =
+                RayPath candidate =
                     ApplyEmission(ApplyMaterial(Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity),materialWeight),emissionRow,sampleIndex,raysForEmission);
-                DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
+                RayPaths[first+bounce]=candidate;
+                DebugArrival(debugSlot+1,debugPath,position,end,time,candidate);
             }
             previousEdge = edge;
             canSampleEdge = true;
@@ -819,13 +850,14 @@ void TracePaths(uint index, bool is2D)
         float last = length(end - position), cosine = last > 0 ? max(0, dot(n, (end - position) / last)) : 0;
         if (cosine > 0 && Visible(stateOffset, position + n * RayEpsilon, end, is2D))
         {
-            RayPaths[first + bounce] =
+            RayPath candidate =
                 ApplyEmission(ApplyMaterial(Arrival(position, end, time + last / speed,
                         gain * sqrt(saturate((1 - material.surface.z) * material.surface.y)) * weight *
                             cosine * .5 * exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last) *
                             ReferenceDistance / max(MinimumDistance, spreadingDistance + last),
                         frequencyBin, arrivalRatio, identity),materialWeight),emissionRow,sampleIndex,raysForEmission);
-            DebugArrival(debugSlot + 1, debugPath, position, end, time, RayPaths[first + bounce]);
+            RayPaths[first+bounce]=candidate;
+            DebugArrival(debugSlot+1,debugPath,position,end,time,candidate);
         }
         surfaceNormal = n;
         surfaceScatter = sqrt(saturate((1 - material.surface.z) * material.surface.y));

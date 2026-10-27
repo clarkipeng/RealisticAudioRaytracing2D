@@ -1,0 +1,527 @@
+{
+  "uniqueFinalChecks": 79,
+  "uniqueFinalPassed": 79,
+  "scope": "Focused numerical regressions in an isolated Unity Editor; no player, microphone, speaker or network session. Test CPU work fraction 0.2, nice 19, one job worker, 3 GiB sampled parent-RSS guard.",
+  "checks": [
+    {
+      "run": "controls-current",
+      "result": "Failed(Child)",
+      "total": 10,
+      "passed": 9,
+      "failed": 1,
+      "durationSeconds": 123.8544569,
+      "parentPeakRssBytes": 886079488,
+      "tests": [
+        {
+          "name": "TakeChecks.CompleteMirrorsMatchIndependentRoomImagesAtOneRay(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.CompleteMirrorsMatchIndependentRoomImagesAtOneRay(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.CompleteMirrorsPreserveAllThirtyTwoWalkInteractions(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.CompleteMirrorsPreserveAllThirtyTwoWalkInteractions(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedGeometryLimitRejectsInvalidArrivalContract",
+          "result": "Failed",
+          "failure": "  Expected: <System.InvalidOperationException>\n  But was:  null\n"
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,Spectral,False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,ImpulseResponse,False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(2048,Spectral,False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,Spectral,True,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,Spectral,False,True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "run": "guard-serial",
+      "result": "Passed",
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "durationSeconds": 6.9378781,
+      "parentPeakRssBytes": 1011974144,
+      "tests": [
+        {
+          "name": "TakeChecks.PackedGeometryLimitRejectsInvalidArrivalContract",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "run": "regressions-final",
+      "result": "Passed",
+      "total": 59,
+      "passed": 59,
+      "failed": 0,
+      "durationSeconds": 403.2394771,
+      "parentPeakRssBytes": 727711744,
+      "tests": [
+        {
+          "name": "TakeChecks.ComplexArrivalsPreserveMaterialPhase(ImpulseResponse,64,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ComplexArrivalsPreserveMaterialPhase(Spectral,64,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ComplexArrivalsPreserveMaterialPhase(ImpulseResponse,64,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ComplexArrivalsPreserveMaterialPhase(Spectral,64,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ComplexArrivalsPreserveMaterialPhase(Spectral,2048,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.DiffractedAudioMatchesCpuReference(ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.DiffractedAudioMatchesCpuReference(Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,1,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,64,1,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,128,1,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,1,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,64,0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,128,0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,1,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,1,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(Linear,64,0,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionOfflineCpuGpuBatchAndLiveAgreeWithShortBursts(WindowedSinc,128,0,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionPackedDspKeepsDistinctBirthsAndPointSources(128,2)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionPackedDspKeepsDistinctBirthsAndPointSources(2048,1)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionPackedTransportKeepsFrameSourceAndListenerOffsets",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpactAndPointMirrorDispatchUseTheirOwnRayCounts",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpedanceReflectionMatchesPlaneWave(0.0f,0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpedanceReflectionMatchesPlaneWave(0.5f,0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpedanceReflectionMatchesPlaneWave(2.0f,0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpedanceReflectionMatchesPlaneWave(8.0f,0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpedanceReflectionMatchesPlaneWave(0.4f,0.3f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpedanceReflectionMatchesPlaneWave(0.4f,-0.3f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MaterialBoundaryClockRate(False,False,0.28f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MaterialBoundaryClockRate(False,True,2.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MaterialBoundaryClockRate(True,False,2.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MaterialBoundaryClockRate(True,True,0.28f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MaterialSpeedDoppler",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MirrorChecks",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MovingMirrorDoppler(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MovingMirrorDoppler(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedGeometryLimitRejectsInvalidArrivalContract",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,Spectral,False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,ImpulseResponse,False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(2048,Spectral,False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,Spectral,True,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PackedRouteFiltersPreservePcm(128,Spectral,False,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Planar2D)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.PlaneReflectionsKeepEachSiteWaveformAndGeometricDelay(Spatial3D)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RayDebugCapturesMirrorGeometry",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RayDebugPreservesArrivals(False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RayDebugPreservesArrivals(False,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RayDebugPreservesArrivals(True,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RayDebugPreservesArrivals(True,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RayDebugUsesMaterialTravelTimes",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(False,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(False,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(True,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ZeroBouncesPreservesDirectImpulseAndOcclusionWithoutReflectedTail(True,True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "run": "bounds-and-masks",
+      "result": "Passed",
+      "total": 15,
+      "passed": 15,
+      "failed": 0,
+      "durationSeconds": 105.089811,
+      "parentPeakRssBytes": 713408512,
+      "tests": [
+        {
+          "name": "TakeChecks.AllMutedPairsNeedNoMaterialFilters(128)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.AllMutedPairsNeedNoMaterialFilters(2048)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.BudgetedFirstImagesPreservePrimitivePdf(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.BudgetedFirstImagesPreservePrimitivePdf(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.GpuPathReductionMatchesReference(128,Mono)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.GpuPathReductionMatchesReference(128,Binaural)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.GpuPathReductionMatchesReference(2048,Binaural)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SelfMonitorMaskPreservesTheOtherListenersVoice(False,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SelfMonitorMaskPreservesTheOtherListenersVoice(True,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SelfMonitorMaskPreservesTheOtherListenersVoice(False,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SelfMonitorMaskPreservesTheOtherListenersVoice(True,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SelfMonitorMaskPreservesTheOtherListenersVoice(True,Spectral,2048)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SynthesisSettingsUseDefaultOrExplicitSelection(\"{\\\"transport\\\":1}\",Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SynthesisSettingsUseDefaultOrExplicitSelection(\"{\\\"synthesis\\\":0}\",ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SynthesisSettingsUseDefaultOrExplicitSelection(\"{\\\"synthesis\\\":1}\",Spectral)",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "run": "event-budget",
+      "result": "Passed",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "durationSeconds": 4.1451767,
+      "parentPeakRssBytes": 869662720,
+      "tests": [
+        {
+          "name": "TakeChecks.BudgetedFirstImagesPreservePrimitivePdf(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.BudgetedFirstImagesPreservePrimitivePdf(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Planar2D,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.EmissionUnevenRayAllocationPreservesEachMirrorWeight(Spatial3D,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpactAndPointMirrorDispatchUseTheirOwnRayCounts",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ImpactEnergyAndCoverageDoNotInflateOtherSources",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    }
+  ]
+}

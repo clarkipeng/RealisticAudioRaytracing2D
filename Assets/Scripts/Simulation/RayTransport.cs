@@ -13,23 +13,43 @@ internal sealed class RayTransport : IDisposable
     internal sealed class Layout
     {
         internal readonly Vector2Int[] Ranges,DirectSites;
-        internal readonly int[] Owners,RayCounts;
+        internal readonly int[] Owners,RayCounts,GroupLimits;
         internal readonly int Capacity,MaximumSlots;
         internal Layout(AcousticTake.Scene scene,TakeRender.Settings settings)
         {
             Ranges=new Vector2Int[checked(scene.sources.Length*scene.listeners.Length)];
             RayCounts=new int[Ranges.Length];
+            GroupLimits=new int[Ranges.Length];
+            bool Constant(float[] values)
+            {if(values!=null)for(int i=1;i<values.Length;i++)if(values[i]!=values[0])return false;return true;}
+            bool sharedGeometry=true,sharedBranches=true;
+            foreach(var material in scene.materials)
+            {
+                sharedGeometry&=Constant(material.ior);
+                sharedBranches&=Constant(material.transmission)&&Constant(material.scattering);
+            }
             var direct=new List<Vector2Int>();
             for(int s=0;s<scene.sources.Length;s++)
             {
                 int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
                 int rays=settings.maxBounces==0?0:checked(settings.FrequencyBins*settings.SourceRaysPerBin(scene,s));
-                int slots=checked(sites*settings.FrequencyBins+rays*(settings.maxBounces+1));
+                int slots=checked(sites*settings.FrequencyBins*(1+settings.MirrorCandidates(scene))+rays*settings.PathSlotsPerRay);
+                int geometricBins=sharedGeometry?1:settings.FrequencyBins;
+                int mirrors=settings.MirrorCandidates(scene)*sites;
+                if(settings.reflectionSampling==TakeRender.ReflectionSampling.PrimitiveBaseline)mirrors=rays/settings.FrequencyBins;
+                // Frequency-dependent loss changes pressure, not route geometry.
+                // A walk only needs separate geometric groups when speed or a
+                // branch probability changes across bins. Early zero gain can
+                // remove prefixes; it cannot add another geometric route.
+                int walkBins=sharedGeometry&&sharedBranches?1:settings.FrequencyBins;
+                int walks=checked(rays/settings.FrequencyBins*settings.maxBounces*walkBins);
+                int groups=checked((sites+mirrors)*geometricBins+walks);
                 MaximumSlots=Math.Max(MaximumSlots,slots);
                 for(int l=0;l<scene.listeners.Length;l++)
                 {
                     int pair=s*scene.listeners.Length+l;Ranges[pair]=new Vector2Int(Capacity,slots);Capacity=checked(Capacity+slots);
                     RayCounts[pair]=rays;
+                    GroupLimits[pair]=groups;
                     for(int n=0;n<sites;n++)direct.Add(new Vector2Int(pair,n));
                 }
             }
@@ -62,6 +82,9 @@ internal sealed class RayTransport : IDisposable
     readonly ComputeShader shader;
     readonly CommandBuffer commands;
     readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins;
+    readonly int mirrorKernel;
+    readonly bool visibleMirrors;
+    readonly int[] mirrorCounts,mirrorSites;
     readonly Layout layout;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Volume
@@ -82,7 +105,7 @@ internal sealed class RayTransport : IDisposable
     public int PathsPerFrame { get; }
     public int SlotsPerPair { get; }
     internal ComputeBuffer Buffer => pathBuffer;
-    public long CpuBytes => Paths.Length * (long)PathStride + enabledPairs.Length * 4L + everActive.Length + emissions.NumericBytes + (layout.Owners.Length+layout.RayCounts.Length)*4L + (layout.Ranges.Length+layout.DirectSites.Length)*8L;
+    public long CpuBytes => Paths.Length * (long)PathStride + enabledPairs.Length * 4L + everActive.Length + emissions.NumericBytes + (layout.Owners.Length+layout.RayCounts.Length+layout.GroupLimits.Length+mirrorCounts.Length+mirrorSites.Length)*4L + (layout.Ranges.Length+layout.DirectSites.Length)*8L;
     public long GpuBytes { get; }
     public RayTransport(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
                         TakeRender.Settings settings, ComputeShader shader, ComputeBuffer primitives,
@@ -94,9 +117,13 @@ internal sealed class RayTransport : IDisposable
             Marshal.SizeOf<Edge>() != 80 || Marshal.SizeOf<Volume>() != 48)
             throw new InvalidOperationException("Spectral GPU ABI mismatch.");
         this.shader = shader;
+        int declaredPrimitives=0;foreach(var obj in scene.objects)declaredPrimitives=checked(declaredPrimitives+obj.primitiveCount);
+        if(declaredPrimitives!=geometry.Length)throw new ArgumentException("Scene primitive ranges must cover the supplied transport geometry.");
         rayCount = settings.RaysPerPair;
         frequencyBins = settings.fftSize / 2 + 1;
         pairs = checked(scene.sources.Length * scene.listeners.Length);
+        visibleMirrors=settings.reflectionSampling==TakeRender.ReflectionSampling.FirstImages;
+        mirrorCounts=new int[pairs];mirrorSites=new int[pairs];
         everActive = new bool[scene.sources.Length];
         enabledPairs = new uint[checked(pairs * maximumFrames)];
         int bins = settings.fftSize / 2 + 1;
@@ -118,8 +145,11 @@ internal sealed class RayTransport : IDisposable
                                              (settings.useBvh ? "Bvh" : ""));
             traceKernel =
                 shader.FindKernel((planar ? "Trace2D" : "Trace3D") + (settings.useBvh ? "Bvh" : ""));
+            mirrorKernel=shader.FindKernel((planar?"PrepareMirrors2D":"PrepareMirrors3D")+(settings.useBvh?"Bvh":""));
             if (!shader.IsSupported(directKernel) || !shader.IsSupported(traceKernel))
                 throw new NotSupportedException("Raytraced kernels are unavailable on this GPU.");
+            if(visibleMirrors && !shader.IsSupported(mirrorKernel))
+                throw new NotSupportedException("Complete-route kernels are unavailable on this GPU.");
             var materials = new Material[Math.Max(1, scene.materials.Length * bins)];
             for (int m = 0; m < scene.materials.Length; m++)
                 for (int b = 0; b < bins; b++)
@@ -147,6 +177,13 @@ internal sealed class RayTransport : IDisposable
             if (volumes.Length > 0)
                 volumeBuffer.SetData(volumes);
             pathBuffer = new ComputeBuffer(checked(PathsPerFrame * maximumFrames), PathStride);
+            for(int p=0;p<pairs;p++)
+            {
+                int source=p/scene.listeners.Length;
+                int sites=scene.planes==null?1:Array.Find(scene.planes,x=>x.source==source)?.samples??1;
+                int count=settings.MirrorCandidates(scene);
+                mirrorCounts[p]=count;mirrorSites[p]=sites;
+            }
             enabledBuffer = new ComputeBuffer(enabledPairs.Length, 4);
             var adjacency = new List<int>[geometry.Length];
             for (int i = 0; i < adjacency.Length; i++)
@@ -169,7 +206,7 @@ internal sealed class RayTransport : IDisposable
             edgeIndexBuffer = new ComputeBuffer(Math.Max(1, edgeIndices.Count), 4);
             if (edgeIndices.Count > 0)
                 edgeIndexBuffer.SetData(edgeIndices);
-            foreach (int kernel in new[] { directKernel, traceKernel })
+            foreach (int kernel in new[] { directKernel, traceKernel, mirrorKernel })
             {
                 shader.SetBuffer(kernel, "Primitives", primitives);
                 shader.SetBuffer(kernel, "States", states);
@@ -194,6 +231,8 @@ internal sealed class RayTransport : IDisposable
                 }
             }
             shader.SetInt("RaysPerBin", settings.RaysPerBin);
+            shader.SetInt("UseVisibleMirrors",visibleMirrors?1:0);
+            shader.SetInt("PathSlotsPerRay",settings.PathSlotsPerRay);
             shader.SetInt("RaySeed", settings.seed);
             shader.SetInt("FrequencyBins", bins);
             shader.SetInt("RaysPerPair", settings.RaysPerPair);
@@ -228,6 +267,7 @@ internal sealed class RayTransport : IDisposable
     {
         shader.SetBuffer(directKernel, "DebugSegments", segments);
         shader.SetBuffer(traceKernel, "DebugSegments", segments);
+        shader.SetBuffer(mirrorKernel,"DebugSegments",segments);
     }
     public void SetActivity(AcousticTake.Scene scene, AcousticTake.State[] states, int frames)
     {
@@ -478,6 +518,13 @@ internal sealed class RayTransport : IDisposable
                 commands.SetComputeIntParam(shader,"RayTracePair",pair);
                 commands.SetComputeIntParam(shader,"RaysPerPair",layout.RayCounts[pair]);
                 commands.SetComputeIntParam(shader,"RaysPerBin",layout.RayCounts[pair]/frequencyBins);
+                commands.SetComputeIntParam(shader,"MirrorCandidateCount",mirrorCounts[pair]);
+                commands.SetComputeIntParam(shader,"MirrorSiteCapacity",mirrorSites[pair]);
+                if(mirrorCounts[pair]>0)
+                {
+                    int rows=checked(frames*mirrorSites[pair]*frequencyBins);
+                    commands.DispatchCompute(shader,mirrorKernel,(checked(rows*mirrorCounts[pair])+63)/64,1,1);
+                }
                 commands.DispatchCompute(shader,traceKernel,(checked(frames*layout.RayCounts[pair])+63)/64,1,1);
             }
             commands.EndSample("Acoustics.GPU.Trace");

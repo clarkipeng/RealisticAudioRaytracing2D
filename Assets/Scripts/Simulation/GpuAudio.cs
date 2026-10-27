@@ -19,6 +19,7 @@ internal sealed class GpuAudio : IDisposable
     readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
     readonly ComputeBuffer args,headsPose,source,work,transform,output,sourceClocks;
     readonly int[] planeRows;
+    readonly int[] filterOffsets;
     readonly float[] download;
     readonly Vector4[] poses;
     readonly bool[] audibleSources;
@@ -37,7 +38,7 @@ internal sealed class GpuAudio : IDisposable
     public long ReadbackBytes {get;private set;}
     public static bool Selected(TakeRender.Settings settings,ComputeShader transport) =>
         transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu;
-    public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1)
+    public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1,bool transported=false)
     {
         Emission.Configure(scene,signals);AudioSourcePlane.ValidateRender(scene,settings);layout=new RayTransport.Layout(scene,settings);slots=layout.MaximumSlots;
         audibleSources=new bool[signals.Length];
@@ -88,13 +89,16 @@ internal sealed class GpuAudio : IDisposable
 
             // Material spectra are shared by both ears. Head endpoints reuse scratch per bank's hop.
             // The immutable self-monitor mask changes storage, never source/listener IDs.
-            var filterPairs=new int[pairs];int filterCapacity=0;
+            filterOffsets=new int[pairs];var groupLimits=new int[pairs];int filterCapacity=0,maximumGroups=0;
             for(int p=0;p<pairs;p++)
             {
                 bool audible=scene.sources[p/listeners].mutedListenerPlusOne!=p%listeners+1;
-                filterPairs[p]=audible?filterCapacity:-1;if(audible)filterCapacity=checked(filterCapacity+layout.Ranges[p].y);
+                groupLimits[p]=transported?layout.GroupLimits[p]:layout.Ranges[p].y;
+                filterOffsets[p]=audible?filterCapacity:-1;
+                if(audible){filterCapacity=checked(filterCapacity+groupLimits[p]);maximumGroups=Math.Max(maximumGroups,groupLimits[p]);}
             }
-            Buffer("AudioFilterPairs",pairs,4).SetData(filterPairs);Set("AudioFilterCapacity",filterCapacity);
+            Buffer("AudioFilterPairs",pairs,4).SetData(filterOffsets);Set("AudioFilterCapacity",filterCapacity);
+            Buffer("AudioGroupLimits",pairs,4).SetData(groupLimits);
             int filterElements=Math.Max(1,checked(2*filterCapacity*bins));
             Buffer("AudioFilters",filterElements,8);
             Diagnostics.pathCapacity=capacity;Diagnostics.filterBytes=filterElements*8L;
@@ -102,8 +106,8 @@ internal sealed class GpuAudio : IDisposable
             // Shared FFTs only write their nonredundant bins. Global filter preparation
             // runs pair by pair, so its separate transform scratch can reuse the same rows.
             int workStride=fft<=2048?bins:fft;
-            work=Buffer("AudioWork",checked(capacity*workStride),8);
-            transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(slots,listeners*channels)*fft),8):work;
+            work=Buffer("AudioWork",Math.Max(1,checked(filterCapacity*workStride)),8);
+            transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(maximumGroups,listeners*channels)*fft),8):work;
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
             PrepareEars(hrtf);
@@ -113,7 +117,8 @@ internal sealed class GpuAudio : IDisposable
             Set("AudioTransition",settings.transitionSamples);Set("AudioSpectral",settings.synthesis==TakeRender.Synthesis.Spectral?1:0);
             Set("AudioRadius",settings.sincRadius);Set("AudioSinc",settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?1:0);
             Set("AudioLatency",settings.fftSize/2+(settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0));shader.SetFloat("AudioMaximumDelay",settings.maximumDelaySeconds);
-            NumericBytes+=(long)download.Length*4+poses.Length*16L+audibleSources.Length;
+            NumericBytes+=(long)download.Length*4+poses.Length*16L+audibleSources.Length+filterOffsets.Length*4L+
+                (layout.Owners.Length+layout.RayCounts.Length+layout.GroupLimits.Length)*4L+(layout.Ranges.Length+layout.DirectSites.Length)*8L;
             Submit();
         }
         catch {Dispose();throw;}
@@ -187,7 +192,8 @@ internal sealed class GpuAudio : IDisposable
     void FftGlobal(ComputeBuffer buffer,int size,bool inverse,int pair,int which,int count=0)
     {
         BindTransform(buffer);Set("AudioTransformSize",size);Set("AudioTransformInverse",inverse?1:0);Set("AudioTransformInput",count==0 && !inverse?1:0);
-        Set("AudioTransformBase",buffer==work && count==0?layout.Ranges[pair].x:0);
+        Set("AudioTransformBase",buffer==work && count==0?Math.Max(0,filterOffsets[pair]):0);
+        Set("AudioTransformPathBase",count==0?layout.Ranges[pair].x:0);
         if(count==0)Dispatch(reverse,pair,which);else commands.DispatchCompute(shader,reverse,count,1,1);
         for(int stage=2;;stage=checked(stage*2))
         {Set("AudioStage",stage);if(count==0)Dispatch(butterfly,pair,which);else commands.DispatchCompute(shader,butterfly,count,1,1);if(stage==size)break;}
@@ -285,7 +291,7 @@ internal sealed class GpuAudio : IDisposable
         double latency=(double)(readbackCompleted-readbackStarted)/System.Diagnostics.Stopwatch.Frequency;
         Diagnostics.readbacks++;Diagnostics.readbackSeconds+=latency;Diagnostics.maximumReadbackSeconds=Math.Max(Diagnostics.maximumReadbackSeconds,latency);
         Diagnostics.maximumConsumeDelaySeconds=Math.Max(Diagnostics.maximumConsumeDelaySeconds,TakeRender.Elapsed(readbackCompleted));
-        if(download[0]!=0)throw new InvalidOperationException("GPU audio validation failed ("+download[0]+"): 1 invalid path, 2 missing source history, 3 non-finite audio, 4 invalid path grouping.");
+        if(download[0]!=0)throw new InvalidOperationException("GPU audio validation failed ("+download[0]+"): 1 invalid path, 2 missing source history, 3 non-finite audio, 4 invalid path grouping, 5 geometric group capacity mismatch.");
         ResponseSupportSamples=(int)download[1];int length=requested*listeners*channels;
         uint responses=unchecked((uint)BitConverter.SingleToInt32Bits(download[2])),reused=unchecked((uint)BitConverter.SingleToInt32Bits(download[3]));
         Diagnostics.responseUpdates+=unchecked(responses-previousResponses);Diagnostics.reusedResponses+=unchecked(reused-previousReused);

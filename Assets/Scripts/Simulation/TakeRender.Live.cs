@@ -69,7 +69,7 @@ public static partial class TakeRender
                 if(GpuAudio.Selected(settings,shader))
                 {
                     gpuBlock=new float[checked(block.Length*settings.maximumResponsesPerBatch)];
-                    gpuAudio=new GpuAudio(scene,rate,settings,signals,settings.maximumResponsesPerBatch);
+                    gpuAudio=new GpuAudio(scene,rate,settings,signals,settings.maximumResponsesPerBatch,transported:true);
                 }
                 else mixer=new Mixer(scene,rate,settings,signals);
                 solver=new TransportSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate,gpuAudio==null);

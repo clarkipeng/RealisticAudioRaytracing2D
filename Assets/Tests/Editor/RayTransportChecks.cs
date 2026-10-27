@@ -20,7 +20,8 @@ public partial class TakeChecks
         using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
         var direct=new TakeRender.DirectPath[2];solver.Solve(state,direct);
         var expected=(RayTransport.Path[])solver.RayPaths.Clone();
-        int bin=10, pairOffset=settings.SpectralSlotsPerPair;
+        var layout=new RayTransport.Layout(scene,settings);
+        int bin=10, pairOffset=layout.Ranges[1].x,pairSlots=layout.Ranges[1].y;
         var segments=solver.CaptureRays(state,1,bin);
         int arrivals=0,edges=0;
         foreach(var s in segments)
@@ -30,19 +31,16 @@ public partial class TakeChecks
             if(s.kind==TransportSolver.RayEvent.Diffraction)edges++;
             if(s.kind!=TransportSolver.RayEvent.Listener)continue;
             arrivals++;Near(Vector3.Distance(s.end,state[1].position),0,"Captured connection ends at selected listener");
-            int first=s.path==0?pairOffset+bin:pairOffset+settings.FrequencyBins+
-                (bin*settings.RaysPerBin+(int)(s.path-1)/2)*(settings.maxBounces+1);
             bool matches=false;
-            int count=s.path==0?1:settings.maxBounces+1;
-            for(int i=first;i<first+count;i++)
-                matches|=Mathf.Abs(expected[i].delaySeconds-s.end.w)<1e-6f &&
+            for(int i=pairOffset;i<pairOffset+pairSlots;i++)
+                matches|=expected[i].frequencyBin==bin && Mathf.Abs(expected[i].delaySeconds-s.end.w)<1e-6f &&
                     Mathf.Abs(expected[i].pressureGain-s.pressure)<1e-6f;
             Check(matches,"Debug listener segment matches the uninstrumented audio arrival");
         }
         Check(arrivals>0 && edges>0,"Capture includes nonzero diffraction connections");
-        int start=pairOffset+settings.FrequencyBins+bin*settings.RaysPerBin*(settings.maxBounces+1);
-        for(int i=start;i<start+settings.RaysPerBin*(settings.maxBounces+1);i++)
+        for(int i=pairOffset;i<pairOffset+pairSlots;i++)
         {
+            if(expected[i].frequencyBin!=bin)continue;
             var actual=solver.RayPaths[i];
             Check(actual.identity==expected[i].identity,"Debugging does not change path sampling");
             Near(actual.pressureGain,expected[i].pressureGain,"Debugging preserves signed gain",1e-6f);
@@ -86,11 +84,12 @@ public partial class TakeChecks
         var settings=SpectralSettings();settings.speedOfSound=1000;settings.raysPerBin=1;
         using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
         var segments=solver.CaptureRays(state,0,1);
-        Near(Vector3.Distance(segments[2].start,state[0].position),0,"Mirror starts at emitter");
-        Near(Vector3.Distance(segments[2].end,Vector3.zero),0,"Mirror hits image-source reflection point");
-        Near(segments[2].end.w,Mathf.Sqrt(2)/1000,"Mirror first leg delay",1e-7f);
-        Near(segments[3].end.w,2*Mathf.Sqrt(2)/1000,"Mirror full path delay",1e-7f);
-        Check(segments[2].kind==TransportSolver.RayEvent.Reflection && segments[3].kind==TransportSolver.RayEvent.Listener,
+        int first=geometry.Length+1+settings.RaysPerBin*(2+2*settings.maxBounces);
+        Near(Vector3.Distance(segments[first].start,state[0].position),0,"Mirror starts at emitter");
+        Near(Vector3.Distance(segments[first].end,Vector3.zero),0,"Mirror hits image-source reflection point");
+        Near(segments[first].end.w,Mathf.Sqrt(2)/1000,"Mirror first leg delay",1e-7f);
+        Near(segments[first+1].end.w,2*Mathf.Sqrt(2)/1000,"Mirror full path delay",1e-7f);
+        Check(segments[first].kind==TransportSolver.RayEvent.Reflection && segments[first+1].kind==TransportSolver.RayEvent.Listener,
             "Mirror capture distinguishes surface interaction and listener connection");
     }
 
@@ -125,7 +124,7 @@ public partial class TakeChecks
             var geometry=new[]{new AcousticTake.Primitive {objectIndex=2,a=new Vector3(0,-10,-10),b=new Vector3(0,10,-10),c=new Vector3(0,0,10)}};
             var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=4;settings.raysPerBin=1;settings.maxBounces=1;settings.diffractionFactor=0;settings.airAbsorption=false;
             using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
-            solver.Solve(state,new TakeRender.DirectPath[1]);var mirror=solver.RayPaths[settings.FrequencyBins+2];
+            solver.Solve(state,new TakeRender.DirectPath[1]);var mirror=solver.RayPaths[settings.FrequencyBins+1];
             var y=new System.Numerics.Complex(real,imaginary);double distance=2*Math.Sqrt(1+separation*separation),cosine=2/distance;
             var expected=(cosine-y)/(cosine+y)/distance;
             Assert.That(mirror.delaySeconds,Is.EqualTo(distance/343).Within(1e-7));
@@ -204,7 +203,7 @@ public partial class TakeChecks
                 settings.useBvh=bvh;
                 using var solver=new TransportSolver(scene,geometry,settings,shader,2,8000);
                 solver.Solve(state,direct);var rays=solver.RayPaths;double energy=0;
-                for(int i=65;i<settings.SpectralSlotsPerPair;i++)
+                for(int i=65;i<rays.Length;i++)
                 {
                     float value=rays[i].pressureGain;Check(float.IsFinite(value),"Finite indirect pressure");energy+=value*value;
                     if(baseline!=null)Near(value,baseline[i].pressureGain,"BVH indirect agreement",1e-5f);
@@ -442,7 +441,7 @@ public partial class TakeChecks
         foreach(int at in new[]{0,128})
         {
             for(int bin=0;bin<changedSettings.FrequencyBins;bin++)
-                changedPaths[changedSettings.FrequencyBins+bin*(changedSettings.maxBounces+1)]=
+                changedPaths[changedSettings.FrequencyBins+bin*changedSettings.PathSlotsPerRay]=
                     new RayTransport.Path {frequencyBin=(uint)bin,pressureGain=1,delaySeconds=at==0?0:256f/8192};
             changedMixer.SetResponse((long)at,new TakeRender.DirectPath[1],state,false,changedPaths,0);
             int length=at==0?128:1024;var chunk=new float[128];
@@ -513,7 +512,7 @@ public partial class TakeChecks
                 solver.Solve(state,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
                 for(int bin=0;bin<settings.FrequencyBins;bin++)
                 {
-                    int at=settings.FrequencyBins+bin*(settings.maxBounces+1);
+                    int at=settings.FrequencyBins+bin*settings.MirrorCandidates(scene);
                     Near(rays[at].pressureGain,scattering==0?1/Mathf.Sqrt(8):0,"Image-source specular gain",1e-5f);
                     if(scattering==0)Near(rays[at].delaySeconds,Mathf.Sqrt(8)/343,"Image-source specular time",1e-6f);
                 }
@@ -533,7 +532,8 @@ public partial class TakeChecks
             solver.Solve(poses,new TakeRender.DirectPath[1]);var rays=solver.RayPaths;
             for(int bin=0;bin<settings.FrequencyBins;bin++)
             {
-                float gain=0;for(int ray=0;ray<budget;ray++)gain+=rays[settings.FrequencyBins+(bin*budget+ray)*2].pressureGain;
+                int count=settings.MirrorCandidates(square);
+                float gain=0;for(int ray=0;ray<count;ray++)gain+=rays[settings.FrequencyBins+bin*count+ray].pressureGain;
                 Near(gain,1/Mathf.Sqrt(8),"Shared-edge mirror gain is invariant over complete primitive strata",1e-5f);
             }
         }

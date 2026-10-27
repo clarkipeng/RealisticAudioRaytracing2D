@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acoustic Lab · Integrated rain reflections</title>
+<style>
+:root{color-scheme:dark;--bg:#10141b;--panel:#181e28;--line:#343e4d;--text:#e8edf5;--muted:#adb9cb;--accent:#1accff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}main{max-width:1140px;margin:auto;padding:30px}h1{font-size:32px;line-height:1.15;margin:8px 0 14px;letter-spacing:-.8px}h2{font-size:17px;margin:0}p{color:var(--muted);margin:8px 0}.eyebrow{font-size:12px;font-weight:700;letter-spacing:1.6px;color:var(--accent)}.scope{max-width:940px}.note{color:#ffca87}.players{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:24px 0}.panel{padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}.panel p{font-size:13px;min-height:60px}audio{width:100%;height:38px}img{width:100%;height:auto;border-radius:12px}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;margin-top:18px}th,td{text-align:right;padding:9px 12px;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}th{font-size:12px;color:var(--muted)}footer{margin-top:22px;font-size:12px;color:var(--muted)}a{color:var(--accent)}@media(max-width:760px){main{padding:18px}.players{grid-template-columns:1fr}.panel p{min-height:0}th,td{padding:8px 5px;font-size:12px}}
+</style>
+<main>
+<div class="eyebrow">ACOUSTIC LAB / RUNTIME INTEGRATION</div>
+<h1>Rain with every first reflection</h1>
+<p class="scope">Same 98 recorded rain sources, same canopy, listener and gain. Each audible first reflection now reaches the production audio renderer with its own delay and direction. These three-second clips use a common scale, with no normalization.</p>
+<p class="scope note">This integrates first reflections. The complete multi-edge solver is still unresolved. The third clip is an independent direct + first-reflection control, not full wave ground truth.</p>
+<div class="players">
+ <section class="panel"><h2>Before</h2><p>Original rain renderer: two primitive samples per frequency bin, with probability compensation.</p><audio controls preload="metadata" src="before.wav" aria-label="Original rain renderer"></audio></section>
+ <section class="panel"><h2>Integrated</h2><p>All 84 triangle candidates checked. Each valid first reflection retained. Existing 32-interaction walk preserved.</p><audio controls preload="metadata" src="integrated.wav" aria-label="Integrated rain renderer"></audio></section>
+ <section class="panel"><h2>First-reflection control</h2><p>Independent geometric calculation of direct sound and 73 valid first mirrors. Excludes higher-order scattering.</p><audio controls preload="metadata" src="first-images.wav" aria-label="Independent first-reflection control"></audio></section>
+</div>
+<img src="waveforms.png" alt="Original, integrated and first-reflection control waveforms and RMS envelopes on shared scales">
+<table aria-label="Measured render cost and output"><thead><tr><th>Same 6.5 s render</th><th>Before</th><th>Integrated</th></tr></thead><tbody id="metrics"></tbody></table>
+<p class="scope" style="font-size:13px">Offline host timings on shared hardware, one run per version. Transport includes completion/readback; audio includes synthesis and delivery. Wall time includes 20% work pacing. These are not realtime or universal speedup measurements. Diffraction is disabled in both renders, matching the original rain take.</p>
+<footer>27 October 2026 · <a href="report.json">Measurements and input hashes</a> · <a href="waveforms.png">Export waveform plot</a><br>No playback starts automatically. Playing one clip pauses the others.</footer>
+</main>
+<script id="report" type="application/json">{{REPORT}}</script>
+<script>
+const report=JSON.parse(document.getElementById('report').textContent);
+const rows=[['Reserved numeric storage',r=>(r.cost.workingNumericBytes/1048576).toFixed(1)+' MiB'],['Transport',r=>r.cost.solveSeconds.toFixed(3)+' s'],['Audio synthesis + delivery',r=>r.cost.audioSeconds.toFixed(3)+' s'],['Render wall time · paced',r=>r.cost.wallSeconds.toFixed(1)+' s'],['Peak · full render',r=>r.fullRender.peak.toFixed(4)],['Samples above ±1',r=>r.fullRender.samplesAboveUnity.toLocaleString()]];
+rows.push(['RMS error vs first-reflection control',r=>(100*report.comparedToFirstImages[r===report.before?'before':'integrated'].relativeRmsError).toFixed(2)+'%']);
+for(const [label,value] of rows){const tr=document.createElement('tr');for(const text of [label,value(report.before),value(report.integrated)]){const td=document.createElement('td');td.textContent=text;tr.append(td)}document.getElementById('metrics').append(tr)}
+for(const player of document.querySelectorAll('audio'))player.addEventListener('play',()=>{for(const other of document.querySelectorAll('audio'))if(other!==player)other.pause()});
+</script>
+</html>

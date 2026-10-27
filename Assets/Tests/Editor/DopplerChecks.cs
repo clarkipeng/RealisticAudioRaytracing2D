@@ -48,7 +48,10 @@ public partial class TakeChecks
     [TestCase("{\"synthesis\":1}",TakeRender.Synthesis.Spectral), Category("Core")]
     public void SynthesisSettingsUseDefaultOrExplicitSelection(string json,TakeRender.Synthesis expected)
     {
-        Assert.That(JsonUtility.FromJson<TakeRender.Settings>(json).synthesis,Is.EqualTo(expected));
+        var settings=JsonUtility.FromJson<TakeRender.Settings>(json);
+        Assert.That(settings.synthesis,Is.EqualTo(expected));
+        Assert.That(settings.reflectionSampling,Is.EqualTo(TakeRender.ReflectionSampling.FirstImages));
+        Assert.That(settings.reflectionCandidates,Is.GreaterThan(0),"Existing settings acquire a usable mirror budget.");
     }
 
     [Test, Category("GPU")]
@@ -234,7 +237,7 @@ public partial class TakeChecks
             for(int i=0;i<state.Length;i++)state[i].position=initial[i].position+initial[i].velocity*(float)seconds;
             solver.Solve(state,direct);var arrivals=solver.RayPaths;
             if(mirrorOnly)
-                for(int slot=0;slot<arrivals.Length;slot++)if(slot<settings.FrequencyBins || (slot-settings.FrequencyBins)%(settings.maxBounces+1)!=0)
+                for(int slot=0;slot<arrivals.Length;slot++)if(slot<settings.FrequencyBins || slot>=settings.FrequencyBins*(1+settings.MirrorCandidates(scene)))
                     arrivals[slot]=default;
             if(settings.transport==TakeRender.Transport.Direct)mixer.SetResponse(sample,direct,state);
             else mixer.SetResponse((long)sample,direct,state,false,arrivals,0);

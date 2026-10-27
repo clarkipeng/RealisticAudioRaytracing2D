@@ -34,6 +34,7 @@ StructuredBuffer<float> AudioSource,AudioClips;
 StructuredBuffer<uint4> AudioClipInfo;
 StructuredBuffer<uint4> AudioSourceClocks;
 StructuredBuffer<int> AudioFilterPairs; // packed filter offset, or -1
+StructuredBuffer<uint> AudioGroupLimits;
 StructuredBuffer<uint2> AudioRanges;
 StructuredBuffer<uint> AudioOwners;
 RWStructuredBuffer<float4> AudioSums;
@@ -49,7 +50,7 @@ uint AudioPair,AudioWhich,AudioRadius,AudioSinc;
 int AudioLatency,AudioRingAt,AudioAvailableStart,AudioAvailableEnd;
 uint AudioBlockNegative;
 uint AudioWriteOffset,AudioWriteCount,AudioWriteAt;
-uint AudioWorkStride,AudioTransformSize,AudioTransformBase,AudioTransformInverse,AudioStage,AudioBuildingFilter,AudioTransformInput;
+uint AudioWorkStride,AudioTransformSize,AudioTransformBase,AudioTransformPathBase,AudioTransformInverse,AudioStage,AudioBuildingFilter,AudioTransformInput;
 float AudioMaximumDelay;
 static const float AUDIO_PI=3.14159265358979323846;
 static const uint AUDIO_SHARED=2048;
@@ -67,6 +68,7 @@ uint AudioBank() {return AudioMeta[0] ^ (AudioSpectral!=0?0:AudioWhich);}
 // Acoustic ownership is per pair; the output/head clock still advances as one response.
 uint AudioPathBank(uint pair) {return AudioWhich==0?AudioPairState[pair].x:AudioPairState[pair].y;}
 uint AudioFilterAt(uint bank,uint g) {return (bank*AudioFilterCapacity+AudioFilterPairs[AudioOwners[g]]+g-AudioRanges[AudioOwners[g]].x)*AudioBins;}
+uint AudioWorkAt(uint g) {return (AudioFilterPairs[AudioOwners[g]]+g-AudioRanges[AudioOwners[g]].x)*AudioWorkStride;}
 bool AudioReuseInput(uint g) {uint4 pair=AudioPairState[AudioOwners[g]];return AudioWhich!=0 && ((AudioSpectral!=0 && AudioMatches[pair.y*AudioCapacity+g]==(int)g) || (pair.x==pair.y && (AudioSpectral==0 || AudioPaths[pair.x*AudioCapacity+g].direction.w==0)));}
 bool AudioOldOff() {return AudioWhich!=0 && AudioMeta[2]==0;}
 int AudioDifference(uint2 a,uint2 b) {return (int)(a.x-b.x);} // Local differences only; absolute sample clocks remain integers.
@@ -189,7 +191,7 @@ void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
     AllMemoryBarrierWithGroupSync();if(tid.x!=0)return;
     if(rebuild)
     {
-        uint count=0;
+        uint count=0,groupError=0;
         for(uint slot=0;slot<AudioRanges[pair].y;slot++)
         {
             uint i=base+slot;if(AudioNext[i]<0)continue;uint hash=(uint)AudioNext[i];
@@ -203,11 +205,18 @@ void AudioGroups(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
             }
             if(probes==AudioHashSize){AudioError(4);continue;}
             int group=entry.x;
-            if(group<0){group=(int)count++;AudioPaths[bank*AudioCapacity+base+group]=path;}
+            if(group<0)
+            {
+                // Bounds are derived from shared transport geometry, never an
+                // empirical cap. Fail explicitly before any packed FFT store.
+                if(count>=AudioGroupLimits[pair]){groupError=5;break;}
+                group=(int)count++;AudioPaths[bank*AudioCapacity+base+group]=path;
+            }
             else if(path.frequencyBin<AudioPaths[bank*AudioCapacity+base+group].frequencyBin)AudioPaths[bank*AudioCapacity+base+group].frequencyBin=path.frequencyBin;
             AudioNext[i]=entry.y<0?-1:(int)base+entry.y;AudioHeads[base+group]=(int)i;
             AudioInsert(pair,hash,group,(int)slot);
         }
+        if(groupError!=0)AudioError(groupError);
         DeviceMemoryBarrier();
         AudioCounts[bank*AudioPairs+pair]=count;InterlockedAdd(AudioMeta[15],count);
         for(uint g=0;g<count;g++)
@@ -409,7 +418,7 @@ void AudioInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     if(t==0)InterlockedAdd(AudioMeta[16],1);
     for(uint n=t;n<AudioFft;n+=256)AudioShared[n]=float2(AudioSample(g,n),0);GroupMemoryBarrierWithGroupSync();
     AudioFftShared(AudioFft,false,t);
-    for(uint k=t;k<AudioBins;k+=256)AudioWork[g*AudioWorkStride+k]=AudioShared[k];
+    for(uint k=t;k<AudioBins;k+=256)AudioWork[AudioWorkAt(g)+k]=AudioShared[k];
 }
 float4 AudioSum(uint channel,uint bin,bool moving,uint tile)
 {
@@ -420,7 +429,7 @@ float4 AudioSum(uint channel,uint bin,bool moving,uint tile)
         for(uint p=tile;p<AudioCounts[bank*AudioPairs+pair];p+=AudioTiles)
         {
             uint g=AudioRanges[pair].x+p;
-            float2 filtered=AudioMultiply(AudioWork[g*AudioWorkStride+bin],AudioFilters[AudioFilterAt(bank,g)+bin]);
+            float2 filtered=AudioMultiply(AudioWork[AudioWorkAt(g)+bin],AudioFilters[AudioFilterAt(bank,g)+bin]);
             value.xy+=AudioMultiply(filtered,AudioEar(AudioBlends[g],ear,bin));
             if(moving)value.zw+=AudioMultiply(filtered,AudioEar(AudioBlends[AudioCapacity+g],ear,bin));
         }
@@ -495,20 +504,20 @@ void AudioMaterialGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 void AudioPadGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(AudioPairState[AudioPair].z==0)return;uint g=AudioRanges[AudioPair].x+group.x;
-    for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[g*AudioFft+n]=n<AudioSize?float2(AudioTransform[group.x*AudioFft+(n+AudioSize/2)%AudioSize].x,0):0;
+    for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[AudioWorkAt(g)+n]=n<AudioSize?float2(AudioTransform[group.x*AudioFft+(n+AudioSize/2)%AudioSize].x,0):0;
 }
 [numthreads(256,1,1)]
 void AudioFilterGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(AudioPairState[AudioPair].z==0)return;uint g=AudioRanges[AudioPair].x+group.x;
-    for(uint k=tid.x;k<AudioBins;k+=256)AudioFilters[AudioFilterAt(AudioPairState[AudioPair].x,g)+k]=AudioWork[g*AudioFft+k];
+    for(uint k=tid.x;k<AudioBins;k+=256)AudioFilters[AudioFilterAt(AudioPairState[AudioPair].x,g)+k]=AudioWork[AudioWorkAt(g)+k];
 }
 [numthreads(256,1,1)]
 void AudioInputGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
     if(AudioOldOff())return;uint g=AudioRanges[AudioPair].x+group.x;if(tid.x==0)AudioPrepareHead(g);if(AudioReuseInput(g))return;
     if(tid.x==0)InterlockedAdd(AudioMeta[16],1);
-    for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[g*AudioFft+n]=float2(AudioSample(g,n),0);
+    for(uint n=tid.x;n<AudioFft;n+=256)AudioWork[AudioWorkAt(g)+n]=float2(AudioSample(g,n),0);
 }
 [numthreads(256,1,1)]
 void AudioSumGlobal(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
@@ -531,13 +540,13 @@ bool AudioSkipTransform(uint g) {return AudioBuildingFilter!=0?AudioPairState[Au
 [numthreads(256,1,1)]
 void AudioBitReverse(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    uint g=AudioTransformBase+group.x,n=AudioTransformSize,bits=(uint)firstbithigh(n);if(AudioSkipTransform(g))return;
+    uint g=AudioTransformBase+group.x,n=AudioTransformSize,bits=(uint)firstbithigh(n);if(AudioSkipTransform(AudioTransformPathBase+group.x))return;
     for(uint i=tid.x;i<n;i+=256){uint j=reversebits(i)>>(32-bits);if(j>i){float2 a=AudioTransform[g*AudioFft+i];AudioTransform[g*AudioFft+i]=AudioTransform[g*AudioFft+j];AudioTransform[g*AudioFft+j]=a;}}
 }
 [numthreads(256,1,1)]
 void AudioButterfly(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
 {
-    uint g=AudioTransformBase+group.x,n=AudioTransformSize,step=AudioStage;if(AudioSkipTransform(g))return;
+    uint g=AudioTransformBase+group.x,n=AudioTransformSize,step=AudioStage;if(AudioSkipTransform(AudioTransformPathBase+group.x))return;
     for(uint i=tid.x;i<n/2;i+=256)
     {
         uint k=i%(step/2),at=g*AudioFft+(i/(step/2))*step+k;float angle=(AudioTransformInverse!=0?2:-2)*AUDIO_PI*k/step;

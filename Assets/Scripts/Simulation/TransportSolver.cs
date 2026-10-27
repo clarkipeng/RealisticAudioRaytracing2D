@@ -226,6 +226,7 @@ public sealed class TransportSolver : IDisposable
         if (Marshal.SizeOf<RaySegment>() != 48)
             throw new InvalidOperationException("Ray capture GPU ABI mismatch.");
         int slots = checked(geometry.Length + 1 + settings.RaysPerBin * checked(2 + 2 * settings.maxBounces));
+        slots=checked(slots+2*settings.MirrorCandidates(scene));
         var segments = new RaySegment[slots];
         using var buffer = new ComputeBuffer(slots, 48);
         buffer.SetData(segments);

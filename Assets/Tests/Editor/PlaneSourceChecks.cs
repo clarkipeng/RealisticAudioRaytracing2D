@@ -66,7 +66,7 @@ public partial class TakeChecks
         var phases=new System.Collections.Generic.HashSet<uint>();
         for(int r=0;r<4;r++)
         {
-            var reflected=paths[4*bins+r*2];phases.Add(reflected.emissionPhase);
+            var reflected=paths[4*bins+r*bins*settings.MirrorCandidates(scene)];phases.Add(reflected.emissionPhase);
             int site=Enumerable.Range(0,4).Single(i=>paths[i*bins].emissionPhase==reflected.emissionPhase);
             var sample=AudioSourcePlane.Sample(plane,site);var image=states[0].position+(Vector3)sample;image.y=-image.y;
             float length=Vector3.Distance(image,states[1].position);

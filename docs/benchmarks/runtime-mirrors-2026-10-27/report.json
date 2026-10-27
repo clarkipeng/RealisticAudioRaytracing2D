@@ -1,0 +1,108 @@
+{
+  "scope": "Static canopy, identical recorded rain sources; 32 surface interactions retained; diffraction disabled as in the original take. The independent PCM control includes direct and every first image, not full wave propagation or higher-order scattering.",
+  "inputHashes": {
+    "sceneHash": "1442701105b691a0731f8b6782b9c5589d7bbd88c85187cf522599a8f6428b80",
+    "takeSourceHash": "",
+    "takeStateHash": "89615dd1546a58f8ad40e3d5202d541bb3b3ed3b58d47af6862439c80925606d",
+    "takeEventHash": "83e81fe3ef039957d2c84c38c2a6736c81d21772f65b1d6bef2e37d2860949ac"
+  },
+  "rate": 44100,
+  "sourceCount": 98,
+  "validFirstMirrors": 73,
+  "listenSeconds": 3,
+  "sourceTimeWindowSeconds": [
+    2,
+    5
+  ],
+  "dspLatencySamples": 144,
+  "normalization": "None; common original gain",
+  "before": {
+    "cost": {
+      "workingNumericBytes": 1556671556,
+      "preparedPcmBytes": 86436000,
+      "solveSeconds": 0.4891160999999999,
+      "audioSeconds": 24.051961400000014,
+      "preparationSeconds": 1.8884927999999999,
+      "wallSeconds": 157.7731293,
+      "gpuAudio": {
+        "responseUpdates": 196,
+        "reusedResponses": 195,
+        "filterBytes": 880894560,
+        "materialFilters": 62,
+        "inputFfts": 555396,
+        "pathCapacity": 426790,
+        "activeGroups": 62,
+        "peakGroups": 62,
+        "readbacks": 195,
+        "readbackSeconds": 8.226835600000001,
+        "maximumReadbackSeconds": 0.3065252,
+        "maximumConsumeDelaySeconds": 1.27e-05
+      }
+    },
+    "audio": {
+      "rms": 0.06930173335609252,
+      "peak": 0.772332489490509,
+      "samplesAboveUnity": 0
+    },
+    "fullRender": {
+      "rms": 0.061319583608745926,
+      "peak": 0.772332489490509,
+      "samplesAboveUnity": 0
+    },
+    "wavSha256": "a677af30eda63e4df9f050f8e0c93e1b1c0557c87b4d14f2dc296022e0cfb46f"
+  },
+  "integrated": {
+    "cost": {
+      "workingNumericBytes": 438950980,
+      "preparedPcmBytes": 86436000,
+      "solveSeconds": 1.2475599000000004,
+      "audioSeconds": 28.984792899999988,
+      "preparationSeconds": 2.2195783,
+      "wallSeconds": 190.7228581,
+      "gpuAudio": {
+        "responseUpdates": 196,
+        "reusedResponses": 195,
+        "filterBytes": 30138528,
+        "materialFilters": 133,
+        "inputFfts": 1191414,
+        "pathCapacity": 949130,
+        "activeGroups": 133,
+        "peakGroups": 133,
+        "readbacks": 195,
+        "readbackSeconds": 12.499663499999992,
+        "maximumReadbackSeconds": 0.6091788,
+        "maximumConsumeDelaySeconds": 1.69e-05
+      }
+    },
+    "audio": {
+      "rms": 0.013764765792015347,
+      "peak": 0.07123513519763947,
+      "samplesAboveUnity": 0
+    },
+    "fullRender": {
+      "rms": 0.012168866283622523,
+      "peak": 0.08726096898317337,
+      "samplesAboveUnity": 0
+    },
+    "wavSha256": "2a894f72c5f485393572e49432764608762e1069945267359325ffe7c1b28d85"
+  },
+  "control": {
+    "audio": {
+      "rms": 0.013765238094102317,
+      "peak": 0.07128075057637849,
+      "samplesAboveUnity": 0
+    },
+    "directRms": 0.011209350913340018,
+    "mirrorRms": 0.007933199231017738
+  },
+  "comparedToFirstImages": {
+    "before": {
+      "relativeRmsError": 4.884423411141986,
+      "correlation": 0.24719882411756625
+    },
+    "integrated": {
+      "relativeRmsError": 0.010345661447733618,
+      "correlation": 0.9999464823957215
+    }
+  }
+}

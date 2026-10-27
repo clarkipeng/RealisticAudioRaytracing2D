@@ -1,5 +1,9 @@
 # Cleanup validation and measured bottlenecks
 
+## First-image runtime integration and filter storage — 2026-10-27
+
+[Matched rain comparison and reproduction evidence](benchmarks/runtime-mirrors-2026-10-27/README.md). Live/offline audio now retains first-image candidates individually and packs FFT storage by conservative geometric bounds; existing 32-interaction walks remain. Event count no longer raises the per-event reflection budget. **79 distinct focused cases pass.** Same 98-source canopy take: numeric storage **1,556.7 → 439.0 MB**, transport **0.489 → 1.248 s**, audio stage **24.052 → 28.985 s**. Single offline runs, not realtime qualification. Relative RMS difference from an independent direct/first-image control falls **488.44% → 1.035%** at unchanged source gain; this is not a full-wave accuracy score. The generalized complete-edge attempt worsened its diagnostic wave error and remains unshipped, with failed evidence retained.
+
 ## Finite 3D material queries and unchanged instance bounds — 2026-10-22
 
 [Consolidated report and 2D height-slice maps](acoustic-experiment-history.md) · [Numerical ledger](benchmarks/finite3d-scaling-2026-10-22.json) · [Reproduction archive](benchmarks/finite3d-scaling-2026-10-22.zip).

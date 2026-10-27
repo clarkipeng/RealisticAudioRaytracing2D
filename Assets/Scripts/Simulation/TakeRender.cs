@@ -15,6 +15,7 @@ public static partial class TakeRender
     public enum Transport { Direct, Raytraced }
     public enum Synthesis { ImpulseResponse, Spectral }
     public enum AudioBackend { Gpu, CpuReference }
+    public enum ReflectionSampling { FirstImages, PrimitiveBaseline }
     [Serializable] public sealed class Settings : ISerializationCallbackReceiver
     {
         public int responseStepSamples = 512;
@@ -37,6 +38,10 @@ public static partial class TakeRender
         public Synthesis synthesis=Synthesis.Spectral;
         public AudioBackend audioBackend;
         [Min(1)] public int raysPerBin=1;
+        [Tooltip("Keep complete first-order mirror routes as delayed audio arrivals. PrimitiveBaseline preserves the old estimator for comparisons.")]
+        public ReflectionSampling reflectionSampling;
+        [Min(1), Tooltip("Minimum mirror candidates per emission. The candidate budget also grows with rays per bin; small scenes enumerate every primitive.")]
+        public int reflectionCandidates=128;
         [Min(0), Tooltip("Zero renders direct sound only, including material transmission, with no reflection or diffraction paths.")]
         public int maxBounces=5;
         public int seed;
@@ -49,7 +54,16 @@ public static partial class TakeRender
             if(raysPerPair>0 && FrequencyBins>0){raysPerBin=RaysPerBin;raysPerPair=0;}
         }
         public int RaysPerPair => maxBounces==0 ? 0:checked(FrequencyBins*RaysPerBin);
-        public int SpectralSlotsPerPair => checked(FrequencyBins+RaysPerPair*checked(maxBounces+1));
+        public int PathSlotsPerRay => checked(maxBounces+(reflectionSampling==ReflectionSampling.PrimitiveBaseline?1:0));
+        // Geometry-free point-source capacity. Use SlotsPerPair(scene) or Layout
+        // for real scenes, whose complete mirrors have their own route range.
+        public int SpectralSlotsPerPair => checked(FrequencyBins+RaysPerPair*PathSlotsPerRay);
+        internal int MirrorCandidates(AcousticTake.Scene scene)
+        {
+            if(maxBounces==0 || reflectionSampling==ReflectionSampling.PrimitiveBaseline)return 0;
+            int primitives=0;foreach(var obj in scene.objects)primitives=checked(primitives+obj.primitiveCount);
+            return Math.Min(primitives,Math.Max(reflectionCandidates,RaysPerBin));
+        }
         internal int SourceRaysPerBin(AcousticTake.Scene scene,int source)
         {
             var plane=scene.planes==null?null:Array.Find(scene.planes,p=>p.source==source);
@@ -63,7 +77,7 @@ public static partial class TakeRender
             for(int s=0;s<scene.sources.Length;s++)
             {
                 int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
-                maximum=Math.Max(maximum,checked(FrequencyBins*(sites+(maxBounces==0?0:SourceRaysPerBin(scene,s)*(maxBounces+1)))));
+                maximum=Math.Max(maximum,checked(FrequencyBins*(sites*(1+MirrorCandidates(scene))+(maxBounces==0?0:SourceRaysPerBin(scene,s)*PathSlotsPerRay))));
             }
             return maximum;
         }
@@ -220,14 +234,14 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="integrated-edge-pressure-preview-v10";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-complex-fir-hrtf-v2":"path-clock-complex-spectral-v4";
+            report.method="integrated-first-mirrors-edge-preview-v11";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-complex-fir-hrtf-v2":"path-clock-complex-spectral-v4";
             if(useGpuAudio)
             {
                 report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-complex-path-filter-overlap-save-v2":"gpu-path-clock-complex-spectral-v4";
                 report.audioShaderDependencyHash=AcousticTake.Provenance.Capture(Resources.Load<ComputeShader>("Acoustics/GpuAudio")).shaderDependencyHash;
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
-            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time.";
+            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time. Mirror selection="+settings.reflectionSampling+", candidate budget floor="+settings.reflectionCandidates+". FirstImages retains each candidate as a separate delayed arrival; it does not replace the higher-order edge sampler.";
             if(settings.maxBounces==0)
                 report.transportDescription="Synthesis="+settings.synthesis+". Direct sound only: retarded direct arrivals, occlusion, material transmission/interior travel and air/material attenuation. No reflected, scattered or diffracted paths are allocated or traced. Existing source recordings may contain their own reverberation.";
         }
@@ -243,7 +257,7 @@ public static partial class TakeRender
         var signals=Signal.FromTake(take,pcm);
         void EvaluateEmission(long birth,AcousticTake.State[] target) => take.Evaluate(Math.Min(birth,metadata.durationSamples),target);
         int batchCapacity=shader==null || !SystemInfo.supportsAsyncGPUReadback ? 1:(int)Math.Min(settings.maximumResponsesPerBatch,(length-1)/settings.responseStepSamples+1);
-        using var gpuAudio=useGpuAudio?new GpuAudio(scene,metadata.sampleRate,settings,signals,batchCapacity):null;
+        using var gpuAudio=useGpuAudio?new GpuAudio(scene,metadata.sampleRate,settings,signals,batchCapacity,transported:true):null;
         var mixer=useGpuAudio?null:new Mixer(scene,metadata.sampleRate,settings,signals);
         long initialMixerBytes=gpuAudio?.NumericBytes??mixer.NumericBytes;
         report.backendScope=useGpuAudio?"GPU transport and audio synthesis; CPU source timeline and PCM output":"Transport backend; CPU reference audio synthesis";
@@ -658,6 +672,8 @@ public static partial class TakeRender
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.transport==Transport.Raytraced)
         {
+            if(settings.reflectionCandidates<1 || (settings.reflectionSampling!=ReflectionSampling.FirstImages && settings.reflectionSampling!=ReflectionSampling.PrimitiveBaseline))
+                throw new ArgumentException("Invalid mirror route sampling settings.");
             if(settings.fftSize<2 || (settings.fftSize&(settings.fftSize-1))!=0 || settings.spectralHop<1 || settings.spectralHop>settings.fftSize/2 ||
                 settings.fftSize%settings.spectralHop!=0 || settings.responseStepSamples%settings.spectralHop!=0 ||
                 settings.RaysPerBin<1 || settings.maxBounces<0 || !float.IsFinite(settings.diffractionFactor) || settings.diffractionFactor<0)

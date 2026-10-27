@@ -116,12 +116,15 @@ public partial class TakeChecks
                     var p=EdgeResponse(paths,(int)bin,hz);
                     Assert.That(double.IsFinite(p.Real)&&double.IsFinite(p.Imaginary),Is.True);
                     csv.WriteLine(FormattableString.Invariant($"{diffraction},{rays},{seed},{point},{hz:R},{p.Real:R},{p.Imaginary:R},{seconds:R},{(direct[0].pressureGain!=0?1:0)}"));
-                    if(terms!=null)for(int slot=0;slot<settings.maxBounces+2;slot++)
+                    int mirrorSlots=settings.FrequencyBins*settings.MirrorCandidates(scene);
+                    int kinds=settings.PathSlotsPerRay+1+(mirrorSlots>0?1:0);
+                    if(terms!=null)for(int slot=0;slot<kinds;slot++)
                     {
                         var value=System.Numerics.Complex.Zero;int count=0;double largest=0;
                         for(int i=0;i<paths.Length;i++)
                         {
-                            int kind=i<settings.FrequencyBins?0:1+(i-settings.FrequencyBins)%(settings.maxBounces+1);
+                            int kind=i<settings.FrequencyBins?0:i<settings.FrequencyBins+mirrorSlots?1:
+                                1+(mirrorSlots>0?1:0)+(i-settings.FrequencyBins-mirrorSlots)%settings.PathSlotsPerRay;
                             var path=paths[i];if(kind!=slot||path.frequencyBin!=(int)bin)continue;
                             var gain=new System.Numerics.Complex(path.pressureGain,path.pressureImag);
                             if(gain==System.Numerics.Complex.Zero)continue;
