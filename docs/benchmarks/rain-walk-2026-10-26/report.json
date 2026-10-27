@@ -1,0 +1,327 @@
+{
+  "version": "rain-area-walk-v1",
+  "status": "awaiting listening",
+  "sourceFeedback": "User called the publisher audition better; spatialized output is not yet accepted.",
+  "sampleRate": 44100,
+  "seconds": 18,
+  "seed": 23,
+  "patchWidth": 2,
+  "patchCount": 98,
+  "quadratureSitesPerPatch": 64,
+  "responseRate": 30,
+  "sourceGrainSeconds": 4,
+  "sourceEpochSeconds": 1,
+  "emissionGain": 0.005615637901146715,
+  "model": "Statistical area-power direct response; one seeded mono texture and centroid delay per patch; equal-power stereo pan.",
+  "limits": "No reflections, diffraction, transmission, structural roof radiation or HRTF; recording acoustics retained; cubic delay interpolation; source units uncalibrated.",
+  "scene": {
+    "domainXZ": [
+      [
+        -10,
+        10
+      ],
+      [
+        -8,
+        8
+      ]
+    ],
+    "roofXZ": [
+      [
+        -6.25,
+        2.25
+      ],
+      [
+        -3.25,
+        3.25
+      ]
+    ],
+    "surfaces": [
+      {
+        "name": "roof",
+        "x": [
+          -6.25,
+          2.25
+        ],
+        "z": [
+          -3.25,
+          3.25
+        ],
+        "height": 3.251,
+        "profile": "iron"
+      },
+      {
+        "name": "west ground",
+        "x": [
+          -10,
+          -6.25
+        ],
+        "z": [
+          -8,
+          8
+        ],
+        "height": 0.001,
+        "profile": "rain"
+      },
+      {
+        "name": "east ground",
+        "x": [
+          2.25,
+          10
+        ],
+        "z": [
+          -8,
+          8
+        ],
+        "height": 0.001,
+        "profile": "rain"
+      },
+      {
+        "name": "south ground",
+        "x": [
+          -6.25,
+          2.25
+        ],
+        "z": [
+          -8,
+          -3.25
+        ],
+        "height": 0.001,
+        "profile": "rain"
+      },
+      {
+        "name": "north ground",
+        "x": [
+          -6.25,
+          2.25
+        ],
+        "z": [
+          3.25,
+          8
+        ],
+        "height": 0.001,
+        "profile": "rain"
+      }
+    ],
+    "walls": [
+      {
+        "center": [
+          -2,
+          3.125,
+          0
+        ],
+        "half": [
+          4.25,
+          0.125,
+          3.25
+        ]
+      },
+      {
+        "center": [
+          -6.125,
+          1.5,
+          0
+        ],
+        "half": [
+          0.125,
+          1.5,
+          3.25
+        ]
+      },
+      {
+        "center": [
+          -4.125,
+          1.5,
+          -3.125
+        ],
+        "half": [
+          2.125,
+          1.5,
+          0.125
+        ]
+      },
+      {
+        "center": [
+          -4.125,
+          1.5,
+          3.125
+        ],
+        "half": [
+          2.125,
+          1.5,
+          0.125
+        ]
+      },
+      {
+        "center": [
+          -2.125,
+          1.25,
+          -2.075
+        ],
+        "half": [
+          0.125,
+          1.25,
+          1.175
+        ]
+      },
+      {
+        "center": [
+          -2.125,
+          1.25,
+          2.075
+        ],
+        "half": [
+          0.125,
+          1.25,
+          1.175
+        ]
+      },
+      {
+        "center": [
+          -2.125,
+          2.75,
+          0
+        ],
+        "half": [
+          0.125,
+          0.25,
+          3.25
+        ]
+      }
+    ]
+  },
+  "inputs": {
+    "rain": {
+      "file": "PM_RD_RAIN_8_MODERATE_DRIPPY.wav",
+      "sha256": "bde8c266a247b9843a8813cf52e587d135e9c94dba201d00ca11908a49047488",
+      "monoRms": 0.011342997944186748,
+      "source": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_RAIN_8_MODERATE_DRIPPY.wav",
+      "normalization": "One RMS value for the complete recording; no per-grain gain."
+    },
+    "iron": {
+      "file": "PM_RD_DESIGNED_DRIPPY_ON_IRON_PLATE_3.wav",
+      "sha256": "19c431eae089f860c419734c02eb6fe505b03691f975272acb63d42db6491251",
+      "monoRms": 0.02129696737242568,
+      "source": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/PMSFX%20-%20Rain%20Designer/PM_RD_DESIGNED_DRIPPY_ON_IRON_PLATE_3.wav",
+      "normalization": "One RMS value for the complete recording; no per-grain gain."
+    }
+  },
+  "audits": {
+    "outside": {
+      "expectedPowerByGrid": {
+        "4": 9.142082187085895,
+        "8": 9.132597021839867,
+        "16": 9.132187418715748,
+        "32": 9.132001314247567
+      },
+      "grid8ErrorDb": 0.00028329396080366444,
+      "sealedDoorPower": 9.132597021839867,
+      "audioRms": 0.011735918748522698,
+      "roofRms": 0.0
+    },
+    "canopy": {
+      "expectedPowerByGrid": {
+        "4": 4.323746382924378,
+        "8": 4.3234705242167895,
+        "16": 4.324222568089601,
+        "32": 4.32438482989857
+      },
+      "grid8ErrorDb": -0.0009183269090193149,
+      "sealedDoorPower": 4.3234705242167895,
+      "audioRms": 0.008055972464790543,
+      "roofRms": 0.0
+    },
+    "inside": {
+      "expectedPowerByGrid": {
+        "4": 0.5107597741180648,
+        "8": 0.5146219759430706,
+        "16": 0.5147216092908019,
+        "32": 0.5144109759743378
+      },
+      "grid8ErrorDb": 0.0017810143633572775,
+      "sealedDoorPower": 0.0,
+      "audioRms": 0.0028019218896086885,
+      "roofRms": 0.0
+    }
+  },
+  "maxRouteGrid8Vs16ErrorDb": 0.01719137233420689,
+  "maxAdjacentExpectedPowerStepDb": 0.21501287107522105,
+  "recordingRegionMaxAbsCorrelation": 0.01721738290669721,
+  "quarterSecondRms": [
+    0.011882089269866785,
+    0.011904892305511606,
+    0.011516720608809074,
+    0.01205548009179968,
+    0.011615737893734015,
+    0.011748716306330322,
+    0.011608611051522284,
+    0.011777462696951974,
+    0.011456899344639317,
+    0.01195586802122962,
+    0.011582126292821416,
+    0.011631360519000886,
+    0.011996289107856415,
+    0.012335415417681048,
+    0.01129239698848204,
+    0.011725038465059517,
+    0.011549258615188374,
+    0.010900099487638067,
+    0.011183590409374847,
+    0.010501130725282803,
+    0.010561907458055079,
+    0.00950116643824914,
+    0.009262839216449163,
+    0.00895600981909062,
+    0.00875589021200591,
+    0.008566126742123842,
+    0.00842556273971884,
+    0.008427898218803688,
+    0.007655681236204643,
+    0.007910286448091202,
+    0.007804876572422233,
+    0.007960344674560417,
+    0.00798679194234571,
+    0.00845711169578524,
+    0.0080406616924422,
+    0.008004864991740185,
+    0.00818148997366808,
+    0.007937377508322586,
+    0.007942306866462827,
+    0.008434276404988858,
+    0.008365057535116835,
+    0.008930927284301992,
+    0.008054148528584382,
+    0.007883744109672554,
+    0.007194931729312882,
+    0.00708761994915691,
+    0.006675256111006981,
+    0.006482398910091387,
+    0.005647807184925484,
+    0.00492726212132168,
+    0.003996665040519679,
+    0.0033894879246970876,
+    0.0032200777890136517,
+    0.002998901948652933,
+    0.003245378597269538,
+    0.0028632124450937244,
+    0.0029223934976363402,
+    0.0027008085798833808,
+    0.0027480105686383816,
+    0.0026833927817271046,
+    0.002703918383771544,
+    0.0027258666879992582,
+    0.002864039529044226,
+    0.0027264526554898246,
+    0.0027186078581499444,
+    0.0028941267955850327,
+    0.0029312303235137557,
+    0.002803341384694928,
+    0.0026294771329738627,
+    0.0027448510231061493,
+    0.002663154828963671,
+    0.0027124512530964724
+  ],
+  "peak": 0.09262366821008675,
+  "geometrySeconds": 1.421013666986255,
+  "totalSeconds": 4.440084374989965,
+  "outputSha256": "4f724e5996291cb02f3257703ad7056dec30d452995b2cd3fbb6dd16c8ade896"
+}

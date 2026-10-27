@@ -16,6 +16,8 @@ Research review, 26 October 2026. Recommendation and experiments, not an impleme
 
 **Publisher source review:** the user authorized checking the library demos. Four PMSFX samples were found in the official Sonniss GDC 2020 track list and prepared as a [private source audition](benchmarks/rain-library-2026-10-26/README.md). They contain finished rain and designed layers, not the full library's isolated-drop bank. No new synthesis or propagation is applied, and source acceptance remains pending.
 
+**Spatial follow-up:** the user called the publisher audition better and authorized the [courtyard → canopy → indoor walk](benchmarks/rain-walk-2026-10-26/README.md). It uses continuous recorded textures in surface patches and an explicitly statistical direct-area-power response. The 18-second offline test has fixed emission gain and a synchronized first-person view/minimap. It measures source batching and doorway visibility; it does not replace production transport. Roof-top audio is occluded from the listener along this route, so indoor roof sound remains unimplemented. Spatial listening approval is pending.
+
 The best candidate for this project is a hybrid: model rainfall as many varied surface impacts, synthesize the dense component in bounded world-space regions, and preserve distinguishable impacts where spatial detail matters. Use the existing geometry/transport for shelter and propagation. Evaluate this against a small explicit-drop reference before choosing the runtime representation. A bank of convincing sounds solves a different problem from a stable spatial estimator; both need attention.
 
 ## What the literature establishes
