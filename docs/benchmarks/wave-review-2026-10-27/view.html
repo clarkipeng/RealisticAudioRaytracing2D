@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acoustic Lab · Wave reference comparison</title>
+<style>
+:root{color-scheme:dark;--bg:#10141b;--panel:#181e28;--line:#343e4d;--text:#e8edf5;--muted:#adb9cb;--accent:#1accff;--native:#ffbb74}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}main{max-width:1440px;margin:auto;padding:28px}h1{font-size:32px;line-height:1.15;margin:8px 0 12px;letter-spacing:-.8px}h2{font-size:17px;margin:0}p{margin:8px 0;color:var(--muted)}.eyebrow{font-size:12px;font-weight:700;letter-spacing:1.6px;color:var(--accent)}.scope{max-width:960px}.controls{display:flex;align-items:end;flex-wrap:wrap;gap:14px;margin:22px 0 18px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px}label{display:grid;gap:6px;color:var(--muted);font-size:12px}select,button{font:inherit;color:var(--text);background:#242d3b;border:1px solid #4a586d;border-radius:6px;padding:8px 10px;cursor:pointer}button:hover{border-color:var(--accent)}button:focus-visible,select:focus-visible,input:focus-visible,canvas:focus-visible{outline:2px solid var(--accent);outline-offset:3px}input{accent-color:var(--accent)}.phase{width:155px;align-self:center}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.stat{border-left:2px solid var(--line);padding:0 14px}.stat strong{display:block;font-size:25px;font-weight:600;font-variant-numeric:tabular-nums}.stat span{color:var(--muted);font-size:12px}.maps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:15px;min-width:0}.subtitle{font-size:12px;margin-top:4px;min-height:36px}.field{width:100%;display:block;aspect-ratio:1.19;cursor:crosshair;touch-action:manipulation}.scale{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);margin:5px 0}.scale .bar{height:9px;flex:1;border-radius:3px}.pressure-bar{background:linear-gradient(90deg,#5e9fff,#10141b,#ffc179)}.level-bar{background:linear-gradient(90deg,#101327,#35478d,#7d397e,#d76c51,#ffe9a5)}.error-bar{background:linear-gradient(90deg,#101327,#833784,#df7853,#ffe9a5)}.clip{font-size:11px;color:var(--muted);min-height:16px}.hint{font-size:12px;margin:12px 0 18px}.receiver{display:grid;grid-template-columns:1fr 1.7fr;gap:20px;margin-top:10px}.receiver p{font-size:13px}.buttons{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}.buttons button{font-size:12px}.waveform{width:100%;display:block;aspect-ratio:3.4}.point-values{font-variant-numeric:tabular-nums;color:var(--text)!important}.notes{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:22px}.notes p{font-size:13px}.notes h2{font-size:14px}.legend{display:flex;gap:18px;font-size:12px}.ref-color{color:var(--accent)}.native-color{color:var(--native)}a{color:var(--accent)}footer{margin-top:24px;font-size:12px;color:var(--muted)}.note{color:#ffca87}.disabled{opacity:.45} @media(max-width:900px){.maps{grid-template-columns:1fr}.field{max-height:440px}.stats{grid-template-columns:1fr 1fr}.receiver,.notes{grid-template-columns:1fr}main{padding:18px}.subtitle{min-height:0}.waveform{aspect-ratio:2.5}}
+</style>
+<main>
+  <nav class="legend" style="margin-bottom:20px"><a id="blocks-link" href="index.html">Finite 3D benchmark</a><a id="canopy-link" href="canopy/index.html">Rain canopy</a><a id="prototype-link" href="prototype.html">Improved 2.5D prototype</a></nav>
+  <div class="eyebrow">ACOUSTIC LAB / PROPAGATION CHECK</div>
+  <h1>Wave reference vs what we reproduce</h1>
+  <p class="scope" id="intro">A <strong>250 Hz tone</strong> passing two solid blocks. Left: an independent numerical wave solution. Middle: the live 3D sampler used by the rain demo. Same source, geometry, receiver positions, phase convention and amplitude scale.</p>
+  <p class="scope note" id="scope">This is the finite-3D benchmark. The improved offline 2.5D prototype is a separate implementation; see its tab above.</p>
+  <div class="controls">
+    <label>Display<select id="mode"><option value="pressure">Wavefronts · signed pressure</option><option value="level">Sound level · magnitude</option></select></label>
+    <label>Rays per frequency bin<select id="rays"><option value="2">2 · low budget</option><option value="128">128 · higher budget</option></select></label>
+    <label>Random seed<select id="seed"><option value="0">0</option><option value="1">1</option></select></label>
+    <label>Diffraction<select id="diffraction"><option value="0">Off · rain trial setting</option><option value="1">On · experimental</option></select></label>
+    <label class="phase" id="phase-control">Phase <span id="phase-text">0°</span><input aria-label="Wave phase" type="range" id="phase" min="0" max="360" value="0"></label>
+    <button id="animate" type="button" aria-pressed="false">Animate slowly</button>
+  </div>
+  <div class="stats" aria-live="polite">
+    <div class="stat"><strong id="whole-error">—</strong><span>Complex pressure error · all points</span></div>
+    <div class="stat"><strong id="shadow-error">—</strong><span>Complex pressure error · blocked view</span></div>
+    <div class="stat"><strong id="zero-count">—</strong><span>Points where renderer returns silence</span></div>
+    <div class="stat"><strong id="ref-change">—</strong><span>Reference’s last mesh refinement change</span></div>
+  </div>
+  <div class="maps">
+    <section class="panel"><h2>Numerical wave reference</h2><p class="subtitle" id="reference-detail">Finite 3D Helmholtz solution · 8,000 triangles</p><canvas class="field" id="reference-map" width="720" height="605" aria-label="Reference pressure field. Click to choose a receiver."></canvas><div class="scale"><span class="scale-low">−1</span><span class="bar pressure-bar main-bar"></span><span class="scale-high">+1</span></div><div class="clip" id="ref-clip"></div></section>
+    <section class="panel"><h2>Live 3D sampler</h2><p class="subtitle">Rain demo’s transport · 32 bounces · 1.25 s horizon</p><canvas class="field" id="native-map" width="720" height="605" aria-label="Native pressure field. Click to choose a receiver."></canvas><div class="scale"><span class="scale-low">−1</span><span class="bar pressure-bar main-bar"></span><span class="scale-high">+1</span></div><div class="clip" id="native-clip"></div></section>
+    <section class="panel"><h2>Where they disagree</h2><p class="subtitle">Complex difference, including phase · brighter is worse</p><canvas class="field" id="error-map" width="720" height="605" aria-label="Complex pressure error field. Click to choose a receiver."></canvas><div class="scale"><span>0</span><span class="bar error-bar"></span><span>3× reference RMS</span></div><div class="clip" id="error-clip"></div></section>
+  </div>
+  <p class="hint" id="map-hint">XY slice at z = 0.2 m; both blocks have finite depth along z. ★ Source · gray = solid · ring = chosen receiver. Click any sampled cell to compare its waveform. Maps use fixed scales; saturated cells are counted below them.</p>
+  <section class="panel receiver">
+    <div><h2>Pressure at one receiver</h2><p id="point-location"></p><p class="point-values" id="point-values"></p><p id="point-phase"></p><div class="buttons"><button type="button" data-point="clear">Clear view</button><button type="button" data-point="first">Behind first block</button><button type="button" data-point="second">Behind second block</button></div></div>
+    <div><div class="legend"><span class="ref-color">━ Numerical wave</span><span class="native-color">━ Live 3D sampler</span></div><canvas class="waveform" id="waveform" width="1020" height="300" aria-label="One cycle of pressure at the selected receiver, reference and native on the same amplitude scale."></canvas><p class="hint" id="cycle-note">One 4 ms cycle, p(t) = Re[P exp(iωt)]. Animation shows a slowed steady tone, not onset. No gain fitting or speaker playback.</p></div>
+  </section>
+  <div class="notes">
+    <section><h2>How much can we trust the reference?</h2><p id="validation"></p><p>These are numerical checks, not certified error bounds or a real-world recording. The boundary-element solver is independent of our ray and edge kernels.</p></section>
+    <section><h2>What this comparison establishes</h2><p>The wave solution includes interference and sound bending around finite solids. Without diffraction, the live sampler relies on direct sound and sampled reflections. Higher ray counts test sampling coverage; they do not guarantee the wave model is complete.</p><p>Error = ‖native − wave‖₂ / ‖wave‖₂ over the displayed samples; it can exceed 100%. The reference is steady-state. The live sampler has finite depth and time support, so model, sampling and truncation errors are combined.</p></section>
+  </div>
+  <footer><span id="measurement-date">Native measurement: 27 Oct 2026 · cached wave reference: 18 Oct 2026</span> · <a href="report.json">Full measurements & provenance</a> · <a href="comparison.png">Exported level comparison</a><br><span id="timing"></span></footer>
+</main>
+<script id="comparison-data" type="application/json">{{DATA}}</script>
+<script>
+(() => {
+  'use strict';
+  const d=JSON.parse(document.getElementById('comparison-data').textContent), $=id=>document.getElementById(id);
+  const pct=v=>(100*v).toFixed(1)+'%', amp=(v,i)=>Math.hypot(v.real[i],v.imag[i]);
+  const canopy=Boolean(d.config.view),view=d.config.view||{axes:[0,1],fixedAxis:2,fixedValue:.2,bounds:{xmin:-3.3,xmax:3.5,ymin:-2.8,ymax:2.8},presets:{clear:[-1.8,-1.9],first:[0,-.7],second:[1.8,1.5]}};
+  const limits=view.bounds,pad={l:55,r:15,t:14,b:45},project=p=>view.axes.map(a=>p[a]),hz=d.report.hz;
+  let selected=0, running=false, raf=0, previous=0;
+  const current=()=>d.fields[`r${$('rays').value}-s${$('seed').value}-d${$('diffraction').value}`];
+  const measurement=()=>d.report.cases.find(c=>c.key===`r${$('rays').value}-s${$('seed').value}-d${$('diffraction').value}`);
+  const phase=()=>Number($('phase').value)*Math.PI/180;
+  const pressure=(v,i)=>v.real[i]*Math.cos(phase())-v.imag[i]*Math.sin(phase());
+  function position(canvas,x,y){return [pad.l+(x-limits.xmin)/(limits.xmax-limits.xmin)*(canvas.width-pad.l-pad.r),pad.t+(limits.ymax-y)/(limits.ymax-limits.ymin)*(canvas.height-pad.t-pad.b)];}
+  function gradient(t,stops){t=Math.max(0,Math.min(1,t))*(stops.length-1);const i=Math.min(stops.length-2,Math.floor(t)),f=t-i;return `rgb(${stops[i].map((v,j)=>Math.round(v*(1-f)+stops[i+1][j]*f)).join(',')})`;}
+  const heat=[[16,19,39],[53,71,141],[125,57,126],[215,108,81],[255,233,165]], signed=[[94,159,255],[16,20,27],[255,193,121]];
+  function map(id,values,error=false){
+    const canvas=$(id),ctx=canvas.getContext('2d'),mode=$('mode').value;
+    ctx.fillStyle='#181e28';ctx.fillRect(0,0,canvas.width,canvas.height);
+    const dx=(d.config.x[1]-d.config.x[0])/2,dy=(d.config.y[1]-d.config.y[0])/2;
+    let clipped=0, peak=0;
+    for(let i=0;i<d.points.length;i++){
+      const [x,y]=project(d.points[i]),v=error?Math.hypot(values.real[i]-d.reference.real[i],values.imag[i]-d.reference.imag[i])/d.referenceRms:mode==='pressure'?pressure(values,i):20*Math.log10(Math.max(amp(values,i),1e-12));
+      const t=error?v/3:mode==='pressure'?(v+1)/2:(v+60)/70;
+      if(t<0||t>1)clipped++;peak=Math.max(peak,error?v:amp(values,i));
+      const a=position(canvas,x-dx,y+dy),b=position(canvas,x+dx,y-dy);
+      ctx.fillStyle=gradient(t,!error&&mode==='pressure'?signed:heat);ctx.fillRect(a[0],a[1],b[0]-a[0]+.5,b[1]-a[1]+.5);
+    }
+    ctx.lineWidth=1.4;
+    for(const w of d.config.walls){const c=project(w.center),h=project(w.half),inside=Math.abs(w.center[view.fixedAxis]-view.fixedValue)<=w.half[view.fixedAxis],a=position(canvas,c[0]-h[0],c[1]+h[1]),b=position(canvas,c[0]+h[0],c[1]-h[1]);ctx.fillStyle='#83909e';ctx.strokeStyle='#e8edf5';if(inside)ctx.fillRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);ctx.setLineDash(inside?[]:[7,5]);ctx.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);}ctx.setLineDash([]);
+    ctx.font='23px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#1accff';const source=position(canvas,...project(d.config.source));ctx.fillText('★',...source);
+    const pick=position(canvas,...project(d.points[selected]));ctx.beginPath();ctx.arc(...pick,8,0,Math.PI*2);ctx.strokeStyle='#10141b';ctx.lineWidth=5;ctx.stroke();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+    const step=canopy?2:1;ctx.fillStyle='#adb9cb';ctx.font='17px system-ui';ctx.textBaseline='top';for(let x=Math.ceil(limits.xmin/step)*step;x<=limits.xmax;x+=step){const p=position(canvas,x,limits.ymin);ctx.fillText(String(x),p[0],p[1]+7);}ctx.textAlign='right';ctx.textBaseline='middle';for(let y=Math.ceil(limits.ymin/step)*step;y<=limits.ymax;y+=step){const p=position(canvas,limits.xmin,y);ctx.fillText(String(y),p[0]-12,p[1]);}ctx.textAlign='center';ctx.fillText('xyz'[view.axes[0]]+' (m)',canvas.width/2,canvas.height-9);ctx.save();ctx.translate(13,canvas.height/2);ctx.rotate(-Math.PI/2);ctx.fillText('xyz'[view.axes[1]]+' (m)',0,0);ctx.restore();
+    const clipId=error?'error-clip':id==='reference-map'?'ref-clip':'native-clip';$(clipId).textContent=`${clipped} / ${d.points.length} cells outside color range · max ${error?peak.toFixed(2)+'×':peak.toFixed(3)+' pressure amplitude'}`;
+  }
+  function waveform(){
+    const canvas=$('waveform'),ctx=canvas.getContext('2d'),native=current(),i=selected,a=amp(d.reference,i),b=amp(native,i),max=Math.max(.05,a,b)*1.15;
+    const box={l:65,r:15,t:18,b:40},w=canvas.width-box.l-box.r,h=canvas.height-box.t-box.b;
+    ctx.clearRect(0,0,canvas.width,canvas.height);ctx.font='17px system-ui';ctx.lineWidth=1;ctx.strokeStyle='#343e4d';ctx.fillStyle='#adb9cb';ctx.textAlign='right';ctx.textBaseline='middle';
+    for(const value of [-max,0,max]){const y=box.t+h/2-value/max*h/2;ctx.beginPath();ctx.moveTo(box.l,y);ctx.lineTo(box.l+w,y);ctx.stroke();ctx.fillText(value.toFixed(2),box.l-9,y);}
+    for(let fraction=0;fraction<=1;fraction+=.25){ctx.textAlign='center';ctx.fillText((fraction*1000/hz).toFixed(0)+' ms',box.l+fraction*w,canvas.height-12);}
+    for(const [v,color] of [[d.reference,'#1accff'],[native,'#ffbb74']]){ctx.beginPath();ctx.strokeStyle=color;ctx.lineWidth=3;for(let n=0;n<=500;n++){const t=n/500*2*Math.PI,value=v.real[i]*Math.cos(t)-v.imag[i]*Math.sin(t),x=box.l+n/500*w,y=box.t+h/2-value/max*h/2;if(n===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.stroke();}
+    const x=box.l+Number($('phase').value)/360*w;ctx.strokeStyle='#e8edf5';ctx.lineWidth=1;ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(x,box.t);ctx.lineTo(x,box.t+h);ctx.stroke();ctx.setLineDash([]);
+    const [px,py,pz]=d.points[i];$('point-location').textContent=`(${px.toFixed(2)}, ${py.toFixed(2)}, ${pz.toFixed(2)}) m · ${d.nativeShadow[i]!==d.shadow[i]?'grazing boundary: visibility changes after float32 rounding':d.shadow[i]?'source blocked by a solid':'direct view of source'}`;
+    $('point-values').textContent=`Amplitude: wave ${a.toFixed(4)} · native ${b.toFixed(4)}${b>1e-12?' · '+(20*Math.log10(b/a)).toFixed(1)+' dB relative to wave':' · native silent'}`;
+    const offset=(Math.atan2(native.imag[i],native.real[i])-Math.atan2(d.reference.imag[i],d.reference.real[i]))*180/Math.PI;
+    $('point-phase').textContent=b>1e-12?`Phase difference: ${(((offset+540)%360)-180).toFixed(1)}° · waveform axes shared by both curves.`:'Native phase is undefined at zero amplitude.';
+  }
+  function draw(){
+    $('phase-text').textContent=$('phase').value+'°';map('reference-map',d.reference);map('native-map',current());map('error-map',current(),true);waveform();
+  }
+  function update(){
+    const c=measurement(),isPressure=$('mode').value==='pressure';$('whole-error').textContent=pct(c.complexRelativeL2);$('shadow-error').textContent=pct(c.shadowComplexRelativeL2);$('zero-count').textContent=`${c.zeroPoints} / ${d.points.length}`;$('ref-change').textContent=(100*d.report.referenceGlobalRefinementChange).toFixed(2)+'%';
+    $('phase').disabled=!isPressure;$('animate').disabled=!isPressure;$('phase-control').classList.toggle('disabled',!isPressure);if(!isPressure)stop();
+    document.querySelectorAll('.main-bar').forEach(e=>e.className='bar main-bar '+(isPressure?'pressure-bar':'level-bar'));document.querySelectorAll('.scale-low').forEach(e=>e.textContent=isPressure?'−1':'−60 dB');document.querySelectorAll('.scale-high').forEach(e=>e.textContent=isPressure?'+1':'+10 dB');
+    $('timing').textContent=`Median transport query: ${c.medianSolveMs.toFixed(2)} ms at this setting. Includes GPU readback and five frequency bins, excludes audio synthesis, startup and the deliberate throttle. This is not a real-time qualification.`;draw();
+  }
+  function stop(){running=false;cancelAnimationFrame(raf);$('animate').textContent='Animate slowly';$('animate').setAttribute('aria-pressed','false');}
+  function tick(now){if(!running||document.hidden){stop();return;}if(now-previous>=1000/30){$('phase').value=(Number($('phase').value)+(previous?Math.min(100,now-previous):33)*.09)%360;previous=now;draw();}raf=requestAnimationFrame(tick);}
+  $('animate').addEventListener('click',()=>{if(running){stop();return;}running=true;previous=0;$('animate').textContent='Pause animation';$('animate').setAttribute('aria-pressed','true');raf=requestAnimationFrame(tick);});document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
+  for(const id of ['mode','rays','seed','diffraction'])$(id).addEventListener('change',update);$('phase').addEventListener('input',draw);
+  function nearest(x,y){let best=Infinity,index=0;d.points.forEach((point,i)=>{const p=project(point),q=(p[0]-x)**2+(p[1]-y)**2;if(q<best){best=q;index=i;}});selected=index;}
+  document.querySelectorAll('.field').forEach(canvas=>canvas.addEventListener('click',e=>{const r=canvas.getBoundingClientRect(),cx=(e.clientX-r.left)/r.width*canvas.width,cy=(e.clientY-r.top)/r.height*canvas.height,x=limits.xmin+(cx-pad.l)/(canvas.width-pad.l-pad.r)*(limits.xmax-limits.xmin),y=limits.ymax-(cy-pad.t)/(canvas.height-pad.t-pad.b)*(limits.ymax-limits.ymin);if(x<d.config.x[0]-.08||x>d.config.x.at(-1)+.08||y<d.config.y[0]-.08||y>d.config.y.at(-1)+.08)return;nearest(x,y);draw();}));
+  const presets=view.presets;document.querySelectorAll('[data-point]').forEach((button,i)=>{if(view.presetLabels)button.textContent=view.presetLabels[i];button.addEventListener('click',()=>{nearest(...presets[button.dataset.point]);draw();});});
+  $('validation').textContent=`The last mesh refinement changed complex pressure by ${(100*d.report.referenceGlobalRefinementChange).toFixed(2)}% overall and ${(100*d.report.referenceShadowRefinementChange).toFixed(2)}% in the blocked region. A separate cached analytic rigid-sphere control at ${hz} Hz has ${(100*d.report.referenceSphereControlError).toFixed(2)}% error.`;
+  $('reference-detail').textContent=`Finite 3D Helmholtz solution · ${d.report.referenceMesh.triangles.toLocaleString()} triangles`;
+  $('cycle-note').textContent=`One ${1000/hz} ms cycle, p(t) = Re[P exp(iωt)]. Animation shows a slowed steady tone, not onset. No gain fitting or speaker playback.`;
+  if(canopy){$('intro').textContent='A 125 Hz tone from ground-rain patch 39 through the actual canopy and room geometry. Left: an independent wave solution. Middle: the live 3D sampler used by the rain demo. Same source and receiver positions, rigid surfaces and amplitude scale.';$('scope').textContent='Controlled propagation test: one ground patch with rigid surfaces in both solvers. This is not the 98-source rain mix or its absorptive materials; there is no reflecting floor or roof vibration.';$('map-hint').textContent='Top view at ear height y = 1.6 m. Dashed outline = roof overhead; gray = walls in this slice. ★ Ground source projected onto the map · ring = chosen receiver. Click a sampled cell to inspect its waveform. Fixed scales; saturated cells are counted below.';$('measurement-date').textContent='Native and wave measurements: 27 Oct 2026';$('blocks-link').href='../index.html';$('canopy-link').href='index.html';$('prototype-link').href='../prototype.html';}
+  document.querySelectorAll('.field').forEach(c=>{c.height=Math.round(pad.t+pad.b+(c.width-pad.l-pad.r)*(limits.ymax-limits.ymin)/(limits.xmax-limits.xmin));c.style.aspectRatio=c.width+'/'+c.height;});
+  nearest(...presets.first);update();
+})();
+</script>
+</html>

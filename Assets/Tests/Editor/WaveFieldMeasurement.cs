@@ -32,6 +32,9 @@ public partial class TakeChecks
         string output=Environment.GetEnvironmentVariable("ACOUSTIC_WAVE_OUTPUT");
         if(string.IsNullOrEmpty(output))Assert.Ignore("Set ACOUSTIC_WAVE_OUTPUT to a prepared pressure-map directory.");
         Assert.That(Application.isBatchMode,Is.True,"Use an isolated batch project.");
+        string budget=Environment.GetEnvironmentVariable("ACOUSTIC_WAVE_WORK_FRACTION");
+        double workFraction=string.IsNullOrEmpty(budget)?1:double.Parse(budget,System.Globalization.CultureInfo.InvariantCulture);
+        Assert.That(workFraction,Is.GreaterThan(0).And.LessThanOrEqualTo(1));
         AudioListener.volume=0;
         string compiled=Path.Combine(output,"renderer-scene.json");
         var config=JsonUtility.FromJson<WaveScene>(File.ReadAllText(File.Exists(compiled)?compiled:Path.Combine(output,"scene.json")));
@@ -100,6 +103,7 @@ public partial class TakeChecks
             settings.maximumDelaySeconds=config.maximumDelaySeconds;settings.minimumDistance=.01f;
             using var solver=new TransportSolver(scene,geometry.ToArray(),settings,shader,sampleRate:config.sampleRate);
             state[1].position=WaveVector(config.points);solver.Solve(state,direct); // Exclude cold dispatch.
+            long budgetStarted=System.Diagnostics.Stopwatch.GetTimestamp();
             for(int point=0;point<config.points.Length/3;point++)
             {
                 state[1].position=WaveVector(config.points,point*3);
@@ -126,6 +130,15 @@ public partial class TakeChecks
                         }
                         terms.WriteLine(FormattableString.Invariant($"{diffraction},{rays},{seed},{point},{hz:R},{slot},{value.Real:R},{value.Imaginary:R},{count},{largest:R}"));
                     }
+                }
+                // Pace short batches of completed work. Per-point sleeps suffer
+                // severe timer coalescing under macOS background task policy.
+                double workSeconds=TakeRender.Elapsed(budgetStarted);
+                if(workFraction<1 && (workSeconds>=.05 || point+1==config.points.Length/3))
+                {
+                    System.Threading.Thread.Sleep((int)Math.Min(int.MaxValue,
+                        Math.Ceiling(workSeconds*1000*(1/workFraction-1))));
+                    budgetStarted=System.Diagnostics.Stopwatch.GetTimestamp();
                 }
             }
             csv.Flush();Debug.Log($"Wave field: diffraction={diffraction}, rays={rays}, seed={seed}");
