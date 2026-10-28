@@ -1,19 +1,42 @@
-"""Bake the exterior of a rigid group of closed meshes, retaining surface materials.
+"""Compute the exterior of a rigid group of closed meshes, retaining surface materials.
 
-Offline only. Install tools/solid-boundary-requirements.txt in a Python venv.
+The Unity Editor runs this automatically for AcousticSolid groups and caches the
+result by input hash. Install tools/solid-boundary-requirements.txt in a Python venv.
 Input/output positions use the group's local frame. No voxelization or gap fill.
+
+Exit codes: 0 success, 3 missing or mismatched backend, 4 invalid input geometry.
 """
 import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 from pathlib import Path
+import sys
 import time
 
-import manifold3d as m
-import numpy as np
+try:
+    import manifold3d as m
+    import numpy as np
+except ImportError as error:
+    m = np = None
+    MISSING = error.name or str(error)
+else:
+    MISSING = None
 
 VERSION = 1
+# Pinned so equal input hashes give equal boundaries on every machine.
+BACKEND_VERSION = '3.5.4'
+REQUIREMENTS = Path(__file__).with_name('solid-boundary-requirements.txt')
+
+
+def backend_problem():
+    if MISSING:
+        return f'missing Python module {MISSING!r}'
+    found = importlib.metadata.version('manifold3d')
+    if found != BACKEND_VERSION:
+        return f'manifold3d {found} is installed; require {BACKEND_VERSION}'
+    return None
 
 
 def checked(mesh, label):
@@ -109,9 +132,20 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('input', type=Path); p.add_argument('output', type=Path)
     args = p.parse_args()
+    problem = backend_problem()
+    if problem:
+        sys.stderr.write(f'Solid-boundary backend unavailable: {problem}. Install it with:\n'
+                         f'  {sys.executable} -m pip install -r {REQUIREMENTS}\n')
+        raise SystemExit(3)
     raw = args.input.read_bytes()
-    result = bake(json.loads(raw), hashlib.sha256(raw).hexdigest())
-    args.output.write_text(json.dumps(result, indent=2, allow_nan=False)+'\n')
+    try:
+        result = bake(json.loads(raw), hashlib.sha256(raw).hexdigest())
+    except ValueError as error:
+        sys.stderr.write(f'Invalid solid input: {error}\n')
+        raise SystemExit(4)
+    partial = args.output.with_name(args.output.name+'.partial')
+    partial.write_text(json.dumps(result, indent=2, allow_nan=False)+'\n')
+    os.replace(partial, args.output)
     print(f"Baked {result['inputTriangles']} -> {result['outputTriangles']} triangles; "
           f"{result['components']} component(s), volume {result['volume']:.9g}, area {result['area']:.9g}.")
 

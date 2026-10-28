@@ -42,13 +42,13 @@ public static class SceneToTake
             var solid = binding.transform.GetComponent<AcousticSolid>();
             if (solid == null || !solid.enabled || !binding.geometry) continue;
             if (binding.transform.GetComponent<AcousticSurface>().geometrySource == AcousticSurface.GeometrySource.None) continue;
-            if (dimension != AcousticTake.Dimension.Spatial3D) throw new InvalidOperationException("Solid bakes require 3D capture.");
-            boundaries.Add(binding.transform, solid.ReadValidated(fallback));
+            if (dimension != AcousticTake.Dimension.Spatial3D) throw new InvalidOperationException("Acoustic solids require 3D capture.");
+            boundaries.Add(binding.transform, solid.Resolve(fallback));
             foreach (var member in solid.members)
             {
                 if (!objectIndices.TryGetValue(member.transform, out int at) || !bindings[at].geometry)
-                    throw new InvalidOperationException("Register each baked source surface as a geometry binding.");
-                if (!grouped.Add(member.transform)) throw new InvalidOperationException("A surface cannot belong to two baked solids.");
+                    throw new InvalidOperationException("Register each acoustic solid member as a geometry binding.");
+                if (!grouped.Add(member.transform)) throw new InvalidOperationException("A surface cannot belong to two acoustic solids.");
             }
         }
 
@@ -68,7 +68,7 @@ public static class SceneToTake
                 var asset = surface != null && surface.material != null ? surface.material : fallback;
                 if (surface != null && surface.submeshMaterials != null && slot < surface.submeshMaterials.Length && surface.submeshMaterials[slot] != null)
                     asset = surface.submeshMaterials[slot];
-                if (solid != null && solid.enabled) asset = solid.surfaceMaterials[slot];
+                if (solid != null && solid.enabled) asset = solid.SurfaceMaterials[slot];
                 if (asset == null) throw new InvalidOperationException(transform.name + ": assign an acoustic material or the take's default material.");
                 if (!materialIndices.TryGetValue(asset, out int index))
                 {
@@ -269,7 +269,7 @@ public static class SceneToTake
                 if(solid!=null)
                 {
                     solidSnapshot=new AcousticSolid.Snapshot(solid,geometry && selection!=AcousticSurface.GeometrySource.None);
-                    foreach(var value in solid.surfaceMaterials)owner.AddMaterial(value);
+                    foreach(var value in solid.SurfaceMaterials)owner.AddMaterial(value);
                     return;
                 }
                 if (!geometry || selection==AcousticSurface.GeometrySource.None) return;

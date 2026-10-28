@@ -187,11 +187,11 @@ public partial class TakeChecks
         }
     }
 
-    // Exercise the same bake/import/scene compiler used by live and recorded
-    // scenes, rather than substituting a hand-authored union for the renderer.
+    // Exercise the same automatic boundary generation and scene compiler used by live
+    // and recorded scenes, rather than substituting a hand-authored union for the renderer.
     sealed class BakedWaveSolid : IDisposable
     {
-        readonly GameObject root,source,listener; readonly AudioMaterial material; readonly string asset;
+        readonly GameObject root,source,listener; readonly AudioMaterial material;
         public readonly AcousticTake.Scene scene;
         public readonly AcousticTake.Primitive[] geometry;
         public readonly AcousticTake.State[] states;
@@ -199,7 +199,7 @@ public partial class TakeChecks
         {
             Assert.That(config.triangles,Is.Null);Assert.That(config.materials,Is.Null,"This bake/reference fixture uses rigid walls.");
             Assert.That(config.physicalModel,Is.Not.EqualTo("point-extruded"));
-            string python=SolidPython();asset="Assets/wave-solid-"+Guid.NewGuid().ToString("N")+".json";
+            SolidPython();
             root=new GameObject("physical boundary");source=new GameObject("source");listener=new GameObject("listener");
             material=RigidSolidMaterial("rigid");
             try
@@ -211,9 +211,8 @@ public partial class TakeChecks
                     var wall=config.walls[i];solid.members[i]=SolidBox(root.transform,"wall-"+i,WaveVector(wall.center),WaveVector(wall.half)*2,material);
                     bindings.Add(new(){id="wall-"+i,transform=solid.members[i].transform,geometry=true});
                 }
-                AcousticSolidEditor.Bake(solid,python,asset,material);
                 File.WriteAllText(Path.Combine(output,"boundary-input.json"),solid.ExportInput(material,out _),new System.Text.UTF8Encoding(false));
-                File.WriteAllText(Path.Combine(output,"boundary.json"),solid.boundary.text);
+                File.WriteAllText(Path.Combine(output,"boundary.json"),JsonUtility.ToJson(solid.Resolve(material),true));
                 source.transform.position=WaveVector(config.source);
                 scene=SceneToTake.Compile(bindings,AcousticTake.Dimension.Spatial3D,.01f,material,Array.Empty<Transform>(),Array.Empty<AudioClip>(),new[]{listener.transform},out geometry);
                 scene.sources=new[]{new AcousticTake.SourceDefinition{objectIndex=0,clipIndex=0}};scene.clips=new[]{new AcousticTake.ClipDefinition()};
@@ -223,7 +222,7 @@ public partial class TakeChecks
         }
         public void Dispose()
         {
-            UnityEditor.AssetDatabase.DeleteAsset(asset);UnityEngine.Object.DestroyImmediate(root);
+            UnityEngine.Object.DestroyImmediate(root);
             UnityEngine.Object.DestroyImmediate(source);UnityEngine.Object.DestroyImmediate(listener);UnityEngine.Object.DestroyImmediate(material);
         }
     }
