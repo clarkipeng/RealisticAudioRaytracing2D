@@ -1513,6 +1513,8 @@ Implementation touches `RaytracedAudioSource`, scene source export/guard validat
 
 ## 8. Reconstruction and temporal upscaling
 
+**Training plan, 2026-10-28:** [audio DLSS training plan](audio-dlss/README.md) proposes a hybrid teacher (3D FDTD below a 0.5–1.4 kHz crossover, converged tracer above), a procedural scene generator shared by teacher and Unity renders, family-level held-out splits, and staged gates. The FDTD prototype has only passed a closed rigid-box mode check; it is not yet a qualified teacher.
+
 ### Experiments and model boundary
 
 “Audio DLSS” here means our learned acoustic reconstruction, without dependency on NVIDIA's graphics DLSS SDK. Its useful analogy is reusing noisy current/history information with motion and validity, not copying an undocumented frame count. NVIDIA describes temporal reconstruction and stability/responsiveness tradeoffs, not a universal context size we can adopt. [NVIDIA technical overview](https://research.nvidia.com/labs/adlr/DLSS4/).
