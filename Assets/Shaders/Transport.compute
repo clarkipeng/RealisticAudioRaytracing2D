@@ -15,6 +15,15 @@
 #pragma kernel PrepareMirrors2DBvh USE_BVH
 #pragma kernel PrepareMirrors3D
 #pragma kernel PrepareMirrors3DBvh USE_BVH
+#pragma kernel PrepareComplete2D
+#pragma kernel IntegrateComplete2D
+#pragma kernel PrepareComplete2DBvh USE_BVH
+#pragma kernel IntegrateComplete2DBvh USE_BVH
+#pragma kernel PrepareComplete3D
+#pragma kernel IntegrateComplete3D
+#pragma kernel PrepareComplete3DBvh USE_BVH
+#pragma kernel IntegrateComplete3DBvh USE_BVH
+#pragma kernel CompactComplete
 #pragma multi_compile_local _ ACOUSTIC_DEBUG
 
 #include "Geometry.hlsl"
@@ -70,3 +79,21 @@ void EvaluateDirectProbe(uint pair, bool is2D)
 [numthreads(64, 1, 1)] void PrepareMirrors2DBvh(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, true); }
 [numthreads(64, 1, 1)] void PrepareMirrors3D(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, false); }
 [numthreads(64, 1, 1)] void PrepareMirrors3DBvh(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, false); }
+
+[numthreads(64,1,1)] void PrepareComplete2D(uint3 id:SV_DispatchThreadID) { PrepareCompleteRoutes(id.x,true); }
+
+[numthreads(64,1,1)] void IntegrateComplete2D(uint3 id:SV_DispatchThreadID) { IntegrateCompleteRoutes(id.x,true); }
+
+[numthreads(64,1,1)] void PrepareComplete2DBvh(uint3 id:SV_DispatchThreadID) { PrepareCompleteRoutes(id.x,true); }
+
+[numthreads(64,1,1)] void IntegrateComplete2DBvh(uint3 id:SV_DispatchThreadID) { IntegrateCompleteRoutes(id.x,true); }
+
+[numthreads(64,1,1)] void PrepareComplete3D(uint3 id:SV_DispatchThreadID) { PrepareCompleteRoutes(id.x,false); }
+
+[numthreads(64,1,1)] void IntegrateComplete3D(uint3 id:SV_DispatchThreadID) { IntegrateCompleteRoutes(id.x,false); }
+
+[numthreads(64,1,1)] void PrepareComplete3DBvh(uint3 id:SV_DispatchThreadID) { PrepareCompleteRoutes(id.x,false); }
+
+[numthreads(64,1,1)] void IntegrateComplete3DBvh(uint3 id:SV_DispatchThreadID) { IntegrateCompleteRoutes(id.x,false); }
+
+[numthreads(1,1,1)] void CompactComplete(uint3 id:SV_DispatchThreadID) { CompactCompleteRoutes(); }

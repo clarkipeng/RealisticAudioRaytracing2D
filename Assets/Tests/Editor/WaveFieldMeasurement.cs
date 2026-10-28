@@ -14,7 +14,7 @@ public partial class TakeChecks
         public float[] source, points, frequencies;
         public WaveWall[] walls;
         public int[] rays, seeds;
-        public int sampleRate, fftSize, maxBounces;
+        public int sampleRate, fftSize, maxBounces, completeRouteSamples;
         public float speedOfSound, maximumDelaySeconds;
         public bool decompose;
         public float[] triangles;
@@ -98,6 +98,7 @@ public partial class TakeChecks
         {
             var settings=EdgeSettings();settings.useBvh=true;settings.airAbsorption=false;
             settings.fftSize=config.fftSize;settings.spectralHop=config.fftSize/2;
+            settings.completeRouteSamples=config.completeRouteSamples;
             settings.raysPerBin=rays;settings.seed=seed;settings.maxBounces=config.maxBounces;
             settings.diffractionFactor=diffraction;settings.speedOfSound=config.speedOfSound;
             settings.maximumDelaySeconds=config.maximumDelaySeconds;settings.minimumDistance=.01f;
@@ -117,13 +118,15 @@ public partial class TakeChecks
                     Assert.That(double.IsFinite(p.Real)&&double.IsFinite(p.Imaginary),Is.True);
                     csv.WriteLine(FormattableString.Invariant($"{diffraction},{rays},{seed},{point},{hz:R},{p.Real:R},{p.Imaginary:R},{seconds:R},{(direct[0].pressureGain!=0?1:0)}"));
                     int mirrorSlots=settings.FrequencyBins*settings.MirrorCandidates(scene);
-                    int kinds=settings.PathSlotsPerRay+1+(mirrorSlots>0?1:0);
+                    int legacyKinds=settings.PathSlotsPerRay+1+(mirrorSlots>0?1:0);
+                    int completeStart=settings.FrequencyBins+mirrorSlots+settings.RaysPerPair*settings.PathSlotsPerRay;
+                    int kinds=legacyKinds+(settings.CompleteSamples>0?1:0);
                     if(terms!=null)for(int slot=0;slot<kinds;slot++)
                     {
                         var value=System.Numerics.Complex.Zero;int count=0;double largest=0;
                         for(int i=0;i<paths.Length;i++)
                         {
-                            int kind=i<settings.FrequencyBins?0:i<settings.FrequencyBins+mirrorSlots?1:
+                            int kind=i>=completeStart?legacyKinds:i<settings.FrequencyBins?0:i<settings.FrequencyBins+mirrorSlots?1:
                                 1+(mirrorSlots>0?1:0)+(i-settings.FrequencyBins-mirrorSlots)%settings.PathSlotsPerRay;
                             var path=paths[i];if(kind!=slot||path.frequencyBin!=(int)bin)continue;
                             var gain=new System.Numerics.Complex(path.pressureGain,path.pressureImag);

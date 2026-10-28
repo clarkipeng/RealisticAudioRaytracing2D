@@ -147,6 +147,7 @@ public sealed class TakeEditor : Editor
         settings.fftSize=EditorGUILayout.IntField("Acoustic frequency grid (FFT size)",settings.fftSize);
         settings.spectralHop=EditorGUILayout.IntField("Convolution block (samples)",settings.spectralHop);
         settings.diffractionFactor=EditorGUILayout.FloatField("Diffraction factor",settings.diffractionFactor);
+        settings.completeRouteSamples=EditorGUILayout.IntField(new GUIContent("Complete route samples", "Tuned early diffraction/mixed routes per emission; zero selects the legacy walk. This budget multiplies retained emission sites."),settings.completeRouteSamples);
         settings.airAbsorption=EditorGUILayout.Toggle("Air absorption",settings.airAbsorption);
     }
     void DrawConfiguration(RayTraceManager manager)

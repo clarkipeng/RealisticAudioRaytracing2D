@@ -1,0 +1,356 @@
+{
+  "latestDistinctChecks": 29,
+  "latestPassed": 29,
+  "runs": [
+    {
+      "run": "straightline-controls",
+      "result": "Passed",
+      "total": 17,
+      "passed": 17,
+      "failed": 0,
+      "tests": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-probes\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/runtime-barrier\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/runtime-slit\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-1-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-barrier-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-slit-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-corridor-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RouteAnglesMatchReference",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedBurstAudioPreservesBirthsAcrossBatchingAndLive",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(False,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(True,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(False,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(True,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "run": "accepted-controls",
+      "result": "Failed(Child)",
+      "total": 21,
+      "passed": 20,
+      "failed": 1,
+      "tests": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-128\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-512\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-2048\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-1-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-barrier-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-slit-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureScalableRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/map-corridor-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.RouteAnglesMatchReference",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedBurstAudioPreservesBirthsAcrossBatchingAndLive",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(False,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(True,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(False,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(True,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(True)",
+          "result": "Failed",
+          "failure": "  Early-route integration must retain every existing later interaction.\n  Expected: RayTransport+Path\n  But was:  RayTransport+Path\n"
+        },
+        {
+          "name": "TakeChecks.TunedRoutesAppearInRayCapture",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "run": "deeper-control",
+      "result": "Failed(Child)",
+      "total": 2,
+      "passed": 1,
+      "failed": 1,
+      "tests": [
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(True)",
+          "result": "Failed",
+          "failure": "  Later interaction 315 (ray 9, bounce 2): before={\"direction\":{\"x\":-0.670762300491333,\"y\":0.4024573862552643,\"z\":-0.6229815483093262,\"w\":0.0},\"delaySeconds\":0.036308594048023227,\"pressureGain\":-0.005193042103201151,\"frequencyBin\":0,\"identity\":235510699,\"pressureImag\":0.0,\"emissionPhase\":0,\"birthLow\":0,\"birthHigh\":0} after={\"direction\":{\"x\":0.0,\"y\":0.0,\"z\":0.0,\"w\":0.0},\"delaySeconds\":0.0,\"pressureGain\":0.0,\"frequencyBin\":0,\"identity\":0,\"pressureImag\":0.0,\"emissionPhase\":0,\"birthLow\":0,\"birthHigh\":0}\n  Expected: RayTransport+Path\n  But was:  RayTransport+Path\n"
+        }
+      ]
+    },
+    {
+      "run": "final-controls",
+      "result": "Passed",
+      "total": 18,
+      "passed": 18,
+      "failed": 0,
+      "tests": [
+        {
+          "name": "TakeChecks.BudgetedFirstImagesPreservePrimitivePdf(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.BudgetedFirstImagesPreservePrimitivePdf(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-128\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-512\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-2048\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/finite-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedBurstAudioPreservesBirthsAcrossBatchingAndLive",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(False,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(True,Spectral)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(False,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedDiffractionProducesMatchingCpuGpuAudio(True,ImpulseResponse)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesAppearInRayCapture",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    },
+    {
+      "run": "final-fields",
+      "result": "Passed",
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "tests": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/full-barrier\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/full-slit\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/diffraction-integration/full-finite\")",
+          "result": "Passed",
+          "failure": null
+        }
+      ]
+    }
+  ]
+}

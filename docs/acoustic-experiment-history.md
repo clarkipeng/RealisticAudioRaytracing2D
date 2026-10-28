@@ -8,6 +8,27 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**The tuned early diffraction integral reaches shared audio — 27 October**
+
+Recovered the October 22 complete-route shader and extracted its exact kernel,
+Cauchy mixture/PDF and complete one/two-edge integration into a shared include.
+The production planar adapter now gives 1.44% barrier / 2.42% slit complex error
+against unchanged wave references over 1,040 receivers. The four archived shader
+maps agree within 2.2e-8 relative float difference. Actual CPU/GPU/live/offline
+arrival synthesis is covered, including 32-slot preservation and source births.
+
+The finite 3D extension is **not promoted to the Church preset**. Whole-canopy
+error falls 50.05% → 43.04% and silent receivers fall 257 → 0, but shadow error
+worsens 100.19% → 125.51%; affordable budgets remain strongly seed-sensitive.
+The 128-sample, 98-source rain trial uses 722.4 MB versus 439.0 MB and produces
+14.4×-full-scale peaks at unchanged gain; it is rejected as a preset. The explicit
+`completeRouteSamples` setting exposes the integration while old jobs retain their
+previous mode. No full-room fidelity or realtime claim follows.
+
+[Implementation, final fields, audio controls, cost and failures](benchmarks/runtime-diffraction-2026-10-27/README.md).
+
+---
+
 **Full-wave check after first-image integration — 27 October**
 
 Fresh finite-3D measurements against the unchanged 125 Hz canopy BEM reference give **55.92% → 50.05%** whole-map complex-pressure error at two rays/bin with diffraction off. The blocked region still has **100.19% error**; 257 of 1,166 receivers return zero pressure. At a blocked indoor point near (-4.17, 1.60, -1.93) m, reference amplitude is 0.2084 and native pressure is zero. The earlier 1.03% PCM difference was against direct plus first images, not this full-wave field.

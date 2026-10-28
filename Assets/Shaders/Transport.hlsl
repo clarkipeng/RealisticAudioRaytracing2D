@@ -1,3 +1,4 @@
+#include "DiffractionIntegral.hlsl"
 // Shared geometric preview: surface and signed edge events share a path loop.
 // This is not a validated wave/diffraction reference.
 struct RayMaterial
@@ -11,15 +12,7 @@ struct Edge
     float4 a, b, face, normal;
     uint4 ids;
 };
-struct RayPath
-{
-    // direction.xyz: listener-to-arrival; direction.w: 1 - received/emitted frequency ratio.
-    float4 direction;
-    float delaySeconds, pressureGain;
-    uint frequencyBin, identity;
-    float pressureImag;
-    uint emissionPhase, birthLow, birthHigh;
-};
+#include "RayPath.hlsl"
 float2 ComplexProduct(float2 a, float2 b) { return float2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x); }
 float2 ReflectionPressure(RayMaterial material, float cosine)
 {
@@ -54,7 +47,7 @@ StructuredBuffer<uint4> EmissionClocks; // phase/clip offset, birth low/high, re
 uint EmissionFrameStride;
 uint RaysPerBin, RaySeed, RayTracePair;
 uint FrequencyBins, RaysPerPair, MaxBounces, EdgeCount, VolumeCount, UseAirAbsorption;
-uint MirrorCandidateCount, MirrorSiteCapacity, UseVisibleMirrors;
+uint MirrorCandidateCount, MirrorSiteCapacity, UseVisibleMirrors,UseCompleteRoutes;
 float FrequencyStep, DiffractionFactor, MaximumPathDelay;
 // Fixed slots per captured ray avoid atomics and never truncate a path. All stores
 // and selection checks compile out of the normal transport variant.
@@ -678,6 +671,7 @@ void PrepareMirrors(uint index, bool is2D)
         primitive,(float)PrimitiveCount/MirrorCandidateCount,true);
     RayPaths[slot]=ApplyEmission(arrival,emissionRow,site,0);
 }
+#include "CompleteDiffraction.hlsl"
 void TracePaths(uint index, bool is2D)
 {
     if (index >= FrameCount * RaysPerPair)
@@ -686,7 +680,10 @@ void TracePaths(uint index, bool is2D)
          query = frame * PairCount + pair;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
          listener = Listeners[pair % ListenerCount];
-    uint first = frame*RayPathsPerFrame + RayPairRanges[pair].x + RayPairRanges[pair].y - RaysPerPair*PathSlotsPerRay + ray*PathSlotsPerRay;
+    // Walks follow the direct/mirror prefix. Complete routes append after the
+    // walk, so the end of the pair is no longer its starting-offset invariant.
+    uint first = frame*RayPathsPerFrame + RayPairRanges[pair].x +
+        MirrorSiteCapacity*FrequencyBins*(1+(UseVisibleMirrors!=0?MirrorCandidateCount:0)) + ray*PathSlotsPerRay;
     for (uint k = 0; k < PathSlotsPerRay; k++)
         RayPaths[first + k] = (RayPath)0;
     if (RayPairEnabled[query] == 0 || !DebugSelected(query, ray / RaysPerBin))
@@ -738,7 +735,7 @@ void TracePaths(uint index, bool is2D)
     uint previousEdge = 0xffffffff;
     float3 edgeSource = position, vertexVelocity = sourceVelocity;
     float edgeDistance = 0, spreadingDistance = 0;
-    bool canSampleEdge = true;
+    bool canSampleEdge = true,hadSurface=false;
     float3 surfaceNormal = 0;
     float surfaceScatter = 1;
     for (uint bounce = 0; bounce < MaxBounces; bounce++)
@@ -793,7 +790,7 @@ void TracePaths(uint index, bool is2D)
                        segmentStart, position, segmentTime, time, gain * weight);
             identity = HashRay(identity ^ (edge + 1) ^ 0x20000000u);
             float last = length(end - position);
-            if (last > RayEpsilon && Visible(stateOffset, position, end, is2D))
+            if ((UseCompleteRoutes==0 || hadSurface || bounce>=2) && last > RayEpsilon && Visible(stateOffset, position, end, is2D))
             {
                 float3 outgoing = (end - position) / last;
                 float ratio = frequencyRatio * (1 - dot(listenerVelocity, outgoing) / speed) /
@@ -831,6 +828,7 @@ void TracePaths(uint index, bool is2D)
             spreadingDistance = 0;
             previousEdge = 0xffffffff;
         }
+        hadSurface=true;
         position += direction * distance;
         Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
         spreadingDistance += distance;

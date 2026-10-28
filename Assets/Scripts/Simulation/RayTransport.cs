@@ -33,7 +33,7 @@ internal sealed class RayTransport : IDisposable
             {
                 int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
                 int rays=settings.maxBounces==0?0:checked(settings.FrequencyBins*settings.SourceRaysPerBin(scene,s));
-                int slots=checked(sites*settings.FrequencyBins*(1+settings.MirrorCandidates(scene))+rays*settings.PathSlotsPerRay);
+                int slots=checked(sites*settings.FrequencyBins*(1+settings.MirrorCandidates(scene)+settings.CompleteSlots(scene))+rays*settings.PathSlotsPerRay);
                 int geometricBins=sharedGeometry?1:settings.FrequencyBins;
                 int mirrors=settings.MirrorCandidates(scene)*sites;
                 if(settings.reflectionSampling==TakeRender.ReflectionSampling.PrimitiveBaseline)mirrors=rays/settings.FrequencyBins;
@@ -43,7 +43,7 @@ internal sealed class RayTransport : IDisposable
                 // remove prefixes; it cannot add another geometric route.
                 int walkBins=sharedGeometry&&sharedBranches?1:settings.FrequencyBins;
                 int walks=checked(rays/settings.FrequencyBins*settings.maxBounces*walkBins);
-                int groups=checked((sites+mirrors)*geometricBins+walks);
+                int groups=checked((sites+mirrors)*geometricBins+walks+sites*settings.CompleteSlots(scene));
                 MaximumSlots=Math.Max(MaximumSlots,slots);
                 for(int l=0;l<scene.listeners.Length;l++)
                 {
@@ -83,6 +83,8 @@ internal sealed class RayTransport : IDisposable
     readonly CommandBuffer commands;
     readonly int directKernel, traceKernel, pairs, rayCount, frequencyBins;
     readonly int mirrorKernel;
+    readonly int prepareComplete,compactComplete,integrateComplete,completeSamples,completeCapacity,pathSlots,completeSlots;
+    readonly ComputeBuffer completeCandidates,completeSelected,completeCount,completeDraws,completeSteps;
     readonly bool visibleMirrors;
     readonly int[] mirrorCounts,mirrorSites;
     readonly Layout layout;
@@ -121,6 +123,7 @@ internal sealed class RayTransport : IDisposable
         if(declaredPrimitives!=geometry.Length)throw new ArgumentException("Scene primitive ranges must cover the supplied transport geometry.");
         rayCount = settings.RaysPerPair;
         frequencyBins = settings.fftSize / 2 + 1;
+        completeSamples=settings.CompleteSamples;completeSlots=settings.CompleteSlots(scene);pathSlots=settings.PathSlotsPerRay;
         pairs = checked(scene.sources.Length * scene.listeners.Length);
         visibleMirrors=settings.reflectionSampling==TakeRender.ReflectionSampling.FirstImages;
         mirrorCounts=new int[pairs];mirrorSites=new int[pairs];
@@ -146,6 +149,11 @@ internal sealed class RayTransport : IDisposable
             traceKernel =
                 shader.FindKernel((planar ? "Trace2D" : "Trace3D") + (settings.useBvh ? "Bvh" : ""));
             mirrorKernel=shader.FindKernel((planar?"PrepareMirrors2D":"PrepareMirrors3D")+(settings.useBvh?"Bvh":""));
+            prepareComplete=shader.FindKernel((planar?"PrepareComplete2D":"PrepareComplete3D")+(settings.useBvh?"Bvh":""));
+            integrateComplete=shader.FindKernel((planar?"IntegrateComplete2D":"IntegrateComplete3D")+(settings.useBvh?"Bvh":""));
+            compactComplete=shader.FindKernel("CompactComplete");
+            if(completeSamples>0 && (!shader.IsSupported(prepareComplete) || !shader.IsSupported(compactComplete) || !shader.IsSupported(integrateComplete)))
+                throw new NotSupportedException("Complete-route kernels are unavailable on this GPU.");
             if (!shader.IsSupported(directKernel) || !shader.IsSupported(traceKernel))
                 throw new NotSupportedException("Raytraced kernels are unavailable on this GPU.");
             if(visibleMirrors && !shader.IsSupported(mirrorKernel))
@@ -170,6 +178,12 @@ internal sealed class RayTransport : IDisposable
             materialBuffer.SetData(materials);
             var volumes = Volumes(scene, geometry, materials, bins, planar);
             var edges = Edges(geometry, planar, materials, bins, volumes);
+            long candidates=edges.Length+(settings.maxBounces>1?(long)edges.Length*edges.Length+2L*geometry.Length*edges.Length+(long)geometry.Length*geometry.Length:0);
+            completeCapacity=(int)Math.Max(1,Math.Min(completeSamples,candidates));
+            completeCandidates=new ComputeBuffer(completeCapacity,16);completeSelected=new ComputeBuffer(completeCapacity,4);
+            completeSteps=new ComputeBuffer(completeSamples>0&&planar?checked(2*completeCapacity):1,48);
+            completeCount=new ComputeBuffer(1,4);completeDraws=new ComputeBuffer(Math.Max(1,completeSamples),16);
+            if(completeSamples>0)completeDraws.SetData(RouteDraws(completeSamples,settings.seed));
             edgeBuffer = new ComputeBuffer(Math.Max(1, edges.Length), 80);
             if (edges.Length > 0)
                 edgeBuffer.SetData(edges);
@@ -206,8 +220,10 @@ internal sealed class RayTransport : IDisposable
             edgeIndexBuffer = new ComputeBuffer(Math.Max(1, edgeIndices.Count), 4);
             if (edgeIndices.Count > 0)
                 edgeIndexBuffer.SetData(edgeIndices);
-            foreach (int kernel in new[] { directKernel, traceKernel, mirrorKernel })
+            foreach (int kernel in new[] { directKernel, traceKernel, mirrorKernel,prepareComplete,compactComplete,integrateComplete })
             {
+                shader.SetBuffer(kernel,"CompleteCandidates",completeCandidates);shader.SetBuffer(kernel,"CompleteSelected",completeSelected);
+                shader.SetBuffer(kernel,"CompleteCount",completeCount);shader.SetBuffer(kernel,"CompleteDraws",completeDraws);shader.SetBuffer(kernel,"CompleteSteps",completeSteps);
                 shader.SetBuffer(kernel, "Primitives", primitives);
                 shader.SetBuffer(kernel, "States", states);
                 shader.SetBuffer(kernel, "Sources", sources);
@@ -232,6 +248,8 @@ internal sealed class RayTransport : IDisposable
             }
             shader.SetInt("RaysPerBin", settings.RaysPerBin);
             shader.SetInt("UseVisibleMirrors",visibleMirrors?1:0);
+            shader.SetInt("UseCompleteRoutes",completeSamples>0?1:0);
+            shader.SetInt("CompleteSamples",completeSamples);shader.SetInt("CompleteCapacity",completeCapacity);
             shader.SetInt("PathSlotsPerRay",settings.PathSlotsPerRay);
             shader.SetInt("RaySeed", settings.seed);
             shader.SetInt("FrequencyBins", bins);
@@ -246,7 +264,7 @@ internal sealed class RayTransport : IDisposable
             shader.SetFloat("DiffractionFactor", settings.diffractionFactor);
             shader.SetFloat("MaximumPathDelay", settings.maximumDelaySeconds);
             shader.SetInt("UseAirAbsorption", settings.airAbsorption ? 1 : 0);
-            GpuBytes = (long)edgeRangeBuffer.count * 8 + (long)edgeIndexBuffer.count * 4 +
+            GpuBytes = (long)completeSteps.count*48+(long)completeCapacity*20+4+(long)Math.Max(1,completeSamples)*16 + (long)edgeRangeBuffer.count * 8 + (long)edgeIndexBuffer.count * 4 +
                        (long)materials.Length * 32 + (long)Math.Max(1, edges.Length) * 80 +
                        Math.Max(1, volumes.Length) * 48L + (long)PathsPerFrame * maximumFrames * PathStride +
                        enabledPairs.Length * 4L + (long)(emissions.Ranges.Length+2*emissions.Points.Length)*16+(long)(layout.Ranges.Length+layout.DirectSites.Length)*8;
@@ -268,6 +286,7 @@ internal sealed class RayTransport : IDisposable
         shader.SetBuffer(directKernel, "DebugSegments", segments);
         shader.SetBuffer(traceKernel, "DebugSegments", segments);
         shader.SetBuffer(mirrorKernel,"DebugSegments",segments);
+        shader.SetBuffer(integrateComplete,"DebugSegments",segments);
     }
     public void SetActivity(AcousticTake.Scene scene, AcousticTake.State[] states, int frames)
     {
@@ -503,6 +522,19 @@ internal sealed class RayTransport : IDisposable
                     });
         return result.ToArray();
     }
+    static Vector4[] RouteDraws(int count,int seed)
+    {
+        var draws=new Vector4[count];int[] bases={2,3,5,7};var shifts=new double[4];
+        uint state=unchecked((uint)seed)^0x53a91u;
+        for(int d=0;d<4;d++){state^=state>>16;state*=0x7feb352du;state^=state>>15;state*=0x846ca68bu;state^=state>>16;shifts[d]=(state+.5)/4294967296.0;state+=0x9e3779b9u;}
+        for(int i=0;i<count;i++)for(int d=0;d<4;d++)
+        {
+            int n=i+1;double denominator=1,value=0;
+            while(n>0){denominator*=bases[d];value+=(n%bases[d])/denominator;n/=bases[d];}
+            value+=shifts[d];value-=Math.Floor(value);draws[i][d]=Mathf.Clamp((float)value,1e-7f,1-1e-7f);
+        }
+        return draws;
+    }
     public void Dispatch(int frames, bool asynchronous)
     {
         if (pending)
@@ -526,6 +558,15 @@ internal sealed class RayTransport : IDisposable
                     commands.DispatchCompute(shader,mirrorKernel,(checked(rows*mirrorCounts[pair])+63)/64,1,1);
                 }
                 commands.DispatchCompute(shader,traceKernel,(checked(frames*layout.RayCounts[pair])+63)/64,1,1);
+                if(completeSamples>0)for(int frame=0;frame<frames;frame++)for(int site=0;site<mirrorSites[pair];site++)
+                {
+                    int first=checked(frame*PathsPerFrame+layout.Ranges[pair].x+mirrorSites[pair]*frequencyBins*(1+mirrorCounts[pair])+layout.RayCounts[pair]*pathSlots+site*completeSlots*frequencyBins);
+                    commands.SetComputeIntParam(shader,"CompleteOffset",first);commands.SetComputeIntParam(shader,"CompleteFrame",frame);
+                    commands.SetComputeIntParam(shader,"CompleteSite",site);
+                    commands.DispatchCompute(shader,prepareComplete,(completeCapacity+63)/64,1,1);
+                    commands.DispatchCompute(shader,compactComplete,1,1,1);
+                    commands.DispatchCompute(shader,integrateComplete,(completeSamples+63)/64,1,1);
+                }
             }
             commands.EndSample("Acoustics.GPU.Trace");
         }
@@ -586,6 +627,7 @@ internal sealed class RayTransport : IDisposable
         emissionRanges?.Dispose();
         emissionPoints?.Dispose();
         emissionClocks?.Dispose();pairRanges?.Dispose();directSites?.Dispose();
+        completeCandidates?.Dispose();completeSelected?.Dispose();completeCount?.Dispose();completeDraws?.Dispose();completeSteps?.Dispose();
         commands?.Dispose();
     }
 }

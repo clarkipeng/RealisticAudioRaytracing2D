@@ -2126,3 +2126,30 @@ Keep a few end-to-end scenarios: the existing station lifecycle; a church walk/d
 Benchmark each scene with the same saved input, warmup policy and declared CPU/GPU/quality settings. Save code/scene/material/source hashes, wall time, stage scopes, device deadlines, source-to-output and head-to-audio latency, peak buffers, upload/readback bytes and geometry/source/listener counts. Report repetitions and failures; preserve previous implementations in Git. Microphone and network recordings are deterministic *inputs for replay*, not proof that real devices or distributed physics repeat identically.
 
 Before expensive labels, approve the selected teacher's physics and convergence. Before calling voice usable or reconstruction faster, set workload/hardware-specific latency, memory and quality targets from the prototype measurements, then enforce them. Unchosen Opus package/version, measured material curves and final latency targets are explicit implementation decisions; do not silently fill them with arbitrary constants.
+
+## Tuned complete early routes (v12)
+
+`completeRouteSamples > 0` selects the shared wave-benchmark integral for D, DD,
+RD, DR and RR routes in the ordinary `TransportSolver` response. The original
+prototype, the planar runtime adapter and the route-integration reference share
+`DiffractionIntegral.hlsl`: signed wedge coefficients, precise angle span,
+incoming/outgoing Cauchy sampling, exact PDF and complete one/two-edge integration.
+Candidate topology is prepared once per emission/receiver/pose; height samples
+share geometry across frequency bins. Truncated candidate sets stratify the
+nonempty route families and retain the selection-PDF weight.
+
+Complete arrivals append after the existing direct/mirror/walk prefix. Walk
+addresses must derive from that prefix, never from the end of a pair. Only pure
+D/DD walk outputs are suppressed; later walk records remain unchanged. Retaining
+32 walk interactions does not supply all possible high-order specular/mixed
+connections. Every complete arrival retains delay, signed/complex material gain,
+direction, velocity ratio and emission birth/phase. Planar height symmetry creates
+two directions. Both live/offline and CPU/GPU DSP consume the same path ABI.
+
+The near-wave validation applies to rigid infinitely extruded rectangles and
+spherical point sources. Finite 3D edges use their actual support and visibility,
+with an extended Cauchy proposal; full-room accuracy is a separate gate and has
+not passed. Do not substitute infinite walls for finite roofs to improve a score.
+Old jobs retain zero complete samples; the render window exposes the explicit
+budget. The [integration evidence](benchmarks/runtime-diffraction-2026-10-27/README.md)
+separates algorithm recovery, audio correctness, finite-room accuracy and cost.

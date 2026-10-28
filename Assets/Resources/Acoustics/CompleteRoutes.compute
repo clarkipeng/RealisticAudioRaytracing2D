@@ -1,0 +1,350 @@
+#pragma kernel BuildFlags
+#pragma kernel Compact
+#pragma kernel PreparePaths
+#pragma kernel CompactPaths
+#pragma kernel IntegratePaths
+#pragma kernel Mirrors
+#pragma kernel Reduce
+#pragma kernel CheckAngles
+#pragma kernel EmitPaths
+#pragma kernel EmitMirrors
+// Offline port of edge_integral.sample_chain, without CV/roulette. Geometry,
+// complete-route probabilities and shared-face factors are prepared on the CPU.
+// Four angular terms belong to the wedge formula, not acoustic frequency bands.
+struct Route { uint first, depth, end; float weight; };
+StructuredBuffer<float> Draws;
+StructuredBuffer<float2> AngleCases;
+RWStructuredBuffer<float2> Partials, Result, Contributions, MirrorContributions;
+RWStructuredBuffer<uint> Invalid;
+uint RouteCount, SampleCount, Dimensions, GroupCount, Capture;
+float WaveNumber, Horizon, ProposalScale;
+groupshared float2 Sum[64];
+
+#include "../../Shaders/DiffractionIntegral.hlsl"
+[numthreads(1,1,1)]
+void CheckAngles(uint3 id : SV_DispatchThreadID)
+{
+    float2 v=AngleCases[id.x];Contributions[id.x]=float2(Span(v.x,v.y),atan2(v.x,v.y));
+}
+
+StructuredBuffer<float4> Boxes;
+uint EdgeCount,BoxCount;float2 Source,Receiver;
+float2 Corner(uint e)
+{
+    float4 b=Boxes[e/4]; return float2((e%4)<2?b.x:b.z,(e%2)==0?b.y:b.w);
+}
+// Complete one/two-interaction samples without edge-pair tables.
+struct Node {float4 bounds;uint4 links;}; // preorder; links.x=escape, links.y=box+1 or zero
+StructuredBuffer<Node> Nodes;
+StructuredBuffer<float3> RouteDraws;
+RWStructuredBuffer<uint> Flags, ListsOut, CountsOut;
+StructuredBuffer<uint> Lists, Counts;
+uint NodeCount, UseBvh, PathBudget;
+RWStructuredBuffer<uint> DispatchArgs;
+
+bool Overlaps(float4 box,float2 a,float2 b,bool open)
+{
+    float lo=0,hi=1;
+    for(uint axis=0;axis<2;axis++)
+    {
+        float d=b[axis]-a[axis];
+        if(d==0){if(open?(a[axis]<=box[axis] || a[axis]>=box[axis+2]):(a[axis]<box[axis] || a[axis]>box[axis+2]))return false;}
+        else {float x=(box[axis]-a[axis])/d,y=(box[axis+2]-a[axis])/d;lo=max(lo,min(x,y));hi=min(hi,max(x,y));}
+    }
+    return open?lo<hi-4*1.192092896e-7:lo<=hi;
+}
+bool Visible(float2 a,float2 b)
+{
+    if(UseBvh==0){for(uint i=0;i<BoxCount;i++)if(Overlaps(Boxes[i],a,b,true))return false;return true;}
+    uint index=0;
+    while(index<NodeCount)
+    {
+        Node node=Nodes[index];
+        if(node.links.y!=0){if(Overlaps(Boxes[node.links.y-1],a,b,true))return false;index++;}
+        else index=Overlaps(node.bounds,a,b,false)?index+1:node.links.x;
+    }
+    return true;
+}
+
+float Angle(uint e,float2 p)
+{
+    float sx=(e%4)<2?-1:1,sy=(e%2)==0?-1:1;
+    float2 face=sx==sy?float2(0,-sy):float2(-sx,0),d=p-Corner(e);
+    float x=dot(d,face),y=dot(d,float2(-face.y,face.x));
+    float a=Span(abs(y),x);return y<0?2*Pi-a:a;
+}
+Step MakeStep(uint e,float2 a,float2 b,float remaining)
+{
+    Step s=(Step)0;float2 p=Corner(e);s.shape=float4(length(a-p),length(b-p),remaining,2.0/3);
+    float ts=Angle(e,a),tr=Angle(e,b);if(max(ts,tr)>1.5*Pi+4*1.192092896e-7*Pi)return s;
+    float4 theta=Pi+float4(ts+tr,ts-tr,-ts+tr,-ts-tr);uint term=0;
+    [unroll] for(uint i=0;i<4;i++)
+    {
+        // Resolve exact angular boundaries to float precision before division.
+        if(min(abs(theta[i]),abs(theta[i]-3*Pi))<=4*1.192092896e-7*Pi)continue;
+        float4 mask=(float4)(uint4(0,1,2,3)==term);
+        s.sine+=sin((2.0/3)*theta[i])*mask;s.halfSine+=sin(theta[i]/3)*mask;term++;
+    }
+    return s;
+}
+// Measured one/two-interaction experiment; route data stays GPU-resident.
+uint PlaneAxis(uint plane) {return plane%2==0?1:0;}
+float PlanePosition(uint plane)
+{
+    float4 b=Boxes[plane/4];uint side=plane%4;return side==0?b.y:(side==1?b.z:(side==2?b.w:b.x));
+}
+float2 Reflect(uint plane,float2 p) { uint axis=PlaneAxis(plane);float position=PlanePosition(plane);return axis==0?float2(2*position-p.x,p.y):float2(p.x,2*position-p.y); }
+bool HitMirror(uint plane,float2 from,float2 image,out float2 hit)
+{
+    uint axis=PlaneAxis(plane),other=1-axis;float position=PlanePosition(plane),d=image[axis]-from[axis];hit=0;if(d==0)return false;
+    float t=(position-from[axis])/d;hit=from+t*(image-from);hit=axis==0?float2(position,hit.y):float2(hit.x,position);float4 box=Boxes[plane/4];
+    // Reject endpoint contacts at the precision of the intersection operands.
+    const float epsilon=4*1.192092896e-7;
+    float margin=epsilon*max(max(abs(from[other]),abs(image[other])),max(abs(box[other]),abs(box[other+2])));
+    return t>epsilon && t<1-epsilon && hit[other]>box[other]+margin && hit[other]<box[other+2]-margin;
+}
+bool MirrorLeg(uint plane,float2 a,float2 b)
+{
+    float2 hit;return HitMirror(plane,b,Reflect(plane,a),hit) && Visible(a,hit) && Visible(hit,b);
+}
+float3 EvaluateGeometry(Route route,uint draw,Step first,Step second)
+{
+    float4 drawValues=float4(Draws[draw*Dimensions],Draws[draw*Dimensions+1],Draws[draw*Dimensions+2],Draws[draw*Dimensions+3]);
+    bool valid;float4 result=IntegrateEdgePair(first,second,route.depth,drawValues,Horizon,ProposalScale,route.weight,valid);
+    if(!valid)InterlockedAdd(Invalid[0],1);
+    return result.xyz;
+}
+float2 Evaluate(Route route,uint draw,Step first,Step second)
+{
+    float3 evaluated=EvaluateGeometry(route,draw,first,second);
+    float2 phase; sincos(-WaveNumber*evaluated.x,phase.y,phase.x);
+    return phase*evaluated.y;
+}
+
+bool Faces(uint plane,float2 p)
+{
+    uint side=plane%4;float d=p[PlaneAxis(plane)]-PlanePosition(plane);
+    return (side==0 || side==3)?d<0:d>0;
+}
+[numthreads(64,1,1)]
+void BuildFlags(uint id:SV_DispatchThreadID)
+{
+    if(id>=EdgeCount)return;
+    uint a=Visible(Source,Corner(id))?1:0,b=Visible(Corner(id),Receiver)?1:0;
+    Flags[id]=a|(b<<1)|((uint)Faces(id,Source)<<2)|((uint)Faces(id,Receiver)<<3)|((a&b)<<4);
+}
+[numthreads(1,1,1)]
+void Compact(uint id:SV_DispatchThreadID)
+{
+    uint count[5]={0,0,0,0,0};
+    for(uint i=0;i<EdgeCount;i++)for(uint j=0;j<5;j++)
+        if((Flags[i]&(1u<<j))!=0)ListsOut[j*EdgeCount+count[j]++]=i;
+    for(uint j=0;j<5;j++)CountsOut[j]=count[j];
+    float paths=count[4]+(float)count[0]*count[1]+(float)count[2]*count[1]+(float)count[0]*count[3];
+    DispatchArgs[0]=max(1,((uint)min((float)PathBudget,paths)+63)/64);DispatchArgs[1]=1;DispatchArgs[2]=1;
+    uint mirrorWork=(uint)min((float)SampleCount,max(1.0,max((float)count[2],(float)count[2]*count[3])));
+    DispatchArgs[3]=(mirrorWork+63)/64;DispatchArgs[4]=1;DispatchArgs[5]=1;
+}
+uint Item(uint list,uint i){return Lists[list*EdgeCount+i];}
+float4 CandidateCounts(){return float4(Counts[4],(float)Counts[0]*Counts[1],(float)Counts[2]*Counts[1],(float)Counts[0]*Counts[3]);}
+// Small candidate sets are stratified completely; larger ones are sampled with
+// independent discrete choices. No large E*E integer index or allocation.
+struct Prepared {Step first,second;float4 info;};
+RWStructuredBuffer<Prepared> PreparedOut;
+StructuredBuffer<Prepared> PreparedIn;
+RWStructuredBuffer<uint> SelectedOut, ValidOut;
+StructuredBuffer<uint> Selected, Valid;
+Route Choose(uint tile,out Step first,out Step second)
+{
+    Route route=(Route)0;first=(Step)0;second=(Step)0;
+    float4 sizes=CandidateCounts();float total=dot(sizes,1);
+    if(total==0)return route;uint family=0,a=0,b=0;float inverse;
+    if(total<=PathBudget)
+    {
+        if(tile>=(uint)total)return route;
+        uint rank=tile;inverse=1;
+        for(uint j=0;j<3;j++){if(rank<(uint)sizes[j])break;rank-=(uint)sizes[j];family++;}
+        uint columns=family==1 || family==2?Counts[1]:(family==3?Counts[3]:1);a=rank/columns;b=rank%columns;
+    }
+    else
+    {
+        float3 u=RouteDraws[tile];float x=u.x*total,before=0;
+        for(uint j=0;j<3;j++){if(x<before+sizes[j])break;before+=sizes[j];family++;}
+        uint rows=family==0?Counts[4]:(family==2?Counts[2]:Counts[0]);
+        uint columns=family==1 || family==2?Counts[1]:(family==3?Counts[3]:1);
+        a=min(rows-1,(uint)(u.y*rows));b=min(columns-1,(uint)(u.z*columns));inverse=total/PathBudget;
+    }
+    route.weight=inverse;
+    if(family==0)
+    {
+        uint e=Item(4,a);route.first=e;first=MakeStep(e,Source,Receiver,length(Receiver-Corner(e)));route.depth=1;
+    }
+    else if(family==1)
+    {
+        a=Item(0,a);b=Item(1,b);if(a==b || !Visible(Corner(a),Corner(b)))return (Route)0;
+        route.first=b;float last=length(Receiver-Corner(b));first=MakeStep(a,Source,Corner(b),length(Corner(b)-Corner(a))+last);
+        second=MakeStep(b,Corner(a),Receiver,last);route.depth=2;
+        if(a/4==b/4 && any(Corner(a)==Corner(b)))route.weight*=.5;
+    }
+    else
+    {
+        uint e=family==2?Item(1,b):Item(0,a),plane=family==2?Item(2,a):Item(3,b);float2 from=Source,to=Receiver;
+        if(family==2){if(!MirrorLeg(plane,Source,Corner(e)))return (Route)0;from=Reflect(plane,Source);}
+        else {if(!MirrorLeg(plane,Corner(e),Receiver))return (Route)0;to=Reflect(plane,Receiver);}
+        route.first=e;route.end=family==3?plane+1:0;first=MakeStep(e,from,to,length(to-Corner(e)));route.depth=1;
+    }
+    if(first.shape.x+first.shape.z>=Horizon || all(first.halfSine==0) || (route.depth==2 && all(second.halfSine==0)))route.depth=0;
+    return route;
+}
+float MirrorDistance(uint a,uint b)
+{
+    float2 first=Reflect(a,Source),second=Reflect(b,first),hitA=0,hitB=0;
+    if(a!=b && HitMirror(b,Receiver,second,hitB) && HitMirror(a,hitB,first,hitA) && Visible(Source,hitA) && Visible(hitA,hitB) && Visible(hitB,Receiver))return length(second-Receiver);
+    return 0;
+}
+float2 Pressure(float distance)
+{
+    if(distance<=0 || distance>=Horizon)return 0;float2 phase;sincos(-WaveNumber*distance,phase.y,phase.x);return phase/distance;
+}
+[numthreads(64,1,1)]
+void Mirrors(uint3 id:SV_DispatchThreadID,uint3 group:SV_GroupID,uint lane:SV_GroupIndex)
+{
+    float2 value=0;
+    if(id.x<SampleCount){
+    // First-order reflections and direct sound require only linear work.
+    for(uint a=id.x;a<Counts[2];a+=SampleCount)
+    {
+        uint plane=Item(2,a);if(MirrorLeg(plane,Source,Receiver))value+=Pressure(length(Reflect(plane,Source)-Receiver));
+    }
+    if(id.x==0 && Visible(Source,Receiver))value+=Pressure(length(Receiver-Source));
+    float count=(float)Counts[2]*Counts[3];
+    if(count<=SampleCount)
+    {
+        if(id.x<(uint)count)value+=Pressure(MirrorDistance(Item(2,id.x/Counts[3]),Item(3,id.x%Counts[3])));
+    }
+    else
+    {
+        float3 u=RouteDraws[id.x];uint a=min(Counts[2]-1,(uint)(u.y*Counts[2])),b=min(Counts[3]-1,(uint)(u.z*Counts[3]));
+        value+=Pressure(MirrorDistance(Item(2,a),Item(3,b)))*(count/SampleCount);
+    }
+    }
+    if(Capture!=0 && id.x<SampleCount)MirrorContributions[id.x]=value;
+    Sum[lane]=value;GroupMemoryBarrierWithGroupSync();
+    for(uint stride=32;stride>0;stride>>=1){if(lane<stride)Sum[lane]+=Sum[lane+stride];GroupMemoryBarrierWithGroupSync();}
+    if(lane==0)Partials[group.x]+=Sum[0];
+}
+// Candidate storage is bounded by the requested path budget, not scene pairs.
+[numthreads(64,1,1)]
+void PreparePaths(uint id:SV_DispatchThreadID)
+{
+    if(id>=PathBudget || id>=dot(CandidateCounts(),1))return;Prepared p=(Prepared)0;Route r=Choose(id,p.first,p.second);p.info=float4(r.depth,r.weight,r.first,r.end);PreparedOut[id]=p;
+}
+[numthreads(1,1,1)]
+void CompactPaths(uint id:SV_DispatchThreadID)
+{
+    uint count=0,limit=(uint)min((float)PathBudget,dot(CandidateCounts(),1));for(uint i=0;i<limit;i++)if(PreparedIn[i].info.x!=0)SelectedOut[count++]=i;ValidOut[0]=count;
+}
+[numthreads(64,1,1)]
+void IntegratePaths(uint3 id:SV_DispatchThreadID,uint3 group:SV_GroupID,uint lane:SV_GroupIndex)
+{
+    float2 value=0;uint count=Valid[0];
+    if(id.x<SampleCount && count>0)
+    {
+        uint base=SampleCount/count,extra=SampleCount%count,split=(base+1)*extra;
+        uint rank=id.x<split?id.x/(base+1):extra+(id.x-split)/base;
+        uint begin=rank*base+min(rank,extra),samples=base+(rank<extra);
+        Prepared p=PreparedIn[Selected[rank]];Route r=(Route)0;r.depth=(uint)p.info.x;r.weight=2*p.info.y/samples;
+        value=Evaluate(r,id.x-begin,p.first,p.second);
+    }
+    if(Capture!=0 && id.x<SampleCount){Contributions[id.x]=value;MirrorContributions[id.x]=0;}
+    Sum[lane]=value;GroupMemoryBarrierWithGroupSync();
+    for(uint stride=32;stride>0;stride>>=1){if(lane<stride)Sum[lane]+=Sum[lane+stride];GroupMemoryBarrierWithGroupSync();}
+    if(lane==0)Partials[group.x]=Sum[0];
+}
+[numthreads(64,1,1)]
+void Reduce(uint lane : SV_GroupIndex)
+{
+    float2 value = 0;
+    for (uint i = lane; i < GroupCount; i += 64) value += Partials[i];
+    Sum[lane] = value;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint stride = 32; stride > 0; stride >>= 1)
+    {
+        if (lane < stride) Sum[lane] += Sum[lane+stride];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane == 0) {Result[0] = Sum[0];Result[1]=float2(dot(CandidateCounts(),1),Valid[0]);}
+}
+
+// Audio consumes the same quadrature as the pressure benchmark. Preserve each
+// signed contribution's actual delay and direction; do not encode a tone as an IR.
+#include "../../Shaders/RayPath.hlsl"
+RWStructuredBuffer<RayPath> AudioArrivals;
+float AudioSpeed,AudioReferenceDistance;
+uint AudioOffset,AudioBins,AudioIdentity;
+RayPath AudioArrival(float3 origin,float distance,float gain,uint identity)
+{
+    RayPath p=(RayPath)0;
+    if(distance<=0 || distance>=Horizon)return p;
+    p.direction=float4(normalize(origin-float3(Receiver,0)),0);
+    p.delaySeconds=distance/AudioSpeed;p.pressureGain=gain*AudioReferenceDistance;
+    p.identity=identity;return p;
+}
+void StoreAudio(uint arrivalIndex,RayPath p)
+{
+    for(uint bin=0;bin<AudioBins;bin++)
+    {p.frequencyBin=bin;AudioArrivals[AudioOffset+arrivalIndex*AudioBins+bin]=p;}
+}
+[numthreads(64,1,1)]
+void EmitPaths(uint id:SV_DispatchThreadID)
+{
+    if(id>=SampleCount)return;
+    RayPath a=(RayPath)0,b=(RayPath)0;uint count=Valid[0];
+    if(count>0)
+    {
+        uint base=SampleCount/count,extra=SampleCount%count,split=(base+1)*extra;
+        uint rank=id<split?id/(base+1):extra+(id-split)/base;
+        uint begin=rank*base+min(rank,extra),samples=base+(rank<extra);
+        Prepared p=PreparedIn[Selected[rank]];Route r=(Route)0;r.depth=(uint)p.info.x;r.weight=p.info.y/samples;
+        float3 value=EvaluateGeometry(r,id-begin,p.first,p.second);
+        float2 last=Corner((uint)p.info.z);float height=value.z;
+        if(p.info.w!=0)
+        {
+            uint plane=(uint)p.info.w-1;float2 hit;
+            HitMirror(plane,Receiver,Reflect(plane,last),hit);
+            height*=length(Receiver-hit)/length(Receiver-Reflect(plane,last));last=hit;
+        }
+        uint identity=AudioIdentity+2*id;
+        a=AudioArrival(float3(last,height),value.x,value.y,identity);
+        b=AudioArrival(float3(last,-height),value.x,value.y,identity+1);
+    }
+    StoreAudio(2*id,a);StoreAudio(2*id+1,b);
+}
+[numthreads(64,1,1)]
+void EmitMirrors(uint id:SV_DispatchThreadID)
+{
+    // Exact direct/first images occupy fixed slots; R2 uses the benchmark's
+    // bounded, probability-compensated candidate strategy.
+    if(id==0)
+    {
+        RayPath direct=(RayPath)0;
+        if(Visible(Source,Receiver))direct=AudioArrival(float3(Source,0),length(Source-Receiver),1/length(Source-Receiver),AudioIdentity+2*SampleCount);
+        StoreAudio(2*SampleCount,direct);
+    }
+    if(id<EdgeCount)
+    {
+        RayPath p=(RayPath)0;float2 hit;
+        if(MirrorLeg(id,Source,Receiver))
+        {HitMirror(id,Receiver,Reflect(id,Source),hit);float d=length(Reflect(id,Source)-Receiver);p=AudioArrival(float3(hit,0),d,1/d,AudioIdentity+2*SampleCount+1+id);}
+        StoreAudio(2*SampleCount+1+id,p);
+    }
+    if(id>=SampleCount)return;
+    RayPath p=(RayPath)0;float count=(float)Counts[2]*Counts[3],weight=1;uint a=0,b=0;
+    bool active=id<count;
+    if(count<=SampleCount){if(active){a=Item(2,id/Counts[3]);b=Item(3,id%Counts[3]);}}
+    else
+    {float3 u=RouteDraws[id];a=Item(2,min(Counts[2]-1,(uint)(u.y*Counts[2])));b=Item(3,min(Counts[3]-1,(uint)(u.z*Counts[3])));weight=count/SampleCount;active=true;}
+    if(active)
+    {float d=MirrorDistance(a,b);float2 hit;if(d>0){HitMirror(b,Receiver,Reflect(b,Reflect(a,Source)),hit);p=AudioArrival(float3(hit,0),d,weight/d,AudioIdentity+2*SampleCount+1+EdgeCount+id);}}
+    StoreAudio(2*SampleCount+1+EdgeCount+id,p);
+}

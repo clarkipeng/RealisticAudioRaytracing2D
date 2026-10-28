@@ -1,0 +1,38 @@
+{
+  "scope": "Single same-input 98-source offline rain take; baseline diffraction off, new completeRouteSamples=128/diffractionFactor=1. This small budget fails the finite-room fidelity gate; timings are not realtime or controlled throughput claims.",
+  "before": {
+    "workingNumericBytes": 438950980,
+    "solveSeconds": 1.2475599000000004,
+    "audioSeconds": 28.984792899999988,
+    "preparationSeconds": 2.2195783,
+    "wallSeconds": 190.7228581,
+    "sourceCount": 98,
+    "primitiveCount": 84,
+    "responseCount": 196,
+    "maximumSolveSeconds": 0.1655438
+  },
+  "integrated": {
+    "workingNumericBytes": 722399864,
+    "solveSeconds": 0.6190066999999999,
+    "audioSeconds": 22.57066240000004,
+    "preparationSeconds": 0.6664983999999999,
+    "wallSeconds": 121.0205112,
+    "sourceCount": 98,
+    "primitiveCount": 84,
+    "responseCount": 196,
+    "maximumSolveSeconds": 0.0473221
+  },
+  "hashes": {
+    "sceneHash": "1442701105b691a0731f8b6782b9c5589d7bbd88c85187cf522599a8f6428b80",
+    "takeStateHash": "89615dd1546a58f8ad40e3d5202d541bb3b3ed3b58d47af6862439c80925606d",
+    "takeEventHash": "83e81fe3ef039957d2c84c38c2a6736c81d21772f65b1d6bef2e37d2860949ac",
+    "takeSourceHash": ""
+  },
+  "output": {
+    "rate": 44100,
+    "samples": 286651,
+    "peak": 14.395990371704102,
+    "rms": 1.029200579186324,
+    "samplesExceedingFullScale": 67723
+  }
+}

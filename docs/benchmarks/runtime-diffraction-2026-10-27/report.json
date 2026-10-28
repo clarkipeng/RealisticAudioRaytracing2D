@@ -1,0 +1,441 @@
+{
+  "metric": "relative L2 complex pressure, no fitting/normalization",
+  "planar": [
+    {
+      "family": "barrier",
+      "points": 531,
+      "samples": 65536,
+      "runtimeVsWave": 0.01439086682606034,
+      "originalVsWave": 0.01463282822071259,
+      "runtimeVsOriginal": 0.0017479914491755869,
+      "medianSolveMs": 4.5663,
+      "rendererSha256": "37fe0b2cfdf3eb5b6a888aca7ce072e91ff40251812e67e5dd52b3b99a36e793",
+      "referenceSha256": "49d71ddacc455effe020506329b88cec4d82e272633f4147f2085829c77c8216"
+    },
+    {
+      "family": "slit",
+      "points": 509,
+      "samples": 65536,
+      "runtimeVsWave": 0.02422329902511328,
+      "originalVsWave": 0.023579679991424157,
+      "runtimeVsOriginal": 0.01109468496265855,
+      "medianSolveMs": 3.6219,
+      "rendererSha256": "7ac2b9bf8a6cd73d042032154f69c9d46379274e030b0bcc146314c9a7cfb63c",
+      "referenceSha256": "e98023936ddb6d0869ac6fd7a4b1973bdd3c660e7644afa83fddd02965a64591"
+    }
+  ],
+  "finite": [
+    {
+      "name": "finite-128",
+      "samples": 128,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.021595669832744,
+      "medianSolveMs": 1.6072,
+      "zeros": 3,
+      "rendererSha256": "fa549dd17dc6b8141f39dbd365f39d969ac45fe492bdf2168194c8b2a09bc151",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.0605289092948949,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-128",
+      "samples": 128,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 1.716353368642607,
+      "medianSolveMs": 1.8481,
+      "zeros": 0,
+      "rendererSha256": "fa549dd17dc6b8141f39dbd365f39d969ac45fe492bdf2168194c8b2a09bc151",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.533651522003556,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.33464811845459874,
+        "real": 0.2591037543369222,
+        "imag": 0.21178906410321335
+      }
+    },
+    {
+      "name": "finite-128",
+      "samples": 128,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.021595669832744,
+      "medianSolveMs": 1.4022999999999999,
+      "zeros": 3,
+      "rendererSha256": "fa549dd17dc6b8141f39dbd365f39d969ac45fe492bdf2168194c8b2a09bc151",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.0605289092948949,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-128",
+      "samples": 128,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 2.859257155460128,
+      "medianSolveMs": 2.3312,
+      "zeros": 0,
+      "rendererSha256": "fa549dd17dc6b8141f39dbd365f39d969ac45fe492bdf2168194c8b2a09bc151",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 2.1063722016877695,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.18163906539336935,
+        "real": -0.06724641851548982,
+        "imag": 0.16873253768558186
+      }
+    },
+    {
+      "name": "finite-512",
+      "samples": 512,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.021595669832744,
+      "medianSolveMs": 1.5026,
+      "zeros": 3,
+      "rendererSha256": "96b34437bd6b699fe878f4b21f381d6f024d83f8ad3c4c93fff245fa0c29cd21",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.0605289092948949,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-512",
+      "samples": 512,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 1.8559451358034285,
+      "medianSolveMs": 2.1037,
+      "zeros": 0,
+      "rendererSha256": "96b34437bd6b699fe878f4b21f381d6f024d83f8ad3c4c93fff245fa0c29cd21",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.549675484157503,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.13147925498293456,
+        "real": 0.0015291287076669062,
+        "imag": 0.13147036265357645
+      }
+    },
+    {
+      "name": "finite-512",
+      "samples": 512,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.021595669832744,
+      "medianSolveMs": 1.6402999999999999,
+      "zeros": 3,
+      "rendererSha256": "96b34437bd6b699fe878f4b21f381d6f024d83f8ad3c4c93fff245fa0c29cd21",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.0605289092948949,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-512",
+      "samples": 512,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 1.7592723398992982,
+      "medianSolveMs": 2.545,
+      "zeros": 0,
+      "rendererSha256": "96b34437bd6b699fe878f4b21f381d6f024d83f8ad3c4c93fff245fa0c29cd21",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.41548401905436,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.2282696766880297,
+        "real": 0.06493341410116442,
+        "imag": 0.21883943206932407
+      }
+    },
+    {
+      "name": "finite-2048",
+      "samples": 2048,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.258321366503054,
+      "medianSolveMs": 1.9838,
+      "zeros": 3,
+      "rendererSha256": "a665233aab2bc9d91c9c70258abf666c390c13887c196553cb1eb5bf10aeaa76",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.3120755753275224,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-2048",
+      "samples": 2048,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 1.153964136908062,
+      "medianSolveMs": 2.4263000000000003,
+      "zeros": 0,
+      "rendererSha256": "a665233aab2bc9d91c9c70258abf666c390c13887c196553cb1eb5bf10aeaa76",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.0612656358702774,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.09974844435496039,
+        "real": 0.028447983642933772,
+        "imag": 0.09560577586048868
+      }
+    },
+    {
+      "name": "finite-2048",
+      "samples": 2048,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.258321366503054,
+      "medianSolveMs": 2.2046,
+      "zeros": 3,
+      "rendererSha256": "a665233aab2bc9d91c9c70258abf666c390c13887c196553cb1eb5bf10aeaa76",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.3120755753275224,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-2048",
+      "samples": 2048,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 1.454751086796955,
+      "medianSolveMs": 3.1437,
+      "zeros": 0,
+      "rendererSha256": "a665233aab2bc9d91c9c70258abf666c390c13887c196553cb1eb5bf10aeaa76",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.4523236468431677,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.23766474894043874,
+        "real": -0.03768251593553318,
+        "imag": 0.23465839188422405
+      }
+    },
+    {
+      "name": "finite-65536",
+      "samples": 65536,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.1071099388813836,
+      "medianSolveMs": 5.7751,
+      "zeros": 3,
+      "rendererSha256": "0efb932846146607987e25197966f551491c195916f1f46cefba80d6524a8d5f",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.0833398611769107,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-65536",
+      "samples": 65536,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 1.1050756131693085,
+      "medianSolveMs": 7.6583,
+      "zeros": 0,
+      "rendererSha256": "0efb932846146607987e25197966f551491c195916f1f46cefba80d6524a8d5f",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.027131878270352,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.05828242944919618,
+        "real": 0.0420592206195529,
+        "imag": -0.04034679099229957
+      }
+    },
+    {
+      "name": "finite-65536",
+      "samples": 65536,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 0,
+      "points": 5,
+      "complexRelativeL2": 1.1071099388813836,
+      "medianSolveMs": 5.8305,
+      "zeros": 3,
+      "rendererSha256": "0efb932846146607987e25197966f551491c195916f1f46cefba80d6524a8d5f",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 1.0833398611769107,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "finite-65536",
+      "samples": 65536,
+      "maxBounces": 32,
+      "seed": 17,
+      "diffraction": 1,
+      "points": 5,
+      "complexRelativeL2": 0.8082417427858317,
+      "medianSolveMs": 5.8739,
+      "zeros": 0,
+      "rendererSha256": "0efb932846146607987e25197966f551491c195916f1f46cefba80d6524a8d5f",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 4,
+      "shadowComplexRelativeL2": 0.8288762575716201,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0506241009705457,
+        "real": 0.046070058759095624,
+        "imag": 0.0209845010664891
+      }
+    },
+    {
+      "name": "full-finite",
+      "samples": 65536,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 0,
+      "points": 1166,
+      "complexRelativeL2": 0.474786655050925,
+      "medianSolveMs": 3.6696999999999997,
+      "zeros": 248,
+      "rendererSha256": "06edd0eb4facd316b3046318752c76fd0c7199f8dba4e4dd43e0fd2aeea1beb3",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 294,
+      "shadowComplexRelativeL2": 1.0995516272128114,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.0,
+        "real": 0.0,
+        "imag": 0.0
+      }
+    },
+    {
+      "name": "full-finite",
+      "samples": 65536,
+      "maxBounces": 32,
+      "seed": 0,
+      "diffraction": 1,
+      "points": 1166,
+      "complexRelativeL2": 0.43036660224450773,
+      "medianSolveMs": 3.8439,
+      "zeros": 0,
+      "rendererSha256": "06edd0eb4facd316b3046318752c76fd0c7199f8dba4e4dd43e0fd2aeea1beb3",
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "shadowPoints": 294,
+      "shadowComplexRelativeL2": 1.2550980723145964,
+      "indoor323": {
+        "gtAmplitude": 0.20839099938187455,
+        "runtimeAmplitude": 0.05828242944919618,
+        "real": 0.0420592206195529,
+        "imag": -0.04034679099229957
+      }
+    }
+  ],
+  "archiveParity": [
+    {
+      "name": "map-1-65536",
+      "points": 1014,
+      "relativeDifference": 1.166518330428553e-08,
+      "maxAbsoluteDifference": 2.9999999984209325e-08,
+      "baselineSha256": "9ee7dce326de7af80f3110c9d2d469ce063d0a5fad13f66ec7cca6c8dee9fd2e",
+      "currentSha256": "429cf2cbd5ef67d90c08339d17dd06b3f79bb931394d2d323a67bf87338fefe0"
+    },
+    {
+      "name": "map-barrier-65536",
+      "points": 531,
+      "relativeDifference": 8.750786504008545e-09,
+      "maxAbsoluteDifference": 3.0000000039720476e-08,
+      "baselineSha256": "b6979232cded6eab28460d1a985b4b05f5f40a147f303cb0e257de360c91d921",
+      "currentSha256": "b631120fb256d63ca6fd025bcffa3af2a0dadd64ec168abb2f9521919d6d6aee"
+    },
+    {
+      "name": "map-slit-65536",
+      "points": 509,
+      "relativeDifference": 1.9702394923722294e-08,
+      "maxAbsoluteDifference": 8.999999989711682e-08,
+      "baselineSha256": "70c253b4b0386781dd01b5a41e573f345b9487b18511a66f34c9819e5e03cfb1",
+      "currentSha256": "4903a2d623f1f4987ebc1b3e89bd7079d4e9060613b9f5523d0687e20fd484e9"
+    },
+    {
+      "name": "map-corridor-65536",
+      "points": 461,
+      "relativeDifference": 2.122008841491628e-08,
+      "maxAbsoluteDifference": 9.999999994736442e-08,
+      "baselineSha256": "49ae9813abb483ed05a2a4f7d8724f569e98cfd20472ca5f7aad8c0de70b077d",
+      "currentSha256": "ac0cfab88a48deb457502113056a590e86a5e7cb66865f357f1d7968df2acb6b"
+    }
+  ]
+}

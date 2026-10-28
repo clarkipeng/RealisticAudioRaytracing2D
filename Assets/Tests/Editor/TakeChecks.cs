@@ -21,6 +21,7 @@ public partial class TakeChecks
         // a fresh empty scene, including when the runner's scene is untitled.
         EditorSceneManager.NewScene(NewSceneSetup.EmptyScene,NewSceneMode.Single);
         pacedTestCpuStarted=System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds;
+        pacedTestWallStarted=System.Diagnostics.Stopwatch.GetTimestamp();
     }
 
     [TearDown]
@@ -40,11 +41,15 @@ public partial class TakeChecks
                 if(!(fraction>0 && fraction<=1))throw new ArgumentException("Invalid acoustic test work fraction.");
                 double work=System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds-pacedTestCpuStarted;
                 UnityEngine.Debug.Log($"Acoustic test CPU work: {work:F3}s; pacing fraction {fraction:F2}; {TestContext.CurrentContext.Test.Name}");
-                System.Threading.Thread.Sleep((int)Math.Min(int.MaxValue,Math.Ceiling(work*1000*(1/fraction-1))));
+                // Credit waits and pacing already performed inside long measurements.
+                double elapsed=TakeRender.Elapsed(pacedTestWallStarted);
+                double idle=Math.Max(0,work/fraction-elapsed);
+                while(idle>0){int ms=(int)Math.Min(1000,Math.Ceiling(idle*1000));System.Threading.Thread.Sleep(ms);idle-=ms*.001;}
             }
         }
     }
     double pacedTestCpuStarted;
+    long pacedTestWallStarted;
 
     static ComputeShader RequireGpu()
     {

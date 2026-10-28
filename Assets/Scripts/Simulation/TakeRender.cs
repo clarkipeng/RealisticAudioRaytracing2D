@@ -42,6 +42,10 @@ public static partial class TakeRender
         public ReflectionSampling reflectionSampling;
         [Min(1), Tooltip("Minimum mirror candidates per emission. The candidate budget also grows with rays per bin; small scenes enumerate every primitive.")]
         public int reflectionCandidates=128;
+        [Min(0),Tooltip("Complete one/two-interaction diffraction and mixed reflection paths per emission. Zero retains the legacy walk for comparisons.")]
+        public int completeRouteSamples;
+        internal int CompleteSamples => maxBounces>0?completeRouteSamples:0;
+        internal int CompleteSlots(AcousticTake.Scene scene) => checked(CompleteSamples*(scene.dimension==AcousticTake.Dimension.Planar2D?2:1));
         [Min(0), Tooltip("Zero renders direct sound only, including material transmission, with no reflection or diffraction paths.")]
         public int maxBounces=5;
         public int seed;
@@ -77,11 +81,11 @@ public static partial class TakeRender
             for(int s=0;s<scene.sources.Length;s++)
             {
                 int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
-                maximum=Math.Max(maximum,checked(FrequencyBins*(sites*(1+MirrorCandidates(scene))+(maxBounces==0?0:SourceRaysPerBin(scene,s)*PathSlotsPerRay))));
+                maximum=Math.Max(maximum,checked(FrequencyBins*(sites*(1+MirrorCandidates(scene)+CompleteSlots(scene))+(maxBounces==0?0:SourceRaysPerBin(scene,s)*PathSlotsPerRay))));
             }
             return maximum;
         }
-        [Tooltip("Experimental sampled edge transport: 1 uses signed rigid-wedge contributions; 0 disables diffraction. Increase rays per bin for convergence.")]
+        [Tooltip("Experimental sampled edge transport: 1 uses signed rigid-wedge contributions; 0 disables diffraction. Use completeRouteSamples for tuned early routes; raysPerBin controls the residual walk.")]
         [Min(0)] public float diffractionFactor=1;
         public bool airAbsorption=true;
         [Min(2)] public int fftSize=1024,spectralHop=256;
@@ -234,14 +238,14 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method="integrated-first-mirrors-edge-preview-v11";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-complex-fir-hrtf-v2":"path-clock-complex-spectral-v4";
+            report.method=settings.CompleteSamples>0?"complete-early-routes-edge-preview-v12":"integrated-first-mirrors-edge-preview-v11";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-complex-fir-hrtf-v2":"path-clock-complex-spectral-v4";
             if(useGpuAudio)
             {
                 report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-complex-path-filter-overlap-save-v2":"gpu-path-clock-complex-spectral-v4";
                 report.audioShaderDependencyHash=AcousticTake.Provenance.Capture(Resources.Load<ComputeShader>("Acoustics/GpuAudio")).shaderDependencyHash;
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
-            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time. Mirror selection="+settings.reflectionSampling+", candidate budget floor="+settings.reflectionCandidates+". FirstImages retains each candidate as a separate delayed arrival; it does not replace the higher-order edge sampler.";
+            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time. Mirror selection="+settings.reflectionSampling+", candidate budget floor="+settings.reflectionCandidates+". FirstImages retains each candidate as a separate delayed arrival. Complete early-route samples="+settings.CompleteSamples+"; positive values use the wave-tuned signed one/two-edge integral with D/DD/RD/DR/RR route families and replace the first two pure-edge walk arrivals. Later walk interactions remain. Planar walls share the original integral; finite 3D edges extend its sampling and are not validated as a full room-wave solution.";
             if(settings.maxBounces==0)
                 report.transportDescription="Synthesis="+settings.synthesis+". Direct sound only: retarded direct arrivals, occlusion, material transmission/interior travel and air/material attenuation. No reflected, scattered or diffracted paths are allocated or traced. Existing source recordings may contain their own reverberation.";
         }
@@ -672,7 +676,7 @@ public static partial class TakeRender
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.transport==Transport.Raytraced)
         {
-            if(settings.reflectionCandidates<1 || (settings.reflectionSampling!=ReflectionSampling.FirstImages && settings.reflectionSampling!=ReflectionSampling.PrimitiveBaseline))
+            if(settings.completeRouteSamples<0 || settings.reflectionCandidates<1 || (settings.reflectionSampling!=ReflectionSampling.FirstImages && settings.reflectionSampling!=ReflectionSampling.PrimitiveBaseline))
                 throw new ArgumentException("Invalid mirror route sampling settings.");
             if(settings.fftSize<2 || (settings.fftSize&(settings.fftSize-1))!=0 || settings.spectralHop<1 || settings.spectralHop>settings.fftSize/2 ||
                 settings.fftSize%settings.spectralHop!=0 || settings.responseStepSamples%settings.spectralHop!=0 ||
