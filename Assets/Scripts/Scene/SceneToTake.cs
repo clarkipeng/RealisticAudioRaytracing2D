@@ -25,7 +25,8 @@ public static class SceneToTake
     public static AcousticTake.Scene Compile(List<RayTraceManager.TakeObjectBinding> bindings,
         AcousticTake.Dimension dimension, float curveTolerance, AudioMaterial fallback,
         Transform[] sources, AudioClip[] clips, Transform[] listeners,
-        out AcousticTake.Primitive[] geometry, bool authoringCoordinates = false)
+        out AcousticTake.Primitive[] geometry, bool authoringCoordinates = false,
+        List<AudioMaterial> materialAssets = null, bool useSolidBakes = true)
     {
         if (!(curveTolerance > 0)) throw new ArgumentOutOfRangeException(nameof(curveTolerance));
         var primitives = new List<AcousticTake.Primitive>();
@@ -34,6 +35,22 @@ public static class SceneToTake
         var objects = new AcousticTake.ObjectDefinition[bindings.Count];
         var objectIndices = new Dictionary<Transform, int>();
         for (int i = 0; i < bindings.Count; i++) objectIndices.Add(bindings[i].transform, i);
+        var grouped = new HashSet<Transform>();
+        var boundaries = new Dictionary<Transform, AcousticSolid.Boundary>();
+        if (useSolidBakes) foreach (var binding in bindings)
+        {
+            var solid = binding.transform.GetComponent<AcousticSolid>();
+            if (solid == null || !solid.enabled || !binding.geometry) continue;
+            if (binding.transform.GetComponent<AcousticSurface>().geometrySource == AcousticSurface.GeometrySource.None) continue;
+            if (dimension != AcousticTake.Dimension.Spatial3D) throw new InvalidOperationException("Solid bakes require 3D capture.");
+            boundaries.Add(binding.transform, solid.ReadValidated(fallback));
+            foreach (var member in solid.members)
+            {
+                if (!objectIndices.TryGetValue(member.transform, out int at) || !bindings[at].geometry)
+                    throw new InvalidOperationException("Register each baked source surface as a geometry binding.");
+                if (!grouped.Add(member.transform)) throw new InvalidOperationException("A surface cannot belong to two baked solids.");
+            }
+        }
 
         for (int i = 0; i < bindings.Count; i++)
         {
@@ -42,6 +59,7 @@ public static class SceneToTake
             int start = primitives.Count;
             var surface = transform.GetComponent<AcousticSurface>();
             var selection = surface != null ? surface.geometrySource : AcousticSurface.GeometrySource.Auto;
+            var solid = useSolidBakes ? transform.GetComponent<AcousticSolid>() : null;
             var filter = transform.GetComponent<MeshFilter>();
             var inverseRotation = Quaternion.Inverse(transform.rotation);
             Func<Vector3, Vector3> bake = p => authoringCoordinates ? p : inverseRotation * transform.TransformVector(p);
@@ -50,10 +68,11 @@ public static class SceneToTake
                 var asset = surface != null && surface.material != null ? surface.material : fallback;
                 if (surface != null && surface.submeshMaterials != null && slot < surface.submeshMaterials.Length && surface.submeshMaterials[slot] != null)
                     asset = surface.submeshMaterials[slot];
+                if (solid != null && solid.enabled) asset = solid.surfaceMaterials[slot];
                 if (asset == null) throw new InvalidOperationException(transform.name + ": assign an acoustic material or the take's default material.");
                 if (!materialIndices.TryGetValue(asset, out int index))
                 {
-                    index = materials.Count; materialIndices.Add(asset, index);
+                    index = materials.Count; materialIndices.Add(asset, index); materialAssets?.Add(asset);
                     materials.Add(asset.ExportEnergyCurve());
                 }
                 return index;
@@ -65,9 +84,19 @@ public static class SceneToTake
                     throw new InvalidOperationException(transform.name + ": degenerate acoustic geometry.");
                 primitives.Add(new AcousticTake.Primitive { a = a, b = b, c = c, objectIndex = i, materialIndex = material(slot) });
             };
-            if (binding.geometry && selection != AcousticSurface.GeometrySource.None)
+            if (binding.geometry && !grouped.Contains(transform) && selection != AcousticSurface.GeometrySource.None)
             {
-                if (dimension == AcousticTake.Dimension.Planar2D)
+                if (solid != null)
+                {
+                    if (solid.enabled)
+                    {
+                        var data = boundaries[transform];
+                        Vector3 Point(int id) => new Vector3(data.vertices[3*id], data.vertices[3*id+1], data.vertices[3*id+2]);
+                        for (int t = 0; t < data.materials.Length; t++)
+                            add(Point(data.triangles[3*t]), Point(data.triangles[3*t+1]), Point(data.triangles[3*t+2]), data.materials[t]);
+                    }
+                }
+                else if (dimension == AcousticTake.Dimension.Planar2D)
                     Segments(transform, curveTolerance, add);
                 else if (selection == AcousticSurface.GeometrySource.Mesh || (selection == AcousticSurface.GeometrySource.Auto && filter != null))
                     Mesh(filter != null ? filter.sharedMesh : null, add);
@@ -220,6 +249,7 @@ public static class SceneToTake
             readonly MeshFilter filter;
             readonly int surfaceId,filterId;
             readonly Mesh mesh;
+            readonly AcousticSolid solid; readonly int solidId; readonly AcousticSolid.Snapshot solidSnapshot;
             readonly Component collider;
             readonly List<Collider> colliders=new List<Collider>();
             readonly List<Collider2D> colliders2D=new List<Collider2D>();
@@ -235,6 +265,13 @@ public static class SceneToTake
                 surface=transform.GetComponent<AcousticSurface>(); surfaceId=Identity(surface); selection=surface!=null ? surface.geometrySource:AcousticSurface.GeometrySource.Auto;
                 material=surface!=null ? surface.material:null; submaterials=surface!=null && surface.submeshMaterials!=null ? (AudioMaterial[])surface.submeshMaterials.Clone():null;
                 owner.AddMaterial(material); if (submaterials!=null) foreach (var value in submaterials) owner.AddMaterial(value);
+                solid=transform.GetComponent<AcousticSolid>(); solidId=Identity(solid);
+                if(solid!=null)
+                {
+                    solidSnapshot=new AcousticSolid.Snapshot(solid);
+                    foreach(var value in solid.surfaceMaterials)owner.AddMaterial(value);
+                    return;
+                }
                 if (!geometry || selection==AcousticSurface.GeometrySource.None) return;
                 filter=transform.GetComponent<MeshFilter>(); filterId=Identity(filter);
                 if (dimension==AcousticTake.Dimension.Spatial3D && (selection==AcousticSurface.GeometrySource.Mesh || (selection==AcousticSurface.GeometrySource.Auto && filter!=null))) mesh=filter.sharedMesh;
@@ -276,6 +313,8 @@ public static class SceneToTake
                 var q=Quaternion.Inverse(transform.rotation);
                 if (!Near(x,q*transform.TransformVector(Vector3.right)) || !Near(y,q*transform.TransformVector(Vector3.up)) || !Near(z,q*transform.TransformVector(Vector3.forward))) Changed();
                 if (surface!=null && (surface.geometrySource!=selection || surface.material!=material || !Same(submaterials,surface.submeshMaterials))) Changed();
+                if(Identity(transform.GetComponent<AcousticSolid>())!=solidId)Changed();
+                if(solidSnapshot!=null){solidSnapshot.Validate();return;}
                 if (!geometry || selection==AcousticSurface.GeometrySource.None) return;
                 if (Identity(transform.GetComponent<MeshFilter>())!=filterId) Changed();
                 if (ReferenceEquals(collider,null)) { if (filter==null || filter.sharedMesh!=mesh) Changed(); return; }

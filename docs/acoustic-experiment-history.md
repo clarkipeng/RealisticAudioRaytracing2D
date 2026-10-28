@@ -8,6 +8,30 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**Material-preserving acoustic exterior bake — 28 October**
+
+Added an explicit offline `AcousticSolid` bake through the shared scene compiler.
+Fixed closed child surfaces become one exterior with material assignments retained;
+whole-group motion and unlisted doors remain independent. Live and captured scenes
+use ordinary primitives, with no new take format or DSP dependency. Interior media
+must agree; stale geometry/relative motion is rejected.
+
+The cube partition discrepancy falls from approximately 11.4% to exact agreement
+on both tested seeds, including rotated/moving-owner field and CPU/GPU binaural
+audio. Six Python controls and fourteen final Unity cases pass, plus a focused
+root-exclusion follow-up. Guards validate without managed allocation.
+
+Against the unchanged finite room/roof reference, whole-map complex error improves
+**40.73% → 29.24%**, shadow **123.94% → 86.92%**. Geometry falls 84 → 52 triangles
+with union area/volume retained. Million-sample indoor error remains 46–47%, and
+128-sample probes remain unstable. The bake is accepted; longer mixed/specular
+paths and affordable sampling remain unresolved. No rain-preset promotion.
+
+[Workflow](acoustic-solid-bake.md) · [same-scale figures, settings, costs, failures
+and reproducible evidence](benchmarks/solid-boundary-2026-10-28/README.md).
+
+---
+
 **Finite 3D adaptation and boundary audit — 28 October**
 
 Kept actual finite rooms and roofs. Corrected a transverse-radius error in the

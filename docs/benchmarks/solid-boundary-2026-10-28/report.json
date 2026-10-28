@@ -1,0 +1,279 @@
+{
+  "scope": "Rigid finite 3D room/roof, 125 Hz, original reference, source, receivers, 32 residual slots and 1.25 s support. No gain/phase fitting.",
+  "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+  "baseline": [
+    {
+      "seed": 0,
+      "samples": 65536,
+      "receivers": 1166,
+      "complexRelativeL2": 0.407271099476617,
+      "shadowComplexRelativeL2": 1.239379965116241,
+      "zeros": 0,
+      "medianSolveMs": 5.562799999999999,
+      "indoorPressure": [
+        0.0667331734373034,
+        -0.009582587448036096
+      ],
+      "rendererSha256": "8db59f1e702517d9c53333912cdb82c24184f4fdf96247f2ad4a3664e6e57bb0"
+    }
+  ],
+  "baked": [
+    {
+      "seed": 0,
+      "samples": 65536,
+      "receivers": 1166,
+      "complexRelativeL2": 0.2923522147436152,
+      "shadowComplexRelativeL2": 0.8692164976102258,
+      "zeros": 0,
+      "medianSolveMs": 3.08035,
+      "indoorPressure": [
+        0.08541325556924104,
+        0.0790028283732091
+      ],
+      "rendererSha256": "9b83d568b31723d0e8f93a1fc8a82a7cc0e3c8ff361ccfc424bedfc30c71c8cd"
+    }
+  ],
+  "referenceIndoor": [
+    0.16852273163949638,
+    0.12258424672093361
+  ],
+  "probes": {
+    "128": [
+      {
+        "seed": 0,
+        "samples": 128,
+        "receivers": 5,
+        "complexRelativeL2": 1.7053341774652537,
+        "shadowComplexRelativeL2": 1.719068830232855,
+        "zeros": 0,
+        "medianSolveMs": 0.9418,
+        "indoorPressure": [
+          0.013319702467222656,
+          0.02806986025729092
+        ],
+        "rendererSha256": "5b964ff906d1d939c596cfa3890bf5a04de20748588caf3bc84eeadc45b5f3f4"
+      },
+      {
+        "seed": 17,
+        "samples": 128,
+        "receivers": 5,
+        "complexRelativeL2": 4.004659701953957,
+        "shadowComplexRelativeL2": 3.0645487358156647,
+        "zeros": 0,
+        "medianSolveMs": 0.8885,
+        "indoorPressure": [
+          -0.12061071727723643,
+          0.09382506600445714
+        ],
+        "rendererSha256": "5b964ff906d1d939c596cfa3890bf5a04de20748588caf3bc84eeadc45b5f3f4"
+      }
+    ],
+    "65536": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "receivers": 5,
+        "complexRelativeL2": 0.5551853714238787,
+        "shadowComplexRelativeL2": 0.5135011699648179,
+        "zeros": 0,
+        "medianSolveMs": 4.6564,
+        "indoorPressure": [
+          0.08541325556924104,
+          0.0790028283732091
+        ],
+        "rendererSha256": "8a9594263e52feab379a0c3f888d0e2e111a31b94f74df41915e81d2e973ab85"
+      },
+      {
+        "seed": 17,
+        "samples": 65536,
+        "receivers": 5,
+        "complexRelativeL2": 0.5293564181161267,
+        "shadowComplexRelativeL2": 0.4974757368636627,
+        "zeros": 0,
+        "medianSolveMs": 10.4269,
+        "indoorPressure": [
+          0.12476784095847883,
+          0.0664361807065149
+        ],
+        "rendererSha256": "8a9594263e52feab379a0c3f888d0e2e111a31b94f74df41915e81d2e973ab85"
+      }
+    ]
+  },
+  "indoor": [
+    {
+      "seed": 0,
+      "samples": 1048576,
+      "receivers": 1,
+      "complexRelativeL2": 0.47479486029808726,
+      "shadowComplexRelativeL2": 0.47479486029808726,
+      "zeros": 0,
+      "medianSolveMs": 19.0986,
+      "indoorPressure": [
+        0.0886676374589322,
+        0.06416441856203547
+      ],
+      "rendererSha256": "68281eb40a07f8e4d28e6f903990f65fbcc44b1e42db155cc9358ed036457ee5",
+      "completeFamilies": {
+        "D": [
+          0.017141055573102613,
+          0.002469172186288299
+        ],
+        "DD": [
+          0.0644503265221375,
+          0.05199301344570495
+        ],
+        "RD": [
+          -0.008150059371373732,
+          -0.0036360909213679366
+        ],
+        "DR": [
+          0.015224988197596075,
+          0.013337386358034947
+        ],
+        "RR": [
+          0.0,
+          0.0
+        ]
+      },
+      "residualPressure": [
+        1.3265374697452037e-06,
+        9.374933752220871e-07
+      ]
+    },
+    {
+      "seed": 17,
+      "samples": 1048576,
+      "receivers": 1,
+      "complexRelativeL2": 0.4648909798779394,
+      "shadowComplexRelativeL2": 0.4648909798779394,
+      "zeros": 0,
+      "medianSolveMs": 31.2163,
+      "indoorPressure": [
+        0.0937276499811131,
+        0.061011079008111424
+      ],
+      "rendererSha256": "68281eb40a07f8e4d28e6f903990f65fbcc44b1e42db155cc9358ed036457ee5",
+      "completeFamilies": {
+        "D": [
+          0.017500014830762682,
+          0.002483159477761345
+        ],
+        "DD": [
+          0.06928473578020301,
+          0.04923891957735385
+        ],
+        "RD": [
+          -0.008224838283592412,
+          -0.00387041672679207
+        ],
+        "DR": [
+          0.015171619097509078,
+          0.01316147445377368
+        ],
+        "RR": [
+          0.0,
+          0.0
+        ]
+      },
+      "residualPressure": [
+        -3.8814437692547e-06,
+        -2.057773985375544e-06
+      ]
+    }
+  ],
+  "boundary": {
+    "version": 1,
+    "inputSha256": "1f9beb02fffe7afaa55893ee65b00fa055cbf7c7bf248e35d971821af9467dbc",
+    "backend": "manifold3d 3.5.4",
+    "inputTriangles": 84,
+    "outputTriangles": 52,
+    "volume": 28.062499880790703,
+    "area": 233.24999904632568,
+    "tolerance": 6.25e-12,
+    "components": 1,
+    "seconds": 0.027598290995229036
+  },
+  "tests": {
+    "initial": {
+      "id": "2",
+      "testcasecount": "6",
+      "result": "Passed",
+      "total": "6",
+      "passed": "6",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-28 20:49:44Z",
+      "end-time": "2026-10-28 20:50:10Z",
+      "duration": "26.2868415"
+    },
+    "compiled": {
+      "id": "2",
+      "testcasecount": "13",
+      "result": "Passed",
+      "total": "13",
+      "passed": "13",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-28 20:52:20Z",
+      "end-time": "2026-10-28 20:57:16Z",
+      "duration": "295.2946008"
+    },
+    "final": {
+      "id": "2",
+      "testcasecount": "14",
+      "result": "Passed",
+      "total": "14",
+      "passed": "14",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-28 20:58:37Z",
+      "end-time": "2026-10-28 21:54:01Z",
+      "duration": "766.28598"
+    },
+    "exclusion": {
+      "id": "2",
+      "testcasecount": "1",
+      "result": "Passed",
+      "total": "1",
+      "passed": "1",
+      "failed": "0",
+      "inconclusive": "0",
+      "skipped": "0",
+      "asserts": "0",
+      "engine-version": "3.5.0.0",
+      "clr-version": "4.0.30319.42000",
+      "start-time": "2026-10-28 21:55:05Z",
+      "end-time": "2026-10-28 21:55:10Z",
+      "duration": "4.868111"
+    }
+  },
+  "partitionRelativeDifference": [
+    {
+      "seed": 0,
+      "moving": false,
+      "value": 0
+    },
+    {
+      "seed": 17,
+      "moving": false,
+      "value": 0
+    },
+    {
+      "seed": 17,
+      "moving": true,
+      "value": 0
+    }
+  ]
+}

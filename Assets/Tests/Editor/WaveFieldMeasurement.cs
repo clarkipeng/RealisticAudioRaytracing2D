@@ -16,7 +16,7 @@ public partial class TakeChecks
         public int[] rays, seeds;
         public int sampleRate, fftSize, maxBounces, completeRouteSamples;
         public float speedOfSound, maximumDelaySeconds;
-        public bool decompose, captureFamilies, solidGeometry;
+        public bool decompose, captureFamilies, solidGeometry, bakeSolids;
         public float[] triangles;
         public int[] triangleMaterials;
         public AcousticTake.MaterialDefinition[] materials;
@@ -88,6 +88,13 @@ public partial class TakeChecks
                 p.a=Vector3.Scale(p.a,half);p.b=Vector3.Scale(p.b,half);p.c=Vector3.Scale(p.c,half);
                 geometry.Add(p);
             }
+        }
+        using var baked=config.bakeSolids?new BakedWaveSolid(config,output):null;
+        if(baked!=null)
+        {
+            scene=baked.scene;geometry=new List<AcousticTake.Primitive>(baked.geometry);state=baked.states;
+            if(config.receiverMotion?.velocity!=null)
+            {state[1].velocity=WaveVector(config.receiverMotion.velocity);state[1].flags|=AcousticTake.StateFlags.VelocityValid;}
         }
         using var csv=new StreamWriter(Path.Combine(output,"renderer.csv"));
         csv.WriteLine("diffraction,rays,seed,point,hz,real,imag,solve_seconds,direct_visible");
@@ -177,6 +184,47 @@ public partial class TakeChecks
                 }
             }
             csv.Flush();Debug.Log($"Wave field: diffraction={diffraction}, rays={rays}, seed={seed}");
+        }
+    }
+
+    // Exercise the same bake/import/scene compiler used by live and recorded
+    // scenes, rather than substituting a hand-authored union for the renderer.
+    sealed class BakedWaveSolid : IDisposable
+    {
+        readonly GameObject root,source,listener; readonly AudioMaterial material; readonly string asset;
+        public readonly AcousticTake.Scene scene;
+        public readonly AcousticTake.Primitive[] geometry;
+        public readonly AcousticTake.State[] states;
+        public BakedWaveSolid(WaveScene config,string output)
+        {
+            Assert.That(config.triangles,Is.Null);Assert.That(config.materials,Is.Null,"This bake/reference fixture uses rigid walls.");
+            Assert.That(config.physicalModel,Is.Not.EqualTo("point-extruded"));
+            string python=SolidPython();asset="Assets/wave-solid-"+Guid.NewGuid().ToString("N")+".json";
+            root=new GameObject("physical boundary");source=new GameObject("source");listener=new GameObject("listener");
+            material=RigidSolidMaterial("rigid");
+            try
+            {
+                var solid=root.AddComponent<AcousticSolid>();solid.members=new AcousticSurface[config.walls.Length];
+                var bindings=new List<RayTraceManager.TakeObjectBinding>{new(){id="source",transform=source.transform},new(){id="listener",transform=listener.transform},new(){id="boundary",transform=root.transform,geometry=true}};
+                for(int i=0;i<config.walls.Length;i++)
+                {
+                    var wall=config.walls[i];solid.members[i]=SolidBox(root.transform,"wall-"+i,WaveVector(wall.center),WaveVector(wall.half)*2,material);
+                    bindings.Add(new(){id="wall-"+i,transform=solid.members[i].transform,geometry=true});
+                }
+                AcousticSolidEditor.Bake(solid,python,asset,material);
+                File.WriteAllText(Path.Combine(output,"boundary-input.json"),solid.ExportInput(material,out _),new System.Text.UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(output,"boundary.json"),solid.boundary.text);
+                source.transform.position=WaveVector(config.source);
+                scene=SceneToTake.Compile(bindings,AcousticTake.Dimension.Spatial3D,.01f,material,Array.Empty<Transform>(),Array.Empty<AudioClip>(),new[]{listener.transform},out geometry);
+                scene.sources=new[]{new AcousticTake.SourceDefinition{objectIndex=0,clipIndex=0}};scene.clips=new[]{new AcousticTake.ClipDefinition()};
+                states=new AcousticTake.State[bindings.Count];for(int i=0;i<states.Length;i++)states[i]=SceneToTake.Observe(scene,i,bindings[i].transform);
+            }
+            catch {Dispose();throw;}
+        }
+        public void Dispose()
+        {
+            UnityEditor.AssetDatabase.DeleteAsset(asset);UnityEngine.Object.DestroyImmediate(root);
+            UnityEngine.Object.DestroyImmediate(source);UnityEngine.Object.DestroyImmediate(listener);UnityEngine.Object.DestroyImmediate(material);
         }
     }
 
