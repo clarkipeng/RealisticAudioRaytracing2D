@@ -117,6 +117,74 @@ public partial class TakeChecks
         AssertBurstAudio(expected,rendered.ToArray());
     }
 
+    [TestCase(-1.005f,0),TestCase(-1.005f,17),TestCase(-.995f,0),TestCase(-.995f,17),TestCase(-2f,0),TestCase(-2f,17)]
+    [Category("GPU"),Category("FiniteAdaptation")]
+    public void FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(float y,int seed)
+    {
+        KnifeEdgeFixture(false,out var scene,out var geometry,out var state);
+        state[0].position=new Vector3(-2,1,-8);state[1].position=new Vector3(2,y,4);
+        var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=2;settings.raysPerBin=2;
+        settings.completeRouteSamples=2048;settings.useBvh=true;settings.seed=seed;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
+        solver.Solve(state,new TakeRender.DirectPath[1]);
+        // Independent double-precision quadrature of the physical finite edge,
+        // with the 0.1 s horizon. Refinement changes every component by <8e-9.
+        double[] re=y<-1.5f?new[]{.06843164673970846,.012774721943881809,-.03883484010540754,.032912210471587426}:
+            y<-1?new[]{.07121761059868985,-.01884081741135529,-.031237589211197396,-.017125893790192675}:
+            new[]{.07124448416276889,-.019135875840134972,-.03092320874570661,-.017968330874092296};
+        double[] im=y<-1.5f?new[]{0d,.045102900198930984,.012316053724628951,-.010943643929545006}:
+            y<-1?new[]{0d,.0502251388012103,-.03841724891942468,.04297588280604822}:
+            new[]{0d,.05019485235594404,-.03880526670515018,.04279319803337289};
+        int[] bins={0,1,2,4};
+        for(int i=0;i<bins.Length;i++)
+        {
+            var actual=EdgeResponse(solver.RayPaths,bins[i],bins[i]*125);
+            Assert.That((actual-new System.Numerics.Complex(re[i],im[i])).Magnitude,Is.LessThan(.003),
+                "Unequal-height finite edge, bin "+bins[i]+", value="+actual);
+        }
+    }
+
+    [TestCase(false,0f),TestCase(true,0f),TestCase(false,.1f),TestCase(true,.1f)]
+    [Category("GPU"),Category("FiniteAdaptation")]
+    public void JoinedMeshObjectsKeepTheSameSolidFaceMultiplicity(bool rotated,float gap)
+    {
+        var scene=Scene(3);scene.listeners=new[]{1};
+        scene.materials=new[]{new AcousticTake.MaterialDefinition{frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f}}};
+        var state=States(3);state[0].position=Vector3.left*3;state[1].position=Vector3.right*3;
+        var geometry=new List<AcousticTake.Primitive>();
+        for(int owner=2;owner<=3;owner++)
+        {
+            // An off-centre seam/gap catches checks that examine only the midpoint.
+            float left=owner==2?-1:-.8f+gap,right=owner==2?-.8f:1;
+            state[owner].position=Vector3.right*((left+right)*.5f);state[owner].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+            scene.objects[owner].primitiveStart=geometry.Count;
+            foreach(var original in TransportBox(scene.dimension,owner,0,1))
+            {var face=original;float half=(right-left)*.5f;face.a.x*=half;face.b.x*=half;face.c.x*=half;geometry.Add(face);}
+            scene.objects[owner].primitiveCount=geometry.Count-scene.objects[owner].primitiveStart;
+        }
+        var rotation=rotated?Quaternion.Euler(23,41,17):Quaternion.identity;
+        var translation=rotated?new Vector3(4,-2,1):Vector3.zero;
+        for(int i=0;i<state.Length;i++){state[i].position=rotation*state[i].position+translation;state[i].rotation=rotation;}
+        var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=2;settings.raysPerBin=2;
+        settings.completeRouteSamples=65536;settings.maxBounces=2;settings.useBvh=true;
+        using var solver=new TransportSolver(scene,geometry.ToArray(),settings,RequireGpu(),sampleRate:1000);
+        var segments=solver.CaptureRays(state,0,0);
+        int start=geometry.Count+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
+        double actual=0;var inverse=Quaternion.Inverse(rotation);
+        for(int i=0;i<settings.CompleteSamples;i++)
+        {
+            var first=segments[start+3*i];var second=segments[start+3*i+1];
+            if(first.kind!=TransportSolver.RayEvent.Diffraction || second.kind!=TransportSolver.RayEvent.Diffraction)continue;
+            var a=inverse*((Vector3)first.end-translation);var b=inverse*((Vector3)second.end-translation);
+            if(Mathf.Abs(a.x+1)<1e-4f && Mathf.Abs(b.x-1)<1e-4f)actual+=segments[start+3*i+2].pressure;
+        }
+        // Same four outer-edge integrals as the independently integrated cube.
+        // A genuine gap removes the shared-solid-face half multiplicity.
+        double expected=.160990476380*(gap==0?1:2);
+        Assert.That(actual,Is.EqualTo(expected).Within(expected*.075),
+            "Outer-edge field must follow continuous solid coverage, independent of mesh ownership and pose.");
+    }
+
     [TestCase(false),TestCase(true),Category("GPU"),Category("TunedDiffraction")]
     public void TunedEarlyRoutesPreserveExistingDeeperInteractions(bool planar)
     {

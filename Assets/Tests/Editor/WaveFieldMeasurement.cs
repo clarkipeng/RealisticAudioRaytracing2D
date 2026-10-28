@@ -16,7 +16,7 @@ public partial class TakeChecks
         public int[] rays, seeds;
         public int sampleRate, fftSize, maxBounces, completeRouteSamples;
         public float speedOfSound, maximumDelaySeconds;
-        public bool decompose;
+        public bool decompose, captureFamilies, solidGeometry;
         public float[] triangles;
         public int[] triangleMaterials;
         public AcousticTake.MaterialDefinition[] materials;
@@ -62,12 +62,12 @@ public partial class TakeChecks
             {
                 // FEM normals leave the air. The tracer needs normals leaving the solid.
                 geometry.Add(new AcousticTake.Primitive {objectIndex=2,materialIndex=config.triangleMaterials[triangle],
-                    a=WaveVector(config.triangles,9*triangle),b=WaveVector(config.triangles,9*triangle+6),c=WaveVector(config.triangles,9*triangle+3)});
+                    a=WaveVector(config.triangles,9*triangle),b=WaveVector(config.triangles,9*triangle+(config.solidGeometry?3:6)),c=WaveVector(config.triangles,9*triangle+(config.solidGeometry?6:3))});
                 var p=geometry[triangle];bounds.Encapsulate(p.a);bounds.Encapsulate(p.b);bounds.Encapsulate(p.c);
             }
             // Close the opaque solid outside the air cavity. These outer faces are
             // inaccessible from inside; they preserve solid winding and wedge angles.
-            foreach(var face in TransportBox(scene.dimension,2,0,1))
+            if(!config.solidGeometry)foreach(var face in TransportBox(scene.dimension,2,0,1))
             {
                 var p=face;var half=bounds.extents+Vector3.one;
                 p.a=bounds.center+Vector3.Scale(p.a,half);p.b=bounds.center+Vector3.Scale(p.b,half);p.c=bounds.center+Vector3.Scale(p.c,half);
@@ -93,6 +93,9 @@ public partial class TakeChecks
         csv.WriteLine("diffraction,rays,seed,point,hz,real,imag,solve_seconds,direct_visible");
         using var terms=config.decompose?new StreamWriter(Path.Combine(output,"path-orders.csv")):null;
         terms?.WriteLine("diffraction,rays,seed,point,hz,slot,real,imag,arrivals,maximum_contribution");
+        using var families=config.captureFamilies?new StreamWriter(Path.Combine(output,"families.csv")):null;
+        families?.WriteLine("diffraction,seed,point,hz,family,real,imag,arrivals,maximum_contribution");
+        if(config.captureFamilies){Assert.That(scene.dimension,Is.EqualTo(AcousticTake.Dimension.Spatial3D));Assert.That(config.materials,Is.Null,"Debug gain is signed only for these rigid controls.");}
         var shader=RequireGpu();var direct=new TakeRender.DirectPath[1];
         foreach(int rays in config.rays)foreach(int seed in config.seeds)foreach(int diffraction in new[]{0,1})
         {
@@ -104,6 +107,7 @@ public partial class TakeChecks
             settings.maximumDelaySeconds=config.maximumDelaySeconds;settings.minimumDistance=.01f;
             using var solver=new TransportSolver(scene,geometry.ToArray(),settings,shader,sampleRate:config.sampleRate);
             state[1].position=WaveVector(config.points);solver.Solve(state,direct); // Exclude cold dispatch.
+            if(config.captureFamilies)foreach(float hz in config.frequencies)solver.CaptureRays(state,0,(int)(hz*config.fftSize/config.sampleRate));
             long budgetStarted=System.Diagnostics.Stopwatch.GetTimestamp();
             for(int point=0;point<config.points.Length/3;point++)
             {
@@ -117,6 +121,31 @@ public partial class TakeChecks
                     var p=EdgeResponse(paths,(int)bin,hz);
                     Assert.That(double.IsFinite(p.Real)&&double.IsFinite(p.Imaginary),Is.True);
                     csv.WriteLine(FormattableString.Invariant($"{diffraction},{rays},{seed},{point},{hz:R},{p.Real:R},{p.Imaginary:R},{seconds:R},{(direct[0].pressureGain!=0?1:0)}"));
+                    if(families!=null && diffraction!=0)
+                    {
+                        var segments=solver.CaptureRays(state,0,(int)bin);
+                        int start=geometry.Count+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
+                        var sums=new System.Numerics.Complex[5];var counts=new int[5];var peaks=new double[5];
+                        for(int sample=0;sample<settings.CompleteSamples;sample++)
+                        {
+                            int at=start+3*sample;var first=segments[at];var second=segments[at+1];
+                            if(first.kind==TransportSolver.RayEvent.None)continue;
+                            int family=first.kind==TransportSolver.RayEvent.Reflection?(second.kind==TransportSolver.RayEvent.Reflection?4:2):
+                                second.kind==TransportSolver.RayEvent.Listener?0:second.kind==TransportSolver.RayEvent.Diffraction?1:3;
+                            var arrival=segments[at+(family==0?1:2)];Assert.That(arrival.kind,Is.EqualTo(TransportSolver.RayEvent.Listener));
+                            sums[family]+=arrival.pressure*System.Numerics.Complex.Exp(new System.Numerics.Complex(0,-2*Math.PI*hz*arrival.end.w));
+                            counts[family]++;peaks[family]=Math.Max(peaks[family],Math.Abs(arrival.pressure));
+                        }
+                        string[] names={"D","DD","RD","DR","RR"};var captured=System.Numerics.Complex.Zero;
+                        for(int f=0;f<5;f++)
+                        {captured+=sums[f];families.WriteLine(FormattableString.Invariant($"{diffraction},{seed},{point},{hz:R},{names[f]},{sums[f].Real:R},{sums[f].Imaginary:R},{counts[f]},{peaks[f]:R}"));}
+                        int offset=settings.FrequencyBins*(1+settings.MirrorCandidates(scene))+settings.RaysPerPair*settings.PathSlotsPerRay;
+                        var ordinary=System.Numerics.Complex.Zero;
+                        for(int i=offset;i<paths.Length;i++)if(paths[i].frequencyBin==(int)bin)
+                            ordinary+=paths[i].pressureGain*System.Numerics.Complex.Exp(new System.Numerics.Complex(0,-2*Math.PI*hz*paths[i].delaySeconds));
+                        Assert.That((captured-ordinary).Magnitude,Is.LessThan(1e-5+ordinary.Magnitude*1e-3),"Debug families must reconstruct the actual complete-route field.");
+                        families.Flush();
+                    }
                     int mirrorSlots=settings.FrequencyBins*settings.MirrorCandidates(scene);
                     int legacyKinds=settings.PathSlotsPerRay+1+(mirrorSlots>0?1:0);
                     int completeStart=settings.FrequencyBins+mirrorSlots+settings.RaysPerPair*settings.PathSlotsPerRay;

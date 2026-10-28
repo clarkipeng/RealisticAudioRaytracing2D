@@ -2153,3 +2153,20 @@ not passed. Do not substitute infinite walls for finite roofs to improve a score
 Old jobs retain zero complete samples; the render window exposes the explicit
 budget. The [integration evidence](benchmarks/runtime-diffraction-2026-10-27/README.md)
 separates algorithm recovery, audio correctness, finite-room accuracy and cost.
+
+**Finite 3D correction, 28 October:** the finite height proposal uses transverse
+radii in the current edge frame. Total 3D remaining distance cannot substitute
+for that radius when source and receiver have different axial heights. For a
+single edge the eta-zero centre is `(zs*rr + zr*rs)/(rs + rr)`; multi-edge guidance
+projects each remaining leg while retaining uniform support and the exact PDF.
+
+Complete finite DD connections use the exterior limit for visibility along a
+shared solid face. Internal mesh seams must not obstruct that surface path.
+Half multiplicity requires coverage of the **whole** inter-edge segment by the
+union of coplanar active triangles, independently of owner IDs; a genuine gap
+retains full multiplicity. World poses participate in both checks. Visibility
+offsets use the existing tolerance and do not alter arrival vertices or delays.
+This does not construct a union boundary for arbitrary overlapping solids or
+complete higher-order paths. The residual walk remains unchanged. See the
+[finite-room audit](benchmarks/finite-diffraction-2026-10-28/README.md) for the
+independent controls, representation comparison and remaining quality failures.

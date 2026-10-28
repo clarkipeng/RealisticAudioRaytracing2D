@@ -8,6 +8,34 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**Finite 3D adaptation and boundary audit — 28 October**
+
+Kept actual finite rooms and roofs. Corrected a transverse-radius error in the
+finite height proposal: all six unequal-height quadrature cases now pass, versus
+four failures before. A separate physical-cube control exposed internal mesh
+seams blocking outer-surface diffraction (0.01113 versus reference 0.16099 DC).
+The complete finite DD adapter now checks the exterior visibility limit and
+whole-segment solid-face coverage in world space, including real gaps and
+rotated objects. Its independent controls pass without changing path delays,
+PDFs, signs or the existing later walk slots.
+
+The full 1,166-receiver canopy improves **43.04% → 40.73%** complex error;
+shadow error remains **123.94%**. Million-sample indoor probes still have
+65.6–68.3% error. The exact exterior union of the same boxes gives different
+results, and splitting an illuminated cube changes the field by about 11.4%
+on both tested seeds. Physical boundary construction and full higher/mixed
+route coverage remain unresolved. The 128-sample five-probe results are still
+unusable (419% / 317% error). These findings do not justify enabling the rain
+preset or claiming the original planar near-wave accuracy in 3D.
+
+22 final correctness checks and seven measurements pass, including CPU/GPU
+IR/spectral audio, source births, live/offline batching, ray capture and later
+walk preservation. Measurement success is not a physical quality pass. All
+workers stopped; no audio was played. [Code, unfitted maps, convergence,
+representation failures and reproducible evidence](benchmarks/finite-diffraction-2026-10-28/README.md).
+
+---
+
 **The tuned early diffraction integral reaches shared audio — 27 October**
 
 Recovered the October 22 complete-route shader and extracted its exact kernel,

@@ -218,6 +218,9 @@ float CompleteFiniteHeight(uint edge,uint previous,uint state,float3 before,floa
 {
     float3 a,u,f,n;float extent,angle;EdgeFrame(edge,state,false,a,u,f,n,extent,angle);
     Step step=CompleteStep(edge,state,source,next,false,remaining);
+    // The single-edge eta=0 peak uses transverse radii in this edge's frame.
+    // A 3D remaining-path length is not a transverse radius: substituting it
+    // shifts narrow peaks whenever the endpoints have unequal axial heights.
     float zs=dot(source-a,u),zr=dot(end-a,u),rs=step.shape.x,rr=max(remaining,RayEpsilon),nu=step.shape.w;
     float center=(zs*rr+zr*rs)/(rs+rr),m=length(float2(rs,zs-center)),l=length(float2(rr,zr-center));
     float centers[13],scales[13],spans[13];uint count=1;
@@ -293,7 +296,14 @@ float3 CompletePoint(uint edge,uint previous,uint state,bool planar,Step step,St
         height=SampleHeight(step,prior,previous==0xffffffff,previousHeight,0,travelled,
                             MaximumPathDelay*SpeedOfSound,1,draw,density);
     }
-    else height=CompleteFiniteHeight(edge,previous,state,before,source,next,end,step.shape.z,draw,density);
+    else
+    {
+        // Unfold the remaining legs in this edge's transverse plane. For
+        // parallel edges this is the tuned sampler's original remaining radius.
+        float3 leg=next-a,tail=end-next;
+        float radial=length(leg-dot(leg,u)*u)+length(tail-dot(tail,u)*u);
+        height=CompleteFiniteHeight(edge,previous,state,before,source,next,end,radial,draw,density);
+    }
     return a+height*u;
 }
 float CompleteVelocityRatio(uint owner,uint state,float3 before,float3 vertex,float3 after,bool planar)
@@ -372,6 +382,72 @@ void IntegrateCompletePlanar(CompleteRoute route,uint selected,uint index,uint s
         if(family!=4){p.direction.z=-p.direction.z;p.identity=HashRay(identity^0x73a91u);RayPaths[slot+FrequencyBins+bin]=ApplyEmission(p,emission,CompleteSite,0);}
     }
 }
+// A face may cross mesh-owner seams. Test the whole inter-edge segment against
+// the union of coplanar triangles; coplanarity alone also includes real gaps.
+bool CompleteFaceInterval(uint id,uint state,float3 start,float3 end,float3 normal,out float2 interval)
+{
+    interval=float2(0,1);Primitive p=Primitives[id];State pose=States[state+p.indices.x];
+    if((pose.flags.x&3)!=3)return false;
+    float3 v[3]={pose.position.xyz+Rotate(pose.rotation,p.a.xyz),
+                 pose.position.xyz+Rotate(pose.rotation,p.b.xyz),
+                 pose.position.xyz+Rotate(pose.rotation,p.c.xyz)};
+    for(uint i=0;i<3;i++)if(abs(dot(v[i]-start,normal))>RayEpsilon)return false;
+    float3 n=cross(v[1]-v[0],v[2]-v[0]);float area=length(n);if(area<=1e-12)return false;n/=area;
+    for(uint i=0;i<3;i++)
+    {
+        float3 side=cross(n,v[(i+1)%3]-v[i]);float size=length(side);if(size<=1e-12)return false;side/=size;
+        float a=dot(start-v[i],side)+RayEpsilon,b=dot(end-v[i],side)+RayEpsilon;
+        if(a<0 && b<0)return false;
+        if(a<0)interval.x=max(interval.x,a/(a-b));
+        if(b<0)interval.y=min(interval.y,a/(a-b));
+    }
+    return interval.x<=interval.y;
+}
+bool CompleteFaceCovers(uint state,float3 start,float3 end,float3 normal)
+{
+    float covered=0;
+    // Greedy interval union needs no per-path allocation or triangle ordering.
+    // Each successful pass consumes at least one previously uncovered interval.
+    for(uint scan=0;scan<PrimitiveCount;scan++)
+    {
+        float previous=covered;
+        for(uint i=0;i<PrimitiveCount;i++)
+        {
+            float2 interval;
+            if(CompleteFaceInterval(i,state,start,end,normal,interval) && interval.x<=covered)
+                covered=max(covered,interval.y);
+            if(covered>=1)return true;
+        }
+        if(covered==previous)return false;
+    }
+    return false;
+}
+float CompleteEdgeConnection(uint first,uint second,uint state,float3 start,float3 end)
+{
+    Edge a=Edges[first],b=Edges[second];
+    if(!(a.ids.y==a.ids.z && b.ids.y==b.ids.z))
+    {
+        // Outward normals on both sides of each solid wedge.
+        float3 an[2]={a.normal.xyz,sin(a.face.w)*a.face.xyz-cos(a.face.w)*a.normal.xyz};
+        float3 bn[2]={b.normal.xyz,sin(b.face.w)*b.face.xyz-cos(b.face.w)*b.normal.xyz};
+        for(uint i=0;i<2;i++)
+        {
+            float3 normal=Rotate(States[state+a.ids.x].rotation,an[i]);
+            if(abs(dot(normal,end-start))>RayEpsilon)continue;
+            for(uint j=0;j<2;j++)
+                if(dot(normal,Rotate(States[state+b.ids.x].rotation,bn[j]))>.99999)
+                {
+                    // Evaluate the exterior limit of a face-grazing path.
+                    // Internal mesh seams cannot obstruct the outer surface.
+                    float3 offset=2*RayEpsilon*normal;
+                    if(!Visible(state,start+offset,end+offset,false))return 0;
+                    return CompleteFaceCovers(state,start,end,normal)?.5:1;
+                }
+        }
+    }
+    return Visible(state,start,end,false)?1:0;
+}
+
 void IntegrateCompleteRoutes(uint index,bool planar)
 {
     if(index>=CompleteSamples)return;
@@ -427,12 +503,13 @@ void IntegrateCompleteRoutes(uint index,bool planar)
     float3 mirror=0;float cosine=0;
     if(family==2){if(!CompleteMirror(route.first,state,source,pointA,planar,mirror,cosine))return;}
     else if(!Visible(state,source,pointA,planar))return;
-    if(depth==2 && !Visible(state,pointA,pointB,planar))return;
+    float connection=depth==2?CompleteEdgeConnection(first,last,state,pointA,pointB):1;
+    if(connection==0)return;
     if(family==3){if(!CompleteMirror(route.second,state,pointB,end,planar,mirror,cosine))return;}
     else if(!Visible(state,pointB,end,planar))return;
     float distance0=length(pointA-from),distance1=depth==2?length(pointB-pointA):length(to-pointA);
     float finalDistance=length(to-pointB);if(min(min(distance0,distance1),finalDistance)<=RayEpsilon)return;
-    if(depth==2)gain*=EdgeConnectionWeight(first,last)*TunedEdgeKernel(first,state,from,pointA,pointB,planar)/distance0;
+    if(depth==2)gain*=connection*TunedEdgeKernel(first,state,from,pointA,pointB,planar)/distance0;
     gain*=TunedEdgeKernel(last,state,depth==2?pointA:from,pointB,to,planar)/(distance1*(depth==2?finalDistance:distance0));
     float distance=travelled+finalDistance;
     uint identity=CompleteIdentity(route,draw),owner=family==3?Primitives[route.second].indices.x:Edges[last].ids.x;

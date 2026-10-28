@@ -1,0 +1,196 @@
+{
+  "baseCommit": "564c96aed3fec5179732a6a27bc2506a0cea8b9e",
+  "finalSourceSha256": {
+    "Assets/Shaders/CompleteDiffraction.hlsl": "b02e551c02874a5229e8d94ef876bfee75dfca29c99cf50334ab1cc49cc8ab7f",
+    "Assets/Tests/Editor/TunedDiffractionChecks.cs": "ac6076f084593ffef4c6982cd16665b35475187eaedca0f4cbb99d292b05d4cd",
+    "Assets/Tests/Editor/WaveFieldMeasurement.cs": "5092e113006f9e3176b98a3009b66ac7322c442e053bc6d4fc9793383bc49680"
+  },
+  "acceptedCorrectnessCases": 22,
+  "acceptedMeasurementCases": 7,
+  "physicalRoomQualityGate": "failed",
+  "runs": [
+    {
+      "run": "peak-before",
+      "result": "Failed(Child)",
+      "passed": 2,
+      "failed": 4,
+      "total": 6,
+      "durationSeconds": 2.3297962,
+      "exitCode": 2,
+      "peakSampledParentRssBytes": 1198424064,
+      "failures": [
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-1.005f,0)",
+          "message": "  Unequal-height finite edge, bin 0, value=(0.0469782461053398, 0)\n  Expected: less than 0.0030000000000000001d\n  But was:  0.024239364493349999d\n"
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-1.005f,17)",
+          "message": "  Unequal-height finite edge, bin 0, value=(0.137529689710419, 0)\n  Expected: less than 0.0030000000000000001d\n  But was:  0.066312079111729386d\n"
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-0.995f,0)",
+          "message": "  Unequal-height finite edge, bin 0, value=(0.0917099880140881, 0)\n  Expected: less than 0.0030000000000000001d\n  But was:  0.020465503851319247d\n"
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-0.995f,17)",
+          "message": "  Unequal-height finite edge, bin 0, value=(0.0645552772937776, 0)\n  Expected: less than 0.0030000000000000001d\n  But was:  0.006689206868991257d\n"
+        }
+      ]
+    },
+    {
+      "run": "peak-after",
+      "result": "Passed",
+      "passed": 13,
+      "failed": 0,
+      "total": 13,
+      "durationSeconds": 99.1605048,
+      "exitCode": 0,
+      "peakSampledParentRssBytes": 1297022976,
+      "failures": []
+    },
+    {
+      "run": "projected-guide",
+      "result": "Passed",
+      "passed": 13,
+      "failed": 0,
+      "total": 13,
+      "durationSeconds": 139.3706407,
+      "exitCode": 0,
+      "peakSampledParentRssBytes": 1376124928,
+      "failures": []
+    },
+    {
+      "run": "convergence",
+      "result": "Passed",
+      "passed": 3,
+      "failed": 0,
+      "total": 3,
+      "durationSeconds": 522.0411805,
+      "exitCode": 0,
+      "peakSampledParentRssBytes": 1728397312,
+      "failures": []
+    },
+    {
+      "run": "ownership-before",
+      "result": "Failed(Child)",
+      "passed": 1,
+      "failed": 1,
+      "total": 2,
+      "durationSeconds": 110.2001122,
+      "exitCode": 2,
+      "peakSampledParentRssBytes": 1613660160,
+      "failures": [
+        {
+          "name": "JoinedMeshObjectsKeepTheSameSolidFaceMultiplicity",
+          "message": "  The physical cube is unchanged when its two touching halves have distinct owners: (0.0111335581968888, 0)\n  Expected: less than 0.012d\n  But was:  0.14985691818311123d\n"
+        }
+      ]
+    },
+    {
+      "run": "coverage-after",
+      "result": "Failed(Child)",
+      "passed": 0,
+      "failed": 18,
+      "total": 18,
+      "durationSeconds": 2.6825949,
+      "exitCode": 2,
+      "peakSampledParentRssBytes": 1039089664,
+      "failures": [
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-1.005f,0)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-1.005f,17)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-0.995f,0)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-0.995f,17)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-2.0f,0)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "FiniteDiffractionKeepsThePeakAtUnequalEndpointHeights(-2.0f,17)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "JoinedMeshObjectsKeepTheSameSolidFaceMultiplicity(False,0.0f)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "JoinedMeshObjectsKeepTheSameSolidFaceMultiplicity(True,0.0f)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "JoinedMeshObjectsKeepTheSameSolidFaceMultiplicity(False,0.1f)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "JoinedMeshObjectsKeepTheSameSolidFaceMultiplicity(True,0.1f)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/finite-diffraction/coverage-probes-128\")",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/finite-diffraction/coverage-probes-65536\")",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/finite-diffraction/coverage-indoor\")",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/finite-diffraction/coverage-union\")",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "TunedRoutesMatchIndependentHalfPlane(False)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "TunedRoutesMatchIndependentHalfPlane(True)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "TunedRoutesReachTheFarSideOfASolid(False)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        },
+        {
+          "name": "TunedRoutesReachTheFarSideOfASolid(True)",
+          "message": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        }
+      ]
+    },
+    {
+      "run": "coverage-compiled",
+      "result": "Passed",
+      "passed": 18,
+      "failed": 0,
+      "total": 18,
+      "durationSeconds": 155.0966327,
+      "exitCode": 0,
+      "peakSampledParentRssBytes": 2905849856,
+      "failures": []
+    },
+    {
+      "run": "final",
+      "result": "Passed",
+      "passed": 11,
+      "failed": 0,
+      "total": 11,
+      "durationSeconds": 203.5181415,
+      "exitCode": 0,
+      "peakSampledParentRssBytes": 1823473664,
+      "failures": []
+    }
+  ]
+}
