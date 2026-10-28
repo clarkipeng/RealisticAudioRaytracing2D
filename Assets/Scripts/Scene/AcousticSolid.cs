@@ -117,16 +117,17 @@ public sealed class AcousticSolid : MonoBehaviour
 
     public sealed class Snapshot
     {
-        readonly AcousticSolid solid; readonly bool enabled; readonly float tolerance;
+        readonly AcousticSolid solid; readonly bool enabled, grouped; readonly float tolerance;
         readonly TextAsset boundary; readonly byte[] bytes;
         readonly AcousticSurface[] members; readonly AudioMaterial[] materials; readonly Matrix4x4[] frames;
-        public Snapshot(AcousticSolid solid)
+        public Snapshot(AcousticSolid solid, bool geometry)
         {
             this.solid = solid; enabled = solid.enabled; tolerance = solid.curveTolerance;
+            grouped = enabled && geometry;
             boundary = solid.boundary; bytes = boundary == null ? null : boundary.bytes;
             members = (AcousticSurface[])solid.members.Clone(); materials = (AudioMaterial[])solid.surfaceMaterials.Clone();
             frames = new Matrix4x4[members.Length];
-            if (enabled) for (int i = 0; i < members.Length; i++) frames[i] = solid.MemberFrame(members[i]);
+            if (grouped) for (int i = 0; i < members.Length; i++) frames[i] = solid.MemberFrame(members[i]);
         }
         public void Validate()
         {
@@ -143,7 +144,7 @@ public sealed class AcousticSolid : MonoBehaviour
             for (int i = 0; i < members.Length; i++)
             {
                 if (solid.members[i] != members[i]) Stale();
-                if (enabled)
+                if (grouped)
                 {
                     var now = solid.MemberFrame(members[i]);
                     // Frames are evaluated only from local hierarchy transforms;

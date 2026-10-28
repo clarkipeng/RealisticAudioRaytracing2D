@@ -61,6 +61,9 @@ public partial class TakeChecks
             var excluded=SceneToTake.Compile(manager.takeObjects,AcousticTake.Dimension.Spatial3D,.01f,a,Array.Empty<Transform>(),Array.Empty<AudioClip>(),Array.Empty<Transform>(),out _);
             Assert.That(excluded.objects[owner].primitiveCount,Is.Zero);
             foreach(var member in solid.members)Assert.That(excluded.objects[manager.takeObjects.FindIndex(x=>x.transform==member.transform)].primitiveCount,Is.EqualTo(12));
+            var excludedGuard=new SceneToTake.Guard(manager,Array.Empty<Transform>(),Array.Empty<AudioClip>(),Array.Empty<Transform>());
+            solid.members[0].transform.localPosition+=Vector3.right*.1f;excludedGuard.Validate();
+            solid.members[0].transform.localPosition-=Vector3.right*.1f;
             groupSurface.geometrySource=AcousticSurface.GeometrySource.Auto;
             solid.members[0].transform.localPosition+=Vector3.right*.1f;
             Assert.Throws<InvalidOperationException>(guard.Validate);Assert.Throws<InvalidOperationException>(()=>solid.ReadValidated(a));

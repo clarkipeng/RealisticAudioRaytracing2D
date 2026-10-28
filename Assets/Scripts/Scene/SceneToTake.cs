@@ -268,7 +268,7 @@ public static class SceneToTake
                 solid=transform.GetComponent<AcousticSolid>(); solidId=Identity(solid);
                 if(solid!=null)
                 {
-                    solidSnapshot=new AcousticSolid.Snapshot(solid);
+                    solidSnapshot=new AcousticSolid.Snapshot(solid,geometry && selection!=AcousticSurface.GeometrySource.None);
                     foreach(var value in solid.surfaceMaterials)owner.AddMaterial(value);
                     return;
                 }
