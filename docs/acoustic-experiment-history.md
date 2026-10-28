@@ -8,6 +8,36 @@ Commit each completed experiment or independently validated improvement, and che
 
 Git preserves committed code, not arbitrary chat history, ignored scratch files or footage that was never captured. Promote useful `.context` evidence into the dated archives linked here before finishing an experiment. Record live footage separately when requested; silent offline results do not imply we captured gameplay video. Inspect old code with `git show REVISION:path` without switching the Unity checkout. `git log --date=short --format='%h %ad %s' -- docs/acoustic-experiment-history.md` finds the journal checkpoints.
 
+**Third-order finite paths: rejected room extension — 28 October**
+
+Tested a bounded complete three-interaction R/D evaluator through ordinary audio,
+with independent image-source, finite RDR quadrature and finite DDD quadrature
+controls. Conservative candidate culling, separate shader variants and per-family
+sample budgets preserve the earlier route families and avoid cubic table storage.
+The family-budget run passes 18 checks, including actual CPU/GPU binaural audio
+and the excluded-solid-root motion guard fixed in `0cbd066`.
+
+The same finite room still fails: whole-map error rises from the accepted bake's
+**29.24% to 119.40%**, shadow from **86.92% to 321.36%**. Median solve/readback is
+24.655 ms versus 3.080 ms in the accepted single-run comparison. Million-sample
+indoor results are strongly seed-dependent. A whole-remaining-path height proposal
+and a raw physical-vertex audit are retained as targeted follow-ups. The freshly
+compiled proposal still has 190.15% / 95.49% indoor error at a million samples.
+Early compile/harness failures and low-count quadrature failures are retained too.
+
+The first proposal-only retest exposed stale Unity conditional-include caching:
+source hashes changed but the executed fields and compiler diagnostics repeated
+the prior binary. It is explicitly invalidated, the dependency is made
+unconditional, and the final check reimports the parent shader. No fitted gain,
+clipping, changed reference or relaxed test threshold conceals the failures.
+
+The boundary bake and capture fix stay; the three-order setting, shader variants,
+buffers and tests are archived outside live Assets. This does not solve the
+remaining indoor fidelity or affordable-source-budget problem. No rain preset
+promotion. [Results, exact sources, cached-run audit and reproduction](benchmarks/third-order-2026-10-28/README.md).
+
+---
+
 **Material-preserving acoustic exterior bake — 28 October**
 
 Added an explicit offline `AcousticSolid` bake through the shared scene compiler.

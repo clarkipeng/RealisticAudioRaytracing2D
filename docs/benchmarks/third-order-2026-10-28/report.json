@@ -1,0 +1,4606 @@
+{
+  "acceptedBakeRevision": "0122256",
+  "productionRevision": "0cbd066",
+  "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+  "referenceIndoor": [
+    0.16852273163949638,
+    0.12258424672093361
+  ],
+  "scope": "Same finite seven-box room/roof, rigid materials, 125 Hz numerical BEM reference. No gain/phase fitting, clipping or smoothing.",
+  "runs": {
+    "pilot-run": {
+      "results": {
+        "id": "2",
+        "testcasecount": "1",
+        "result": "Failed(Child)",
+        "total": "1",
+        "passed": "0",
+        "failed": "1",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 21:59:02Z",
+        "end-time": "2026-10-28 21:59:09Z",
+        "duration": "6.2807363"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/pilot\")",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : The selected direct compute kernel cannot run on this device."
+        }
+      ],
+      "exitCode": 2,
+      "wallSeconds": 42.35046754201176,
+      "peakParentRssBytes": 738885632,
+      "verifiedSourceFiles": 129
+    },
+    "compile2": {
+      "results": {
+        "id": "2",
+        "testcasecount": "1",
+        "result": "Passed",
+        "total": "1",
+        "passed": "1",
+        "failed": "0",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 21:59:47Z",
+        "end-time": "2026-10-28 22:06:58Z",
+        "duration": "430.8655342"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/pilot\")",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 0,
+      "wallSeconds": 451.3239957500191,
+      "peakParentRssBytes": 1247068160,
+      "verifiedSourceFiles": 129
+    },
+    "controls": {
+      "results": {
+        "id": "2",
+        "testcasecount": "13",
+        "result": "Failed(Child)",
+        "total": "13",
+        "passed": "10",
+        "failed": "3",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 22:08:08Z",
+        "end-time": "2026-10-28 22:10:34Z",
+        "duration": "145.5164106"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(0)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(17)",
+          "result": "Failed",
+          "failure": "  Expected: less than 8.4669041282807182E-05d\n  But was:  0.00013278373934205709d\n"
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.0f)",
+          "result": "Failed",
+          "failure": "System.ArgumentException : Invalid mix block."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.35f)",
+          "result": "Failed",
+          "failure": "System.ArgumentException : Invalid mix block."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(0)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderSettingsPreserveOldJobsAndRejectPlanarExtension",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 2,
+      "wallSeconds": 169.1195918750018,
+      "peakParentRssBytes": 2397011968,
+      "verifiedSourceFiles": 130
+    },
+    "culled": {
+      "results": {
+        "id": "2",
+        "testcasecount": "17",
+        "result": "Failed(Child)",
+        "total": "17",
+        "passed": "7",
+        "failed": "10",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 22:11:52Z",
+        "end-time": "2026-10-28 22:14:04Z",
+        "duration": "132.2635546"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/indoor\")",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/probes-128\")",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/probes-65536\")",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/full\")",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(0)",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(17)",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.0f)",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.35f)",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(0)",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17)",
+          "result": "Failed",
+          "failure": "System.NotSupportedException : Complete-route kernels are unavailable on this GPU."
+        },
+        {
+          "name": "TakeChecks.ThirdOrderSettingsPreserveOldJobsAndRejectPlanarExtension",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedEarlyRoutesPreserveExistingDeeperInteractions(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 2,
+      "wallSeconds": 155.00021012499928,
+      "peakParentRssBytes": 1322221568,
+      "verifiedSourceFiles": 130
+    },
+    "checked": {
+      "results": {
+        "id": "2",
+        "testcasecount": "13",
+        "result": "Failed(Child)",
+        "total": "13",
+        "passed": "11",
+        "failed": "2",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 22:15:17Z",
+        "end-time": "2026-10-28 22:23:00Z",
+        "duration": "462.9323708"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/checked-indoor\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/checked-probes-128\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/checked-probes-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/checked-full\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/checked-two-order\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(0)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(17)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.35f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,False)",
+          "result": "Failed",
+          "failure": "  Expected: less than 0.00059402467546494024d\n  But was:  0.00070573133740987155d\n"
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,True)",
+          "result": "Failed",
+          "failure": "  Expected: less than 0.00059402467546494024d\n  But was:  0.00070592780232344473d\n"
+        },
+        {
+          "name": "TakeChecks.ThirdOrderSettingsPreserveOldJobsAndRejectPlanarExtension",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 2,
+      "wallSeconds": 481.5114017079759,
+      "peakParentRssBytes": 2857648128,
+      "verifiedSourceFiles": 130
+    },
+    "balanced": {
+      "results": {
+        "id": "2",
+        "testcasecount": "18",
+        "result": "Passed",
+        "total": "18",
+        "passed": "18",
+        "failed": "0",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 22:24:13Z",
+        "end-time": "2026-10-28 22:37:47Z",
+        "duration": "813.6580254"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/balanced-indoor\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/balanced-probes-128\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/balanced-probes-65536\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/balanced-full\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/balanced-two-order\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SolidBakePreservesMaterialsAndRejectsStaleGeometry",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(0)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(17)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.35f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderSettingsPreserveOldJobsAndRejectPlanarExtension",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesMatchIndependentHalfPlane(True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.TunedRoutesReachTheFarSideOfASolid(True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 0,
+      "wallSeconds": 837.127101541002,
+      "peakParentRssBytes": 2461106176,
+      "verifiedSourceFiles": 130
+    },
+    "guided": {
+      "results": {
+        "id": "2",
+        "testcasecount": "9",
+        "result": "Passed",
+        "total": "9",
+        "passed": "9",
+        "failed": "0",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 22:38:20Z",
+        "end-time": "2026-10-28 22:40:09Z",
+        "duration": "108.8625723"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/guided-indoor\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(0)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(17)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.35f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderSettingsPreserveOldJobsAndRejectPlanarExtension",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 0,
+      "wallSeconds": 130.69244441701449,
+      "peakParentRssBytes": 2394603520,
+      "verifiedSourceFiles": 130
+    },
+    "guided-fresh": {
+      "results": {
+        "id": "2",
+        "testcasecount": "9",
+        "result": "Passed",
+        "total": "9",
+        "passed": "9",
+        "failed": "0",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 22:40:28Z",
+        "end-time": "2026-10-28 22:47:19Z",
+        "duration": "410.6236866"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.MeasureRuntimeCompleteRoutes(\"/Users/clarkpeng/UnityGames/realisticaudioraytracing2d/.context/third-order/guided-fresh-indoor\")",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(0)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderDiffractionMatchesIndependentTripleIntegral(17)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.0f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMirrorsMatchIndependentShoeboxImages(0.35f)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderMixedPathMatchesIndependentUnfoldedIntegral(17,True)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.ThirdOrderSettingsPreserveOldJobsAndRejectPlanarExtension",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 0,
+      "wallSeconds": 424.57739933297853,
+      "peakParentRssBytes": 2180513792,
+      "verifiedSourceFiles": 130
+    },
+    "production-final": {
+      "results": {
+        "id": "2",
+        "testcasecount": "5",
+        "result": "Passed",
+        "total": "5",
+        "passed": "5",
+        "failed": "0",
+        "inconclusive": "0",
+        "skipped": "0",
+        "asserts": "0",
+        "engine-version": "3.5.0.0",
+        "clr-version": "4.0.30319.42000",
+        "start-time": "2026-10-28 22:47:53Z",
+        "end-time": "2026-10-28 22:57:44Z",
+        "duration": "513.2279439"
+      },
+      "checks": [
+        {
+          "name": "TakeChecks.SolidBakePreservesMaterialsAndRejectsStaleGeometry",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SolidBakeRejectsDifferentInteriorMedia",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SolidPartitionsHaveMatchingTransport(0,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SolidPartitionsHaveMatchingTransport(17,False)",
+          "result": "Passed",
+          "failure": null
+        },
+        {
+          "name": "TakeChecks.SolidPartitionsHaveMatchingTransport(17,True)",
+          "result": "Passed",
+          "failure": null
+        }
+      ],
+      "exitCode": 0,
+      "wallSeconds": 542.6998121659853,
+      "peakParentRssBytes": 1238859776,
+      "verifiedSourceFiles": 128
+    }
+  },
+  "measurements": {
+    "checked-indoor": [
+      {
+        "seed": 0,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 1.0542599977557916,
+        "shadowComplexRelativeL2": 1.0542599977557916,
+        "medianSolveMs": 104.37480000000001,
+        "pressure": [
+          [
+            0.19474990491597,
+            -0.09554295471437887
+          ]
+        ],
+        "sha256": "94f2046cfaec00a09228bf41050a7b36640142b3b37922738283119fa68acb91"
+      },
+      {
+        "seed": 17,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 1.1848865491653984,
+        "shadowComplexRelativeL2": 1.1848865491653984,
+        "medianSolveMs": 99.80930000000001,
+        "pressure": [
+          [
+            0.015407483195985132,
+            -0.07112960166886464
+          ]
+        ],
+        "sha256": "94f2046cfaec00a09228bf41050a7b36640142b3b37922738283119fa68acb91"
+      }
+    ],
+    "checked-probes-128": [
+      {
+        "seed": 0,
+        "samples": 128,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 1.8239679850746628,
+        "shadowComplexRelativeL2": 1.8829914677129589,
+        "medianSolveMs": 2.8421000000000003,
+        "pressure": [
+          [
+            0.421432886659258,
+            0.06948710993542599
+          ],
+          [
+            0.022589711048942186,
+            0.005197029808114654
+          ],
+          [
+            -0.0015560940667283668,
+            -0.03163808093807235
+          ],
+          [
+            -0.054141890001645356,
+            0.1254333043799464
+          ],
+          [
+            0.10700122541614668,
+            -0.045404281234276915
+          ]
+        ],
+        "sha256": "9450beca99b549e666aa2f647ae526894e6d1702b21f2f43ad8c7e54dc1a5839"
+      },
+      {
+        "seed": 17,
+        "samples": 128,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 2.83093933785107,
+        "shadowComplexRelativeL2": 2.553794692425362,
+        "medianSolveMs": 3.4516,
+        "pressure": [
+          [
+            0.2410304591967835,
+            -0.558740717698701
+          ],
+          [
+            0.139162454702425,
+            0.05892981200883171
+          ],
+          [
+            0.10201792941333593,
+            0.10351595281729041
+          ],
+          [
+            -0.12565917095664583,
+            -0.41544936627999945
+          ],
+          [
+            0.2377094753022876,
+            -0.39218496903496697
+          ]
+        ],
+        "sha256": "9450beca99b549e666aa2f647ae526894e6d1702b21f2f43ad8c7e54dc1a5839"
+      }
+    ],
+    "checked-probes-65536": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 3.674326529070132,
+        "shadowComplexRelativeL2": 3.5323087914430995,
+        "medianSolveMs": 7.5445,
+        "pressure": [
+          [
+            0.10180891597655559,
+            0.10794355671148914
+          ],
+          [
+            0.5479461570719077,
+            0.5698671660081353
+          ],
+          [
+            0.7724618860881302,
+            0.45295823288605513
+          ],
+          [
+            0.10930479215410743,
+            0.4332697331104468
+          ],
+          [
+            -0.08433745518423069,
+            -0.3286586837922239
+          ]
+        ],
+        "sha256": "13de65f55280dc401c886ac814eb8541fd3a288145369fa0ffe8cd0891e2bfea"
+      },
+      {
+        "seed": 17,
+        "samples": 65536,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 1.6878164854946842,
+        "shadowComplexRelativeL2": 1.6060245193357552,
+        "medianSolveMs": 7.7636,
+        "pressure": [
+          [
+            0.13504759414762102,
+            -0.1402018584920324
+          ],
+          [
+            0.14848383638623588,
+            0.046411545483000284
+          ],
+          [
+            0.2282425615871105,
+            -0.06769472371233366
+          ],
+          [
+            0.07955601171889892,
+            0.16387166448297324
+          ],
+          [
+            -0.3445969866763079,
+            -0.049238990326827575
+          ]
+        ],
+        "sha256": "13de65f55280dc401c886ac814eb8541fd3a288145369fa0ffe8cd0891e2bfea"
+      }
+    ],
+    "checked-full": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 3,
+        "receivers": 1166,
+        "complexRelativeL2": 1.2408546848524327,
+        "shadowComplexRelativeL2": 3.2595559929510314,
+        "medianSolveMs": 7.679200000000001,
+        "pressure": null,
+        "sha256": "00a0a8595d00ce189fcc2864ea6a49e882f18339d5f531ab6fc5f16edbdec4b3"
+      }
+    ],
+    "checked-two-order": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 2,
+        "receivers": 5,
+        "complexRelativeL2": 0.5551853714238787,
+        "shadowComplexRelativeL2": 0.5135011699648179,
+        "medianSolveMs": 10.1288,
+        "pressure": [
+          [
+            -0.005484462050094516,
+            -0.10400564418649039
+          ],
+          [
+            0.08541325556924104,
+            0.0790028283732091
+          ],
+          [
+            0.07713317050113712,
+            0.0886855975795771
+          ],
+          [
+            -0.029686314005475334,
+            0.07885389667193643
+          ],
+          [
+            -0.013828012757307828,
+            -0.05203105055598798
+          ]
+        ],
+        "sha256": "8b4d246cabe4dbfaf11fa8baae11b1f1fdb13265b56975c88a069a0d6b758d81"
+      },
+      {
+        "seed": 17,
+        "samples": 65536,
+        "order": 2,
+        "receivers": 5,
+        "complexRelativeL2": 0.5293564181161267,
+        "shadowComplexRelativeL2": 0.4974757368636627,
+        "medianSolveMs": 4.6156,
+        "pressure": [
+          [
+            -0.027350056662958335,
+            -0.08425540285234577
+          ],
+          [
+            0.12476784095847883,
+            0.0664361807065149
+          ],
+          [
+            0.11421821573148175,
+            0.08007516210306798
+          ],
+          [
+            -0.021519176275430398,
+            0.04798279976337217
+          ],
+          [
+            -0.031190959516299195,
+            -0.06477782862167249
+          ]
+        ],
+        "sha256": "8b4d246cabe4dbfaf11fa8baae11b1f1fdb13265b56975c88a069a0d6b758d81"
+      }
+    ],
+    "balanced-indoor": [
+      {
+        "seed": 0,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 1.8813211127526668,
+        "shadowComplexRelativeL2": 1.8813211127526668,
+        "medianSolveMs": 230.3921,
+        "pressure": [
+          [
+            0.0806633035243863,
+            -0.25949457592748637
+          ]
+        ],
+        "sha256": "6a8034efddbbd02cdfe3ed131e76129ce1cad7cd306c6a041deccd88f0a84106"
+      },
+      {
+        "seed": 17,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 0.8232501186109141,
+        "shadowComplexRelativeL2": 0.8232501186109141,
+        "medianSolveMs": 237.31169999999997,
+        "pressure": [
+          [
+            0.06532620095432967,
+            -0.014465358311255961
+          ]
+        ],
+        "sha256": "6a8034efddbbd02cdfe3ed131e76129ce1cad7cd306c6a041deccd88f0a84106"
+      }
+    ],
+    "balanced-probes-128": [
+      {
+        "seed": 0,
+        "samples": 128,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 2.9369724446260177,
+        "shadowComplexRelativeL2": 3.0668016473077384,
+        "medianSolveMs": 2.6645000000000003,
+        "pressure": [
+          [
+            0.6928609685844507,
+            0.3792097032895891
+          ],
+          [
+            0.006145646294326896,
+            -0.011312691615812675
+          ],
+          [
+            -0.0015560943148497514,
+            -0.03163808088533311
+          ],
+          [
+            -0.054141890001645356,
+            0.1254333043799464
+          ],
+          [
+            0.10700122541614668,
+            -0.045404281234276915
+          ]
+        ],
+        "sha256": "481dda443badce3c0b14246fd816b4238a27d35ae3e237b2a4c54ba5f0d0b354"
+      },
+      {
+        "seed": 17,
+        "samples": 128,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 3.033972281670232,
+        "shadowComplexRelativeL2": 2.4609203911678406,
+        "medianSolveMs": 3.31,
+        "pressure": [
+          [
+            0.1631842137824478,
+            -0.48981850893851414
+          ],
+          [
+            0.13322737977389085,
+            0.04460124940039436
+          ],
+          [
+            0.10276609283791419,
+            0.08814972634824107
+          ],
+          [
+            -0.14234716266540523,
+            -0.5595476623345642
+          ],
+          [
+            0.30168305816651986,
+            -0.4122159267398644
+          ]
+        ],
+        "sha256": "481dda443badce3c0b14246fd816b4238a27d35ae3e237b2a4c54ba5f0d0b354"
+      }
+    ],
+    "balanced-probes-65536": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 3.4094859654774408,
+        "shadowComplexRelativeL2": 3.2627368036864373,
+        "medianSolveMs": 14.7918,
+        "pressure": [
+          [
+            0.13302885811274456,
+            0.006267419075723105
+          ],
+          [
+            0.4830443744253775,
+            0.5692783946938058
+          ],
+          [
+            0.7184866658656702,
+            0.4274730365731006
+          ],
+          [
+            0.08667059545604062,
+            0.41846627053506175
+          ],
+          [
+            -0.0711291339433528,
+            -0.32022965195209235
+          ]
+        ],
+        "sha256": "e8723ce9b50ee702fcf45d46a945b37793ea3f5ba2442d8ee6ff62f01f823595"
+      },
+      {
+        "seed": 17,
+        "samples": 65536,
+        "order": 3,
+        "receivers": 5,
+        "complexRelativeL2": 1.6535085956934426,
+        "shadowComplexRelativeL2": 1.5299567205037687,
+        "medianSolveMs": 14.973099999999999,
+        "pressure": [
+          [
+            0.14191144604055553,
+            -0.1459750520767523
+          ],
+          [
+            0.14032877721502202,
+            0.1384620204007509
+          ],
+          [
+            0.19746290940560576,
+            0.01965596808556273
+          ],
+          [
+            0.1127568880360815,
+            0.15243528846328666
+          ],
+          [
+            -0.37614384722534616,
+            -0.029636721251080075
+          ]
+        ],
+        "sha256": "e8723ce9b50ee702fcf45d46a945b37793ea3f5ba2442d8ee6ff62f01f823595"
+      }
+    ],
+    "balanced-full": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 3,
+        "receivers": 1166,
+        "complexRelativeL2": 1.193966635912272,
+        "shadowComplexRelativeL2": 3.213637875473805,
+        "medianSolveMs": 24.6551,
+        "pressure": null,
+        "sha256": "22623ea0b519da603ce2d2b2880c835108c823cf3c4026cc302c5bee36f7d1e0"
+      }
+    ],
+    "balanced-two-order": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 2,
+        "receivers": 5,
+        "complexRelativeL2": 0.5551852263393082,
+        "shadowComplexRelativeL2": 0.5135009965056386,
+        "medianSolveMs": 7.9878,
+        "pressure": [
+          [
+            -0.005484462050094516,
+            -0.10400564418649039
+          ],
+          [
+            0.08541325556924104,
+            0.0790028283732091
+          ],
+          [
+            0.07713317050113712,
+            0.0886855975795771
+          ],
+          [
+            -0.029686314005475334,
+            0.07885389667193643
+          ],
+          [
+            -0.013828156390924419,
+            -0.052030938617908154
+          ]
+        ],
+        "sha256": "6ba8d959efd0073d986f6f2d659c73c5d4da8f3f35170a03a84fd89bc6835663"
+      },
+      {
+        "seed": 17,
+        "samples": 65536,
+        "order": 2,
+        "receivers": 5,
+        "complexRelativeL2": 0.5293562876877418,
+        "shadowComplexRelativeL2": 0.4974755833921146,
+        "medianSolveMs": 8.225,
+        "pressure": [
+          [
+            -0.027350056662958335,
+            -0.08425540285234577
+          ],
+          [
+            0.12476784095847883,
+            0.0664361807065149
+          ],
+          [
+            0.11421821573148175,
+            0.08007516210306798
+          ],
+          [
+            -0.021519176275430398,
+            0.04798279976337217
+          ],
+          [
+            -0.031191103149915772,
+            -0.06477771668359265
+          ]
+        ],
+        "sha256": "6ba8d959efd0073d986f6f2d659c73c5d4da8f3f35170a03a84fd89bc6835663"
+      }
+    ],
+    "pilot": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 0.8487182930275808,
+        "shadowComplexRelativeL2": 0.8487182930275808,
+        "medianSolveMs": 8.8264,
+        "pressure": [
+          [
+            0.34105953579023995,
+            0.08369505760067052
+          ]
+        ],
+        "sha256": "3dcda5209806b38123c91a31493a39ccbf0abb6c5d917f00db556df7c10c5629"
+      }
+    ],
+    "guided-indoor": [
+      {
+        "seed": 0,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 1.8813211127526668,
+        "shadowComplexRelativeL2": 1.8813211127526668,
+        "medianSolveMs": 236.4144,
+        "pressure": [
+          [
+            0.0806633035243863,
+            -0.25949457592748637
+          ]
+        ],
+        "sha256": "869d95db8412d62e250350b52309583ad531767af2ddc03b272e841d1ce51ac2"
+      },
+      {
+        "seed": 17,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 0.8232501186109141,
+        "shadowComplexRelativeL2": 0.8232501186109141,
+        "medianSolveMs": 221.6045,
+        "pressure": [
+          [
+            0.06532620095432967,
+            -0.014465358311255961
+          ]
+        ],
+        "sha256": "869d95db8412d62e250350b52309583ad531767af2ddc03b272e841d1ce51ac2"
+      }
+    ],
+    "guided-fresh-indoor": [
+      {
+        "seed": 0,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 1.9015366173774513,
+        "shadowComplexRelativeL2": 1.9015366173774513,
+        "medianSolveMs": 224.6122,
+        "pressure": [
+          [
+            0.13259090121396075,
+            -0.27204641694965676
+          ]
+        ],
+        "sha256": "06c037bff50d9b6ff295b7b2d5fc62750f74387861fb78f0b7b5a4aedb5e1177"
+      },
+      {
+        "seed": 17,
+        "samples": 1048576,
+        "order": 3,
+        "receivers": 1,
+        "complexRelativeL2": 0.9549154140851407,
+        "shadowComplexRelativeL2": 0.9549154140851407,
+        "medianSolveMs": 221.2979,
+        "pressure": [
+          [
+            0.06255246562207463,
+            -0.045848594998362795
+          ]
+        ],
+        "sha256": "06c037bff50d9b6ff295b7b2d5fc62750f74387861fb78f0b7b5a4aedb5e1177"
+      }
+    ],
+    "accepted-indoor": [
+      {
+        "seed": 0,
+        "samples": 1048576,
+        "order": 2,
+        "receivers": 1,
+        "complexRelativeL2": 0.47479486029808726,
+        "shadowComplexRelativeL2": 0.47479486029808726,
+        "medianSolveMs": 19.0986,
+        "pressure": [
+          [
+            0.0886676374589322,
+            0.06416441856203547
+          ]
+        ],
+        "sha256": "68281eb40a07f8e4d28e6f903990f65fbcc44b1e42db155cc9358ed036457ee5"
+      },
+      {
+        "seed": 17,
+        "samples": 1048576,
+        "order": 2,
+        "receivers": 1,
+        "complexRelativeL2": 0.4648909798779394,
+        "shadowComplexRelativeL2": 0.4648909798779394,
+        "medianSolveMs": 31.2163,
+        "pressure": [
+          [
+            0.0937276499811131,
+            0.061011079008111424
+          ]
+        ],
+        "sha256": "68281eb40a07f8e4d28e6f903990f65fbcc44b1e42db155cc9358ed036457ee5"
+      }
+    ],
+    "accepted-full": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 2,
+        "receivers": 1166,
+        "complexRelativeL2": 0.2923522147436152,
+        "shadowComplexRelativeL2": 0.8692164976102258,
+        "medianSolveMs": 3.08035,
+        "pressure": null,
+        "sha256": "9b83d568b31723d0e8f93a1fc8a82a7cc0e3c8ff361ccfc424bedfc30c71c8cd"
+      }
+    ],
+    "accepted-probes-65536": [
+      {
+        "seed": 0,
+        "samples": 65536,
+        "order": 2,
+        "receivers": 5,
+        "complexRelativeL2": 0.5551853714238787,
+        "shadowComplexRelativeL2": 0.5135011699648179,
+        "medianSolveMs": 4.6564,
+        "pressure": [
+          [
+            -0.005484462050094516,
+            -0.10400564418649039
+          ],
+          [
+            0.08541325556924104,
+            0.0790028283732091
+          ],
+          [
+            0.07713317050113712,
+            0.0886855975795771
+          ],
+          [
+            -0.029686314005475334,
+            0.07885389667193643
+          ],
+          [
+            -0.013828012757307828,
+            -0.05203105055598798
+          ]
+        ],
+        "sha256": "8a9594263e52feab379a0c3f888d0e2e111a31b94f74df41915e81d2e973ab85"
+      },
+      {
+        "seed": 17,
+        "samples": 65536,
+        "order": 2,
+        "receivers": 5,
+        "complexRelativeL2": 0.5293564181161267,
+        "shadowComplexRelativeL2": 0.4974757368636627,
+        "medianSolveMs": 10.4269,
+        "pressure": [
+          [
+            -0.027350056662958335,
+            -0.08425540285234577
+          ],
+          [
+            0.12476784095847883,
+            0.0664361807065149
+          ],
+          [
+            0.11421821573148175,
+            0.08007516210306798
+          ],
+          [
+            -0.021519176275430398,
+            0.04798279976337217
+          ],
+          [
+            -0.031190959516299195,
+            -0.06477782862167249
+          ]
+        ],
+        "sha256": "8a9594263e52feab379a0c3f888d0e2e111a31b94f74df41915e81d2e973ab85"
+      }
+    ]
+  },
+  "twoOrderParity": {
+    "checked": [
+      {
+        "seed": 0,
+        "maxAbsolute": 0.0,
+        "relativeL2": 0.0
+      },
+      {
+        "seed": 17,
+        "maxAbsolute": 0.0,
+        "relativeL2": 0.0
+      }
+    ],
+    "balanced": [
+      {
+        "seed": 0,
+        "maxAbsolute": 1.8210093226045823e-07,
+        "relativeL2": 8.294776153471352e-07
+      },
+      {
+        "seed": 17,
+        "maxAbsolute": 1.8210093225377736e-07,
+        "relativeL2": 7.749321168310885e-07
+      }
+    ]
+  },
+  "families": {
+    "checked-indoor": [
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.012174209650567818",
+        "imag": "0.0069407803046954665",
+        "arrivals": "33",
+        "maximum_contribution": "0.0076817814260721207"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.13197472059054549",
+        "imag": "0.099754205303925883",
+        "arrivals": "732",
+        "maximum_contribution": "0.068722523748874664"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.0066997087747753606",
+        "imag": "-0.0021760163707658545",
+        "arrivals": "62",
+        "maximum_contribution": "0.0047412891872227192"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.023463801274344383",
+        "imag": "0.020535313452582027",
+        "arrivals": "109",
+        "maximum_contribution": "0.01325321476906538"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "0.0088200088485179476",
+        "imag": "0.0049914436942119968",
+        "arrivals": "14671",
+        "maximum_contribution": "0.01478230394423008"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.021726395196337879",
+        "imag": "-0.028186004182759114",
+        "arrivals": "1111",
+        "maximum_contribution": "0.039360783994197845"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.026697618126587851",
+        "imag": "0.011747205132471282",
+        "arrivals": "1149",
+        "maximum_contribution": "0.017071306705474854"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "0.00023334046269978342",
+        "imag": "-0.0061425722540033685",
+        "arrivals": "29",
+        "maximum_contribution": "0.0021834122017025948"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "0.096834026671428222",
+        "imag": "-0.15599274793815859",
+        "arrivals": "1975",
+        "maximum_contribution": "0.083530336618423462"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.025348058998753694",
+        "imag": "0.0068579150623252734",
+        "arrivals": "158",
+        "maximum_contribution": "0.0056108632124960423"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.041056175009279904",
+        "imag": "-0.0544618226179097",
+        "arrivals": "159",
+        "maximum_contribution": "0.017922800034284592"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.025028133330072887",
+        "imag": "0.0038591716815308675",
+        "arrivals": "38",
+        "maximum_contribution": "0.007816798985004425"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.025521961992399433",
+        "imag": "0.00088438896843590726",
+        "arrivals": "752",
+        "maximum_contribution": "0.031251925975084305"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.0059720752369523252",
+        "imag": "-0.011752323776925592",
+        "arrivals": "68",
+        "maximum_contribution": "0.0090580685064196587"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.006414673332703286",
+        "imag": "0.014777283380585208",
+        "arrivals": "112",
+        "maximum_contribution": "0.012910636141896248"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "-0.012481400201458246",
+        "imag": "0.0013020423626660823",
+        "arrivals": "14585",
+        "maximum_contribution": "0.013357833959162235"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.022983185314279973",
+        "imag": "-0.0082264172191936231",
+        "arrivals": "1170",
+        "maximum_contribution": "0.0077147837728261948"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.0068850805797405872",
+        "imag": "-0.0011397433538563903",
+        "arrivals": "1212",
+        "maximum_contribution": "0.01163841038942337"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "-0.0029611202780520604",
+        "imag": "-0.00522802889673158",
+        "arrivals": "30",
+        "maximum_contribution": "0.003485559020191431"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "0.0068788060635674381",
+        "imag": "-0.017755922598563824",
+        "arrivals": "2092",
+        "maximum_contribution": "0.010047391057014465"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.013895662743457323",
+        "imag": "0.010950657229206615",
+        "arrivals": "164",
+        "maximum_contribution": "0.0056712813675403595"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.028236755962506018",
+        "imag": "-0.059495540427164394",
+        "arrivals": "166",
+        "maximum_contribution": "0.018426382914185524"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      }
+    ],
+    "balanced-indoor": [
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.017330724662294347",
+        "imag": "0.002388428345942321",
+        "arrivals": "41520",
+        "maximum_contribution": "7.3246701504103839E-06"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.066356208363427982",
+        "imag": "0.050607235097898884",
+        "arrivals": "24184",
+        "maximum_contribution": "0.003912661224603653"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.008548482160425485",
+        "imag": "-0.0025256825580959436",
+        "arrivals": "1521",
+        "maximum_contribution": "0.00039133269456215203"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.01564063168750672",
+        "imag": "0.013643486464847126",
+        "arrivals": "2412",
+        "maximum_contribution": "0.00062689121114090085"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "0.017445592091995588",
+        "imag": "0.012319982161691001",
+        "arrivals": "11664",
+        "maximum_contribution": "0.018477883189916611"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.026696450509822976",
+        "imag": "-0.052811963352936593",
+        "arrivals": "652",
+        "maximum_contribution": "0.06560131162405014"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.030933674322376117",
+        "imag": "0.010368751821901232",
+        "arrivals": "862",
+        "maximum_contribution": "0.022761743515729904"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "0.00091610694850411312",
+        "imag": "-0.0074886485469851938",
+        "arrivals": "22",
+        "maximum_contribution": "0.0032147008460015059"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "0.052009428316478284",
+        "imag": "-0.21596523239789769",
+        "arrivals": "1517",
+        "maximum_contribution": "0.11137378960847855"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.033432153043025312",
+        "imag": "0.0064239791681829743",
+        "arrivals": "73",
+        "maximum_contribution": "0.011221726424992085"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.042526117400701287",
+        "imag": "-0.076702131143504035",
+        "arrivals": "82",
+        "maximum_contribution": "0.035845600068569183"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.017332700182507769",
+        "imag": "0.0024065006761111408",
+        "arrivals": "41521",
+        "maximum_contribution": "7.3312958193128E-06"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.0614945082216316",
+        "imag": "0.053184432934932524",
+        "arrivals": "24266",
+        "maximum_contribution": "0.00392541429027915"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.0086562447966751655",
+        "imag": "-0.0037210162514801277",
+        "arrivals": "1517",
+        "maximum_contribution": "0.00039382910472340882"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.01451710004840452",
+        "imag": "0.013148856818483979",
+        "arrivals": "2423",
+        "maximum_contribution": "0.00062653631903231144"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "-0.0049457543603165927",
+        "imag": "-0.0093616967860617375",
+        "arrivals": "12100",
+        "maximum_contribution": "0.016697295010089874"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.026696489819933965",
+        "imag": "0.0060028290813904928",
+        "arrivals": "685",
+        "maximum_contribution": "0.0083486596122384071"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.002828210736293748",
+        "imag": "0.00034185243686549031",
+        "arrivals": "939",
+        "maximum_contribution": "0.015517882071435452"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "-0.0029052572119636138",
+        "imag": "-0.0044724344549902564",
+        "arrivals": "18",
+        "maximum_contribution": "0.0069461031816899776"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "-0.0018532855122379392",
+        "imag": "-0.025734310904520764",
+        "arrivals": "1620",
+        "maximum_contribution": "0.012199201621115208"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.003369168252729874",
+        "imag": "0.011662579892097605",
+        "arrivals": "87",
+        "maximum_contribution": "0.011342562735080719"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.0298578679967785",
+        "imag": "-0.057340516173519054",
+        "arrivals": "86",
+        "maximum_contribution": "0.036106914281845093"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      }
+    ],
+    "guided-indoor": [
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.017330724662294347",
+        "imag": "0.002388428345942321",
+        "arrivals": "41520",
+        "maximum_contribution": "7.3246701504103839E-06"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.066356208363427982",
+        "imag": "0.050607235097898884",
+        "arrivals": "24184",
+        "maximum_contribution": "0.003912661224603653"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.008548482160425485",
+        "imag": "-0.0025256825580959436",
+        "arrivals": "1521",
+        "maximum_contribution": "0.00039133269456215203"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.01564063168750672",
+        "imag": "0.013643486464847126",
+        "arrivals": "2412",
+        "maximum_contribution": "0.00062689121114090085"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "0.017445592091995588",
+        "imag": "0.012319982161691001",
+        "arrivals": "11664",
+        "maximum_contribution": "0.018477883189916611"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.026696450509822976",
+        "imag": "-0.052811963352936593",
+        "arrivals": "652",
+        "maximum_contribution": "0.06560131162405014"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.030933674322376117",
+        "imag": "0.010368751821901232",
+        "arrivals": "862",
+        "maximum_contribution": "0.022761743515729904"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "0.00091610694850411312",
+        "imag": "-0.0074886485469851938",
+        "arrivals": "22",
+        "maximum_contribution": "0.0032147008460015059"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "0.052009428316478284",
+        "imag": "-0.21596523239789769",
+        "arrivals": "1517",
+        "maximum_contribution": "0.11137378960847855"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.033432153043025312",
+        "imag": "0.0064239791681829743",
+        "arrivals": "73",
+        "maximum_contribution": "0.011221726424992085"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.042526117400701287",
+        "imag": "-0.076702131143504035",
+        "arrivals": "82",
+        "maximum_contribution": "0.035845600068569183"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.017332700182507769",
+        "imag": "0.0024065006761111408",
+        "arrivals": "41521",
+        "maximum_contribution": "7.3312958193128E-06"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.0614945082216316",
+        "imag": "0.053184432934932524",
+        "arrivals": "24266",
+        "maximum_contribution": "0.00392541429027915"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.0086562447966751655",
+        "imag": "-0.0037210162514801277",
+        "arrivals": "1517",
+        "maximum_contribution": "0.00039382910472340882"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.01451710004840452",
+        "imag": "0.013148856818483979",
+        "arrivals": "2423",
+        "maximum_contribution": "0.00062653631903231144"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "-0.0049457543603165927",
+        "imag": "-0.0093616967860617375",
+        "arrivals": "12100",
+        "maximum_contribution": "0.016697295010089874"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.026696489819933965",
+        "imag": "0.0060028290813904928",
+        "arrivals": "685",
+        "maximum_contribution": "0.0083486596122384071"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.002828210736293748",
+        "imag": "0.00034185243686549031",
+        "arrivals": "939",
+        "maximum_contribution": "0.015517882071435452"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "-0.0029052572119636138",
+        "imag": "-0.0044724344549902564",
+        "arrivals": "18",
+        "maximum_contribution": "0.0069461031816899776"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "-0.0018532855122379392",
+        "imag": "-0.025734310904520764",
+        "arrivals": "1620",
+        "maximum_contribution": "0.012199201621115208"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.003369168252729874",
+        "imag": "0.011662579892097605",
+        "arrivals": "87",
+        "maximum_contribution": "0.011342562735080719"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.0298578679967785",
+        "imag": "-0.057340516173519054",
+        "arrivals": "86",
+        "maximum_contribution": "0.036106914281845093"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      }
+    ],
+    "guided-fresh-indoor": [
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.017330724662294347",
+        "imag": "0.002388428345942321",
+        "arrivals": "41520",
+        "maximum_contribution": "7.3246701504103839E-06"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.066356208363427982",
+        "imag": "0.050607235097898884",
+        "arrivals": "24184",
+        "maximum_contribution": "0.003912661224603653"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.008548482160425485",
+        "imag": "-0.0025256825580959436",
+        "arrivals": "1521",
+        "maximum_contribution": "0.00039133269456215203"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.01564063168750672",
+        "imag": "0.013643486464847126",
+        "arrivals": "2412",
+        "maximum_contribution": "0.00062689121114090085"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "0.012725492189892065",
+        "imag": "-0.0032589410116006792",
+        "arrivals": "11597",
+        "maximum_contribution": "0.010276785120368004"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.024286163950127868",
+        "imag": "-0.031722102911143545",
+        "arrivals": "638",
+        "maximum_contribution": "0.032234005630016327"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.03677127940207893",
+        "imag": "-0.0079541221293761184",
+        "arrivals": "863",
+        "maximum_contribution": "0.011007918976247311"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "0.00091610694850411312",
+        "imag": "-0.0074886485469851938",
+        "arrivals": "22",
+        "maximum_contribution": "0.0032147008460015059"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "0.10481712306363884",
+        "imag": "-0.21787619233216041",
+        "arrivals": "1491",
+        "maximum_contribution": "0.10852815210819244"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.033432153043025312",
+        "imag": "0.0064239791681829743",
+        "arrivals": "73",
+        "maximum_contribution": "0.011221726424992085"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.042526117400701287",
+        "imag": "-0.076702131143504035",
+        "arrivals": "82",
+        "maximum_contribution": "0.035845600068569183"
+      },
+      {
+        "diffraction": "1",
+        "seed": "0",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "D",
+        "real": "0.017332700182507769",
+        "imag": "0.0024065006761111408",
+        "arrivals": "41521",
+        "maximum_contribution": "7.3312958193128E-06"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DD",
+        "real": "0.0614945082216316",
+        "imag": "0.053184432934932524",
+        "arrivals": "24266",
+        "maximum_contribution": "0.00392541429027915"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RD",
+        "real": "-0.0086562447966751655",
+        "imag": "-0.0037210162514801277",
+        "arrivals": "1517",
+        "maximum_contribution": "0.00039382910472340882"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DR",
+        "real": "0.01451710004840452",
+        "imag": "0.013148856818483979",
+        "arrivals": "2423",
+        "maximum_contribution": "0.00062653631903231144"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDD",
+        "real": "-0.0093938826096138309",
+        "imag": "-0.0041631283420860924",
+        "arrivals": "12002",
+        "maximum_contribution": "0.019365770742297173"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDD",
+        "real": "0.045533645852071362",
+        "imag": "0.0090488973263384061",
+        "arrivals": "680",
+        "maximum_contribution": "0.012959775514900684"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRD",
+        "real": "-0.021874687471755146",
+        "imag": "0.007198002430622818",
+        "arrivals": "925",
+        "maximum_contribution": "0.014220169745385647"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRD",
+        "real": "-0.0029052572119636138",
+        "imag": "-0.0044724344549902564",
+        "arrivals": "18",
+        "maximum_contribution": "0.0069461031816899776"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DDR",
+        "real": "-8.8329798128647212E-05",
+        "imag": "-0.072275269346878585",
+        "arrivals": "1611",
+        "maximum_contribution": "0.024525903165340424"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RDR",
+        "real": "-0.003369168252729874",
+        "imag": "0.011662579892097605",
+        "arrivals": "87",
+        "maximum_contribution": "0.011342562735080719"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "DRR",
+        "real": "-0.0298578679967785",
+        "imag": "-0.057340516173519054",
+        "arrivals": "86",
+        "maximum_contribution": "0.036106914281845093"
+      },
+      {
+        "diffraction": "1",
+        "seed": "17",
+        "point": "0",
+        "hz": "125",
+        "family": "RRR",
+        "real": "0",
+        "imag": "0",
+        "arrivals": "0",
+        "maximum_contribution": "0"
+      }
+    ]
+  },
+  "edgeClassification": {
+    "guided-indoor": {
+      "edges": [
+        {
+          "a": [
+            -6.25,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -6.25,
+            0.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            3.25
+          ],
+          "b": [
+            -6.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -6.25,
+            3.25,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            3.25,
+            -3.25
+          ],
+          "b": [
+            -6.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -6.0,
+            0.0,
+            3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            -3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            3.0,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            3.25
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            3.25
+          ],
+          "b": [
+            -2.0,
+            3.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            3.25,
+            3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            3.25,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.25,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -6.0,
+            3.0,
+            -3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            3.0,
+            -3.0
+          ],
+          "b": [
+            -6.0,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            3.0
+          ],
+          "b": [
+            -6.0,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            -3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            3.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            -3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            3.0
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            3.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            3.0,
+            3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            2.5,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            2.5,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            -0.9000000953674316
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            2.5,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            2.5,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            2.5,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            3.0,
+            3.25
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.0,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.0,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            3.0,
+            3.25
+          ],
+          "b": [
+            2.25,
+            3.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.0,
+            3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        }
+      ],
+      "groups": [
+        {
+          "seed": 0,
+          "family": 0,
+          "kind": "integer-nu edge",
+          "count": 7312,
+          "pressure": [
+            -8.277078713614044e-10,
+            5.466515657620075e-10
+          ],
+          "maximum": 1.99924018e-12
+        },
+        {
+          "seed": 0,
+          "family": 0,
+          "kind": "other",
+          "count": 34208,
+          "pressure": [
+            0.01733072557497446,
+            0.0023884276364098934
+          ],
+          "maximum": 7.32467e-06
+        },
+        {
+          "seed": 0,
+          "family": 1,
+          "kind": "integer-nu edge",
+          "count": 8477,
+          "pressure": [
+            2.5260710294751725e-09,
+            -3.801935128733898e-09
+          ],
+          "maximum": 5.62711477e-09
+        },
+        {
+          "seed": 0,
+          "family": 1,
+          "kind": "other",
+          "count": 15707,
+          "pressure": [
+            0.06635620940992168,
+            0.05060724257340101
+          ],
+          "maximum": 0.003912661
+        },
+        {
+          "seed": 0,
+          "family": 2,
+          "kind": "integer-nu edge",
+          "count": 297,
+          "pressure": [
+            1.8206582303834747e-09,
+            9.665661864999617e-10
+          ],
+          "maximum": 5.550903e-11
+        },
+        {
+          "seed": 0,
+          "family": 2,
+          "kind": "other",
+          "count": 1224,
+          "pressure": [
+            -0.008548483163059714,
+            -0.002525683592078034
+          ],
+          "maximum": 0.0003913327
+        },
+        {
+          "seed": 0,
+          "family": 3,
+          "kind": "integer-nu edge",
+          "count": 295,
+          "pressure": [
+            -1.723350853486057e-09,
+            -8.594956315129513e-09
+          ],
+          "maximum": 7.513386e-10
+        },
+        {
+          "seed": 0,
+          "family": 3,
+          "kind": "other",
+          "count": 2117,
+          "pressure": [
+            0.01564063433136684,
+            0.013643493697965157
+          ],
+          "maximum": 0.0006268912
+        },
+        {
+          "seed": 0,
+          "family": 5,
+          "kind": "integer-nu edge",
+          "count": 5733,
+          "pressure": [
+            -1.2182258100502855e-06,
+            1.8878222761469152e-07
+          ],
+          "maximum": 9.272543e-07
+        },
+        {
+          "seed": 0,
+          "family": 5,
+          "kind": "other",
+          "count": 5931,
+          "pressure": [
+            0.01744680062108381,
+            0.012319794007841894
+          ],
+          "maximum": 0.0184778832
+        },
+        {
+          "seed": 0,
+          "family": 6,
+          "kind": "integer-nu edge",
+          "count": 276,
+          "pressure": [
+            6.281172979950695e-09,
+            2.7621395898746982e-08
+          ],
+          "maximum": 1.64332778e-08
+        },
+        {
+          "seed": 0,
+          "family": 6,
+          "kind": "other",
+          "count": 376,
+          "pressure": [
+            0.026696449906700056,
+            -0.052812007615796755
+          ],
+          "maximum": 0.06560131
+        },
+        {
+          "seed": 0,
+          "family": 7,
+          "kind": "integer-nu edge",
+          "count": 343,
+          "pressure": [
+            9.50879495138128e-08,
+            1.9001810741314688e-07
+          ],
+          "maximum": 2.4344962e-07
+        },
+        {
+          "seed": 0,
+          "family": 7,
+          "kind": "other",
+          "count": 519,
+          "pressure": [
+            -0.03093376761450601,
+            0.01036855822306571
+          ],
+          "maximum": 0.0227617435
+        },
+        {
+          "seed": 0,
+          "family": 8,
+          "kind": "integer-nu edge",
+          "count": 9,
+          "pressure": [
+            7.175353673024991e-10,
+            -1.972743718659615e-09
+          ],
+          "maximum": 7.254472e-10
+        },
+        {
+          "seed": 0,
+          "family": 8,
+          "kind": "other",
+          "count": 13,
+          "pressure": [
+            0.0009161118110822449,
+            -0.007488649070306242
+          ],
+          "maximum": 0.00321470085
+        },
+        {
+          "seed": 0,
+          "family": 9,
+          "kind": "integer-nu edge",
+          "count": 490,
+          "pressure": [
+            -2.624818986864044e-08,
+            2.2453051249355587e-08
+          ],
+          "maximum": 5.307324e-08
+        },
+        {
+          "seed": 0,
+          "family": 9,
+          "kind": "other",
+          "count": 1027,
+          "pressure": [
+            0.05200944729031489,
+            -0.21596526483766001
+          ],
+          "maximum": 0.11137379
+        },
+        {
+          "seed": 0,
+          "family": 10,
+          "kind": "integer-nu edge",
+          "count": 10,
+          "pressure": [
+            -6.136622213095618e-09,
+            -2.1405149192794724e-09
+          ],
+          "maximum": 5.81770943e-09
+        },
+        {
+          "seed": 0,
+          "family": 10,
+          "kind": "other",
+          "count": 63,
+          "pressure": [
+            -0.03343214896920039,
+            0.006423972454072521
+          ],
+          "maximum": 0.0112217264
+        },
+        {
+          "seed": 0,
+          "family": 11,
+          "kind": "integer-nu edge",
+          "count": 7,
+          "pressure": [
+            1.82762173295753e-10,
+            3.728031144156603e-11
+          ],
+          "maximum": 7.531426e-11
+        },
+        {
+          "seed": 0,
+          "family": 11,
+          "kind": "other",
+          "count": 75,
+          "pressure": [
+            -0.04252611264430085,
+            -0.07670211885113795
+          ],
+          "maximum": 0.0358456
+        },
+        {
+          "seed": 17,
+          "family": 0,
+          "kind": "integer-nu edge",
+          "count": 7310,
+          "pressure": [
+            -8.299233545442437e-10,
+            5.540774360574933e-10
+          ],
+          "maximum": 1.839029e-12
+        },
+        {
+          "seed": 17,
+          "family": 0,
+          "kind": "other",
+          "count": 34211,
+          "pressure": [
+            0.01733270096956723,
+            0.0024065001325809126
+          ],
+          "maximum": 7.331296e-06
+        },
+        {
+          "seed": 17,
+          "family": 1,
+          "kind": "integer-nu edge",
+          "count": 8498,
+          "pressure": [
+            -1.0171671700253767e-08,
+            -9.491523519829657e-09
+          ],
+          "maximum": 2.043324e-08
+        },
+        {
+          "seed": 17,
+          "family": 1,
+          "kind": "other",
+          "count": 15768,
+          "pressure": [
+            0.06149452429338852,
+            0.05318444084019151
+          ],
+          "maximum": 0.00392541429
+        },
+        {
+          "seed": 17,
+          "family": 2,
+          "kind": "integer-nu edge",
+          "count": 288,
+          "pressure": [
+            1.844228292621623e-09,
+            9.632746023722621e-10
+          ],
+          "maximum": 7.775351e-11
+        },
+        {
+          "seed": 17,
+          "family": 2,
+          "kind": "other",
+          "count": 1229,
+          "pressure": [
+            -0.008656247001113063,
+            -0.0037210182261378077
+          ],
+          "maximum": 0.0003938291
+        },
+        {
+          "seed": 17,
+          "family": 3,
+          "kind": "integer-nu edge",
+          "count": 301,
+          "pressure": [
+            -2.216125697936153e-09,
+            -9.097838015880848e-09
+          ],
+          "maximum": 7.32015171e-10
+        },
+        {
+          "seed": 17,
+          "family": 3,
+          "kind": "other",
+          "count": 2122,
+          "pressure": [
+            0.014517103060436715,
+            0.013148863342194676
+          ],
+          "maximum": 0.0006265363
+        },
+        {
+          "seed": 17,
+          "family": 5,
+          "kind": "integer-nu edge",
+          "count": 6272,
+          "pressure": [
+            4.949175147745064e-09,
+            8.610446100302639e-08
+          ],
+          "maximum": 8.44572838e-08
+        },
+        {
+          "seed": 17,
+          "family": 5,
+          "kind": "other",
+          "count": 5828,
+          "pressure": [
+            -0.004945754224230919,
+            -0.009361784657253092
+          ],
+          "maximum": 0.016697295
+        },
+        {
+          "seed": 17,
+          "family": 6,
+          "kind": "integer-nu edge",
+          "count": 285,
+          "pressure": [
+            -2.6934097664389823e-08,
+            2.8875583953372325e-08
+          ],
+          "maximum": 4.5285443e-08
+        },
+        {
+          "seed": 17,
+          "family": 6,
+          "kind": "other",
+          "count": 400,
+          "pressure": [
+            0.02669651846813556,
+            0.006002795122008921
+          ],
+          "maximum": 0.00834866
+        },
+        {
+          "seed": 17,
+          "family": 7,
+          "kind": "integer-nu edge",
+          "count": 374,
+          "pressure": [
+            -5.103739152626605e-08,
+            -1.1501506315003323e-08
+          ],
+          "maximum": 5.702865e-08
+        },
+        {
+          "seed": 17,
+          "family": 7,
+          "kind": "other",
+          "count": 565,
+          "pressure": [
+            -0.0028281766905404937,
+            0.00034185202451531357
+          ],
+          "maximum": 0.0155178821
+        },
+        {
+          "seed": 17,
+          "family": 8,
+          "kind": "integer-nu edge",
+          "count": 7,
+          "pressure": [
+            9.905296318257542e-10,
+            -1.5013735421563128e-09
+          ],
+          "maximum": 6.685027e-10
+        },
+        {
+          "seed": 17,
+          "family": 8,
+          "kind": "other",
+          "count": 11,
+          "pressure": [
+            -0.0029052570976484124,
+            -0.00447243355006451
+          ],
+          "maximum": 0.006946103
+        },
+        {
+          "seed": 17,
+          "family": 9,
+          "kind": "integer-nu edge",
+          "count": 532,
+          "pressure": [
+            -2.190848577330823e-07,
+            -3.773929799697714e-08
+          ],
+          "maximum": 2.93914724e-07
+        },
+        {
+          "seed": 17,
+          "family": 9,
+          "kind": "other",
+          "count": 1088,
+          "pressure": [
+            -0.0018530663433372454,
+            -0.025734284187815502
+          ],
+          "maximum": 0.0121992016
+        },
+        {
+          "seed": 17,
+          "family": 10,
+          "kind": "integer-nu edge",
+          "count": 12,
+          "pressure": [
+            6.347735149443655e-10,
+            -7.148616880499376e-10
+          ],
+          "maximum": 8.83551732e-10
+        },
+        {
+          "seed": 17,
+          "family": 10,
+          "kind": "other",
+          "count": 75,
+          "pressure": [
+            -0.003369172392701936,
+            0.011662603383252725
+          ],
+          "maximum": 0.0113425627
+        },
+        {
+          "seed": 17,
+          "family": 11,
+          "kind": "integer-nu edge",
+          "count": 9,
+          "pressure": [
+            -2.9736853151750646e-10,
+            5.923335119619557e-11
+          ],
+          "maximum": 4.64269734e-10
+        },
+        {
+          "seed": 17,
+          "family": 11,
+          "kind": "other",
+          "count": 77,
+          "pressure": [
+            -0.029857879306018634,
+            -0.05734051471203831
+          ],
+          "maximum": 0.0361069143
+        }
+      ]
+    },
+    "guided-fresh-indoor": {
+      "edges": [
+        {
+          "a": [
+            -6.25,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -6.25,
+            0.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            3.25
+          ],
+          "b": [
+            -6.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -6.25,
+            3.25,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            3.25,
+            -3.25
+          ],
+          "b": [
+            -6.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -6.0,
+            0.0,
+            3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            -3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            3.0,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            0.0,
+            3.25
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            3.25
+          ],
+          "b": [
+            -2.0,
+            3.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            3.25,
+            3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.25,
+            3.25,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.25,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -6.0,
+            3.0,
+            -3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            3.0,
+            -3.0
+          ],
+          "b": [
+            -6.0,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            3.0
+          ],
+          "b": [
+            -6.0,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            -3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            3.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            -3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            0.0,
+            3.0
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            3.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -6.0,
+            3.0,
+            3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            3.0
+          ],
+          "b": [
+            -2.25,
+            3.0,
+            3.0
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -3.0
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            2.5,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            -0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            2.5,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            -0.9000000953674316
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            0.0,
+            3.0
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            2.5,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.25,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            0.0,
+            0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            0.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.25,
+            2.5,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.25,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            2.5,
+            -0.9000000953674316
+          ],
+          "b": [
+            -2.0,
+            2.5,
+            0.9000000953674316
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            -2.0,
+            3.0,
+            3.25
+          ],
+          "nu": 2.0
+        },
+        {
+          "a": [
+            -2.0,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.0,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            -2.0,
+            3.0,
+            3.25
+          ],
+          "b": [
+            2.25,
+            3.0,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.0,
+            -3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            -3.25
+          ],
+          "nu": 0.6666666666666666
+        },
+        {
+          "a": [
+            2.25,
+            3.0,
+            3.25
+          ],
+          "b": [
+            2.25,
+            3.25,
+            3.25
+          ],
+          "nu": 0.6666666666666666
+        }
+      ],
+      "groups": [
+        {
+          "seed": 0,
+          "family": 0,
+          "kind": "integer-nu edge",
+          "count": 7312,
+          "pressure": [
+            -8.277078713614044e-10,
+            5.466515657620075e-10
+          ],
+          "maximum": 1.99924018e-12
+        },
+        {
+          "seed": 0,
+          "family": 0,
+          "kind": "other",
+          "count": 34208,
+          "pressure": [
+            0.01733072557497446,
+            0.0023884276364098934
+          ],
+          "maximum": 7.32467e-06
+        },
+        {
+          "seed": 0,
+          "family": 1,
+          "kind": "integer-nu edge",
+          "count": 8477,
+          "pressure": [
+            2.5260710294751725e-09,
+            -3.801935128733898e-09
+          ],
+          "maximum": 5.62711477e-09
+        },
+        {
+          "seed": 0,
+          "family": 1,
+          "kind": "other",
+          "count": 15707,
+          "pressure": [
+            0.06635620940992168,
+            0.05060724257340101
+          ],
+          "maximum": 0.003912661
+        },
+        {
+          "seed": 0,
+          "family": 2,
+          "kind": "integer-nu edge",
+          "count": 297,
+          "pressure": [
+            1.8206582303834747e-09,
+            9.665661864999617e-10
+          ],
+          "maximum": 5.550903e-11
+        },
+        {
+          "seed": 0,
+          "family": 2,
+          "kind": "other",
+          "count": 1224,
+          "pressure": [
+            -0.008548483163059714,
+            -0.002525683592078034
+          ],
+          "maximum": 0.0003913327
+        },
+        {
+          "seed": 0,
+          "family": 3,
+          "kind": "integer-nu edge",
+          "count": 295,
+          "pressure": [
+            -1.723350853486057e-09,
+            -8.594956315129513e-09
+          ],
+          "maximum": 7.513386e-10
+        },
+        {
+          "seed": 0,
+          "family": 3,
+          "kind": "other",
+          "count": 2117,
+          "pressure": [
+            0.01564063433136684,
+            0.013643493697965157
+          ],
+          "maximum": 0.0006268912
+        },
+        {
+          "seed": 0,
+          "family": 5,
+          "kind": "integer-nu edge",
+          "count": 5673,
+          "pressure": [
+            1.9748844626002776e-07,
+            -4.195217869252689e-08
+          ],
+          "maximum": 1.4114336e-07
+        },
+        {
+          "seed": 0,
+          "family": 5,
+          "kind": "other",
+          "count": 5924,
+          "pressure": [
+            0.012725306232348795,
+            -0.003258877098487338
+          ],
+          "maximum": 0.0102767851
+        },
+        {
+          "seed": 0,
+          "family": 6,
+          "kind": "integer-nu edge",
+          "count": 275,
+          "pressure": [
+            3.4112367404966883e-10,
+            1.0458877229366204e-08
+          ],
+          "maximum": 6.562157e-09
+        },
+        {
+          "seed": 0,
+          "family": 6,
+          "kind": "other",
+          "count": 363,
+          "pressure": [
+            0.024286177876021317,
+            -0.03172212326665722
+          ],
+          "maximum": 0.0322340056
+        },
+        {
+          "seed": 0,
+          "family": 7,
+          "kind": "integer-nu edge",
+          "count": 339,
+          "pressure": [
+            -6.949207412542295e-08,
+            8.429411079298803e-08
+          ],
+          "maximum": 6.62587141e-08
+        },
+        {
+          "seed": 0,
+          "family": 7,
+          "kind": "other",
+          "count": 524,
+          "pressure": [
+            -0.0367711947173094,
+            -0.007954208999947853
+          ],
+          "maximum": 0.011007919
+        },
+        {
+          "seed": 0,
+          "family": 8,
+          "kind": "integer-nu edge",
+          "count": 9,
+          "pressure": [
+            7.175353673024991e-10,
+            -1.972743718659615e-09
+          ],
+          "maximum": 7.254472e-10
+        },
+        {
+          "seed": 0,
+          "family": 8,
+          "kind": "other",
+          "count": 13,
+          "pressure": [
+            0.0009161118110822449,
+            -0.007488649070306242
+          ],
+          "maximum": 0.00321470085
+        },
+        {
+          "seed": 0,
+          "family": 9,
+          "kind": "integer-nu edge",
+          "count": 463,
+          "pressure": [
+            -2.993234230622589e-09,
+            -6.605862614730037e-08
+          ],
+          "maximum": 8.604752e-08
+        },
+        {
+          "seed": 0,
+          "family": 9,
+          "kind": "other",
+          "count": 1028,
+          "pressure": [
+            0.10481702866476225,
+            -0.2178762051401825
+          ],
+          "maximum": 0.108528152
+        },
+        {
+          "seed": 0,
+          "family": 10,
+          "kind": "integer-nu edge",
+          "count": 10,
+          "pressure": [
+            -6.136622213095618e-09,
+            -2.1405149192794724e-09
+          ],
+          "maximum": 5.81770943e-09
+        },
+        {
+          "seed": 0,
+          "family": 10,
+          "kind": "other",
+          "count": 63,
+          "pressure": [
+            -0.03343214896920039,
+            0.006423972454072521
+          ],
+          "maximum": 0.0112217264
+        },
+        {
+          "seed": 0,
+          "family": 11,
+          "kind": "integer-nu edge",
+          "count": 7,
+          "pressure": [
+            1.82762173295753e-10,
+            3.728031144156603e-11
+          ],
+          "maximum": 7.531426e-11
+        },
+        {
+          "seed": 0,
+          "family": 11,
+          "kind": "other",
+          "count": 75,
+          "pressure": [
+            -0.04252611264430085,
+            -0.07670211885113795
+          ],
+          "maximum": 0.0358456
+        },
+        {
+          "seed": 17,
+          "family": 0,
+          "kind": "integer-nu edge",
+          "count": 7310,
+          "pressure": [
+            -8.299233545442437e-10,
+            5.540774360574933e-10
+          ],
+          "maximum": 1.839029e-12
+        },
+        {
+          "seed": 17,
+          "family": 0,
+          "kind": "other",
+          "count": 34211,
+          "pressure": [
+            0.01733270096956723,
+            0.0024065001325809126
+          ],
+          "maximum": 7.331296e-06
+        },
+        {
+          "seed": 17,
+          "family": 1,
+          "kind": "integer-nu edge",
+          "count": 8498,
+          "pressure": [
+            -1.0171671700253767e-08,
+            -9.491523519829657e-09
+          ],
+          "maximum": 2.043324e-08
+        },
+        {
+          "seed": 17,
+          "family": 1,
+          "kind": "other",
+          "count": 15768,
+          "pressure": [
+            0.06149452429338852,
+            0.05318444084019151
+          ],
+          "maximum": 0.00392541429
+        },
+        {
+          "seed": 17,
+          "family": 2,
+          "kind": "integer-nu edge",
+          "count": 288,
+          "pressure": [
+            1.844228292621623e-09,
+            9.632746023722621e-10
+          ],
+          "maximum": 7.775351e-11
+        },
+        {
+          "seed": 17,
+          "family": 2,
+          "kind": "other",
+          "count": 1229,
+          "pressure": [
+            -0.008656247001113063,
+            -0.0037210182261378077
+          ],
+          "maximum": 0.0003938291
+        },
+        {
+          "seed": 17,
+          "family": 3,
+          "kind": "integer-nu edge",
+          "count": 301,
+          "pressure": [
+            -2.216125697936153e-09,
+            -9.097838015880848e-09
+          ],
+          "maximum": 7.32015171e-10
+        },
+        {
+          "seed": 17,
+          "family": 3,
+          "kind": "other",
+          "count": 2122,
+          "pressure": [
+            0.014517103060436715,
+            0.013148863342194676
+          ],
+          "maximum": 0.0006265363
+        },
+        {
+          "seed": 17,
+          "family": 5,
+          "kind": "integer-nu edge",
+          "count": 6150,
+          "pressure": [
+            -2.9793864269718218e-08,
+            8.899175025554566e-08
+          ],
+          "maximum": 9.076454e-08
+        },
+        {
+          "seed": 17,
+          "family": 5,
+          "kind": "other",
+          "count": 5852,
+          "pressure": [
+            -0.009393857472195889,
+            -0.004163207037081937
+          ],
+          "maximum": 0.01936577
+        },
+        {
+          "seed": 17,
+          "family": 6,
+          "kind": "integer-nu edge",
+          "count": 278,
+          "pressure": [
+            -9.197093572050396e-09,
+            2.241318692346519e-09
+          ],
+          "maximum": 4.5884498e-08
+        },
+        {
+          "seed": 17,
+          "family": 6,
+          "kind": "other",
+          "count": 402,
+          "pressure": [
+            0.0455336475465949,
+            0.009048902266436131
+          ],
+          "maximum": 0.0129597755
+        },
+        {
+          "seed": 17,
+          "family": 7,
+          "kind": "integer-nu edge",
+          "count": 358,
+          "pressure": [
+            -5.499551775442566e-08,
+            -1.5539794568102082e-08
+          ],
+          "maximum": 5.7555674e-08
+        },
+        {
+          "seed": 17,
+          "family": 7,
+          "kind": "other",
+          "count": 567,
+          "pressure": [
+            -0.021874617498940613,
+            0.007198016864568465
+          ],
+          "maximum": 0.01422017
+        },
+        {
+          "seed": 17,
+          "family": 8,
+          "kind": "integer-nu edge",
+          "count": 7,
+          "pressure": [
+            9.905296318257542e-10,
+            -1.5013735421563128e-09
+          ],
+          "maximum": 6.685027e-10
+        },
+        {
+          "seed": 17,
+          "family": 8,
+          "kind": "other",
+          "count": 11,
+          "pressure": [
+            -0.0029052570976484124,
+            -0.00447243355006451
+          ],
+          "maximum": 0.006946103
+        },
+        {
+          "seed": 17,
+          "family": 9,
+          "kind": "integer-nu edge",
+          "count": 513,
+          "pressure": [
+            3.263196256923604e-08,
+            4.857179314014402e-08
+          ],
+          "maximum": 2.29048567e-07
+        },
+        {
+          "seed": 17,
+          "family": 9,
+          "kind": "other",
+          "count": 1098,
+          "pressure": [
+            -8.835115002612647e-05,
+            -0.07227530977739335
+          ],
+          "maximum": 0.0245259032
+        },
+        {
+          "seed": 17,
+          "family": 10,
+          "kind": "integer-nu edge",
+          "count": 12,
+          "pressure": [
+            6.347735149443655e-10,
+            -7.148616880499376e-10
+          ],
+          "maximum": 8.83551732e-10
+        },
+        {
+          "seed": 17,
+          "family": 10,
+          "kind": "other",
+          "count": 75,
+          "pressure": [
+            -0.003369172392701936,
+            0.011662603383252725
+          ],
+          "maximum": 0.0113425627
+        },
+        {
+          "seed": 17,
+          "family": 11,
+          "kind": "integer-nu edge",
+          "count": 9,
+          "pressure": [
+            -2.9736853151750646e-10,
+            5.923335119619557e-11
+          ],
+          "maximum": 4.64269734e-10
+        },
+        {
+          "seed": 17,
+          "family": 11,
+          "kind": "other",
+          "count": 77,
+          "pressure": [
+            -0.029857879306018634,
+            -0.05734051471203831
+          ],
+          "maximum": 0.0361069143
+        }
+      ]
+    }
+  },
+  "invalidValidationRun": {
+    "guided": "Source changed but fields/controls and shader warning line numbers match the prior binary; conditional include was not recompiled. Use guided-fresh to assess the remaining-path proposal."
+  }
+}
