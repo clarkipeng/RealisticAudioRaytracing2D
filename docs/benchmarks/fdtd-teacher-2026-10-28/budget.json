@@ -1,0 +1,20 @@
+{
+  "declared": "2026-10-28, before any FDTD field was compared with a BEM reference",
+  "metric": "complex relative L2 = ||p_fdtd - p_bem|| / ||p_bem|| over receivers; exp(+iwt), free field exp(-ikr)/r; no gain, phase or normalization fitting",
+  "references": {
+    "canopy": "wave-review-2026-10-27 evidence, canopy/reference/reference-0.25-125.npz (1,166 receivers, 293 shadow by the independent segment/box check)",
+    "blocks": "wave-review-2026-10-27 evidence, blocks/reference/reference-0.1-250.npz (1,178 receivers)"
+  },
+  "reportedField": "finest grid level (0.05/3 m), raw; no Richardson extrapolation in the headline",
+  "pass": {
+    "canopyWholeMap": 0.05,
+    "blocksWholeMap": 0.05
+  },
+  "reportedWithoutThreshold": ["canopy shadow-region error", "canopy receiver #323 error", "blocks shadow-region error"],
+  "selfConsistency": {
+    "finestGridPairChange": 0.01,
+    "absorbingLayerChange": 0.01,
+    "truncationChange": 0.01,
+    "freeFieldAnalyticErrorAtFinestLevel": 0.01
+  }
+}
