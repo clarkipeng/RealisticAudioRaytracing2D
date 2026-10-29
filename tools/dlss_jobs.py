@@ -140,10 +140,12 @@ class Worker:
                     mains = on_mains()
                     if not mains and not suspended:
                         os.killpg(process.pid, signal.SIGSTOP)
+                        awake.terminate()   # Let the Mac sleep while the worker waits for AC power.
                         suspended, paused_at = True, time.monotonic()
                         self.log(f'suspended worker on battery at {time.strftime("%H:%M:%S")}')
                     elif mains and suspended:
                         os.killpg(process.pid, signal.SIGCONT)
+                        awake = subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
                         suspended = False
                         self.paused_seconds += time.monotonic() - paused_at
                         self.log(f'resumed worker on AC power at {time.strftime("%H:%M:%S")}')
@@ -252,6 +254,26 @@ def run_test(name, filter_, work_fraction, runner=RUNNER, unity=UNITY):
     return summary
 
 
+def reproduce(data, names, work_fraction):
+    """Re-render scenes from their exact scene.json bytes; payloads must match bit for bit.
+
+    Timing files and run.json (which records wall time) are excluded from the comparison.
+    """
+    copy = data / 'repro'
+    for name in names:
+        target = copy / 'scenes' / name
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(data / 'scenes' / name / 'scene.json', target / 'scene.json')
+    render(copy, [copy / 'scenes' / n for n in names], len(names), work_fraction)
+    report = {}
+    for name in names:
+        first, second = data / 'scenes' / name / 'tracer', copy / 'scenes' / name / 'tracer'
+        files = sorted(p.name for p in first.iterdir() if not p.name.startswith(('seconds-', 'run.json', 'provenance')))
+        report[name] = {f: sha256(first / f) == sha256(second / f) for f in files}
+    (copy / 'reproduce.json').write_text(json.dumps(report, indent=1) + '\n')
+    return report
+
+
 # ---------------------------------------------------------------- FDTD subset
 
 def fdtd_select(data, count):
@@ -338,6 +360,9 @@ def main():
     r.add_argument('--work-fraction', type=float, default=.2)
     r.add_argument('--variant', choices=['tracer', 'tracer-rigid'], default='tracer')
     r.add_argument('--fdtd-subset', type=int, help='render only the FDTD-selected scenes')
+    q = sub.add_parser('reproduce')
+    q.add_argument('scenes', nargs='+')
+    q.add_argument('--work-fraction', type=float, default=.2)
     t = sub.add_parser('test')
     t.add_argument('filter')
     t.add_argument('--work-fraction', type=float, default=.2)
@@ -357,6 +382,9 @@ def main():
         folders = [data / 'scenes' / s for s in a.scenes] if a.scenes else \
             fdtd_select(data, a.fdtd_subset) if a.fdtd_subset else scene_dirs(data)
         render(data, folders, a.batch, a.work_fraction, a.variant)
+    elif a.command == 'reproduce':
+        report = reproduce(data, a.scenes, a.work_fraction)
+        print(json.dumps({n: all(v.values()) for n, v in report.items()}, indent=1))
     elif a.command == 'test':
         run_test('test', a.filter, a.work_fraction)
     elif a.command == 'fdtd':
