@@ -13,6 +13,15 @@ A fused GPU wave solver on this Mac now matches both independent wave references
 Its second-order dispersion makes complex-accurate data roughly 35 cells per wavelength, far more than first assumed, so a 500 Hz pilot is GPU-hours per scene family, not overnight.
 What's missing is a procedural scene generator, wall impedance, and a lower-dispersion scheme before 1 kHz.
 
+**Revised direction, 29 October 2026.**
+The upscaler's primary target is now the **converged ray tracer**, not the wave solver.
+It learns low ray budget → high ray budget from the same renderer, which keeps inputs and targets in one physical model and makes labels free to generate.
+That should generalise to unseen geometry better than learning ray → wave, which would ask the network to infer missing physics.
+The cost is that the output inherits the tracer's physics bias (29% whole map / 87% shadow at 125 Hz on the canopy).
+That bias is fixed in the tracer itself and measured against the validated FDTD solver, which becomes a validation tool rather than the bulk label source.
+Ray → wave remains a secondary experiment on a small FDTD-labelled subset, scored on held-out scene families.
+Sections 5–8 below describe the original hybrid-teacher plan; the hybrid crossover stays relevant for that experiment and for qualifying tracer improvements.
+
 ---
 
 ## 1. What the renderer actually computes
