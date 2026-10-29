@@ -16,7 +16,7 @@ import dlss_dataset as dd
 import dlss_scenes as ds
 import fdtd_wave as fw
 
-FIXTURE = Path(__file__).with_name('fixtures') / 'dlss-scenes-v1.json'
+FIXTURE = Path(__file__).with_name('fixtures') / 'dlss-scenes-v2.json'
 
 
 class Generator(unittest.TestCase):

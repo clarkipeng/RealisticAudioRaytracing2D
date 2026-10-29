@@ -19,7 +19,7 @@ import math
 
 import numpy as np
 
-GENERATOR_VERSION = 'dlss-scenes-v1'
+GENERATOR_VERSION = 'dlss-scenes-v2'
 SCENE_SCHEMA = 'dlss-scene-v1'
 LATTICE = .0625        # Box faces are integer multiples of this (dyadic, exact in float32).
 WALL = .25             # Wall, floor and roof thickness (canopy benchmark convention).
@@ -40,7 +40,7 @@ SPEED_OF_SOUND = 343.0
 # Budgets: the label is the converged tracer, K independent seeds at identical
 # settings; inputs are separate runs at fractions of one label run.
 LABEL_BUDGET = dict(raysPerBin=512, completeRouteSamples=65536)
-LABEL_SEEDS = 2
+LABEL_SEEDS = 8        # v1 used 2; its early-field labels failed acceptance (calibration)
 INPUT_FRACTIONS = (256, 64, 16, 4)
 INPUT_SEEDS = 4
 
@@ -70,8 +70,10 @@ CLOSED_FAMILIES = ('shoebox', 'furnished')
 def split_for(family, parameters):
     """Frozen split rule: whole families and parameter ranges, never per receiver.
 
-    validation holds out the corridor/coupled family and dense furniture;
-    test holds out the canopy family and wide doorways.
+    validation holds out the corridor/coupled family and dense furniture
+    (8-10 items requested); test holds out the canopy family and doorways wider
+    than 1.5 m. The generator draws every third doorway/furnished scene from
+    the held-out range.
     """
     if family == 'canopy':
         return 'test'
@@ -246,7 +248,7 @@ def room(boxes, x0, x1, z0, z1, height, openings=(), floor=True, roof=True):
                 boxes.add([a, lo, n0], [b, hi, n1])
 
 
-def shoebox(rng):
+def shoebox(rng, index):
     lx, lz = lattice_value(rng, 3, 8), lattice_value(rng, 3, 7)
     h = lattice_value(rng, 2.5, 4)
     b = Boxes()
@@ -255,10 +257,11 @@ def shoebox(rng):
     return b, p, [(0, lx, 0, lz)], (0, lx, 1, min(2.2, h - .5), 0, lz)
 
 
-def doorway(rng):
-    lx, lz = lattice_value(rng, 3, 7), lattice_value(rng, 3, 6)
+def doorway(rng, index):
+    # Every third scene draws from the held-out wide-opening range.
+    width = lattice_value(rng, 1.5625, 2.0) if index % 3 == 2 else lattice_value(rng, .8, 1.5)
+    lx, lz = lattice_value(rng, 3, 7), lattice_value(rng, max(3, width + 1.5), 6)
     h = lattice_value(rng, 2.6, 3.6)
-    width = lattice_value(rng, .8, 2.0)
     window = rng.uniform() < .3
     center = lattice_value(rng, .6 + width / 2, lz - .6 - width / 2)
     bottom, top = (lattice_value(rng, .8, 1.0), lattice_value(rng, 1.9, min(2.4, h - .3))) if window \
@@ -273,7 +276,7 @@ def doorway(rng):
     return b, p, [(0, lx, 0, lz), outside], region
 
 
-def corridor(rng):
+def corridor(rng, index):
     kind = ['straight', 'L', 'coupled'][int(rng.integers(3))]
     h = lattice_value(rng, 2.4, 3.2)
     b = Boxes()
@@ -319,7 +322,7 @@ def corridor(rng):
     return b, p, regions, source
 
 
-def canopy(rng):
+def canopy(rng, index):
     kind = ['posts', 'overhang', 'porch'][int(rng.integers(3))]
     h = lattice_value(rng, 2.4, 4.0)
     sx, sz = lattice_value(rng, 3, 6), lattice_value(rng, 3, 5.5)
@@ -343,7 +346,7 @@ def canopy(rng):
     return b, p, regions, source
 
 
-def barriers(rng):
+def barriers(rng, index):
     size = lattice_value(rng, 6, 9)
     count = int(rng.integers(2, 7))
     b = Boxes()
@@ -372,10 +375,11 @@ def barriers(rng):
     return b, p, regions, edge
 
 
-def furnished(rng):
-    lx, lz = lattice_value(rng, 4, 8), lattice_value(rng, 3.5, 7)
+def furnished(rng, index):
+    lx, lz = lattice_value(rng, 5, 8), lattice_value(rng, 4.5, 7)
     h = lattice_value(rng, 2.5, 3.5)
-    items = int(rng.integers(2, 11))
+    # Every third scene draws from the held-out dense range (8-10 items).
+    items = int(rng.integers(8, 11)) if index % 3 == 2 else int(rng.integers(2, 8))
     b = Boxes()
     room(b, 0, lx, 0, lz, h)
     placed = 0
@@ -402,7 +406,7 @@ def furnished(rng):
             continue
         b.add(low, high, 'clutter')
         placed += 1
-    p = dict(length=lx, depth=lz, height=h, items=placed)
+    p = dict(length=lx, depth=lz, height=h, items=items, placed=placed)
     return b, p, [(0, lx, 0, lz)], (.5, lx - .5, 1, min(2.2, h - .5), .5, lz - .5)
 
 
@@ -448,7 +452,7 @@ def generate(family, index):
         raise ValueError(f'Unknown family {family}')
     scene_id = f'{family}-{index:04d}'
     rng = stream(scene_id, 'geometry')
-    boxes, parameters, regions, source_region = BUILDERS[family](rng)
+    boxes, parameters, regions, source_region = BUILDERS[family](rng, index)
     walls = boxes.walls()
     materials = surface_materials(boxes.roles, stream(scene_id, 'materials'))
     endpoints = stream(scene_id, 'endpoints')

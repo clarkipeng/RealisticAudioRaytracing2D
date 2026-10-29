@@ -1,0 +1,12 @@
+{
+ "generator": "dlss-scenes-v2",
+ "note": "SHA-256 of dlss_scenes.dumps(generate(family, 0)); regenerate only with a new GENERATOR_VERSION.",
+ "scenes": {
+  "shoebox-0000": "3b0566726db866359d2aea1f5f7b85b0d323bddc5908f0a15464eccdf76726a4",
+  "doorway-0000": "4eedf988446531300f3f78aece6c66689a38b881b091508e0bb109e5bdd44e67",
+  "corridor-0000": "2a0c2cbd82e3b6171aceea651c3877be92f925e7478dca2c5e808bc1e10da4d6",
+  "canopy-0000": "ed880b73892f03ec8fd1e3cb0ea65ec1da2e4f1c30657986e554067de58843c3",
+  "barriers-0000": "83b6b6ed53d3279e17ae589b655efbd99d0ac2ad657ce1eb6474be4108af3f0e",
+  "furnished-0000": "c092ab747aa68a0e2f36cd041417b1a724d8634813d1e42f08e5ca381707682b"
+ }
+}

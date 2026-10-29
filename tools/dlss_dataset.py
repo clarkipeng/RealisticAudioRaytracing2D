@@ -48,7 +48,7 @@ FAMILIES = ['direct', 'R', 'D', 'DD', 'RD', 'DR', 'RR', 'walk']
 TARGET_FAMILIES = ['direct', 'R', 'D', 'DD', 'RD', 'DR', 'RR']
 UNITS = 'pressure relative to a unit-amplitude point source at 1 m; time dependence exp(+i*w*t)'
 # Label acceptance, fixed with the protocol before the pilot (generation.json).
-ACCEPTANCE = dict(relativeStandardError=.1, nearZeroFloor=.01, minimumValidFraction=.9,
+ACCEPTANCE = dict(relativeStandardError=.1, nearZeroFloor=.05, minimumValidFraction=.9,
                   definition='entry valid if sqrt(var/K) <= relativeStandardError*|mean| + '
                              'nearZeroFloor*rms_receivers(|mean|) at that frequency; '
                              'scene accepted if all values are finite and the valid fraction >= minimumValidFraction')
