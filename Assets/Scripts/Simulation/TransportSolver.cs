@@ -59,6 +59,9 @@ public sealed class TransportSolver : IDisposable
         if(Emission.HasBursts(scene))transport.PrepareEmissions(signals,first,frames,evaluate);
     }
     internal int RayPathsPerFrame => transport?.PathsPerFrame ?? 0;
+    // Offline dataset diagnostic; see RayTransport.CompleteSampleFamilies.
+    internal int[] CompleteSampleFamilies() =>
+        transport?.CompleteSampleFamilies() ?? throw new InvalidOperationException("Requires GPU raytraced transport.");
     ComputeBuffer bvhNodes, bvhIndices;
     ComputeBuffer primitives, states, sources, listeners, responses;
     readonly TakeRender.DirectPath[] completedPaths;

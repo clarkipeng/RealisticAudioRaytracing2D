@@ -281,6 +281,39 @@ internal sealed class RayTransport : IDisposable
         emissionRanges.SetData(emissions.Ranges,0,0,frames*emissions.FrameStride);
         emissionPoints.SetData(emissions.Points,0,0,frames*emissions.PointsPerFrame);emissionClocks.SetData(emissions.Clocks,0,0,frames*emissions.PointsPerFrame);
     }
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    struct CompleteRoute { public uint first, second, family; public float weight; }
+    // Diagnostic synchronous export for offline datasets. Returns the complete-route
+    // family (0 D, 1 DD, 2 RD, 3 DR, 4 RR) of each integration sample written by the
+    // latest dispatch, or -1 where no route was selected. It reads the route tables
+    // left by that dispatch and repeats IntegrateCompleteRoutes' sample-to-route
+    // mapping, so it is defined only for one pair, one frame and one emission site.
+    internal int[] CompleteSampleFamilies()
+    {
+        if (pending || pairs != 1 || mirrorSites[0] != 1 || completeSlots != completeSamples)
+            throw new InvalidOperationException("Complete-route families need one idle 3D point-source pair.");
+        var families = new int[completeSamples];
+        Array.Fill(families, -1);
+        if (completeSamples == 0)
+            return families;
+        var count = new uint[1];
+        completeCount.GetData(count);
+        if (count[0] == 0)
+            return families;
+        if (count[0] > completeCapacity)
+            throw new InvalidOperationException("Complete-route count exceeds its capacity.");
+        var selected = new uint[count[0]];
+        completeSelected.GetData(selected, 0, 0, selected.Length);
+        var routes = new CompleteRoute[completeCapacity];
+        completeCandidates.GetData(routes);
+        uint total = (uint)completeSamples, per = total / count[0], extra = total % count[0], split = (per + 1) * extra;
+        for (uint index = 0; index < total; index++)
+        {
+            uint rank = index < split ? index / (per + 1) : extra + (index - split) / per;
+            families[index] = (int)routes[selected[rank]].family;
+        }
+        return families;
+    }
     internal void BindDebug(ComputeBuffer segments)
     {
         shader.SetBuffer(directKernel, "DebugSegments", segments);
