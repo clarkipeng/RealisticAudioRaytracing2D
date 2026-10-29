@@ -9,8 +9,9 @@ The renderer's remaining error at low frequencies is a *systematic bias*, not sa
 That is the regime where sound behaves like waves, not rays.
 The fix the field uses is a **hybrid**: a wave simulation below roughly 0.5–1.4 kHz and ray tracing above.
 For us, that hybrid becomes the *training target* for the learned upscaler.
-A GPU wave solver on this Mac already reproduces textbook room modes and is fast enough to generate hundreds of training scenes overnight.
-What's missing is a procedural scene generator and the validation step that qualifies the solver as ground truth.
+A fused GPU wave solver on this Mac now matches both independent wave references (125 Hz canopy 1.37%, 250 Hz blocks 0.79%), so the stage-1 gate is passed for rigid geometry.
+Its second-order dispersion makes complex-accurate data roughly 35 cells per wavelength, far more than first assumed, so a 500 Hz pilot is GPU-hours per scene family, not overnight.
+What's missing is a procedural scene generator, wall impedance, and a lower-dispersion scheme before 1 kHz.
 
 ---
 
@@ -165,8 +166,19 @@ Every spectral peak between 40 and 260 Hz (25 of them) lands within **0.23%** of
 Throughput is **0.56–0.64 billion cell updates per second** across 128³–320³ grids, using unfused PyTorch operations.
 A fused Metal kernel should be several times faster **[est., unmeasured]**.
 
-This is a correctness smoke test, not a qualified teacher.
-Not yet tested: open boundaries (absorbing layers for outdoor scenes), comparison against the canopy BEM, absorbing wall materials.
+This was a correctness smoke test, not a qualified teacher.
+
+### Stage 1 result: the teacher is qualified for rigid geometry (29 October)
+
+The full validation is in [the FDTD teacher benchmark](../benchmarks/fdtd-teacher-2026-10-28/README.md).
+- [`tools/fdtd_wave.py`](../../tools/fdtd_wave.py) runs fused Metal kernels (via PyTorch MPS) with a convolutional PML, exact box walls on velocity faces, and analytically normalised complex output.
+- Against the canopy BEM it gives **1.37% whole map, 3.97% shadow, 4.66% at receiver #323**; against the blocks BEM **0.79% / 2.96%**. Nothing is fitted; the declared budget was 5%.
+- Its own changes are small: 0.14% for the last grid refinement, 0.006% for a thicker or farther absorbing layer, 0.17% for truncation, and 0.03% against the analytic free field.
+- The remaining canopy difference sits in the resonant room interior, where a 0.1 Hz frequency shift changes the field by 1.7%; it is most likely residual BEM mesh error, not proven.
+- The lossless floorless room rings for seconds, so the canopy needed 1.2 s of simulated time; absorbing materials will shorten this.
+- The PFFDTD Metal fork was checked and not adopted: Cartesian only, first-order boundary absorber rather than a PML, and Metal untested in its CI.
+- Throughput is about 1.9–2.3 billion cell updates per second, three to four times the unfused sketch.
+- Not yet done: wall impedance (absorbing materials), oblique geometry (staircasing needs its own convergence check), and broadband validation.
 
 ### What it costs
 
@@ -185,6 +197,10 @@ Open scenes also need an absorbing margin around the domain, which adds volume.
 
 **Prototype budget [est.]:** 500 scenes × ~4 listener runs × ~20 s (900 m³ at 500 Hz) ≈ 11 GPU-hours at the measured rate.
 That is overnight on this Mac with throttling, or less with a fused kernel.
+
+**Revised after stage 1.** The table above assumes 10 cells per wavelength, which the stage-1 dispersion measurement puts at about 60% complex error after 10 wavelengths.
+About 35 cells per wavelength keeps free-field dispersion near 5% over 10 wavelengths: about 20 GPU minutes per 0.5 s source run for 900 m³ at 500 Hz at the measured 1.9 Gcell/s.
+The same pilot is then roughly 670 GPU-hours, so it needs smaller rooms, rented GPUs, or a lower-dispersion scheme (FCC or fourth-order) first; complex-accurate 1 kHz in 900 m³ needs about 17 GiB.
 
 ## 6. Scaling environments
 
@@ -255,7 +271,7 @@ The spec already demands this comparison at matched total cost.
 
 | Stage | Work | Gate before moving on |
 |---|---|---|
-| 1 | Fused GPU FDTD (or verify the PFFDTD Metal fork) with absorbing boundaries and wall impedance | Matches the 125 Hz canopy BEM and the 2D/2.5D reference set within a declared budget, e.g. under 5% |
+| 1 | Fused GPU FDTD (or verify the PFFDTD Metal fork) with absorbing boundaries and wall impedance | Matches the 125 Hz canopy BEM and the 2D/2.5D reference set within a declared budget, e.g. under 5%. **Passed for rigid walls on 29 October:** canopy 1.37%, 250 Hz blocks 0.79%. Wall impedance remains. |
 | 2 | Procedural generator + headless Unity batch renders from the same scene file | Same scene compiles identically to FDTD voxels and Unity primitives; renders reproducible by seed |
 | 3 | Dataset writer (hashes, splits, per-family buffers) | Split isolation and identity checks pass |
 | 4 | ~500-scene pilot at ≤500 Hz crossover; small causal model | Beats equal-cost extra rays on **held-out families**, measured separately for noise and bias |
@@ -273,7 +289,8 @@ These matter for realism independently of the upscaler:
 
 ## 10. Risks and unknowns
 
-- The FDTD prototype has only passed a closed-box test. The canopy comparison (stage 1 gate) could expose boundary or source-normalisation problems.
+- The FDTD teacher passed the rigid canopy and blocks comparisons; impedance boundaries, oblique geometry and broadband responses are still unvalidated.
+- Second-order dispersion sets the cost: complex-accurate data needs about 35 cells per wavelength, so the overnight pilot estimate was optimistic by more than an order of magnitude.
 - A network trained on teacher data inherits the teacher's limits: staircased oblique walls in FDTD, missing physics in the high-band tracer.
 - Scene count needed for generalisation is unknown until measured.
 - Inference may cost more than the rays it saves; the equal-cost baseline decides.
