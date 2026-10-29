@@ -1,0 +1,2031 @@
+{
+  "budget": {
+    "declared": "2026-10-28, before any FDTD field was compared with a BEM reference",
+    "metric": "complex relative L2 = ||p_fdtd - p_bem|| / ||p_bem|| over receivers; exp(+iwt), free field exp(-ikr)/r; no gain, phase or normalization fitting",
+    "references": {
+      "canopy": "wave-review-2026-10-27 evidence, canopy/reference/reference-0.25-125.npz (1,166 receivers, 293 shadow by the independent segment/box check)",
+      "blocks": "wave-review-2026-10-27 evidence, blocks/reference/reference-0.1-250.npz (1,178 receivers)"
+    },
+    "reportedField": "finest grid level (0.05/3 m), raw; no Richardson extrapolation in the headline",
+    "pass": {
+      "canopyWholeMap": 0.05,
+      "blocksWholeMap": 0.05
+    },
+    "reportedWithoutThreshold": [
+      "canopy shadow-region error",
+      "canopy receiver #323 error",
+      "blocks shadow-region error"
+    ],
+    "selfConsistency": {
+      "finestGridPairChange": 0.01,
+      "absorbingLayerChange": 0.01,
+      "truncationChange": 0.01,
+      "freeFieldAnalyticErrorAtFinestLevel": 0.01
+    }
+  },
+  "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+  "fixtures": {
+    "canopy": {
+      "hz": 125.0,
+      "points": 1166,
+      "shadowPoints": 293,
+      "referenceSha256": "0a405e8c48fe503253573a59b662852d0453f35eb66b76e3a2191667e65d12af",
+      "referenceRefinementChange": {
+        "whole": 0.004299679656939406,
+        "shadow": 0.013627781375951806
+      },
+      "freeField": {
+        "h50": {
+          "spacing": 0.05,
+          "pointsPerWavelength": 54.88,
+          "complexRelativeL2": 0.002324727539800954,
+          "amplitudeRelativeL2": 0.001604346729850557,
+          "rmsPhaseRadians": 0.003315892835330224,
+          "medianAmplitudeRatio": 0.9984110165407657
+        },
+        "h25": {
+          "spacing": 0.025,
+          "pointsPerWavelength": 109.76,
+          "complexRelativeL2": 0.0006258752900913038,
+          "amplitudeRelativeL2": 0.00041026196795362614,
+          "rmsPhaseRadians": 0.0010026864326799696,
+          "medianAmplitudeRatio": 0.999598783637786
+        },
+        "h17": {
+          "spacing": 0.016666666666666666,
+          "pointsPerWavelength": 164.64000000000001,
+          "complexRelativeL2": 0.00034406881881400786,
+          "amplitudeRelativeL2": 0.00019911427761569518,
+          "rmsPhaseRadians": 0.0006616647903939365,
+          "medianAmplitudeRatio": 0.9998164187119407
+        }
+      },
+      "levels": {
+        "h50": {
+          "spacing": 0.05,
+          "pointsPerWavelength": 54.88,
+          "duration": 1.2,
+          "cells": 9011808,
+          "maxBoxSnap": 6.661338147750939e-16,
+          "complexRelativeL2": 0.020945000207650336,
+          "shadowComplexRelativeL2": 0.05897654097241578,
+          "litComplexRelativeL2": 0.016735433199837668,
+          "amplitudeRelativeL2": 0.01263655772051916,
+          "rmsPhaseRadians": 0.10304668328215327,
+          "medianAmplitudeRatio": 1.0003557572916018,
+          "truncationChange": {
+            "fromSeconds": 0.9000000000000002,
+            "toSeconds": 1.2,
+            "whole": 0.003151979614264901,
+            "shadow": 0.011882841906411692
+          },
+          "probe": {
+            "index": 323,
+            "fdtd": [
+              0.1761038035202636,
+              0.11111033117773411
+            ],
+            "reference": [
+              0.16852273163949638,
+              0.12258424672093361
+            ],
+            "relativeError": 0.06599236051007112
+          }
+        },
+        "h25": {
+          "spacing": 0.025,
+          "pointsPerWavelength": 109.76,
+          "duration": 1.2,
+          "cells": 55150848,
+          "maxBoxSnap": 4.440892098500626e-16,
+          "complexRelativeL2": 0.014936105364835084,
+          "shadowComplexRelativeL2": 0.042787162917221185,
+          "litComplexRelativeL2": 0.011797959287383225,
+          "amplitudeRelativeL2": 0.009266349614028821,
+          "rmsPhaseRadians": 0.03879001372999167,
+          "medianAmplitudeRatio": 1.0014587246012685,
+          "truncationChange": {
+            "fromSeconds": 0.9000000000000002,
+            "toSeconds": 1.2,
+            "whole": 0.0032226479770807686,
+            "shadow": 0.012165551779588942
+          },
+          "probe": {
+            "index": 323,
+            "fdtd": [
+              0.17479021814975138,
+              0.11439209727107558
+            ],
+            "reference": [
+              0.16852273163949638,
+              0.12258424672093361
+            ],
+            "relativeError": 0.04949678118246713
+          }
+        },
+        "h17": {
+          "spacing": 0.016666666666666666,
+          "pointsPerWavelength": 164.64000000000001,
+          "duration": 1.2,
+          "cells": 169049888,
+          "maxBoxSnap": 8.881784197001252e-16,
+          "complexRelativeL2": 0.013672200886147432,
+          "shadowComplexRelativeL2": 0.039668298654535215,
+          "litComplexRelativeL2": 0.01070359937793,
+          "amplitudeRelativeL2": 0.008542693828521426,
+          "rmsPhaseRadians": 0.03365618969056455,
+          "medianAmplitudeRatio": 1.0015206654667854,
+          "truncationChange": {
+            "fromSeconds": 0.9000000000000002,
+            "toSeconds": 1.2,
+            "whole": 0.003218855944076882,
+            "shadow": 0.012193038478674378
+          },
+          "probe": {
+            "index": 323,
+            "fdtd": [
+              0.1746194297949557,
+              0.11503258807644036
+            ],
+            "reference": [
+              0.16852273163949638,
+              0.12258424672093361
+            ],
+            "relativeError": 0.04657364367640588
+          }
+        }
+      },
+      "refinement": {
+        "h50->h25": {
+          "whole": 0.006454356663058008,
+          "shadow": 0.01720548468722973
+        },
+        "h25->h17": {
+          "whole": 0.00140788394255226,
+          "shadow": 0.003520734927780048
+        },
+        "observedOrder": 1.7254571702726538,
+        "estimatedFinestDiscretizationError": 0.0013898535284784803,
+        "observedOrderShadow": 1.8339258265338154,
+        "estimatedFinestDiscretizationErrorShadow": 0.003190575409381985
+      },
+      "truncation": {
+        "referenceSeconds": 2.0000000000000004,
+        "times": [
+          0.05,
+          0.07500000000000001,
+          0.10000000000000002,
+          0.12500000000000003,
+          0.15000000000000002,
+          0.17500000000000004,
+          0.20000000000000007,
+          0.22500000000000006,
+          0.25000000000000006,
+          0.2750000000000001,
+          0.3000000000000001,
+          0.32500000000000007,
+          0.3500000000000001,
+          0.3750000000000001,
+          0.40000000000000013,
+          0.42500000000000016,
+          0.4500000000000001,
+          0.47500000000000014,
+          0.5000000000000001,
+          0.5250000000000001,
+          0.5500000000000002,
+          0.5750000000000002,
+          0.6000000000000002,
+          0.6250000000000002,
+          0.6500000000000002,
+          0.6750000000000003,
+          0.7000000000000002,
+          0.7250000000000002,
+          0.7500000000000002,
+          0.7750000000000002,
+          0.8000000000000003,
+          0.8250000000000003,
+          0.8500000000000003,
+          0.8750000000000002,
+          0.9000000000000002,
+          0.9250000000000003,
+          0.9500000000000003,
+          0.9750000000000003,
+          1.0000000000000002,
+          1.0250000000000004,
+          1.0500000000000003,
+          1.0750000000000004,
+          1.1000000000000003,
+          1.1250000000000004,
+          1.1500000000000004,
+          1.1750000000000003,
+          1.2000000000000004,
+          1.2250000000000003,
+          1.2500000000000004,
+          1.2750000000000004,
+          1.3000000000000005,
+          1.3250000000000004,
+          1.3500000000000005,
+          1.3750000000000004,
+          1.4000000000000004,
+          1.4250000000000005,
+          1.4500000000000004,
+          1.4750000000000005,
+          1.5000000000000004,
+          1.5250000000000006,
+          1.5500000000000005,
+          1.5750000000000006,
+          1.6000000000000005,
+          1.6250000000000004,
+          1.6500000000000006,
+          1.6750000000000005,
+          1.7000000000000006,
+          1.7250000000000005,
+          1.7500000000000007,
+          1.7750000000000006,
+          1.8000000000000005,
+          1.8250000000000006,
+          1.8500000000000005,
+          1.8750000000000007,
+          1.9000000000000006,
+          1.9250000000000007,
+          1.9500000000000006,
+          1.9750000000000005,
+          2.0000000000000004
+        ],
+        "whole": [
+          0.21563683728093547,
+          0.1742392351994371,
+          0.14543650977813355,
+          0.1214763189248585,
+          0.10184931041773365,
+          0.08603609141957844,
+          0.07280829187471714,
+          0.06053543413606837,
+          0.051288428550146856,
+          0.043357344749781264,
+          0.03753533905459624,
+          0.032520804749605114,
+          0.02738894645705913,
+          0.02382510859754059,
+          0.020894580393155542,
+          0.017792169033751665,
+          0.014942578546212022,
+          0.013935564716816944,
+          0.012341369119157859,
+          0.011099542109292461,
+          0.009982814814346735,
+          0.00946414476603319,
+          0.008347268457746389,
+          0.007371635970123671,
+          0.006859616888025373,
+          0.005783995478449441,
+          0.005873180170688497,
+          0.0049553787086908455,
+          0.005256951000286677,
+          0.004634110169347093,
+          0.004661314790431392,
+          0.004218269264964516,
+          0.00360298467877589,
+          0.0037981311173575128,
+          0.002992410569994078,
+          0.003442592019630002,
+          0.002832449249929858,
+          0.003077457929540228,
+          0.0029143941762536717,
+          0.0025471508074321083,
+          0.002706473656838283,
+          0.0019620946380089995,
+          0.0023483234105815595,
+          0.001729378654276585,
+          0.0020999328027458274,
+          0.0018459837115462837,
+          0.0017360725416008063,
+          0.002044228323639104,
+          0.0013541526987483508,
+          0.0018277375718520207,
+          0.0011865996588663222,
+          0.0014225784208825904,
+          0.0012372960285510974,
+          0.0011624204600713338,
+          0.0013365873273807423,
+          0.0009157005619120932,
+          0.0014112853025991232,
+          0.0007793079216099043,
+          0.0011451497658847563,
+          0.0008735315644595544,
+          0.000799018724093568,
+          0.0009682794194914012,
+          0.000559198927186494,
+          0.0010061049808684365,
+          0.0004832249903854186,
+          0.0009283070392728485,
+          0.0006017837657383089,
+          0.000633593376242198,
+          0.0007471976772944125,
+          0.00034205141635750154,
+          0.000762456431936262,
+          0.0002947821504879814,
+          0.0007094218557892402,
+          0.00042852469829151804,
+          0.00055990123615328,
+          0.0005509961670917289,
+          0.00030588509688118465,
+          0.0006226360129578241,
+          0.0
+        ],
+        "shadow": [
+          0.6769329060365695,
+          0.48065754397726623,
+          0.4373080467373843,
+          0.3599574242154045,
+          0.2881800258322472,
+          0.2642408982713093,
+          0.2274121622091366,
+          0.18310412564945847,
+          0.16520511325030826,
+          0.1410306329728483,
+          0.12545290110293233,
+          0.1087709824046161,
+          0.08870946571567719,
+          0.07787593330502211,
+          0.06829364882007158,
+          0.05738716518690018,
+          0.0484600105728811,
+          0.04433503002602685,
+          0.04102936723174386,
+          0.037929676596390204,
+          0.03422318885084668,
+          0.032237129106993626,
+          0.030113072350012867,
+          0.027325346179052946,
+          0.025060755451417092,
+          0.021616532154925868,
+          0.022163396405311227,
+          0.01820401227927898,
+          0.020542393810121882,
+          0.017196525257495536,
+          0.01748060824430473,
+          0.01609384977676014,
+          0.013527610191969248,
+          0.014067201298542008,
+          0.011504093396731713,
+          0.013487669683352426,
+          0.011009322650899843,
+          0.012336557608091936,
+          0.011722467465943406,
+          0.010195412290494175,
+          0.01094458254153329,
+          0.0077651172231312975,
+          0.009236312511178893,
+          0.0067750582815014285,
+          0.007963699759649768,
+          0.007033834379624234,
+          0.006714526007009892,
+          0.007832699164643101,
+          0.005212600859065782,
+          0.0071545192649541045,
+          0.004559406661295473,
+          0.005687079624092708,
+          0.00490838947562804,
+          0.004657818950196625,
+          0.005398872022984039,
+          0.003696323228148011,
+          0.005622266140508405,
+          0.0030828333718937073,
+          0.0045428297277391215,
+          0.003462348154671491,
+          0.003062033530310888,
+          0.003789820840467328,
+          0.0021570895660397616,
+          0.003911505590084087,
+          0.0018869891604591294,
+          0.0036453054974936523,
+          0.002316483435773892,
+          0.00253075911234881,
+          0.0029331648659036147,
+          0.001344777121838432,
+          0.00306567321832586,
+          0.0011328557913807685,
+          0.0028273525263913,
+          0.0017374209977235426,
+          0.002179139203450466,
+          0.002194904693040687,
+          0.0011499252195446591,
+          0.002418913817747226,
+          0.0
+        ]
+      },
+      "absorbingLayer": {
+        "canopy-h50": {
+          "pml": 16,
+          "margin": 0.5,
+          "spacing": 0.05,
+          "whole": 5.630873003891729e-05,
+          "shadow": 0.0002175565025018144,
+          "against": "canopy-pml32-m2-h50"
+        },
+        "canopy-pml8-m0.5-h50": {
+          "pml": 8,
+          "margin": 0.5,
+          "spacing": 0.05,
+          "whole": 0.004297990651436714,
+          "shadow": 0.01574775094094574,
+          "against": "canopy-pml32-m2-h50"
+        },
+        "canopy-pml32-m0.5-h50": {
+          "pml": 32,
+          "margin": 0.5,
+          "spacing": 0.05,
+          "whole": 3.6485756696936014e-05,
+          "shadow": 0.00014136708808422206,
+          "against": "canopy-pml32-m2-h50"
+        },
+        "canopy-pml16-m0.25-h50": {
+          "pml": 16,
+          "margin": 0.25,
+          "spacing": 0.05,
+          "whole": 0.00013850581656571845,
+          "shadow": 0.0005264860881074875,
+          "against": "canopy-pml32-m2-h50"
+        },
+        "canopy-pml16-m1-h50": {
+          "pml": 16,
+          "margin": 1.0,
+          "spacing": 0.05,
+          "whole": 1.0687186788610066e-05,
+          "shadow": 3.968429892044418e-05,
+          "against": "canopy-pml32-m2-h50"
+        },
+        "canopy-pml16-m2-h50": {
+          "pml": 16,
+          "margin": 2.0,
+          "spacing": 0.05,
+          "whole": 5.756636366874129e-06,
+          "shadow": 1.9450213290234285e-05,
+          "against": "canopy-pml32-m2-h50"
+        }
+      },
+      "richardsonVsReference": {
+        "order": 1.7254571702726538,
+        "whole": 0.012455341378626555,
+        "shadow": 0.036669358518024116,
+        "probe": 0.043723252846744214
+      }
+    },
+    "blocks": {
+      "hz": 250.0,
+      "points": 1178,
+      "shadowPoints": 712,
+      "referenceSha256": "d98c361124ed16579036e76b078f6de9462ca778c763368c476f3c298c91cb0d",
+      "referenceRefinementChange": {
+        "whole": 0.0025985259937714718,
+        "shadow": 0.00983191396617211
+      },
+      "freeField": {
+        "h50": {
+          "spacing": 0.05,
+          "pointsPerWavelength": 27.44,
+          "complexRelativeL2": 0.014425951134690468,
+          "amplitudeRelativeL2": 0.008079545495685212,
+          "rmsPhaseRadians": 0.022049271529370137,
+          "medianAmplitudeRatio": 0.992056613541612
+        },
+        "h25": {
+          "spacing": 0.025,
+          "pointsPerWavelength": 54.88,
+          "complexRelativeL2": 0.0036863662051320697,
+          "amplitudeRelativeL2": 0.0020167166425428935,
+          "rmsPhaseRadians": 0.0057637533679648,
+          "medianAmplitudeRatio": 0.9977620837174016
+        },
+        "h17": {
+          "spacing": 0.016666666666666666,
+          "pointsPerWavelength": 82.32000000000001,
+          "complexRelativeL2": 0.0019251709648470952,
+          "amplitudeRelativeL2": 0.0009381237549965865,
+          "rmsPhaseRadians": 0.0034110244960949025,
+          "medianAmplitudeRatio": 0.998924164396733
+        }
+      },
+      "levels": {
+        "h50": {
+          "spacing": 0.05,
+          "pointsPerWavelength": 27.44,
+          "duration": 0.12,
+          "cells": 3369600,
+          "maxBoxSnap": 8.881784197001252e-16,
+          "complexRelativeL2": 0.022275339648589094,
+          "shadowComplexRelativeL2": 0.07502472340656154,
+          "litComplexRelativeL2": 0.017374655486056437,
+          "amplitudeRelativeL2": 0.012066206097628653,
+          "rmsPhaseRadians": 0.08372544964311793,
+          "medianAmplitudeRatio": 0.9998923642607128,
+          "truncationChange": {
+            "fromSeconds": 0.10000000000000002,
+            "toSeconds": 0.12,
+            "whole": 8.41454637360899e-07,
+            "shadow": 3.356864919821848e-06
+          }
+        },
+        "h25": {
+          "spacing": 0.025,
+          "pointsPerWavelength": 54.88,
+          "duration": 0.12,
+          "cells": 19102720,
+          "maxBoxSnap": 4.440892098500626e-16,
+          "complexRelativeL2": 0.010451590722387454,
+          "shadowComplexRelativeL2": 0.03820139914698049,
+          "litComplexRelativeL2": 0.007623769860950242,
+          "amplitudeRelativeL2": 0.005346969993576508,
+          "rmsPhaseRadians": 0.0455641232783848,
+          "medianAmplitudeRatio": 1.0022849734926635,
+          "truncationChange": {
+            "fromSeconds": 0.10000000000000002,
+            "toSeconds": 0.12,
+            "whole": 8.053220445204861e-07,
+            "shadow": 3.2207670297231013e-06
+          }
+        },
+        "h17": {
+          "spacing": 0.016666666666666666,
+          "pointsPerWavelength": 82.32000000000001,
+          "duration": 0.12,
+          "cells": 56921984,
+          "maxBoxSnap": 4.440892098500626e-16,
+          "complexRelativeL2": 0.007942509142967999,
+          "shadowComplexRelativeL2": 0.029579888778710317,
+          "litComplexRelativeL2": 0.00568737471562856,
+          "amplitudeRelativeL2": 0.004083377851054092,
+          "rmsPhaseRadians": 0.03548726828918276,
+          "medianAmplitudeRatio": 1.0026865774737064,
+          "truncationChange": {
+            "fromSeconds": 0.10000000000000002,
+            "toSeconds": 0.12,
+            "whole": 7.924666735116682e-07,
+            "shadow": 3.1688197246169204e-06
+          }
+        }
+      },
+      "refinement": {
+        "h50->h25": {
+          "whole": 0.012577874643227795,
+          "shadow": 0.03738486937632141
+        },
+        "h25->h17": {
+          "whole": 0.0027388781370309666,
+          "shadow": 0.008823141874867985
+        },
+        "observedOrder": 1.7269067478597293,
+        "estimatedFinestDiscretizationError": 0.002700646790411222,
+        "observedOrderShadow": 1.593076528413694,
+        "estimatedFinestDiscretizationErrorShadow": 0.009719539265744186
+      },
+      "truncation": {},
+      "absorbingLayer": {
+        "blocks-h25": {
+          "pml": 16,
+          "margin": 0.5,
+          "spacing": 0.025,
+          "whole": 2.7304157067668343e-06,
+          "shadow": 8.642325405137167e-06,
+          "against": "blocks-pml32-m2-h25"
+        }
+      },
+      "richardsonVsReference": {
+        "order": 1.7269067478597293,
+        "whole": 0.005678490143562357,
+        "shadow": 0.021297106464005292
+      }
+    }
+  },
+  "runs": {
+    "canopy-free-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 0.1,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": true,
+      "shape": [
+        332,
+        84,
+        232
+      ],
+      "origin": [
+        -8.8,
+        -1.3,
+        -5.800000000000001
+      ],
+      "cells": 6470016,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 0.0,
+      "solidCells": 0,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 5.485171082866145,
+        "wallSeconds": 27.309590416989522,
+        "peakDriverBytes": 1082867712,
+        "steps": 1201,
+        "gcellPerSecond": 1.4166357071837614,
+        "peakRssBytes": 348504064
+      },
+      "case": "canopy-free-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "13cf25527e719d3cec8913af8fa9d428f94b3ce85dce5c7407de3eb42e0fbdda",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "64e61b3ce56c7d4fcb96cb0f8ead6abd670b815f12bff0585b535f8b37a1ea91"
+    },
+    "canopy-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        332,
+        117,
+        232
+      ],
+      "origin": [
+        -8.8,
+        -1.3,
+        -5.800000000000001
+      ],
+      "cells": 9011808,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 6.661338147750939e-16,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 100.35649889957858,
+        "wallSeconds": 504.68177580833435,
+        "peakDriverBytes": 1082867712,
+        "steps": 14403,
+        "gcellPerSecond": 1.2933598924558043,
+        "peakRssBytes": 204472320
+      },
+      "case": "canopy-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "cc971910a895c448d685e85ed10608381bb57b3c3f5e11deefcd33482e743cf0"
+    },
+    "canopy-free-h25": {
+      "spacing": 0.025,
+      "hz": [
+        125.0
+      ],
+      "duration": 0.1,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": true,
+      "shape": [
+        632,
+        136,
+        432
+      ],
+      "origin": [
+        -8.4,
+        -0.9,
+        -5.4
+      ],
+      "cells": 37131264,
+      "dt": 4.166011417621935e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 0.0,
+      "solidCells": 0,
+      "pointsPerWavelength": 109.76,
+      "timing": {
+        "gpuSeconds": 63.465542083926266,
+        "wallSeconds": 317.6511269999901,
+        "peakDriverBytes": 1082867712,
+        "steps": 2401,
+        "gcellPerSecond": 1.4047333708440712,
+        "peakRssBytes": 359677952
+      },
+      "case": "canopy-free-h25",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "13cf25527e719d3cec8913af8fa9d428f94b3ce85dce5c7407de3eb42e0fbdda",
+      "decimation": 4,
+      "workFraction": 0.2,
+      "npzSha256": "e73c0d1bc67d998651f32bae4afe6f85cc7dd9c3892b411470402e6288248f02"
+    },
+    "canopy-h25": {
+      "spacing": 0.025,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        632,
+        202,
+        432
+      ],
+      "origin": [
+        -8.4,
+        -0.9,
+        -5.4
+      ],
+      "cells": 55150848,
+      "dt": 4.166011417621935e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 4.440892098500626e-16,
+      "solidCells": 1796000,
+      "pointsPerWavelength": 109.76,
+      "timing": {
+        "gpuSeconds": 803.4070116934308,
+        "wallSeconds": 4037.439992904663,
+        "peakDriverBytes": 2156609536,
+        "steps": 28805,
+        "gcellPerSecond": 1.9773541349751074,
+        "peakRssBytes": 425033728
+      },
+      "case": "canopy-h25",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 4,
+      "workFraction": 0.2,
+      "npzSha256": "0cf9ba20d52533b0b0afcd19e3bc43b72d9f808a7068db90fc40941e0ebb8c98"
+    },
+    "canopy-free-h17": {
+      "spacing": 0.016666666666666666,
+      "hz": [
+        125.0
+      ],
+      "duration": 0.1,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": true,
+      "shape": [
+        932,
+        188,
+        632
+      ],
+      "origin": [
+        -8.266666666666666,
+        -0.7666666666666666,
+        -5.266666666666667
+      ],
+      "cells": 110736512,
+      "dt": 2.77734094508129e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 0.0,
+      "solidCells": 0,
+      "pointsPerWavelength": 164.64000000000001,
+      "timing": {
+        "gpuSeconds": 316.8150942901266,
+        "wallSeconds": 1585.7182924170047,
+        "peakDriverBytes": 2190147584,
+        "steps": 3601,
+        "gcellPerSecond": 1.2586590313996515,
+        "peakRssBytes": 433242112
+      },
+      "case": "canopy-free-h17",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "13cf25527e719d3cec8913af8fa9d428f94b3ce85dce5c7407de3eb42e0fbdda",
+      "decimation": 6,
+      "workFraction": 0.2,
+      "npzSha256": "f92bf1167bc78d4d5fd00acb116ee958da821fb20f7d498fe6d4cf059e4ef0fc"
+    },
+    "canopy-h17": {
+      "spacing": 0.016666666666666666,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        932,
+        287,
+        632
+      ],
+      "origin": [
+        -8.266666666666666,
+        -0.7666666666666666,
+        -5.266666666666667
+      ],
+      "cells": 169049888,
+      "dt": 2.77734094508129e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 8.881784197001252e-16,
+      "solidCells": 6061500,
+      "pointsPerWavelength": 164.64000000000001,
+      "timing": {
+        "gpuSeconds": 3556.0314577556856,
+        "wallSeconds": 17820.023024082184,
+        "peakDriverBytes": 3834314752,
+        "steps": 43207,
+        "gcellPerSecond": 2.0540140315366764,
+        "peakRssBytes": 389660672
+      },
+      "case": "canopy-h17",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 6,
+      "workFraction": 0.2,
+      "npzSha256": "710f348f643b88a425ee9685c85b634469d2b7eae418b683e839f9cf6ee3c592"
+    },
+    "canopy-long-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 2.0,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        332,
+        117,
+        232
+      ],
+      "origin": [
+        -8.8,
+        -1.3,
+        -5.800000000000001
+      ],
+      "cells": 9011808,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 6.661338147750939e-16,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 122.44377816890483,
+        "wallSeconds": 614.8811272919993,
+        "peakDriverBytes": 1082867712,
+        "steps": 24004,
+        "gcellPerSecond": 1.7666837994299602,
+        "peakRssBytes": 349257728
+      },
+      "case": "canopy-long-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "13cf25527e719d3cec8913af8fa9d428f94b3ce85dce5c7407de3eb42e0fbdda",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "8b28c07c34f62c6b32a41767515a56fe6538b016770ce7919829b0c68cc78260"
+    },
+    "canopy-pml32-m2-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 32,
+      "margin": 2.0,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        424,
+        209,
+        324
+      ],
+      "origin": [
+        -11.100000000000001,
+        -3.6,
+        -8.1
+      ],
+      "cells": 28711584,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 1.7763568394002505e-15,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 221.97245493720402,
+        "wallSeconds": 1118.1617081165314,
+        "peakDriverBytes": 1082867712,
+        "steps": 14403,
+        "gcellPerSecond": 1.8629921648115682,
+        "peakRssBytes": 352092160
+      },
+      "case": "canopy-pml32-m2-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "d0511a28724a33da96e0c27bc20a5fcbadba28314861a96bc3975f4524f87fde"
+    },
+    "canopy-pml8-m0.5-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 8,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        316,
+        101,
+        216
+      ],
+      "origin": [
+        -8.4,
+        -0.9,
+        -5.4
+      ],
+      "cells": 6893856,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 4.440892098500626e-16,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 50.65639338211622,
+        "wallSeconds": 255.2274820804596,
+        "peakDriverBytes": 1082867712,
+        "steps": 14403,
+        "gcellPerSecond": 1.9601120675727817,
+        "peakRssBytes": 350814208
+      },
+      "case": "canopy-pml8-m0.5-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "852a01e2b9d7862c244797aad14f7dff8439e19e31592f6a7b5343666310acf5"
+    },
+    "canopy-pml32-m0.5-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 32,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        364,
+        149,
+        264
+      ],
+      "origin": [
+        -9.600000000000001,
+        -2.1,
+        -6.6000000000000005
+      ],
+      "cells": 14318304,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 1.7763568394002505e-15,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 124.6045527640672,
+        "wallSeconds": 629.5461790561676,
+        "peakDriverBytes": 1082867712,
+        "steps": 14403,
+        "gcellPerSecond": 1.6550481337746956,
+        "peakRssBytes": 351977472
+      },
+      "case": "canopy-pml32-m0.5-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "aeb47791f98e6938ff650d96cbadfd0aca6be0ec8f2733c158ac5b032d425707"
+    },
+    "canopy-pml16-m0.25-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 0.25,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        322,
+        107,
+        222
+      ],
+      "origin": [
+        -8.55,
+        -1.05,
+        -5.550000000000001
+      ],
+      "cells": 7648788,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 6.661338147750939e-16,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 56.917484376754146,
+        "wallSeconds": 286.51424384117126,
+        "peakDriverBytes": 1082867712,
+        "steps": 14403,
+        "gcellPerSecond": 1.935529912650058,
+        "peakRssBytes": 350781440
+      },
+      "case": "canopy-pml16-m0.25-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "a6ea6b8e2f030b80fcafd93c1c06c4daa9666bd6a104087779c2bef193b2e6f9"
+    },
+    "canopy-pml16-m1-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 1.0,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        352,
+        137,
+        252
+      ],
+      "origin": [
+        -9.3,
+        -1.8,
+        -6.300000000000001
+      ],
+      "cells": 12152448,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 8.881784197001252e-16,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 86.7235771176347,
+        "wallSeconds": 436.6397080421448,
+        "peakDriverBytes": 1082867712,
+        "steps": 14403,
+        "gcellPerSecond": 2.018271320918662,
+        "peakRssBytes": 351879168
+      },
+      "case": "canopy-pml16-m1-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "175fd17f1c3c31c423fd252e3181a14f962479d9fa92c82d64e1d62780b6bb1a"
+    },
+    "canopy-pml16-m2-h50": {
+      "spacing": 0.05,
+      "hz": [
+        125.0
+      ],
+      "duration": 1.2,
+      "peakHz": 150.0,
+      "pml": 16,
+      "margin": 2.0,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        392,
+        177,
+        292
+      ],
+      "origin": [
+        -10.3,
+        -2.8000000000000003,
+        -7.300000000000001
+      ],
+      "cells": 20260128,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 8.881784197001252e-16,
+      "solidCells": 224500,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 140.34215630346444,
+        "wallSeconds": 709.5153348445892,
+        "peakDriverBytes": 1082867712,
+        "steps": 14403,
+        "gcellPerSecond": 2.0792513901027796,
+        "peakRssBytes": 352141312
+      },
+      "case": "canopy-pml16-m2-h50",
+      "fixture": "canopy",
+      "sceneSha256": "cb42237158cf043f6b803f0fcfe085865c2c3e3e64ccf71fc5f928a910eb6f6c",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "bb080da9055ff9b6f4ab74fddde89c99c424dccdcf1c1ef5ee315c021b9d98e9"
+    },
+    "blocks-free-h50": {
+      "spacing": 0.05,
+      "hz": [
+        250.0
+      ],
+      "duration": 0.06,
+      "peakHz": 300.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": true,
+      "shape": [
+        180,
+        156,
+        52
+      ],
+      "origin": [
+        -4.3,
+        -3.9000000000000004,
+        -1.1
+      ],
+      "cells": 1460160,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 0.0,
+      "solidCells": 0,
+      "pointsPerWavelength": 27.44,
+      "timing": {
+        "gpuSeconds": 0.8754921660001855,
+        "wallSeconds": 4.371934875001898,
+        "peakDriverBytes": 76234752,
+        "steps": 721,
+        "gcellPerSecond": 1.2024954658472373,
+        "peakRssBytes": 346505216
+      },
+      "case": "blocks-free-h50",
+      "fixture": "blocks",
+      "sceneSha256": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+      "solverSha256": "13cf25527e719d3cec8913af8fa9d428f94b3ce85dce5c7407de3eb42e0fbdda",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "fd19b6d1efe084e02d3554a31df4238afb1a6a43068508f72751bb4519f04500"
+    },
+    "blocks-h50": {
+      "spacing": 0.05,
+      "hz": [
+        250.0
+      ],
+      "duration": 0.12,
+      "peakHz": 300.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        180,
+        156,
+        120
+      ],
+      "origin": [
+        -4.3,
+        -3.9000000000000004,
+        -3.0
+      ],
+      "cells": 3369600,
+      "dt": 8.33202283524387e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 8.881784197001252e-16,
+      "solidCells": 65472,
+      "pointsPerWavelength": 27.44,
+      "timing": {
+        "gpuSeconds": 2.8425289589795284,
+        "wallSeconds": 14.407812118530273,
+        "peakDriverBytes": 1082867712,
+        "steps": 1441,
+        "gcellPerSecond": 1.7081949454415284,
+        "peakRssBytes": 347914240
+      },
+      "case": "blocks-h50",
+      "fixture": "blocks",
+      "sceneSha256": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 2,
+      "workFraction": 0.2,
+      "npzSha256": "efcdf7843ea386df90fb2bcf334ecfcefe7b7a807ee19b7f2dd178a564b9d306"
+    },
+    "blocks-free-h25": {
+      "spacing": 0.025,
+      "hz": [
+        250.0
+      ],
+      "duration": 0.06,
+      "peakHz": 300.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": true,
+      "shape": [
+        328,
+        280,
+        72
+      ],
+      "origin": [
+        -3.9000000000000004,
+        -3.5,
+        -0.7000000000000001
+      ],
+      "cells": 6612480,
+      "dt": 4.166011417621935e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 0.0,
+      "solidCells": 0,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 7.4206109601364005,
+        "wallSeconds": 37.31362795800669,
+        "peakDriverBytes": 1082867712,
+        "steps": 1441,
+        "gcellPerSecond": 1.2840699682529715,
+        "peakRssBytes": 336510976
+      },
+      "case": "blocks-free-h25",
+      "fixture": "blocks",
+      "sceneSha256": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+      "solverSha256": "13cf25527e719d3cec8913af8fa9d428f94b3ce85dce5c7407de3eb42e0fbdda",
+      "decimation": 4,
+      "workFraction": 0.2,
+      "npzSha256": "67e148d7f1dfa3cea6aa2af0919e66dbb78a4ed483600b34512a8c7f92fb43a4"
+    },
+    "blocks-h25": {
+      "spacing": 0.025,
+      "hz": [
+        250.0
+      ],
+      "duration": 0.12,
+      "peakHz": 300.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        328,
+        280,
+        208
+      ],
+      "origin": [
+        -3.9000000000000004,
+        -3.5,
+        -2.6
+      ],
+      "cells": 19102720,
+      "dt": 4.166011417621935e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 4.440892098500626e-16,
+      "solidCells": 523776,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 27.38470328913536,
+        "wallSeconds": 138.56648802757263,
+        "peakDriverBytes": 1082867712,
+        "steps": 2881,
+        "gcellPerSecond": 2.009696279668461,
+        "peakRssBytes": 349290496
+      },
+      "case": "blocks-h25",
+      "fixture": "blocks",
+      "sceneSha256": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 4,
+      "workFraction": 0.2,
+      "npzSha256": "c0449db95c29ba3c2470d771b103b886a0561352d9f2ec8318b1cbb1f04ae3d9"
+    },
+    "blocks-free-h17": {
+      "spacing": 0.016666666666666666,
+      "hz": [
+        250.0
+      ],
+      "duration": 0.06,
+      "peakHz": 300.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": true,
+      "shape": [
+        476,
+        404,
+        92
+      ],
+      "origin": [
+        -3.7666666666666666,
+        -3.3666666666666667,
+        -0.5666666666666667
+      ],
+      "cells": 17691968,
+      "dt": 2.77734094508129e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 0.0,
+      "solidCells": 0,
+      "pointsPerWavelength": 82.32000000000001,
+      "timing": {
+        "gpuSeconds": 30.186358044069493,
+        "wallSeconds": 152.31972129200585,
+        "peakDriverBytes": 1082867712,
+        "steps": 2161,
+        "gcellPerSecond": 1.2665437411225318,
+        "peakRssBytes": 347668480
+      },
+      "case": "blocks-free-h17",
+      "fixture": "blocks",
+      "sceneSha256": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+      "solverSha256": "13cf25527e719d3cec8913af8fa9d428f94b3ce85dce5c7407de3eb42e0fbdda",
+      "decimation": 6,
+      "workFraction": 0.2,
+      "npzSha256": "91c17882026e3a8bb3725a1cc348c80222f2fe169f14cacc2906f0b5ea43690d"
+    },
+    "blocks-h17": {
+      "spacing": 0.016666666666666666,
+      "hz": [
+        250.0
+      ],
+      "duration": 0.12,
+      "peakHz": 300.0,
+      "pml": 16,
+      "margin": 0.5,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        476,
+        404,
+        296
+      ],
+      "origin": [
+        -3.7666666666666666,
+        -3.3666666666666667,
+        -2.466666666666667
+      ],
+      "cells": 56921984,
+      "dt": 2.77734094508129e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 4.440892098500626e-16,
+      "solidCells": 1767744,
+      "pointsPerWavelength": 82.32000000000001,
+      "timing": {
+        "gpuSeconds": 128.54176676415955,
+        "wallSeconds": 645.4875679016113,
+        "peakDriverBytes": 2156609536,
+        "steps": 4321,
+        "gcellPerSecond": 1.9134628304531704,
+        "peakRssBytes": 351895552
+      },
+      "case": "blocks-h17",
+      "fixture": "blocks",
+      "sceneSha256": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 6,
+      "workFraction": 0.2,
+      "npzSha256": "b406fe2bff070d1b081b2d2e2db2e750f53dc207cf94fb560a8e0f0e78050947"
+    },
+    "blocks-pml32-m2-h25": {
+      "spacing": 0.025,
+      "hz": [
+        250.0
+      ],
+      "duration": 0.12,
+      "peakHz": 300.0,
+      "pml": 32,
+      "margin": 2.0,
+      "reflection": 1e-06,
+      "order": 3,
+      "alpha": 0.0,
+      "freeField": false,
+      "shape": [
+        480,
+        432,
+        360
+      ],
+      "origin": [
+        -5.800000000000001,
+        -5.4,
+        -4.5
+      ],
+      "cells": 74649600,
+      "dt": 4.166011417621935e-05,
+      "courant": 0.5715767664977295,
+      "speedOfSound": 343.0,
+      "maxBoxSnap": 4.440892098500626e-16,
+      "solidCells": 523776,
+      "pointsPerWavelength": 54.88,
+      "timing": {
+        "gpuSeconds": 119.41940044998773,
+        "wallSeconds": 598.9617371559143,
+        "peakDriverBytes": 2156609536,
+        "steps": 2881,
+        "gcellPerSecond": 1.800925953317513,
+        "peakRssBytes": 349880320
+      },
+      "case": "blocks-pml32-m2-h25",
+      "fixture": "blocks",
+      "sceneSha256": "0d446f9d827fb8cb126798f39dc82bf9365d5c38d1d40fe401345011ab342fee",
+      "solverSha256": "ad3bc9bdbf69d5219315a7a0eea3a7e3c1580229bbda4f159c718b19f39d2551",
+      "decimation": 4,
+      "workFraction": 0.2,
+      "npzSha256": "8bc4312e614f499620858d0a464d0b8096a34bb16a79a8159c5646e1a89b4bed"
+    }
+  },
+  "frequencySensitivity": {
+    "note": "FDTD (1.67 cm) evaluated off 125 Hz; diagnostic of resonance sensitivity, not a fit.",
+    "rows": [
+      {
+        "hz": 124.6,
+        "whole": 0.05248330069294357,
+        "shadow": 0.12730022056755752,
+        "changeVs125": 0.06287190557669196
+      },
+      {
+        "hz": 124.8,
+        "whole": 0.02328722065002693,
+        "shadow": 0.055011279290066294,
+        "changeVs125": 0.03268569529571262
+      },
+      {
+        "hz": 124.9,
+        "whole": 0.010265449845329436,
+        "shadow": 0.02383319891623837,
+        "changeVs125": 0.01667777624073647
+      },
+      {
+        "hz": 125.0,
+        "whole": 0.01367272992512258,
+        "shadow": 0.039671221965457304,
+        "changeVs125": 0.0
+      },
+      {
+        "hz": 125.1,
+        "whole": 0.029233600757103757,
+        "shadow": 0.08168727850705511,
+        "changeVs125": 0.017421095671958486
+      },
+      {
+        "hz": 125.2,
+        "whole": 0.04681908061088214,
+        "shadow": 0.12887171091439756,
+        "changeVs125": 0.035670467925292645
+      },
+      {
+        "hz": 125.4,
+        "whole": 0.08535093545261167,
+        "shadow": 0.23388045731091545,
+        "changeVs125": 0.07493028830897792
+      }
+    ]
+  },
+  "benchmark": [
+    {
+      "n": 192,
+      "cells": 7077888,
+      "steps": 200,
+      "seconds": 0.6516318750218488,
+      "gcellPerSecond": 2.1723578208210523
+    },
+    {
+      "n": 256,
+      "cells": 16777216,
+      "steps": 200,
+      "seconds": 1.5270645410055295,
+      "gcellPerSecond": 2.197315902437584
+    },
+    {
+      "n": 384,
+      "cells": 56623104,
+      "steps": 200,
+      "seconds": 4.906481207988691,
+      "gcellPerSecond": 2.308094196215681
+    }
+  ],
+  "throughput": {
+    "runs": [
+      {
+        "case": "canopy-free-h50",
+        "cells": 6470016,
+        "steps": 1201,
+        "gcellPerSecond": 1.4166357071837614,
+        "gpuSeconds": 5.485171082866145,
+        "wallSeconds": 27.309590416989522,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 348504064
+      },
+      {
+        "case": "canopy-h50",
+        "cells": 9011808,
+        "steps": 14403,
+        "gcellPerSecond": 1.2933598924558043,
+        "gpuSeconds": 100.35649889957858,
+        "wallSeconds": 504.68177580833435,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 204472320
+      },
+      {
+        "case": "canopy-free-h25",
+        "cells": 37131264,
+        "steps": 2401,
+        "gcellPerSecond": 1.4047333708440712,
+        "gpuSeconds": 63.465542083926266,
+        "wallSeconds": 317.6511269999901,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 359677952
+      },
+      {
+        "case": "canopy-h25",
+        "cells": 55150848,
+        "steps": 28805,
+        "gcellPerSecond": 1.9773541349751074,
+        "gpuSeconds": 803.4070116934308,
+        "wallSeconds": 4037.439992904663,
+        "peakDriverBytes": 2156609536,
+        "peakRssBytes": 425033728
+      },
+      {
+        "case": "canopy-free-h17",
+        "cells": 110736512,
+        "steps": 3601,
+        "gcellPerSecond": 1.2586590313996515,
+        "gpuSeconds": 316.8150942901266,
+        "wallSeconds": 1585.7182924170047,
+        "peakDriverBytes": 2190147584,
+        "peakRssBytes": 433242112
+      },
+      {
+        "case": "canopy-h17",
+        "cells": 169049888,
+        "steps": 43207,
+        "gcellPerSecond": 2.0540140315366764,
+        "gpuSeconds": 3556.0314577556856,
+        "wallSeconds": 17820.023024082184,
+        "peakDriverBytes": 3834314752,
+        "peakRssBytes": 389660672
+      },
+      {
+        "case": "canopy-long-h50",
+        "cells": 9011808,
+        "steps": 24004,
+        "gcellPerSecond": 1.7666837994299602,
+        "gpuSeconds": 122.44377816890483,
+        "wallSeconds": 614.8811272919993,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 349257728
+      },
+      {
+        "case": "canopy-pml32-m2-h50",
+        "cells": 28711584,
+        "steps": 14403,
+        "gcellPerSecond": 1.8629921648115682,
+        "gpuSeconds": 221.97245493720402,
+        "wallSeconds": 1118.1617081165314,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 352092160
+      },
+      {
+        "case": "canopy-pml8-m0.5-h50",
+        "cells": 6893856,
+        "steps": 14403,
+        "gcellPerSecond": 1.9601120675727817,
+        "gpuSeconds": 50.65639338211622,
+        "wallSeconds": 255.2274820804596,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 350814208
+      },
+      {
+        "case": "canopy-pml32-m0.5-h50",
+        "cells": 14318304,
+        "steps": 14403,
+        "gcellPerSecond": 1.6550481337746956,
+        "gpuSeconds": 124.6045527640672,
+        "wallSeconds": 629.5461790561676,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 351977472
+      },
+      {
+        "case": "canopy-pml16-m0.25-h50",
+        "cells": 7648788,
+        "steps": 14403,
+        "gcellPerSecond": 1.935529912650058,
+        "gpuSeconds": 56.917484376754146,
+        "wallSeconds": 286.51424384117126,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 350781440
+      },
+      {
+        "case": "canopy-pml16-m1-h50",
+        "cells": 12152448,
+        "steps": 14403,
+        "gcellPerSecond": 2.018271320918662,
+        "gpuSeconds": 86.7235771176347,
+        "wallSeconds": 436.6397080421448,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 351879168
+      },
+      {
+        "case": "canopy-pml16-m2-h50",
+        "cells": 20260128,
+        "steps": 14403,
+        "gcellPerSecond": 2.0792513901027796,
+        "gpuSeconds": 140.34215630346444,
+        "wallSeconds": 709.5153348445892,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 352141312
+      },
+      {
+        "case": "blocks-free-h50",
+        "cells": 1460160,
+        "steps": 721,
+        "gcellPerSecond": 1.2024954658472373,
+        "gpuSeconds": 0.8754921660001855,
+        "wallSeconds": 4.371934875001898,
+        "peakDriverBytes": 76234752,
+        "peakRssBytes": 346505216
+      },
+      {
+        "case": "blocks-h50",
+        "cells": 3369600,
+        "steps": 1441,
+        "gcellPerSecond": 1.7081949454415284,
+        "gpuSeconds": 2.8425289589795284,
+        "wallSeconds": 14.407812118530273,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 347914240
+      },
+      {
+        "case": "blocks-free-h25",
+        "cells": 6612480,
+        "steps": 1441,
+        "gcellPerSecond": 1.2840699682529715,
+        "gpuSeconds": 7.4206109601364005,
+        "wallSeconds": 37.31362795800669,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 336510976
+      },
+      {
+        "case": "blocks-h25",
+        "cells": 19102720,
+        "steps": 2881,
+        "gcellPerSecond": 2.009696279668461,
+        "gpuSeconds": 27.38470328913536,
+        "wallSeconds": 138.56648802757263,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 349290496
+      },
+      {
+        "case": "blocks-free-h17",
+        "cells": 17691968,
+        "steps": 2161,
+        "gcellPerSecond": 1.2665437411225318,
+        "gpuSeconds": 30.186358044069493,
+        "wallSeconds": 152.31972129200585,
+        "peakDriverBytes": 1082867712,
+        "peakRssBytes": 347668480
+      },
+      {
+        "case": "blocks-h17",
+        "cells": 56921984,
+        "steps": 4321,
+        "gcellPerSecond": 1.9134628304531704,
+        "gpuSeconds": 128.54176676415955,
+        "wallSeconds": 645.4875679016113,
+        "peakDriverBytes": 2156609536,
+        "peakRssBytes": 351895552
+      },
+      {
+        "case": "blocks-pml32-m2-h25",
+        "cells": 74649600,
+        "steps": 2881,
+        "gcellPerSecond": 1.800925953317513,
+        "gpuSeconds": 119.41940044998773,
+        "wallSeconds": 598.9617371559143,
+        "peakDriverBytes": 2156609536,
+        "peakRssBytes": 349880320
+      }
+    ],
+    "sustainedGcellPerSecond": 1.8571943918853417,
+    "scope": "GPU-busy time of paced runs (pacing sleeps excluded), all cells incl. CPML and solids; includes source injection, 1,166-receiver recording and plane DFT."
+  },
+  "dispersion": {
+    "canopy": {
+      "pointsPerWavelength": 54.88,
+      "wavelengthsTravelled": [
+        0.5836619095238708,
+        4.439028346047551
+      ],
+      "phaseLagCoefficient": 5.819553243351864,
+      "amplitudeBiasCoefficient": 4.785723263883694
+    },
+    "blocks": {
+      "pointsPerWavelength": 27.44,
+      "wavelengthsTravelled": [
+        0.43941443921519313,
+        5.151777564744108
+      ],
+      "phaseLagCoefficient": 6.309859174845108,
+      "amplitudeBiasCoefficient": 5.981001430034488
+    },
+    "model": {
+      "a": 6.309859174845108,
+      "b": 5.981001430034488,
+      "note": "complex error at D wavelengths ~ |exp(-i a D/ppw^2)(1 - b/ppw^2) - 1|; direction-averaged over the fixtures, 7-point Yee scheme at Courant 0.99/sqrt(3)"
+    }
+  },
+  "projection": {
+    "volume": [
+      12.0,
+      12.0,
+      6.25
+    ],
+    "gcellPerSecond": 1.8571943918853417,
+    "rows": [
+      {
+        "hz": 500,
+        "pointsPerWavelength": 10,
+        "spacing": 0.06860000000000001,
+        "cells": 5313276.0,
+        "steps": 4374,
+        "responseSeconds": 0.5,
+        "memoryGiB": 0.1065778099000454,
+        "gpuMinutes": 0.2085607312257667,
+        "predictedError10Wavelengths": 0.6046911771170441,
+        "predictedErrorAcrossScene": 1.3989329649890336
+      },
+      {
+        "hz": 500,
+        "pointsPerWavelength": 10,
+        "spacing": 0.06860000000000001,
+        "cells": 5313276.0,
+        "steps": 8748,
+        "responseSeconds": 1.0,
+        "memoryGiB": 0.1065778099000454,
+        "gpuMinutes": 0.4171214624515334,
+        "predictedError10Wavelengths": 0.6046911771170441,
+        "predictedErrorAcrossScene": 1.3989329649890336
+      },
+      {
+        "hz": 500,
+        "pointsPerWavelength": 20,
+        "spacing": 0.034300000000000004,
+        "cells": 31373660.0,
+        "steps": 8748,
+        "responseSeconds": 0.5,
+        "memoryGiB": 0.5706765912473202,
+        "gpuMinutes": 2.463005298737949,
+        "predictedError10Wavelengths": 0.15711354023046578,
+        "predictedErrorAcrossScene": 0.3969868753515766
+      },
+      {
+        "hz": 500,
+        "pointsPerWavelength": 20,
+        "spacing": 0.034300000000000004,
+        "cells": 31373660.0,
+        "steps": 17496,
+        "responseSeconds": 1.0,
+        "memoryGiB": 0.5706765912473202,
+        "gpuMinutes": 4.926010597475898,
+        "predictedError10Wavelengths": 0.15711354023046578,
+        "predictedErrorAcrossScene": 0.3969868753515766
+      },
+      {
+        "hz": 500,
+        "pointsPerWavelength": 35,
+        "spacing": 0.019600000000000003,
+        "cells": 146024775.0,
+        "steps": 15309,
+        "responseSeconds": 0.5,
+        "memoryGiB": 2.5190765177831054,
+        "gpuMinutes": 20.061562485888782,
+        "predictedError10Wavelengths": 0.051608945759227934,
+        "predictedErrorAcrossScene": 0.1310761616656333
+      },
+      {
+        "hz": 500,
+        "pointsPerWavelength": 35,
+        "spacing": 0.019600000000000003,
+        "cells": 146024775.0,
+        "steps": 30618,
+        "responseSeconds": 1.0,
+        "memoryGiB": 2.5190765177831054,
+        "gpuMinutes": 40.123124971777564,
+        "predictedError10Wavelengths": 0.051608945759227934,
+        "predictedErrorAcrossScene": 0.1310761616656333
+      },
+      {
+        "hz": 500,
+        "pointsPerWavelength": 50,
+        "spacing": 0.013720000000000001,
+        "cells": 401452712.0,
+        "steps": 21870,
+        "responseSeconds": 0.5,
+        "memoryGiB": 6.763184107840061,
+        "gpuMinutes": 78.79062857574793,
+        "predictedError10Wavelengths": 0.0253218281508535,
+        "predictedErrorAcrossScene": 0.06434263802441768
+      },
+      {
+        "hz": 500,
+        "pointsPerWavelength": 50,
+        "spacing": 0.013720000000000001,
+        "cells": 401452712.0,
+        "steps": 43739,
+        "responseSeconds": 1.0,
+        "memoryGiB": 6.763184107840061,
+        "gpuMinutes": 157.57765447071964,
+        "predictedError10Wavelengths": 0.0253218281508535,
+        "predictedErrorAcrossScene": 0.06434263802441768
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 10,
+        "spacing": 0.034300000000000004,
+        "cells": 31373660.0,
+        "steps": 8748,
+        "responseSeconds": 0.5,
+        "memoryGiB": 0.5706765912473202,
+        "gpuMinutes": 2.463005298737949,
+        "predictedError10Wavelengths": 0.6046911771170441,
+        "predictedErrorAcrossScene": 1.9387265000116911
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 10,
+        "spacing": 0.034300000000000004,
+        "cells": 31373660.0,
+        "steps": 17496,
+        "responseSeconds": 1.0,
+        "memoryGiB": 0.5706765912473202,
+        "gpuMinutes": 4.926010597475898,
+        "predictedError10Wavelengths": 0.6046911771170441,
+        "predictedErrorAcrossScene": 1.9387265000116911
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 20,
+        "spacing": 0.017150000000000002,
+        "cells": 212722128.0,
+        "steps": 17496,
+        "responseSeconds": 0.5,
+        "memoryGiB": 3.634240821003914,
+        "gpuMinutes": 33.399719919372636,
+        "predictedError10Wavelengths": 0.15711354023046578,
+        "predictedErrorAcrossScene": 0.777547905349574
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 20,
+        "spacing": 0.017150000000000002,
+        "cells": 212722128.0,
+        "steps": 34991,
+        "responseSeconds": 1.0,
+        "memoryGiB": 3.634240821003914,
+        "gpuMinutes": 66.79753084698034,
+        "predictedError10Wavelengths": 0.15711354023046578,
+        "predictedErrorAcrossScene": 0.777547905349574
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 35,
+        "spacing": 0.009800000000000001,
+        "cells": 1058632830.0,
+        "steps": 30618,
+        "responseSeconds": 0.5,
+        "memoryGiB": 17.539087621495128,
+        "gpuMinutes": 290.8797999333781,
+        "predictedError10Wavelengths": 0.051608945759227934,
+        "predictedErrorAcrossScene": 0.26145078802120353
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 35,
+        "spacing": 0.009800000000000001,
+        "cells": 1058632830.0,
+        "steps": 61235,
+        "responseSeconds": 1.0,
+        "memoryGiB": 17.539087621495128,
+        "gpuMinutes": 581.7500995793457,
+        "predictedError10Wavelengths": 0.051608945759227934,
+        "predictedErrorAcrossScene": 0.26145078802120353
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 50,
+        "spacing": 0.006860000000000001,
+        "cells": 2997694656.0,
+        "steps": 43739,
+        "responseSeconds": 0.5,
+        "memoryGiB": 49.02019518613815,
+        "gpuMinutes": 1176.6508945937592,
+        "predictedError10Wavelengths": 0.0253218281508535,
+        "predictedErrorAcrossScene": 0.12855192143976374
+      },
+      {
+        "hz": 1000,
+        "pointsPerWavelength": 50,
+        "spacing": 0.006860000000000001,
+        "cells": 2997694656.0,
+        "steps": 87478,
+        "responseSeconds": 1.0,
+        "memoryGiB": 49.02019518613815,
+        "gpuMinutes": 2353.3017891875184,
+        "predictedError10Wavelengths": 0.0253218281508535,
+        "predictedErrorAcrossScene": 0.12855192143976374
+      }
+    ],
+    "note": "GPU-busy minutes per source run; multiply by 5 for 20% work pacing. Predicted errors are free-field dispersion only, at 10 wavelengths and across the 17.5 m scene diagonal; geometry and boundary errors add to them."
+  },
+  "verdict": {
+    "canopyWholeMap": true,
+    "blocksWholeMap": true
+  }
+}

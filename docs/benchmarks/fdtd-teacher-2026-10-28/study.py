@@ -50,8 +50,8 @@ for level in SPACINGS:
 # Absorbing-layer study at the coarse level: thickness (cells) and distance (m).
 for pml, margin in [(8, .5), (32, .5), (16, .25), (16, 1.0), (16, 2.0), (32, 2.0)]:
     case(f'canopy-pml{pml}-m{margin:g}-h50', 'canopy', 'h50', 1.2, pml=pml, margin=margin)
-# Fine-grid check of layer thickness (distance is a physical length, covered above).
-case('canopy-pml32-m0.5-h25', 'canopy', 'h25', 1.2, pml=32, margin=.5)
+# Fine-grid layer check on the cheap fixture. A canopy repeat at 2.5 cm was
+# dropped once the coarse canopy study showed 0.006% change (README).
 case('blocks-pml32-m2-h25', 'blocks', 'h25', .12, pml=32, margin=2.0)
 
 

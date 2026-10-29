@@ -114,9 +114,10 @@ def analyze(evidence, runs, output):
                          complexRelativeL2=rel(H, target), shadowComplexRelativeL2=rel(H, target, shadow),
                          litComplexRelativeL2=rel(H, target, ~shadow), **split_error(H, target))
             t, curve = run['truncationTimes'], run['truncationH']
-            k = int(np.argmin(abs(t - .75 * t[-1])))
-            entry['truncationChange'] = dict(fromSeconds=float(t[k]), toSeconds=float(t[-1]),
-                                             whole=rel(curve[k], curve[-1]), shadow=rel(curve[k], curve[-1], shadow))
+            duration = run['meta']['duration']
+            k = int(np.argmin(abs(t - .75 * duration)))
+            entry['truncationChange'] = dict(fromSeconds=float(t[k]), toSeconds=duration,
+                                             whole=rel(curve[k], H), shadow=rel(curve[k], H, shadow))
             if spec['probe'] is not None:
                 i = spec['probe']
                 entry['probe'] = dict(index=i, fdtd=[float(H[i].real), float(H[i].imag)],
@@ -153,7 +154,7 @@ def analyze(evidence, runs, output):
                                      shadow=[rel(c, curve[-1], shadow) for c in curve])
             maps[(fixture, 'long')] = long
         # Absorbing-layer study: change against the thickest/farthest layer.
-        for spacing_tag, ref_name in [('h50', 'pml32-m2'), ('h25', 'pml32-m2'), ('h25', 'pml32-m0.5')]:
+        for spacing_tag, ref_name in [('h50', 'pml32-m2'), ('h25', 'pml32-m2')]:
             ref = load(runs, f'{fixture}-{ref_name}-{spacing_tag}')
             if ref is None:
                 continue
@@ -173,8 +174,12 @@ def analyze(evidence, runs, output):
                                                    whole=rel(run['H'], ref['H']), shadow=rel(run['H'], ref['H'], shadow),
                                                    against=f'{fixture}-{ref_name}-{spacing_tag}')
         report['fixtures'][fixture] = out
+    report['frequencySensitivity'] = sensitivity(evidence, runs)
+    bench = runs.parent / 'logs/bench.json'
+    report['benchmark'] = json.loads(bench.read_text()) if bench.exists() else None
     report['throughput'] = throughput(report['runs'])
-    report['projection'] = projection(report['throughput']['sustainedGcellPerSecond'])
+    report['dispersion'] = dispersion(evidence, runs)
+    report['projection'] = projection(report['throughput']['sustainedGcellPerSecond'], report['dispersion'])
     passed = dict(canopyWholeMap=None, blocksWholeMap=None)
     for fixture in FIXTURES:
         levels = report['fixtures'][fixture]['levels']
@@ -184,6 +189,40 @@ def analyze(evidence, runs, output):
     (output / 'report.json').write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
     figures(report, maps, output)
     return report
+
+
+def sensitivity(evidence, runs, offsets=(-.4, -.2, -.1, 0, .1, .2, .4)):
+    """Diagnostic only: the finest canopy field at 125 Hz +/- small offsets vs BEM.
+
+    Shows how strongly the lightly damped room's response depends on frequency;
+    it is not used to correct or score the reported field. Derived from the full
+    receiver time series and cached so the slim archive can reproduce it.
+    """
+    cache = runs / 'canopy-h17-sensitivity.npz'
+    full = runs / 'canopy-h17.npz'
+    if full.exists() and 'pressure' in np.load(full).files:
+        d = np.load(full)
+        meta = json.loads(str(d['meta']))
+        dt, dec = meta['dt'], meta['decimation']
+        p, q = d['pressure'].astype(np.float64), d['source']
+        fields = []
+        for f in 125.0 + np.array(offsets):
+            P = np.exp(-2j * np.pi * f * np.arange(len(p)) * dec * dt) @ p * dec * dt
+            Q = np.sum(q * np.exp(-2j * np.pi * f * (np.arange(len(q)) + .5) * dt)) * dt
+            fields.append(4 * np.pi * P / (1j * 2 * np.sin(np.pi * f * dt) / dt * Q))
+        np.savez_compressed(cache, offsets=np.array(offsets), H=np.array(fields))
+    if not cache.exists():
+        return None
+    d = np.load(cache)
+    base = evidence / 'canopy/reference'
+    scene = json.loads((base / 'scene.json').read_text())
+    points = np.array(scene['points'], float).reshape(-1, 3)
+    shadow = shadow_mask(scene, points)
+    target = np.load(base / 'reference-0.25-125.npz')['pressure']
+    at = list(d['offsets']).index(0)
+    return dict(note='FDTD (1.67 cm) evaluated off 125 Hz; diagnostic of resonance sensitivity, not a fit.',
+                rows=[dict(hz=125 + float(o), whole=rel(H, target), shadow=rel(H, target, shadow),
+                           changeVs125=rel(H, d['H'][at])) for o, H in zip(d['offsets'], d['H'])])
 
 
 def throughput(runs):
@@ -197,12 +236,45 @@ def throughput(runs):
                       'includes source injection, 1,166-receiver recording and plane DFT.')
 
 
-def projection(gcell):
+def dispersion(evidence, runs):
+    """Free-field phase lag per wavelength travelled and amplitude bias, times ppw^2.
+
+    Fitted on the coarsest free-field runs (asymptotic second-order regime):
+    phase(r) = -(a / ppw^2) r/lambda + c and median |H|/|exact| - 1 = -b / ppw^2.
+    """
+    out = {}
+    for fixture, spec in FIXTURES.items():
+        run = load(runs, f'{fixture}-free-h50')
+        if run is None:
+            continue
+        scene = json.loads((evidence / fixture / 'reference/scene.json').read_text())
+        points = np.array(scene['points'], float).reshape(-1, 3)
+        r = np.linalg.norm(points - scene['source'], axis=1) / (fw.SPEED_OF_SOUND / spec['hz'])
+        ratio = run['H'] / fw.free_field_pressure(points, scene['source'], spec['hz'])
+        slope = np.linalg.lstsq(np.c_[r, np.ones_like(r)], np.angle(ratio), rcond=None)[0][0]
+        ppw = run['meta']['pointsPerWavelength']
+        out[fixture] = dict(pointsPerWavelength=ppw, wavelengthsTravelled=[float(r.min()), float(r.max())],
+                            phaseLagCoefficient=float(-slope * ppw ** 2),
+                            amplitudeBiasCoefficient=float(-(np.median(abs(ratio)) - 1) * ppw ** 2))
+    if out:
+        out['model'] = dict(a=float(max(v['phaseLagCoefficient'] for v in out.values())),
+                            b=float(max(v['amplitudeBiasCoefficient'] for v in out.values())),
+                            note='complex error at D wavelengths ~ |exp(-i a D/ppw^2)(1 - b/ppw^2) - 1|; '
+                                 'direction-averaged over the fixtures, 7-point Yee scheme at Courant 0.99/sqrt(3)')
+    return out
+
+
+def predicted_error(model, ppw, wavelengths):
+    return float(abs(np.exp(-1j * model['a'] * wavelengths / ppw ** 2) * (1 - model['b'] / ppw ** 2) - 1))
+
+
+def projection(gcell, disp):
     if not gcell:
         return None
+    model = disp.get('model')
     rows = []
     for hz in [500, 1000]:
-        for ppw in [10, 20, 30]:
+        for ppw in [10, 20, 35, 50]:
             h = fw.SPEED_OF_SOUND / hz / ppw
             n = [math.ceil(v / h) + 32 for v in PROJECTION_VOLUME]
             cells = float(np.prod(n))
@@ -211,9 +283,13 @@ def projection(gcell):
                 steps = math.ceil(seconds / dt)
                 rows.append(dict(hz=hz, pointsPerWavelength=ppw, spacing=h, cells=cells, steps=steps,
                                  responseSeconds=seconds, memoryGiB=fw.memory_bytes(fw.Grid(h, (0, 0, 0), tuple(n), 16)) / fw.GIB,
-                                 gpuMinutes=cells * steps / gcell / 1e9 / 60))
+                                 gpuMinutes=cells * steps / gcell / 1e9 / 60,
+                                 predictedError10Wavelengths=predicted_error(model, ppw, 10) if model else None,
+                                 predictedErrorAcrossScene=predicted_error(model, ppw, 17.5 * hz / fw.SPEED_OF_SOUND) if model else None))
     return dict(volume=PROJECTION_VOLUME, gcellPerSecond=gcell, rows=rows,
-                note='GPU-busy minutes per source run; multiply by 5 for 20% work pacing.')
+                note='GPU-busy minutes per source run; multiply by 5 for 20% work pacing. '
+                     'Predicted errors are free-field dispersion only, at 10 wavelengths and across the '
+                     '17.5 m scene diagonal; geometry and boundary errors add to them.')
 
 
 def figures(report, maps, output):
@@ -256,7 +332,7 @@ def figures(report, maps, output):
                                             (axes[2], H - target, '|FDTD − BEM| / RMS(BEM)', True)]:
             c = abs(values) / rms if residual else level(values)
             sc = ax.scatter(points[:, u], points[:, v], c=c, s=14, marker='s', cmap='magma',
-                            vmin=0 if residual else -40, vmax=.15 if residual else 10, linewidths=0)
+                            vmin=0 if residual else -40, vmax=.05 if residual else 10, linewidths=0)
             fig.colorbar(sc, ax=ax, label='Normalised residual' if residual else 'Level (dB re 1 m free field)', shrink=.8)
             ax.set_title(title)
         for ax in axes:
@@ -267,9 +343,10 @@ def figures(report, maps, output):
                                        facecolor='#83909e' if inside else 'none', edgecolor='#e8edf5',
                                        linestyle='-' if inside else '--'))
             ax.plot(scene['source'][u], scene['source'][v], '*', color='#1accff', markersize=10)
+            span = np.vstack([points, scene['source']])
             ax.set(xlabel='xyz'[u] + ' (m)', ylabel='xyz'[v] + ' (m)', aspect='equal',
-                   xlim=(points[:, u].min() - .5, points[:, u].max() + .5),
-                   ylim=(points[:, v].min() - .5, points[:, v].max() + .5))
+                   xlim=(span[:, u].min() - .4, span[:, u].max() + .4),
+                   ylim=(span[:, v].min() - .4, span[:, v].max() + .4))
         e = report['fixtures'][fixture]['levels']['h17']
         fig.suptitle(f'{hz:g} Hz {fixture} · FDTD vs BEM, no fitting · whole {e["complexRelativeL2"]*100:.2f}%, '
                      f'shadow {e["shadowComplexRelativeL2"]*100:.2f}% · slice {"xyz"[axis]} = {fixed} m', fontsize=13)
@@ -295,8 +372,10 @@ def figures(report, maps, output):
         ref = data['referenceRefinementChange']['whole'] * 100
         ax.axhline(ref, color=colors[fixture], lw=.8, alpha=.5)
     hh = np.array([1.6, 5])
-    ax.plot(hh, .2 * (hh / 5) ** 2 * 100 / 100, color='#adb9cb', lw=.8)
-    ax.text(3.3, .2 * (3.3 / 5) ** 2 * 1.3, 'h²', color='#adb9cb')
+    ax.plot(hh, .12 * (hh / 5) ** 2, color='#adb9cb', lw=.8)
+    ax.plot(hh, 1.2 * (hh / 5), color='#adb9cb', lw=.8, ls=':')
+    ax.text(3.2, .12 * (3.2 / 5) ** 2 * .7, 'h²', color='#adb9cb')
+    ax.text(3.2, 1.2 * (3.2 / 5) * .78, 'h', color='#adb9cb')
     ax.axhline(5, color='#ff5c5c', lw=1)
     ax.text(1.62, 5.4, '5% budget', color='#ff5c5c')
     ax.set(xscale='log', yscale='log', xlabel='Grid spacing h (cm)', ylabel='Complex relative L2 (%)',
@@ -328,6 +407,8 @@ def figures(report, maps, output):
 def package(runs, output):
     """evidence.zip: every run without its receiver time series (kept in .context).
 
+    Plane maps are kept for the two reported runs only.
+
     The slim files carry everything analyze.py reads; the manifest records the
     hash of each full run file and of each logged run.
     """
@@ -337,14 +418,17 @@ def package(runs, output):
     with zipfile.ZipFile(output / 'evidence.zip', 'w', zipfile.ZIP_DEFLATED) as z:
         for path in sorted(runs.glob('*.npz')):
             d = np.load(path)
-            keep = {k: d[k] for k in d.files if k != 'pressure'}
+            # Plane maps are only drawn for the reported (finest) runs.
+            drop = {'pressure'} | (set() if path.stem in ('canopy-h17', 'blocks-h17') else {'plane'})
+            keep = {k: d[k] for k in d.files if k not in drop}
             buffer = io.BytesIO()
             np.savez_compressed(buffer, **keep)
             z.writestr(f'runs/{path.name}', buffer.getvalue())
-            z.write(path.with_suffix('.json'), f'runs/{path.stem}.json')
+            if path.with_suffix('.json').exists():
+                z.write(path.with_suffix('.json'), f'runs/{path.stem}.json')
             manifest[path.name] = dict(fullSha256=digest(path), slimSha256=hashlib.sha256(buffer.getvalue()).hexdigest())
         logs = runs.parent / 'logs'
-        for log in sorted(logs.glob('*.log')):
+        for log in sorted([*logs.glob('*.log'), *logs.glob('bench.json')]):
             z.write(log, f'logs/{log.name}')
         z.writestr('manifest.json', json.dumps(manifest, indent=2) + '\n')
 
