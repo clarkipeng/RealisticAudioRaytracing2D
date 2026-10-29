@@ -37,8 +37,9 @@ def case(name, fixture, level, duration, free=False, pml=16, margin=.5, reflecti
                        pml=pml, margin=margin, reflection=reflection)
 
 
-# Canopy: a lossless semi-open room rings for seconds; durations come from the
-# truncation study on the long coarse run (see README).
+# Canopy: the lossless semi-open room rings for seconds. 1.2 s was fixed from
+# canopy-long-h50 (change vs 2 s: 0.17% whole / 0.67% shadow) before any BEM
+# comparison.
 case('canopy-long-h50', 'canopy', 'h50', 2.0)
 for level in SPACINGS:
     case(f'canopy-free-{level}', 'canopy', level, .1, free=True)
@@ -48,7 +49,8 @@ for level in SPACINGS:
 # Absorbing-layer study at the coarse level: thickness (cells) and distance (m).
 for pml, margin in [(8, .5), (32, .5), (16, .25), (16, 1.0), (16, 2.0), (32, 2.0)]:
     case(f'canopy-pml{pml}-m{margin:g}-h50', 'canopy', 'h50', 1.2, pml=pml, margin=margin)
-case('canopy-pml32-m2-h25', 'canopy', 'h25', 1.2, pml=32, margin=2.0)
+# Fine-grid check of layer thickness (distance is a physical length, covered above).
+case('canopy-pml32-m0.5-h25', 'canopy', 'h25', 1.2, pml=32, margin=.5)
 case('blocks-pml32-m2-h25', 'blocks', 'h25', .12, pml=32, margin=2.0)
 
 
