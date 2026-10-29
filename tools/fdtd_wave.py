@@ -320,12 +320,13 @@ class Simulation:
         self.steps += 1
 
     def run(self, source, receivers, duration, peak_hz, plane=None, plane_hz=(),
-            work_fraction=.2, batch_seconds=.1, progress=None):
+            work_fraction=.2, batch_seconds=.1, progress=None, pause=None):
         """Inject a monopole pulse at `source` and record pressure at `receivers`.
 
         Returns time series p^n (n = 0..N) at the receivers, the source signal
         q^(n+1/2), and optional running DFTs on an axis-aligned plane
-        `plane=(axis, value)`. Only `work_fraction` of wall time is GPU work.
+        `plane=(axis, value)`. Only `work_fraction` of wall time is GPU work;
+        `pause()`, if given, may block between batches (e.g. on battery power).
         """
         grid, dt, dev = self.grid, self.dt, self.dev
         steps = int(math.ceil(duration / dt))
@@ -353,7 +354,7 @@ class Simulation:
             w = 2 * math.pi * np.asarray(plane_hz, float)
             planes = torch.zeros((len(w), 2) + tuple(np.delete(grid.shape, axis)), device=dev)
         timing = dict(gpuSeconds=0.0, wallSeconds=0.0, peakDriverBytes=0)
-        start = time.perf_counter()
+        start = time.time()  # Wall clock; perf_counter stops while the system sleeps.
         n = 0
         while n < steps:
             t0 = time.perf_counter()
@@ -384,7 +385,9 @@ class Simulation:
                 progress(n, steps)
             if work_fraction < 1 and n < steps:
                 time.sleep(busy * (1 - work_fraction) / work_fraction)
-        timing['wallSeconds'] = time.perf_counter() - start
+            if pause and n < steps:
+                pause()
+        timing['wallSeconds'] = time.time() - start
         timing['steps'] = steps
         timing['gcellPerSecond'] = grid.cells * steps / timing['gpuSeconds'] / 1e9
         timing['peakRssBytes'] = process_rss()
@@ -443,7 +446,7 @@ def scene_bounds(scene, margin, free_field=False):
 
 def solve(scene, spacing, hz, duration, peak_hz=None, pml=16, margin=.5, reflection=1e-6,
           order=3, alpha=0.0, free_field=False, plane=None, work_fraction=.2,
-          memory_limit=4 * GIB, progress=None):
+          memory_limit=4 * GIB, progress=None, pause=None):
     """Complex pressure at the scene's receivers, normalised to exp(-ikr)/r."""
     c = float(scene.get('speedOfSound', SPEED_OF_SOUND))
     hz = np.atleast_1d(hz).astype(float)
@@ -456,7 +459,7 @@ def solve(scene, spacing, hz, duration, peak_hz=None, pml=16, margin=.5, reflect
                      memory_limit=memory_limit)
     points = np.array(scene['points'], float).reshape(-1, 3)
     result = sim.run(scene['source'], points, duration, peak_hz, plane=plane, plane_hz=hz,
-                     work_fraction=work_fraction, progress=progress)
+                     work_fraction=work_fraction, progress=progress, pause=pause)
     H = transfer(result['pressure'], result['source'], result['dt'], hz, c)
     meta = dict(spacing=spacing, hz=hz.tolist(), duration=duration, peakHz=peak_hz, pml=pml,
                 margin=margin, reflection=reflection, order=order, alpha=alpha, freeField=free_field,

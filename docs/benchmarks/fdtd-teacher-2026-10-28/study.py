@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -54,6 +55,26 @@ case('canopy-pml32-m0.5-h25', 'canopy', 'h25', 1.2, pml=32, margin=.5)
 case('blocks-pml32-m2-h25', 'blocks', 'h25', .12, pml=32, margin=2.0)
 
 
+def wait_for_mains():
+    """Block while the Mac runs on battery: heavy GPU work only on AC power."""
+    told = False
+    while 'AC Power' not in subprocess.run(['pmset', '-g', 'batt'], capture_output=True, text=True).stdout:
+        if not told:
+            print(f'paused on battery power at {time.strftime("%H:%M:%S")}', flush=True)
+            told = True
+        time.sleep(60)
+    if told:
+        print(f'resumed on AC power at {time.strftime("%H:%M:%S")}', flush=True)
+
+
+def power_check():
+    """Throttled pause hook: query power state at most every 30 s."""
+    if time.time() - power_check.last > 30:
+        power_check.last = time.time()
+        wait_for_mains()
+power_check.last = 0.0
+
+
 def run(name, evidence, runs, work_fraction):
     spec = CASES[name]
     fixture = FIXTURES[spec['fixture']]
@@ -69,7 +90,7 @@ def run(name, evidence, runs, work_fraction):
     out = fw.solve(scene, spec['spacing'], fixture['hz'], spec['duration'], fixture['peak'],
                    pml=spec['pml'], margin=spec['margin'], reflection=spec['reflection'],
                    free_field=spec['free'], plane=fixture['plane'], work_fraction=work_fraction,
-                   progress=progress)
+                   progress=progress, pause=power_check)
     dt = out['meta']['dt']
     pressure, source = out['pressure'], out['source']
     times = np.arange(.05, spec['duration'] + 1e-9, .025)
@@ -99,6 +120,7 @@ def main():
         for name, spec in CASES.items():
             print(name, json.dumps(spec))
         return
+    wait_for_mains()
     run(a.case, a.evidence, a.runs, a.work_fraction)
 
 

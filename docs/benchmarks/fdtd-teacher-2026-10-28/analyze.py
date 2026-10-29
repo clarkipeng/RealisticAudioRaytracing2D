@@ -325,12 +325,39 @@ def figures(report, maps, output):
     plt.close(fig)
 
 
+def package(runs, output):
+    """evidence.zip: every run without its receiver time series (kept in .context).
+
+    The slim files carry everything analyze.py reads; the manifest records the
+    hash of each full run file and of each logged run.
+    """
+    import io
+    import zipfile
+    manifest = {}
+    with zipfile.ZipFile(output / 'evidence.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+        for path in sorted(runs.glob('*.npz')):
+            d = np.load(path)
+            keep = {k: d[k] for k in d.files if k != 'pressure'}
+            buffer = io.BytesIO()
+            np.savez_compressed(buffer, **keep)
+            z.writestr(f'runs/{path.name}', buffer.getvalue())
+            z.write(path.with_suffix('.json'), f'runs/{path.stem}.json')
+            manifest[path.name] = dict(fullSha256=digest(path), slimSha256=hashlib.sha256(buffer.getvalue()).hexdigest())
+        logs = runs.parent / 'logs'
+        for log in sorted(logs.glob('*.log')):
+            z.write(log, f'logs/{log.name}')
+        z.writestr('manifest.json', json.dumps(manifest, indent=2) + '\n')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--evidence', type=Path, default=ROOT / '.context/fdtd-teacher/evidence')
     p.add_argument('--runs', type=Path, default=ROOT / '.context/fdtd-teacher/runs')
     p.add_argument('--output', type=Path, default=HERE)
+    p.add_argument('--package', action='store_true', help='Also write evidence.zip')
     a = p.parse_args()
+    if a.package:
+        package(a.runs, a.output)
     report = analyze(a.evidence, a.runs, a.output)
     summary = {f: dict(levels={k: {m: v[m] for m in ['complexRelativeL2', 'shadowComplexRelativeL2']}
                                for k, v in d['levels'].items()},
