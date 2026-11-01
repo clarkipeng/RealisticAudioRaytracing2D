@@ -55,21 +55,36 @@ public partial class TakeChecks
         Assert.That(workFraction,Is.GreaterThan(0).And.LessThanOrEqualTo(1));
         AudioListener.volume=0;
         // Long renders can outlive an audio-device change (sleep, battery suspend).
-        // Device and service logs say nothing about the acoustics, which fail by
-        // exception and are verified per scene by tools/dlss_jobs.py.
-        UnityEngine.TestTools.LogAssert.Ignore(LogType.Error,new System.Text.RegularExpressions.Regex("FMOD|audio device|UnityConnect"));
-        var shader=RequireGpu();
-        foreach(string line in File.ReadAllLines(jobs))
+        // Device and service logs say nothing about the acoustics; every other error
+        // log still fails the render, and tools/dlss_jobs.py verifies each scene.
+        var unrelated=new System.Text.RegularExpressions.Regex("FMOD|audio device|UnityConnect");
+        var errors=datasetErrors=new System.Collections.Concurrent.ConcurrentQueue<string>();
+        Application.LogCallback collect=(message,stack,type)=>
+        {if((type==LogType.Error||type==LogType.Exception||type==LogType.Assert)&&!unrelated.IsMatch(message))errors.Enqueue(message);};
+        bool ignored=UnityEngine.TestTools.LogAssert.ignoreFailingMessages;
+        UnityEngine.TestTools.LogAssert.ignoreFailingMessages=true;
+        Application.logMessageReceivedThreaded+=collect;
+        try
         {
-            // "<scene directory>\t<variant>": tracer uses the scene's material presets,
-            // tracer-rigid replaces every surface with a rigid wall (FDTD comparison).
-            var fields=line.Split('\t');if(fields[0].Trim().Length==0)continue;
-            string variant=fields.Length>1?fields[1].Trim():"tracer";
-            Assert.That(variant,Is.EqualTo("tracer").Or.EqualTo("tracer-rigid"));
-            RenderDatasetScene(fields[0].Trim(),variant,shader,workFraction);
+            var shader=RequireGpu();
+            foreach(string line in File.ReadAllLines(jobs))
+            {
+                // "<scene directory>\t<variant>": tracer uses the scene's material presets,
+                // tracer-rigid replaces every surface with a rigid wall (FDTD comparison).
+                var fields=line.Split('\t');if(fields[0].Trim().Length==0)continue;
+                string variant=fields.Length>1?fields[1].Trim():"tracer";
+                Assert.That(variant,Is.EqualTo("tracer").Or.EqualTo("tracer-rigid"));
+                RenderDatasetScene(fields[0].Trim(),variant,shader,workFraction);
+            }
+        }
+        finally
+        {
+            Application.logMessageReceivedThreaded-=collect;
+            UnityEngine.TestTools.LogAssert.ignoreFailingMessages=ignored;
         }
     }
 
+    static System.Collections.Concurrent.ConcurrentQueue<string> datasetErrors=new();
     void RenderDatasetScene(string directory,string variant,ComputeShader shader,double workFraction)
     {
         string final=Path.Combine(directory,variant),partial=Path.Combine(directory,variant+".partial");
@@ -178,6 +193,8 @@ public partial class TakeChecks
         File.WriteAllBytes(Path.Combine(partial,"direct-visible.u8"),visible);
         run.wallSeconds=TakeRender.Elapsed(sceneStarted);
         File.WriteAllText(Path.Combine(partial,"run.json"),JsonUtility.ToJson(run,true),new System.Text.UTF8Encoding(false));
+        // An acoustics-relevant error log leaves the render partial, so it is retried.
+        Assert.That(datasetErrors,Is.Empty,"Error logged during a dataset render.");
         Directory.Move(partial,final);
     }
 
