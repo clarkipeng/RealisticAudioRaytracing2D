@@ -13,6 +13,7 @@ import numpy as np
 
 import dlss_baselines as bl
 import dlss_dataset as dd
+import dlss_jobs as dj
 import dlss_scenes as ds
 import fdtd_wave as fw
 
@@ -171,6 +172,22 @@ class Packer(unittest.TestCase):
         self.assertAlmostEqual(abs(dd.mesh_volume(dict(vertices=v, triangles=t))), 1.0)
         walls = [dict(center=[.5, .5, .5], half=[.5, .5, .5]), dict(center=[1, .5, .5], half=[.5, .5, .5])]
         self.assertAlmostEqual(dd.union_volume(walls, ds.LATTICE)[0], 1.5)
+
+    def test_render_verification_ignores_runner_and_catches_bad_payloads(self):
+        folder = next((self.data / 'scenes').glob('canopy-*'))
+        self.assertEqual(dj.verify_render(folder), [])
+        payload = folder / 'tracer/counts-input-1-64.i64'
+        payload.write_bytes(payload.read_bytes()[:-8])
+        self.assertTrue(any('counts-input-1-64' in r for r in dj.verify_render(folder)))
+        bad = folder / 'tracer/responses-label.f32'
+        values = np.fromfile(bad, '<f4')
+        values[3] = np.nan
+        values.tofile(bad)
+        self.assertTrue(any('non-finite' in r for r in dj.verify_render(folder)))
+        scene = folder / 'scene.json'
+        scene.write_bytes(scene.read_bytes() + b' ')
+        self.assertIn('run was rendered from different scene bytes', dj.verify_render(folder))
+        self.assertTrue(dj.verify_render(folder, 'tracer-rigid'))
 
     def test_label_statistics_are_unbiased(self):
         runs = np.zeros((3, 1, 1, 1, 2), np.float32)

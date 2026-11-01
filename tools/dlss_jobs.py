@@ -196,45 +196,105 @@ def sync_runner(runner):
     return files
 
 
-def render(data, scenes, batch, work_fraction, variant='tracer', runner=RUNNER, unity=UNITY, rss_limit=4 * GIB):
-    """Render pending scenes in batches; each batch is one Unity launch."""
-    pending = [s for s in scenes if not (s / variant).exists()]
+def verify_render(folder, variant='tracer'):
+    """Reasons a scene's render is unusable (empty when complete and valid).
+
+    Checks the run binds the exact scene bytes and budgets, and that every payload
+    has the size its shape implies and finite values. The test runner's exit code
+    alone is not trusted: unrelated editor logs can fail a run whose outputs are fine.
+    """
+    out = folder / variant
+    try:
+        run = json.loads((out / 'run.json').read_text())
+        scene = json.loads((folder / 'scene.json').read_text())
+    except (OSError, ValueError) as error:
+        return [f'run.json or scene.json unreadable: {error}']
+    reasons = []
+    if run.get('sceneSha256') != sha256(folder / 'scene.json'):
+        reasons.append('run was rendered from different scene bytes')
+    P, Q, F = len(scene['points']) // 3, len(scene['frequencies']), len(run.get('families', []))
+    if run.get('points') != P or run.get('frequencies') != scene['frequencies'] or F != 8:
+        reasons.append('run shape differs from the scene')
+    expected = {b['name']: b for b in scene['render']['budgets']}
+    if [b['name'] for b in run.get('budgets', [])] != list(expected):
+        reasons.append('budgets differ from the scene recipe')
+    for name, budget in expected.items():
+        S = len(budget['seeds'])
+        for stem, ext, dtype, shape in [('responses', 'f32', '<f4', (S, P, Q, F, 2)), ('counts', 'i64', '<i8', (S, P, Q, F)),
+                                        ('peaks', 'f32', '<f4', (S, P, Q, F)), ('seconds', 'f32', '<f4', (S, P))]:
+            path = out / f'{stem}-{name}.{ext}'
+            if not path.exists() or path.stat().st_size != np.prod(shape) * np.dtype(dtype).itemsize:
+                reasons.append(f'{path.name} missing or wrong size')
+            elif dtype == '<f4' and not np.all(np.isfinite(np.fromfile(path, dtype))):
+                reasons.append(f'{path.name} has non-finite values')
+    for path, size in [(out / 'direct-visible.u8', P), (out / 'boundary.json', None)]:
+        if not path.exists() or (size is not None and path.stat().st_size != size):
+            reasons.append(f'{path.name} missing or wrong size')
+    return reasons
+
+
+def render(data, scenes, batch, work_fraction, variant='tracer', runner=RUNNER, unity=UNITY, rss_limit=4 * GIB,
+           attempts=2):
+    """Render pending scenes in batches; each batch is one Unity launch.
+
+    A scene is accepted when verify_render finds nothing wrong, whatever the test
+    runner reported. Invalid outputs are set aside and the scene is retried; a
+    scene that still fails after `attempts` launches stops the queue.
+    """
     logs = data / 'logs'
     logs.mkdir(parents=True, exist_ok=True)
-    print(f'{len(pending)} scenes pending', flush=True)
-    for first in range(0, len(pending), batch):
-        wait_for_mains()
-        group = pending[first:first + batch]
-        name = time.strftime('render-%Y%m%d-%H%M%S')
-        out = logs / name
-        out.mkdir()
-        provenance = dict(files=sync_runner(runner), runner=str(runner), unity=str(unity),
-                          scenes={s.name: sha256(s / 'scene.json') for s in group})
-        (out / 'provenance.json').write_text(json.dumps(provenance, indent=1) + '\n')
-        jobs = out / 'jobs.txt'
-        jobs.write_text(''.join(f'{s.resolve()}\t{variant}\n' for s in group))
-        command = ['nice', '-n', '19', str(unity), '-batchmode', '-force-metal', '-disable-audio',
-                   '-job-worker-count', '1', '-projectPath', str(runner), '-runTests', '-testPlatform', 'EditMode',
-                   '-testFilter', 'TakeChecks.MeasureDatasetScenes', '-testResults', str(out / 'tests.xml'),
-                   '-logFile', str(out / 'unity.log')]
-        env = dict(os.environ, ACOUSTIC_DATASET_JOBS=str(jobs), ACOUSTIC_DATASET_WORK_FRACTION=str(work_fraction),
-                   ACOUSTIC_TEST_WORK_FRACTION=str(work_fraction), ACOUSTIC_SOLID_PYTHON=str(SOLID_PYTHON))
-        print(f'{name}: {variant}, {len(group)} scenes {[s.name for s in group]}', flush=True)
-        resources = Worker(command, env, lambda m: print(m, flush=True), rss_limit).run()
-        passed = (out / 'tests.xml').exists() and xml.parse(out / 'tests.xml').getroot().get('result') == 'Passed'
-        resources.update(passed=passed, workFraction=work_fraction)
-        (out / 'resources.json').write_text(json.dumps(resources, indent=1) + '\n')
-        done = [s for s in group if (s / variant).exists()]
-        for s in done:
-            if not (s / variant / 'provenance.json').exists():
-                record = dict(batch=name, provenanceSha256=sha256(out / 'provenance.json'),
-                              resourcesSha256=sha256(out / 'resources.json'))
-                (s / variant / 'provenance.json').write_text(json.dumps(record, indent=1) + '\n')
-        print(f'{name}: exit {resources["exitCode"]}, passed={passed}, {len(done)}/{len(group)} done, '
-              f'{resources["wallSeconds"]:.0f} s, peak RSS {resources["peakTreeRssBytes"] / GIB:.2f} GiB', flush=True)
-        if not passed:
-            raise RuntimeError(f'Unity batch {name} failed; see {out / "unity.log"}')
+    tries = {}
+    while True:
+        for s in scenes:      # Set aside outputs from interrupted or invalid renders.
+            if (s / variant).exists() and verify_render(s, variant):
+                (s / variant).rename(s / f'{variant}.invalid-{time.strftime("%Y%m%d-%H%M%S")}')
+        pending = [s for s in scenes if not (s / variant).exists()]
+        if not pending:
+            return
+        failed = [s.name for s in pending if tries.get(s, 0) >= attempts]
+        if failed:
+            raise RuntimeError(f'Scenes failed {attempts} renders: {failed}')
+        print(f'{len(pending)} scenes pending', flush=True)
+        group = pending[:batch]
+        for s in group:
+            tries[s] = tries.get(s, 0) + 1
+        render_batch(logs, group, work_fraction, variant, runner, unity, rss_limit)
         time.sleep(20)
+
+
+def render_batch(logs, group, work_fraction, variant, runner, unity, rss_limit):
+    wait_for_mains()
+    name = time.strftime('render-%Y%m%d-%H%M%S')
+    out = logs / name
+    out.mkdir()
+    provenance = dict(files=sync_runner(runner), runner=str(runner), unity=str(unity),
+                      scenes={s.name: sha256(s / 'scene.json') for s in group})
+    (out / 'provenance.json').write_text(json.dumps(provenance, indent=1) + '\n')
+    jobs = out / 'jobs.txt'
+    jobs.write_text(''.join(f'{s.resolve()}\t{variant}\n' for s in group))
+    command = ['nice', '-n', '19', str(unity), '-batchmode', '-force-metal', '-disable-audio',
+               '-job-worker-count', '1', '-projectPath', str(runner), '-runTests', '-testPlatform', 'EditMode',
+               '-testFilter', 'TakeChecks.MeasureDatasetScenes', '-testResults', str(out / 'tests.xml'),
+               '-logFile', str(out / 'unity.log')]
+    env = dict(os.environ, ACOUSTIC_DATASET_JOBS=str(jobs), ACOUSTIC_DATASET_WORK_FRACTION=str(work_fraction),
+               ACOUSTIC_TEST_WORK_FRACTION=str(work_fraction), ACOUSTIC_SOLID_PYTHON=str(SOLID_PYTHON))
+    print(f'{name}: {variant}, {len(group)} scenes {[s.name for s in group]}', flush=True)
+    resources = Worker(command, env, lambda m: print(m, flush=True), rss_limit).run()
+    passed = (out / 'tests.xml').exists() and xml.parse(out / 'tests.xml').getroot().get('result') == 'Passed'
+    valid = {s.name: verify_render(s, variant) if (s / variant).exists() else ['not rendered'] for s in group}
+    resources.update(passed=passed, workFraction=work_fraction, scenes=valid)
+    (out / 'resources.json').write_text(json.dumps(resources, indent=1) + '\n')
+    for s in group:
+        if not valid[s.name] and not (s / variant / 'provenance.json').exists():
+            record = dict(batch=name, provenanceSha256=sha256(out / 'provenance.json'),
+                          resourcesSha256=sha256(out / 'resources.json'), testRunnerPassed=passed)
+            (s / variant / 'provenance.json').write_text(json.dumps(record, indent=1) + '\n')
+    good = sum(not v for v in valid.values())
+    print(f'{name}: exit {resources["exitCode"]}, test runner passed={passed}, {good}/{len(group)} scenes verified, '
+          f'{resources["wallSeconds"]:.0f} s, peak RSS {resources["peakTreeRssBytes"] / GIB:.2f} GiB', flush=True)
+    for scene, reasons in valid.items():
+        if reasons:
+            print(f'{name}: {scene} invalid: {reasons[:3]}', flush=True)
 
 
 def run_test(name, filter_, work_fraction, runner=RUNNER, unity=UNITY):
