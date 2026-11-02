@@ -22,6 +22,11 @@ That bias is fixed in the tracer itself and measured against the validated FDTD 
 Ray → wave remains a secondary experiment on a small FDTD-labelled subset, scored on held-out scene families.
 Sections 5–8 below describe the original hybrid-teacher plan; the hybrid crossover stays relevant for that experiment and for qualifying tracer improvements.
 
+**Dataset pilot, 1 November 2026.**
+The [denoiser dataset](dataset.md) pipeline is built and a 72-scene pilot is packed and verified ([results](../benchmarks/denoise-pilot-2026-10-29/README.md)).
+The converged early field (all path families except the residual walk) is a usable label in most families; the residual walk does not converge with more rays and is excluded from the label until the tracer's walk weights are fixed.
+Against FDTD, the rigid tracer's early field is 15–23% off in open scenes and 41–51% off in shadow.
+
 ---
 
 ## 1. What the renderer actually computes
@@ -281,9 +286,9 @@ The spec already demands this comparison at matched total cost.
 | Stage | Work | Gate before moving on |
 |---|---|---|
 | 1 | Fused GPU FDTD (or verify the PFFDTD Metal fork) with absorbing boundaries and wall impedance | Matches the 125 Hz canopy BEM and the 2D/2.5D reference set within a declared budget, e.g. under 5%. **Passed for rigid walls on 29 October:** canopy 1.37%, 250 Hz blocks 0.79%. Wall impedance remains. |
-| 2 | Procedural generator + headless Unity batch renders from the same scene file | Same scene compiles identically to FDTD voxels and Unity primitives; renders reproducible by seed |
-| 3 | Dataset writer (hashes, splits, per-family buffers) | Split isolation and identity checks pass |
-| 4 | ~500-scene pilot at ≤500 Hz crossover; small causal model | Beats equal-cost extra rays on **held-out families**, measured separately for noise and bias |
+| 2 | Procedural generator + headless Unity batch renders from the same scene file | Same scene compiles identically to FDTD voxels and Unity primitives; renders reproducible by seed. **Passed on 1 November** for six box families: bake, voxel and box-union volumes agree exactly in all 72 pilot scenes, and a re-render is bit-identical. |
+| 3 | Dataset writer (hashes, splits, per-family buffers) | Split isolation and identity checks pass. **Passed on 1 November:** `denoise-pilot-v1` verifies (72 bundles, 53,616 examples, every payload hash, whole held-out canopy family); 63 of 72 labels pass the predeclared acceptance. |
+| 4 | ~500-scene pilot at ≤500 Hz crossover; small causal model | Beats equal-cost extra rays on **held-out families**, measured separately for noise and bias. 72-scene data pilot done (no model yet); baselines to beat are in the pilot report. The residual walk needs a tracer fix before it can be labelled, and dense rooms need a larger label budget. |
 | 5 | Scale to 1–1.4 kHz and thousands of scenes on rented GPUs; export to Unity | End-to-end latency/memory within the live budget |
 
 ## 9. Other pipeline improvements found during the review

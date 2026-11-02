@@ -1,0 +1,149 @@
+{
+ "rows": [
+  {
+   "scene": "barriers-0900-walk",
+   "raysPerBin": 128,
+   "seeds": 4,
+   "walkSingleSeedSD": 1.741654651976297,
+   "walkMeanRms": 0.8714792308503004,
+   "peakMax": 2.4308724403381348,
+   "peakP99": 2.212780714035034,
+   "directPeakMax": 0.6390608549118042,
+   "arrivalsPerBin": 2.7850877192982457,
+   "secondsPerSolve": 0.0026146171148866415
+  },
+  {
+   "scene": "barriers-0900-walk",
+   "raysPerBin": 512,
+   "seeds": 4,
+   "walkSingleSeedSD": 1.7385067943181678,
+   "walkMeanRms": 0.9028839740548419,
+   "peakMax": 5.108820915222168,
+   "peakP99": 0.7823739051818848,
+   "directPeakMax": 0.6390608549118042,
+   "arrivalsPerBin": 15.75438596491228,
+   "secondsPerSolve": 0.004692212678492069
+  },
+  {
+   "scene": "barriers-0900-walk",
+   "raysPerBin": 2048,
+   "seeds": 4,
+   "walkSingleSeedSD": 5.698323602957262,
+   "walkMeanRms": 2.8492772293503466,
+   "peakMax": 11.960381507873535,
+   "peakP99": 9.631197929382324,
+   "directPeakMax": 0.6390608549118042,
+   "arrivalsPerBin": 48.526315789473685,
+   "secondsPerSolve": 0.012816650792956352
+  },
+  {
+   "scene": "barriers-0900-walk",
+   "raysPerBin": 8192,
+   "seeds": 2,
+   "walkSingleSeedSD": 98.10981415236726,
+   "walkMeanRms": 69.36326191231478,
+   "peakMax": 196.56195068359375,
+   "peakP99": 109.6284408569336,
+   "directPeakMax": 0.6390608549118042,
+   "arrivalsPerBin": 192.98245614035088,
+   "secondsPerSolve": 0.16438241302967072
+  },
+  {
+   "scene": "doorway-0900-walk",
+   "raysPerBin": 128,
+   "seeds": 4,
+   "walkSingleSeedSD": 12.226339983834437,
+   "walkMeanRms": 6.116935201988163,
+   "peakMax": 256.76544189453125,
+   "peakP99": 39.01352310180664,
+   "directPeakMax": 1.7609889507293701,
+   "arrivalsPerBin": 90.34693877551021,
+   "secondsPerSolve": 0.006191176827996969
+  },
+  {
+   "scene": "doorway-0900-walk",
+   "raysPerBin": 512,
+   "seeds": 4,
+   "walkSingleSeedSD": 119.50319368511614,
+   "walkMeanRms": 59.85274718714567,
+   "peakMax": 1649.3585205078125,
+   "peakP99": 908.4789428710938,
+   "directPeakMax": 1.7609889507293701,
+   "arrivalsPerBin": 356.81632653061223,
+   "secondsPerSolve": 0.013876151293516159
+  },
+  {
+   "scene": "doorway-0900-walk",
+   "raysPerBin": 2048,
+   "seeds": 4,
+   "walkSingleSeedSD": 16.24053650764396,
+   "walkMeanRms": 8.193872825104254,
+   "peakMax": 233.01881408691406,
+   "peakP99": 165.6153564453125,
+   "directPeakMax": 1.7609889507293701,
+   "arrivalsPerBin": 1380.9727359693877,
+   "secondsPerSolve": 0.031930111348629
+  },
+  {
+   "scene": "doorway-0900-walk",
+   "raysPerBin": 8192,
+   "seeds": 2,
+   "walkSingleSeedSD": 69.3948717363229,
+   "walkMeanRms": 49.0365440822319,
+   "peakMax": 1063.656005859375,
+   "peakP99": 760.7780151367188,
+   "directPeakMax": 1.7609889507293701,
+   "arrivalsPerBin": 5544.15306122449,
+   "secondsPerSolve": 0.13906782865524292
+  },
+  {
+   "scene": "shoebox-0900-walk",
+   "raysPerBin": 128,
+   "seeds": 4,
+   "walkSingleSeedSD": 1.7975085818874605,
+   "walkMeanRms": 0.8942543961311243,
+   "peakMax": 13.547647476196289,
+   "peakP99": 11.822059631347656,
+   "directPeakMax": 1.9073224067687988,
+   "arrivalsPerBin": 157.28658536585365,
+   "secondsPerSolve": 0.007311559282243252
+  },
+  {
+   "scene": "shoebox-0900-walk",
+   "raysPerBin": 512,
+   "seeds": 4,
+   "walkSingleSeedSD": 0.8724599170523902,
+   "walkMeanRms": 0.4351154723830873,
+   "peakMax": 5.767606258392334,
+   "peakP99": 5.245408058166504,
+   "directPeakMax": 1.9073224067687988,
+   "arrivalsPerBin": 672.3963414634146,
+   "secondsPerSolve": 0.010087068192660809
+  },
+  {
+   "scene": "shoebox-0900-walk",
+   "raysPerBin": 2048,
+   "seeds": 4,
+   "walkSingleSeedSD": 0.6981763686843867,
+   "walkMeanRms": 0.3507146033775317,
+   "peakMax": 7.502366065979004,
+   "peakP99": 3.7723586559295654,
+   "directPeakMax": 1.9073224067687988,
+   "arrivalsPerBin": 2617.6646341463415,
+   "secondsPerSolve": 0.03171002119779587
+  },
+  {
+   "scene": "shoebox-0900-walk",
+   "raysPerBin": 8192,
+   "seeds": 2,
+   "walkSingleSeedSD": 0.89092774979978,
+   "walkMeanRms": 0.6294263034668243,
+   "peakMax": 5.18037223815918,
+   "peakP99": 5.143417835235596,
+   "directPeakMax": 1.9073224067687988,
+   "arrivalsPerBin": 10208.387576219513,
+   "secondsPerSolve": 0.25707539916038513
+  }
+ ],
+ "note": "SD and mean are relative to the RMS early field (all other families) of the same scene"
+}
