@@ -216,6 +216,15 @@ The preview combines deterministic direct/transmitted frequency bins, bounded **
 
 **Reflection Sampling → First Images** keeps first-order mirror candidates as separate delayed arrivals in both live and offline audio. It enumerates scenes up to the candidate budget (128 primitives by default); larger scenes use compensated candidate sampling, with a budget that also grows with rays per bin. It preserves the configured multi-bounce surface/edge walk. GPU filter storage shares frequency records whose geometry is guaranteed identical; dispersive speeds and frequency-dependent branch probabilities retain the needed separate capacity. This does not integrate or validate the offline prototype’s complete multi-edge and mixed mirror/edge solver.
 
+**Family Gains** (off by default) scales the sampled early families before the audio stage: first-order images and the complete D/DD/RD/DR/RR routes, each by `(1 + k·rho)^-1/2`, where `rho` is that family's candidate routes per sample.
+It keeps each family's expected energy while removing most low-budget spikes.
+Direct sound and the residual walk are unchanged.
+It needs **Complete Route Samples > 0** and **First Images**, so validation rejects it with the current Church and TrainStation presets, which use the legacy walk.
+The `k` table and its provenance live in `Assets/Resources/Acoustics/FamilyGains.json`.
+Offline reports record its hash as `familyGainsHash`.
+The gains bias the estimator toward its expected level and do not recover diffracted detail in shadow.
+[Fit, shadow analysis and decision](docs/benchmarks/family-gains-2026-11-03/README.md).
+
 **Synthesis → Impulse Response** uses frozen responses. The CPU reference retains the partitioned scene-IR convolver with overlap-add and circular source-spectrum history; the GPU evaluates the equivalent sum of delayed path filters with overlap-save. This remains the default for existing settings. Propagation, fractional delay, material response and the complete per-arrival ear filter are composed into a scene FIR. It is suitable for stationary response rendering; crossfading snapshots does not make moving Doppler exact.
 
 **Synthesis → Spectral** enables continuous Doppler on either audio backend. Each physical path reads the source at a continuously varying emission time, then applies short material and ear spectra with overlap-save. It does not build a propagation-length scene IR. Those short filters are still convolution mathematically. Direct paths and first planar mirrors account for emission/interaction time under locally constant velocity; sampled indirect geometry and other occluders remain frozen at solve time. Topology hashes separate path groups, and each solve refreshes the physical emission-time anchor. Accelerating/rotating general scenes still need validation. CPU per-path synthesis is expensive; the GPU version processes path FFTs in parallel. Neither offline throughput nor numerical agreement establishes realtime deadlines.

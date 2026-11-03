@@ -34,6 +34,12 @@ A 4,658-parameter per-frequency network ([results](../benchmarks/denoise-model-2
 Almost all of that comes from the per-family breakdown rather than learning: fixed per-family gains fitted on the training split reach 32 / 31 / 29 / 21% at no inference cost, and below 1/4 the network is at most 1.4 points better than those gains with the same time spent on rays (interpolated).
 Below 1/4 a single static solve does not carry the complete-route field; temporal history, route-coverage features or exhaustive RR enumeration are the next levers.
 
+**Per-family gains in the renderer, 3 November 2026.**
+Those least-squares gains mute the shadow: on test receivers without line of sight they render the early field 5.9 dB too quiet at 1/256 and are 90% wrong there, barely better than silence ([results](../benchmarks/family-gains-2026-11-03/README.md)).
+A pre-registered, shadow-weighted selection chose a level-preserving law instead, `g = (1 + k·rho)^-1/2` with `rho` the family's candidate routes per sample at run time, which needs no per-budget table.
+On test at 1/256 it is 40% wrong in view and 111% in shadow at −0.2 dB, against raw 212% / 783% at +7.4 / +17.9 dB: it removes the spikes and keeps the shadow level, but does not recover the shadow field's content.
+It ships as the opt-in renderer setting `familyGains` (data in `Assets/Resources/Acoustics/FamilyGains.json`), default off; the walk is not gained.
+
 ---
 
 ## 1. What the renderer actually computes

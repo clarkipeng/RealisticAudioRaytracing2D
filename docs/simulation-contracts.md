@@ -2188,3 +2188,12 @@ Those families are omitted, not estimated: their absolute edge-to-edge transfer 
 Transmission and scatter branches are drawn in proportion to their pressure amplitudes, and a diffuse surface-to-edge leg restarts from the surface vertex's weight divided by the probability that the edge branch was reachable.
 The walk remains unconverged in closed rooms.
 See the [residual-walk benchmark](benchmarks/residual-walk-2026-11-02/README.md).
+
+**Per-family gains, 3 November (opt-in):** `TakeRender.Settings.familyGains` multiplies each first-order image and complete-route arrival by `(1 + k_f·rho)^-power`, where `f` is its family (R, D, DD, RD, DR, RR).
+`rho` is that family's candidate routes per sample, as sampled: primitives over mirror candidates for images, total candidates over samples when every complete candidate is enumerated, and otherwise the route's inclusion weight (family size times nonempty families over samples).
+`k`, the power, the fitted `rho` range and provenance are data in `Resources/Acoustics/FamilyGains.json`, never code constants.
+A pass right after the mirror and complete-route kernels (`FamilyGains.hlsl`) repeats their slot and sample-to-route mapping and scales the path pressure, so every audio backend consumes the same paths; no transport kernel changes.
+Direct sound and the residual walk are never gained, and with the setting off every path is bit-identical to the unbiased estimator.
+The setting requires raytraced transport with complete routes and First Images reflection sampling.
+It is a biased, level-preserving estimator for low budgets, not a physics change; labels, checks and benchmarks render with it off.
+See the [family-gain benchmark](benchmarks/family-gains-2026-11-03/README.md).

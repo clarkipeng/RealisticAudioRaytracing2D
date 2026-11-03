@@ -1,0 +1,27 @@
+{
+    "device": "Apple M5",
+    "cases": [
+        {
+            "fftSize": 64,
+            "bins": 33,
+            "pathsPerSolve": 11385,
+            "solves": 300,
+            "medianMsOff": 0.6338999999999999,
+            "medianMsOn": 0.609,
+            "medianPairedDifferenceMs": -0.029800000000000074,
+            "p10PairedDifferenceMs": -0.20419999999999997,
+            "p90PairedDifferenceMs": 0.11340000000000004
+        },
+        {
+            "fftSize": 1024,
+            "bins": 513,
+            "pathsPerSolve": 176985,
+            "solves": 300,
+            "medianMsOff": 0.9953,
+            "medianMsOn": 1.0534,
+            "medianPairedDifferenceMs": 0.038899999999999917,
+            "p10PairedDifferenceMs": -0.2383000000000001,
+            "p90PairedDifferenceMs": 0.20469999999999995
+        }
+    ]
+}
