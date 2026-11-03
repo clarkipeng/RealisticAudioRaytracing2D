@@ -737,7 +737,8 @@ void TracePaths(uint index, bool is2D)
     float edgeDistance = 0, spreadingDistance = 0;
     bool canSampleEdge = true,hadSurface=false;
     float3 surfaceNormal = 0;
-    float surfaceScatter = 1;
+    float surfaceScatter = 1, edgeGain = 0;
+    float2 edgeMaterialWeight = materialWeight;
     for (uint bounce = 0; bounce < MaxBounces; bounce++)
     {
         float3 segmentStart = position;
@@ -776,7 +777,12 @@ void TracePaths(uint index, bool is2D)
                 spreadingDistance = 0;
             }
             else if (bounce > 0)
-                gain *= surfaceScatter * max(0, dot(surfaceNormal, incoming));
+            {
+                // Diffuse surface-to-edge leg: restart from the surface vertex. The
+                // continuation draws made there belong to the discarded direction.
+                gain = edgeGain * surfaceScatter * max(0, dot(surfaceNormal, incoming));
+                materialWeight = edgeMaterialWeight;
+            }
             Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
             spreadingDistance += distance;
             gain *= inversePdf * DiffractionFactor * EdgeOpacity(edge, frequencyBin) / edgeProbability;
@@ -790,7 +796,7 @@ void TracePaths(uint index, bool is2D)
                        segmentStart, position, segmentTime, time, gain * weight);
             identity = HashRay(identity ^ (edge + 1) ^ 0x20000000u);
             float last = length(end - position);
-            if ((UseCompleteRoutes==0 || hadSurface || bounce>=2) && last > RayEpsilon && Visible(stateOffset, position, end, is2D))
+            if ((UseCompleteRoutes==0 || hadSurface) && last > RayEpsilon && Visible(stateOffset, position, end, is2D))
             {
                 float3 outgoing = (end - position) / last;
                 float ratio = frequencyRatio * (1 - dot(listenerVelocity, outgoing) / speed) /
@@ -803,8 +809,11 @@ void TracePaths(uint index, bool is2D)
                 RayPaths[first+bounce]=candidate;
                 DebugArrival(debugSlot+1,debugPath,position,end,time,candidate);
             }
+            // Each edge-to-edge leg multiplies the weight by K / (leg * pdf), whose
+            // absolute mean exceeds one in measured box scenes: longer pure-edge
+            // chains have no usable variance. Runs stop at the complete-route order.
+            canSampleEdge = UseCompleteRoutes == 0 && previousEdge == 0xffffffff;
             previousEdge = edge;
-            canSampleEdge = true;
             direction = UnitDirection(rng, is2D);
             continue;
         }
@@ -866,12 +875,17 @@ void TracePaths(uint index, bool is2D)
         float3 transmitted = refract(direction, n, currentIor / nextIor);
         if (dot(transmitted, transmitted) == 0)
             transmission = 0; // Total internal reflection leaves no transmitted branch.
+        // Energy fractions give pressure coefficients sqrt(t), sqrt((1-t)s) and
+        // sqrt((1-t)(1-s)). Branches are drawn in proportion to those amplitudes,
+        // so every choice carries the same bounded weight (their sum).
+        float passed = sqrt(transmission), reflected = sqrt(1 - transmission);
+        float chooseTransmission = passed / (passed + reflected);
+        edgeGain = chooseTransmission < 1 ? gain / (1 - chooseTransmission) : 0;
+        edgeMaterialWeight = materialWeight;
+        gain *= passed + reflected;
         uint eventKind;
-        if (RandomRay(rng) < transmission)
+        if (RandomRay(rng) < chooseTransmission)
         {
-            // The legacy contract gives energy fractions. Pressure coefficient / PDF
-            // is sqrt(t)/t, not 1. Complex opaque boundaries take the other branch.
-            gain /= sqrt(transmission);
             identity = HashRay(identity ^ 0x10000000u);
             direction = normalize(transmitted);
             medium = nextMedium;
@@ -880,13 +894,12 @@ void TracePaths(uint index, bool is2D)
         }
         else
         {
-            gain /= sqrt(1 - transmission);
             float3 diffuse = UnitDirection(rng, is2D);
             if (dot(diffuse, n) < 0)
                 diffuse = -diffuse;
-            float scattering = saturate(material.surface.y);
-            bool scattered = RandomRay(rng) < scattering;
-            gain /= sqrt(scattered ? scattering : 1 - scattering);
+            float scattering = sqrt(saturate(material.surface.y)), specular = sqrt(1 - saturate(material.surface.y));
+            bool scattered = RandomRay(rng) < scattering / (scattering + specular);
+            gain *= scattering + specular;
             if(material.medium.w!=0)
                 materialWeight=ComplexProduct(materialWeight,ReflectionPressure(material,abs(dot(direction,n))));
             direction = scattered ? diffuse : reflect(direction, n);

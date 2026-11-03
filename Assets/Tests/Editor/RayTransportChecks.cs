@@ -143,21 +143,23 @@ public partial class TakeChecks
         state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
         var geometry=new[]{new AcousticTake.Primitive {objectIndex=2,
             a=new Vector3(0,-1000,-1000),b=new Vector3(0,1000,-1000),c=new Vector3(0,0,1000)}};
-        var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=4;settings.raysPerBin=8192;
+        var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=4;settings.raysPerBin=32768;
         settings.maxBounces=1;settings.diffractionFactor=0;settings.airAbsorption=false;
         using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
         var sums=new double[3];int hits=0;double[] energy={.25,.75*.6,.75*.4};
+        // Branches are drawn in proportion to pressure amplitude, so each carries the amplitude sum.
+        double split=Math.Sqrt(.25)+Math.Sqrt(.75);double[] weight={split,split*(Math.Sqrt(.6)+Math.Sqrt(.4)),split*(Math.Sqrt(.6)+Math.Sqrt(.4))};
         foreach(var segment in solver.CaptureRays(state,0,1))
         {
             if(segment.path<2 || segment.path%2!=0)continue; // Exclude separately connected mirrors.
             int branch=segment.kind==TransportSolver.RayEvent.Transmission?0:
                 segment.kind==TransportSolver.RayEvent.Reflection?1:segment.kind==TransportSolver.RayEvent.Scatter?2:-1;
             if(branch<0)continue;
-            Assert.That(segment.pressure*settings.raysPerBin,Is.EqualTo(Math.Sqrt(.75/energy[branch])).Within(1e-5),
+            Assert.That(segment.pressure*settings.raysPerBin,Is.EqualTo(Math.Sqrt(.75)*weight[branch]).Within(1e-5),
                 "Surviving pressure is coefficient divided by branch probability.");
             hits++;sums[branch]+=segment.pressure;
         }
-        Assert.That(hits,Is.GreaterThan(2000));
+        Assert.That(hits,Is.GreaterThan(8000));
         TestContext.WriteLine($"hits={hits}; pressure T/R/S={sums[0]*settings.raysPerBin/hits}, {sums[1]*settings.raysPerBin/hits}, {sums[2]*settings.raysPerBin/hits}");
         for(int i=0;i<3;i++)Assert.That(sums[i]*settings.raysPerBin/hits,
             Is.EqualTo(Math.Sqrt(.75*energy[i])).Within(.035),"Each sampled branch estimates its pressure coefficient.");
