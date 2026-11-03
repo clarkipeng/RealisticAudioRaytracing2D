@@ -1,0 +1,2783 @@
+{
+ "ladder": {
+  "before": [
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.7416547536849976,
+    "walkMeanRms": 0.8714792132377625,
+    "totalSingleSeedSD": 1.7732635736465454,
+    "peakMax": 2.4308724403381348,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.001074549974873662
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.73850679397583,
+    "walkMeanRms": 0.9028840065002441,
+    "totalSingleSeedSD": 1.7769443988800049,
+    "peakMax": 5.108820915222168,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.002402300015091896
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 5.698323726654053,
+    "walkMeanRms": 2.8492772579193115,
+    "totalSingleSeedSD": 5.704539775848389,
+    "peakMax": 11.960381507873535,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.009254449978470802
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 98.10981750488281,
+    "walkMeanRms": 69.3632583618164,
+    "totalSingleSeedSD": 98.12093353271484,
+    "peakMax": 196.56195068359375,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.08967660367488861
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 12.226341247558594,
+    "walkMeanRms": 6.1169352531433105,
+    "totalSingleSeedSD": 12.343194007873535,
+    "peakMax": 256.76544189453125,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.0041241999715566635
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 119.5031967163086,
+    "walkMeanRms": 59.852745056152344,
+    "totalSingleSeedSD": 119.51456451416016,
+    "peakMax": 1649.3585205078125,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.013318799436092377
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 16.240537643432617,
+    "walkMeanRms": 8.193872451782227,
+    "totalSingleSeedSD": 16.407012939453125,
+    "peakMax": 233.01881408691406,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.028578899800777435
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 69.39486694335938,
+    "walkMeanRms": 49.03654098510742,
+    "totalSingleSeedSD": 69.40086364746094,
+    "peakMax": 1063.656005859375,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.11177724599838257
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.7975085973739624,
+    "walkMeanRms": 0.8942543864250183,
+    "totalSingleSeedSD": 2.1448774337768555,
+    "peakMax": 13.547647476196289,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.00685460027307272
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.8724599480628967,
+    "walkMeanRms": 0.4351154565811157,
+    "totalSingleSeedSD": 1.3581610918045044,
+    "peakMax": 5.767606258392334,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.008701600134372711
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.698176383972168,
+    "walkMeanRms": 0.35071462392807007,
+    "totalSingleSeedSD": 1.9659026861190796,
+    "peakMax": 7.502366065979004,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.02441979944705963
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.8909277319908142,
+    "walkMeanRms": 0.6294263005256653,
+    "totalSingleSeedSD": 1.1961473226547241,
+    "peakMax": 5.18037223815918,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.24000084400177002
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 4.412710189819336,
+    "walkMeanRms": 2.214931011199951,
+    "totalSingleSeedSD": 4.688792705535889,
+    "peakMax": 41.834598541259766,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.00218144990503788
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 29.687620162963867,
+    "walkMeanRms": 14.864415168762207,
+    "totalSingleSeedSD": 29.738561630249023,
+    "peakMax": 140.22703552246094,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.003942450042814016
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 4.116438388824463,
+    "walkMeanRms": 2.0765140056610107,
+    "totalSingleSeedSD": 4.3428144454956055,
+    "peakMax": 26.231721878051758,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.011005200445652008
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 117.84123229980469,
+    "walkMeanRms": 83.3343505859375,
+    "totalSingleSeedSD": 117.8700942993164,
+    "peakMax": 661.4506225585938,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.04424150288105011
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.45551779866218567,
+    "walkMeanRms": 0.23001471161842346,
+    "totalSingleSeedSD": 0.5680692791938782,
+    "peakMax": 0.9635769724845886,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.000992950052022934
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.797303318977356,
+    "walkMeanRms": 0.9352495670318604,
+    "totalSingleSeedSD": 1.8363460302352905,
+    "peakMax": 5.319257736206055,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.0020942999981343746
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 6.0248517990112305,
+    "walkMeanRms": 3.0125386714935303,
+    "totalSingleSeedSD": 6.030820369720459,
+    "peakMax": 12.835806846618652,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.0056396001018583775
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 103.35676574707031,
+    "walkMeanRms": 73.07279968261719,
+    "totalSingleSeedSD": 103.36787414550781,
+    "peakMax": 206.73419189453125,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.020630549639463425
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.3616652488708496,
+    "walkMeanRms": 0.6846831440925598,
+    "totalSingleSeedSD": 2.117722272872925,
+    "peakMax": 10.394293785095215,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.0016956499312072992
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 28.695802688598633,
+    "walkMeanRms": 14.368090629577637,
+    "totalSingleSeedSD": 28.74102020263672,
+    "peakMax": 147.4839630126953,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.0034419498406350613
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 3.9419949054718018,
+    "walkMeanRms": 1.9886292219161987,
+    "totalSingleSeedSD": 4.165388107299805,
+    "peakMax": 27.312227249145508,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.010116349905729294
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 114.43384552001953,
+    "walkMeanRms": 80.92564392089844,
+    "totalSingleSeedSD": 114.46295928955078,
+    "peakMax": 695.6813354492188,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.03960689902305603
+   }
+  ],
+  "after": [
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.018955059349536896,
+    "walkMeanRms": 0.009478098712861538,
+    "totalSingleSeedSD": 0.33336225152015686,
+    "peakMax": 0.062132686376571655,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.000839899992570281
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.004417737014591694,
+    "walkMeanRms": 0.0022399926092475653,
+    "totalSingleSeedSD": 0.36079439520835876,
+    "peakMax": 0.005727528128772974,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.0016799499280750751
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.001398785854689777,
+    "walkMeanRms": 0.000699351541697979,
+    "totalSingleSeedSD": 0.31186673045158386,
+    "peakMax": 0.002754491986706853,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.004242650233209133
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.0007405744981952012,
+    "walkMeanRms": 0.0005299346521496773,
+    "totalSingleSeedSD": 0.31431156396865845,
+    "peakMax": 0.0004892509896308184,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.015475800260901451
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.08665908873081207,
+    "walkMeanRms": 0.04324014112353325,
+    "totalSingleSeedSD": 1.593298077583313,
+    "peakMax": 0.4179738461971283,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.001651549944654107
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.007809712551534176,
+    "walkMeanRms": 0.004081102088093758,
+    "totalSingleSeedSD": 1.9236100912094116,
+    "peakMax": 0.022841759026050568,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.0030383002012968063
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.020349908620119095,
+    "walkMeanRms": 0.010087184607982635,
+    "totalSingleSeedSD": 1.387276530265808,
+    "peakMax": 0.13801421225070953,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.008140649646520615
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.0037622565869241953,
+    "walkMeanRms": 0.0026285622734576464,
+    "totalSingleSeedSD": 2.5007002353668213,
+    "peakMax": 0.01009306963533163,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.03179309889674187
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.2222617119550705,
+    "walkMeanRms": 0.11059276759624481,
+    "totalSingleSeedSD": 1.8827286958694458,
+    "peakMax": 1.481181025505066,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.002976000076159835
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 135.74070739746094,
+    "walkMeanRms": 67.86380004882812,
+    "totalSingleSeedSD": 135.7403564453125,
+    "peakMax": 1777.4017333984375,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.007429699879139662
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.2747832536697388,
+    "walkMeanRms": 0.6350844502449036,
+    "totalSingleSeedSD": 2.4910471439361572,
+    "peakMax": 13.52729320526123,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.022909700870513916
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.44603222608566284,
+    "walkMeanRms": 0.31298816204071045,
+    "totalSingleSeedSD": 1.2834275960922241,
+    "peakMax": 3.0698022842407227,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.08168944716453552
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.2678866386413574,
+    "walkMeanRms": 0.6338767409324646,
+    "totalSingleSeedSD": 1.727426528930664,
+    "peakMax": 9.63181209564209,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.002499349880963564
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.2725778818130493,
+    "walkMeanRms": 0.13672420382499695,
+    "totalSingleSeedSD": 1.0912880897521973,
+    "peakMax": 1.6767276525497437,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.006266599986702204
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.22271563112735748,
+    "walkMeanRms": 0.11221025139093399,
+    "totalSingleSeedSD": 1.8500834703445435,
+    "peakMax": 1.244213581085205,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.01762384921312332
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.724738597869873,
+    "walkMeanRms": 0.5147282481193542,
+    "totalSingleSeedSD": 1.0781487226486206,
+    "peakMax": 2.675845146179199,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.0688105970621109
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 0.34471753239631653,
+    "peakMax": 0.0,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.001783899962902069
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 0.37034347653388977,
+    "peakMax": 0.0,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.003745549824088812
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 0.3168548047542572,
+    "peakMax": 0.0,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.011405300348997116
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 0.31919652223587036,
+    "peakMax": 0.0,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.036998551338911057
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 1.6373757123947144,
+    "peakMax": 0.0,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.002629899885505438
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 1.8205561637878418,
+    "peakMax": 0.0,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.004440099932253361
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 1.3488653898239136,
+    "peakMax": 0.0,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.01867149956524372
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer-rigid",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.0,
+    "walkMeanRms": 0.0,
+    "totalSingleSeedSD": 2.4794509410858154,
+    "peakMax": 0.0,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.04226800054311752
+   }
+  ],
+  "edgeSchedule": [
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0011111674830317497,
+    "walkMeanRms": 0.0005689377430826426,
+    "totalSingleSeedSD": 0.3327695429325104,
+    "peakMax": 0.000757952977437526,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.0014798499178141356
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0019350014626979828,
+    "walkMeanRms": 0.0009730403544381261,
+    "totalSingleSeedSD": 0.3607630133628845,
+    "peakMax": 0.0023533436469733715,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.003886450082063675
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0015953227411955595,
+    "walkMeanRms": 0.0007934140739962459,
+    "totalSingleSeedSD": 0.31186577677726746,
+    "peakMax": 0.00411428976804018,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.007999500259757042
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.0007431249250657856,
+    "walkMeanRms": 0.0005304287769831717,
+    "totalSingleSeedSD": 0.3143031597137451,
+    "peakMax": 0.0007338764262385666,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.036317698657512665
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.014162935316562653,
+    "walkMeanRms": 0.007206725887954235,
+    "totalSingleSeedSD": 1.590909719467163,
+    "peakMax": 0.07594272494316101,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.003321500029414892
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.006427619606256485,
+    "walkMeanRms": 0.003191245486959815,
+    "totalSingleSeedSD": 1.9234271049499512,
+    "peakMax": 0.027422944083809853,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.004173549823462963
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.034032560884952545,
+    "walkMeanRms": 0.017351465299725533,
+    "totalSingleSeedSD": 1.3875585794448853,
+    "peakMax": 0.27602842450141907,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.017942000180482864
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.005643745884299278,
+    "walkMeanRms": 0.0039605689235031605,
+    "totalSingleSeedSD": 2.500840902328491,
+    "peakMax": 0.02018613927066326,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.04874815046787262
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 7.554117202758789,
+    "walkMeanRms": 3.7715680599212646,
+    "totalSingleSeedSD": 7.772678852081299,
+    "peakMax": 102.75296783447266,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.005503449589014053
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 6.146514892578125,
+    "walkMeanRms": 3.059262275695801,
+    "totalSingleSeedSD": 6.189417362213135,
+    "peakMax": 80.48652648925781,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.01764580048620701
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 9.239496231079102,
+    "walkMeanRms": 4.4771623611450195,
+    "totalSingleSeedSD": 9.517135620117188,
+    "peakMax": 132.9080810546875,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.05989820137619972
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 16.44936180114746,
+    "walkMeanRms": 11.546996116638184,
+    "totalSingleSeedSD": 16.496719360351562,
+    "peakMax": 195.79725646972656,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.24567990005016327
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 17.623485565185547,
+    "walkMeanRms": 8.771880149841309,
+    "totalSingleSeedSD": 17.671640396118164,
+    "peakMax": 192.3685302734375,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.005170799791812897
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 5.602142333984375,
+    "walkMeanRms": 2.796959638595581,
+    "totalSingleSeedSD": 5.693328380584717,
+    "peakMax": 53.79898452758789,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.014861700125038624
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 18.66147804260254,
+    "walkMeanRms": 9.406342506408691,
+    "totalSingleSeedSD": 18.752357482910156,
+    "peakMax": 183.7567138671875,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.055610500276088715
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 11.433120727539062,
+    "walkMeanRms": 8.03795337677002,
+    "totalSingleSeedSD": 11.454833984375,
+    "peakMax": 205.9560089111328,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.2214500606060028
+   }
+  ],
+  "edgeChoice": [
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.0011111674830317497,
+    "walkMeanRms": 0.0005689377430826426,
+    "totalSingleSeedSD": 0.3327695429325104,
+    "peakMax": 0.000757952977437526,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.0019161500968039036
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.001940544112585485,
+    "walkMeanRms": 0.0009756651124916971,
+    "totalSingleSeedSD": 0.36076322197914124,
+    "peakMax": 0.0023533436469733715,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.0041612498462200165
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.001951012760400772,
+    "walkMeanRms": 0.0009713629842735827,
+    "totalSingleSeedSD": 0.3118543028831482,
+    "peakMax": 0.004842778667807579,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.008077849633991718
+   },
+   {
+    "scene": "barriers-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.001092478632926941,
+    "walkMeanRms": 0.0007786555215716362,
+    "totalSingleSeedSD": 0.3142847418785095,
+    "peakMax": 0.0011517585953697562,
+    "directPeakMax": 0.6390608549118042,
+    "secondsPerSolve": 0.03622230142354965
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.02021305449306965,
+    "walkMeanRms": 0.010250112041831017,
+    "totalSingleSeedSD": 1.5909816026687622,
+    "peakMax": 0.11918585747480392,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.00294229993596673
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.007155031897127628,
+    "walkMeanRms": 0.0035842813085764647,
+    "totalSingleSeedSD": 1.9234181642532349,
+    "peakMax": 0.043038055300712585,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.0037636500783264637
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.06010780483484268,
+    "walkMeanRms": 0.0294211246073246,
+    "totalSingleSeedSD": 1.3887685537338257,
+    "peakMax": 0.3249029219150543,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.01800980046391487
+   },
+   {
+    "scene": "canopy-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 0.005752805154770613,
+    "walkMeanRms": 0.004157766699790955,
+    "totalSingleSeedSD": 2.5008351802825928,
+    "peakMax": 0.023760363459587097,
+    "directPeakMax": 1.3994344472885132,
+    "secondsPerSolve": 0.0398034006357193
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 534.8324584960938,
+    "walkMeanRms": 267.4102783203125,
+    "totalSingleSeedSD": 534.8351440429688,
+    "peakMax": 13832.9765625,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.004293600097298622
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 1.9844621419906616,
+    "walkMeanRms": 0.9740948677062988,
+    "totalSingleSeedSD": 2.150869369506836,
+    "peakMax": 13.249618530273438,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.012539450079202652
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 2.4502146244049072,
+    "walkMeanRms": 1.2427314519882202,
+    "totalSingleSeedSD": 3.218552827835083,
+    "peakMax": 32.50074768066406,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.04442465305328369
+   },
+   {
+    "scene": "doorway-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 7.6758341789245605,
+    "walkMeanRms": 5.448756217956543,
+    "totalSingleSeedSD": 7.770191192626953,
+    "peakMax": 151.1635284423828,
+    "directPeakMax": 1.7609889507293701,
+    "secondsPerSolve": 0.15599805116653442
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 128,
+    "seeds": 4,
+    "walkSingleSeedSD": 0.3535793125629425,
+    "walkMeanRms": 0.17279945313930511,
+    "totalSingleSeedSD": 1.2334908246994019,
+    "peakMax": 1.5692957639694214,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.003747449954971671
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 512,
+    "seeds": 4,
+    "walkSingleSeedSD": 13.556197166442871,
+    "walkMeanRms": 6.772441387176514,
+    "totalSingleSeedSD": 13.605755805969238,
+    "peakMax": 112.0116958618164,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.009692950174212456
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 2048,
+    "seeds": 4,
+    "walkSingleSeedSD": 11.687954902648926,
+    "walkMeanRms": 5.814783573150635,
+    "totalSingleSeedSD": 11.834437370300293,
+    "peakMax": 152.3333282470703,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.03758610039949417
+   },
+   {
+    "scene": "shoebox-0900-walk",
+    "variant": "tracer",
+    "raysPerBin": 8192,
+    "seeds": 2,
+    "walkSingleSeedSD": 5.483265399932861,
+    "walkMeanRms": 3.8982834815979004,
+    "totalSingleSeedSD": 5.559979438781738,
+    "peakMax": 31.409961700439453,
+    "directPeakMax": 1.9073224067687988,
+    "secondsPerSolve": 0.13197025656700134
+   }
+  ]
+ },
+ "fdtd": {
+  "before": {
+   "barriers-125": {
+    "settled": 6,
+    "early": 0.2146452550927082,
+    "total": 24.8428066899809,
+    "earlyLos": 0.15851565195180328,
+    "totalLos": 23.993670023054086,
+    "earlyShadow": 0.5053288189206417,
+    "totalShadow": 33.26614290341983,
+    "walkOverEarly": 24.425909995668064
+   },
+   "barriers-250": {
+    "settled": 6,
+    "early": 0.15454262616331657,
+    "total": 26.912798654598063,
+    "earlyLos": 0.10896703493252333,
+    "totalLos": 24.85037657886095,
+    "earlyShadow": 0.46244410619388715,
+    "totalShadow": 43.31874913893892,
+    "walkOverEarly": 26.60337271031881
+   },
+   "canopy-125": {
+    "settled": 4,
+    "early": 0.22726326871081134,
+    "total": 6.90929670067742,
+    "earlyLos": 0.21835259467765614,
+    "totalLos": 7.0963977605796025,
+    "earlyShadow": 0.4130053989224921,
+    "totalShadow": 2.1797703290148163,
+    "walkOverEarly": 7.077337670234445
+   },
+   "canopy-250": {
+    "settled": 4,
+    "early": 0.1790751572987233,
+    "total": 7.285187979878187,
+    "earlyLos": 0.16822906579483643,
+    "totalLos": 7.451553586320763,
+    "earlyShadow": 0.4669954657205586,
+    "totalShadow": 1.94294859567652,
+    "walkOverEarly": 6.953163685919369
+   }
+  },
+  "after": {
+   "barriers-125": {
+    "settled": 6,
+    "early": 0.2146452550927082,
+    "total": 0.2146452594267795,
+    "earlyLos": 0.15851565195180328,
+    "totalLos": 0.15851565251093272,
+    "earlyShadow": 0.5053288189206417,
+    "totalShadow": 0.5053288144537369,
+    "walkOverEarly": 4.208313089996911e-08
+   },
+   "barriers-250": {
+    "settled": 6,
+    "early": 0.15454262616331657,
+    "total": 0.15454262616331657,
+    "earlyLos": 0.10896703493252333,
+    "totalLos": 0.10896703678237607,
+    "earlyShadow": 0.46244410619388715,
+    "totalShadow": 0.46244410648270984,
+    "walkOverEarly": 3.674849679771119e-08
+   },
+   "canopy-125": {
+    "settled": 4,
+    "early": 0.22726326871081134,
+    "total": 0.22726326825779916,
+    "earlyLos": 0.21835259467765614,
+    "totalLos": 0.2183525971300452,
+    "earlyShadow": 0.4130053989224921,
+    "totalShadow": 0.4130053989224921,
+    "walkOverEarly": 5.041721019502112e-08
+   },
+   "canopy-250": {
+    "settled": 4,
+    "early": 0.1790751572987233,
+    "total": 0.17907516847133562,
+    "earlyLos": 0.16822906579483643,
+    "totalLos": 0.16822905529056403,
+    "earlyShadow": 0.4669954657205586,
+    "totalShadow": 0.4669954657205586,
+    "walkOverEarly": 5.8532224590096596e-08
+   }
+  },
+  "rowsBefore": [
+   {
+    "scene": "barriers-0001",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.2843739688396454,
+    "total": 17.554534912109375,
+    "earlyLos": 0.23517516255378723,
+    "totalLos": 11.63238525390625,
+    "earlyShadow": 0.4409673511981964,
+    "totalShadow": 32.80600357055664,
+    "walkOverEarly": 17.796403884887695
+   },
+   {
+    "scene": "barriers-0001",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.22527141869068146,
+    "total": 26.39556312561035,
+    "earlyLos": 0.14967043697834015,
+    "totalLos": 12.617019653320312,
+    "earlyShadow": 0.5808002948760986,
+    "totalShadow": 78.3025894165039,
+    "walkOverEarly": 26.15453338623047
+   },
+   {
+    "scene": "barriers-0004",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.18729166686534882,
+    "total": 29.777341842651367,
+    "earlyLos": 0.17797717452049255,
+    "totalLos": 27.714370727539062,
+    "earlyShadow": 0.33322247862815857,
+    "totalShadow": 59.45265197753906,
+    "walkOverEarly": 28.788393020629883
+   },
+   {
+    "scene": "barriers-0004",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.1568007618188858,
+    "total": 26.197607040405273,
+    "earlyLos": 0.13680902123451233,
+    "totalLos": 24.434608459472656,
+    "earlyShadow": 0.37392956018447876,
+    "totalShadow": 49.38397216796875,
+    "walkOverEarly": 25.970354080200195
+   },
+   {
+    "scene": "barriers-0007",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.09261813759803772,
+    "total": 10.655410766601562,
+    "earlyLos": 0.0734657496213913,
+    "totalLos": 9.772661209106445,
+    "earlyShadow": 0.19899742305278778,
+    "totalShadow": 17.011871337890625,
+    "walkOverEarly": 10.445233345031738
+   },
+   {
+    "scene": "barriers-0007",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.07342185080051422,
+    "total": 11.558822631835938,
+    "earlyLos": 0.0683407336473465,
+    "totalLos": 10.56485652923584,
+    "earlyShadow": 0.10756021738052368,
+    "totalShadow": 17.95064353942871,
+    "walkOverEarly": 11.435988426208496
+   },
+   {
+    "scene": "barriers-0008",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.11330444365739822,
+    "total": 45.60087966918945,
+    "earlyLos": 0.11302369832992554,
+    "totalLos": 47.33487319946289,
+    "earlyShadow": 0.11668215692043304,
+    "totalShadow": 10.449575424194336,
+    "walkOverEarly": 44.86628341674805
+   },
+   {
+    "scene": "barriers-0008",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.07474501430988312,
+    "total": 49.72556686401367,
+    "earlyLos": 0.06867216527462006,
+    "totalLos": 50.98320007324219,
+    "earlyShadow": 0.14773452281951904,
+    "totalShadow": 10.544299125671387,
+    "walkOverEarly": 49.10194778442383
+   },
+   {
+    "scene": "barriers-0009",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.16232801973819733,
+    "total": 17.66465187072754,
+    "earlyLos": 0.11230511218309402,
+    "totalLos": 14.581377983093262,
+    "earlyShadow": 0.45444563031196594,
+    "totalShadow": 40.198974609375,
+    "walkOverEarly": 17.58989715576172
+   },
+   {
+    "scene": "barriers-0009",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.16187982261180878,
+    "total": 18.808753967285156,
+    "earlyLos": 0.0904834121465683,
+    "totalLos": 15.382406234741211,
+    "earlyShadow": 0.5601291060447693,
+    "totalShadow": 47.15222930908203,
+    "walkOverEarly": 18.530902862548828
+   },
+   {
+    "scene": "barriers-0010",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.3357415497303009,
+    "total": 1.7665082216262817,
+    "earlyLos": 0.18164809048175812,
+    "totalLos": 1.4376243352890015,
+    "earlyShadow": 0.9833200573921204,
+    "totalShadow": 3.796173334121704,
+    "walkOverEarly": 1.6661757230758667
+   },
+   {
+    "scene": "barriers-0010",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.17545422911643982,
+    "total": 1.6566275358200073,
+    "earlyLos": 0.11203289777040482,
+    "totalLos": 1.2193098068237305,
+    "earlyShadow": 0.6773741245269775,
+    "totalShadow": 5.680789470672607,
+    "walkOverEarly": 1.655373454093933
+   },
+   {
+    "scene": "canopy-0002",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.03684833273291588,
+    "total": 0.0642157718539238,
+    "earlyLos": 0.03684833273291588,
+    "totalLos": 0.0642157718539238,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.0494135282933712
+   },
+   {
+    "scene": "canopy-0002",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.02139062061905861,
+    "total": 0.05392881855368614,
+    "earlyLos": 0.02139062061905861,
+    "totalLos": 0.05392881855368614,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.04825146123766899
+   },
+   {
+    "scene": "canopy-0004",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.30473271012306213,
+    "total": 13.738615036010742,
+    "earlyLos": 0.2821119427680969,
+    "totalLos": 14.115399360656738,
+    "earlyShadow": 0.5733566284179688,
+    "totalShadow": 1.5065557956695557,
+    "walkOverEarly": 14.077001571655273
+   },
+   {
+    "scene": "canopy-0004",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.2631867527961731,
+    "total": 14.530673027038574,
+    "earlyLos": 0.24252702295780182,
+    "totalLos": 14.865654945373535,
+    "earlyShadow": 0.5399335026741028,
+    "totalShadow": 1.287916898727417,
+    "walkOverEarly": 13.8668851852417
+   },
+   {
+    "scene": "canopy-0008",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.28345656394958496,
+    "total": 0.5335548520088196,
+    "earlyLos": 0.2835410535335541,
+    "totalLos": 0.47207656502723694,
+    "earlyShadow": 0.2676471173763275,
+    "totalShadow": 3.395057201385498,
+    "walkOverEarly": 0.45798686146736145
+   },
+   {
+    "scene": "canopy-0008",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.21337249875068665,
+    "total": 0.436438649892807,
+    "earlyLos": 0.211440771818161,
+    "totalLos": 0.3798157572746277,
+    "earlyShadow": 0.4479781985282898,
+    "totalShadow": 2.9881603717803955,
+    "walkOverEarly": 0.4382222294807434
+   },
+   {
+    "scene": "canopy-0009",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.6865078210830688,
+    "total": 3.255495309829712,
+    "earlyLos": 0.6870837807655334,
+    "totalLos": 3.2857108116149902,
+    "earlyShadow": 0.6675388216972351,
+    "totalShadow": 2.044827699661255,
+    "walkOverEarly": 4.201290130615234
+   },
+   {
+    "scene": "canopy-0009",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.545143187046051,
+    "total": 2.8066961765289307,
+    "earlyLos": 0.5442155003547668,
+    "totalLos": 2.8053863048553467,
+    "earlyShadow": 0.6026923060417175,
+    "totalShadow": 2.8910324573516846,
+    "walkOverEarly": 3.537175416946411
+   },
+   {
+    "scene": "canopy-0010",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.1789606809616089,
+    "total": 1.3838988542556763,
+    "earlyLos": 0.17137953639030457,
+    "totalLos": 1.4014155864715576,
+    "earlyShadow": 0.33368784189224243,
+    "totalShadow": 0.6768103837966919,
+    "walkOverEarly": 1.4073617458343506
+   },
+   {
+    "scene": "canopy-0010",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.11410082876682281,
+    "total": 0.9808210730552673,
+    "earlyLos": 0.09602061659097672,
+    "totalLos": 0.9837368130683899,
+    "earlyShadow": 0.40254396200180054,
+    "totalShadow": 0.858670711517334,
+    "walkOverEarly": 0.9492467045783997
+   },
+   {
+    "scene": "canopy-0011",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.9242697954177856,
+    "total": 1.2191054821014404,
+    "earlyLos": 0.9143646359443665,
+    "totalLos": 1.1372852325439453,
+    "earlyShadow": 1.096745491027832,
+    "totalShadow": 2.275174379348755,
+    "walkOverEarly": 0.5387161374092102
+   },
+   {
+    "scene": "canopy-0011",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.4059659242630005,
+    "total": 0.6352188587188721,
+    "earlyLos": 0.37924426794052124,
+    "totalLos": 0.5451045036315918,
+    "earlyShadow": 1.2175688743591309,
+    "totalShadow": 2.661412000656128,
+    "walkOverEarly": 0.49972712993621826
+   },
+   {
+    "scene": "corridor-0000",
+    "family": "corridor",
+    "hz": 125.0,
+    "settled": false,
+    "early": 1.3594990968704224,
+    "total": 1.4760113954544067,
+    "earlyLos": 1.3824501037597656,
+    "totalLos": 1.4917333126068115,
+    "earlyShadow": 1.206477403640747,
+    "totalShadow": 1.3738585710525513,
+    "walkOverEarly": 0.4950408637523651
+   },
+   {
+    "scene": "corridor-0000",
+    "family": "corridor",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.9266021251678467,
+    "total": 1.0196822881698608,
+    "earlyLos": 0.8418381214141846,
+    "totalLos": 0.9890956282615662,
+    "earlyShadow": 1.0663299560546875,
+    "totalShadow": 1.0741934776306152,
+    "walkOverEarly": 0.6584759950637817
+   },
+   {
+    "scene": "corridor-0001",
+    "family": "corridor",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.5545524954795837,
+    "total": 0.5456494092941284,
+    "earlyLos": 0.5545524954795837,
+    "totalLos": 0.5456494092941284,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.18851631879806519
+   },
+   {
+    "scene": "corridor-0001",
+    "family": "corridor",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.3631250262260437,
+    "total": 0.3992144763469696,
+    "earlyLos": 0.3631250262260437,
+    "totalLos": 0.3992144763469696,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.164108544588089
+   },
+   {
+    "scene": "corridor-0004",
+    "family": "corridor",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.7913575768470764,
+    "total": 1.9261527061462402,
+    "earlyLos": 0.7913575768470764,
+    "totalLos": 1.9261527061462402,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 1.5557429790496826
+   },
+   {
+    "scene": "corridor-0004",
+    "family": "corridor",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.7011350989341736,
+    "total": 1.0043971538543701,
+    "earlyLos": 0.7011350989341736,
+    "totalLos": 1.0043971538543701,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 1.1619393825531006
+   },
+   {
+    "scene": "corridor-0007",
+    "family": "corridor",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.7647706866264343,
+    "total": 0.7642523050308228,
+    "earlyLos": 0.7647706866264343,
+    "totalLos": 0.7642523050308228,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.04832225665450096
+   },
+   {
+    "scene": "corridor-0007",
+    "family": "corridor",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.88071209192276,
+    "total": 0.8795149326324463,
+    "earlyLos": 0.88071209192276,
+    "totalLos": 0.8795149326324463,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.06256210803985596
+   },
+   {
+    "scene": "corridor-0008",
+    "family": "corridor",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.6941254734992981,
+    "total": 0.6933926939964294,
+    "earlyLos": 0.6941254734992981,
+    "totalLos": 0.6933926939964294,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.030529476702213287
+   },
+   {
+    "scene": "corridor-0008",
+    "family": "corridor",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.9383814334869385,
+    "total": 0.9384861588478088,
+    "earlyLos": 0.9383814334869385,
+    "totalLos": 0.9384861588478088,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 0.03566928580403328
+   },
+   {
+    "scene": "corridor-0011",
+    "family": "corridor",
+    "hz": 125.0,
+    "settled": false,
+    "early": 1.0317262411117554,
+    "total": 1.0423599481582642,
+    "earlyLos": 1.0402270555496216,
+    "totalLos": 1.0415847301483154,
+    "earlyShadow": 0.998340368270874,
+    "totalShadow": 1.0453376770019531,
+    "walkOverEarly": 0.17911283671855927
+   },
+   {
+    "scene": "corridor-0011",
+    "family": "corridor",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.8010378479957581,
+    "total": 0.8055570125579834,
+    "earlyLos": 0.7821719646453857,
+    "totalLos": 0.7825592160224915,
+    "earlyShadow": 1.036890983581543,
+    "totalShadow": 1.085809350013733,
+    "walkOverEarly": 0.2090316116809845
+   },
+   {
+    "scene": "doorway-0006",
+    "family": "doorway",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.7313957214355469,
+    "total": 0.730063796043396,
+    "earlyLos": 0.5834896564483643,
+    "totalLos": 0.5894071459770203,
+    "earlyShadow": 1.0270534753799438,
+    "totalShadow": 1.0144627094268799,
+    "walkOverEarly": 0.1915518343448639
+   },
+   {
+    "scene": "doorway-0006",
+    "family": "doorway",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.697867751121521,
+    "total": 0.7363844513893127,
+    "earlyLos": 0.573352575302124,
+    "totalLos": 0.5947725772857666,
+    "earlyShadow": 1.0356091260910034,
+    "totalShadow": 1.1133333444595337,
+    "walkOverEarly": 0.23597276210784912
+   },
+   {
+    "scene": "doorway-0007",
+    "family": "doorway",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.7801260352134705,
+    "total": 0.7834948897361755,
+    "earlyLos": 0.7857997417449951,
+    "totalLos": 0.7775501608848572,
+    "earlyShadow": 0.6750359535217285,
+    "totalShadow": 0.8795410990715027,
+    "walkOverEarly": 0.1878875195980072
+   },
+   {
+    "scene": "doorway-0007",
+    "family": "doorway",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.9657411575317383,
+    "total": 0.9656718373298645,
+    "earlyLos": 0.9657561182975769,
+    "totalLos": 0.964847981929779,
+    "earlyShadow": 0.96467125415802,
+    "totalShadow": 1.022812843322754,
+    "walkOverEarly": 0.23878487944602966
+   },
+   {
+    "scene": "doorway-0008",
+    "family": "doorway",
+    "hz": 125.0,
+    "settled": false,
+    "early": 1.0816452503204346,
+    "total": 1.0985581874847412,
+    "earlyLos": 1.080155372619629,
+    "totalLos": 1.0944421291351318,
+    "earlyShadow": 1.377377986907959,
+    "totalShadow": 1.8013429641723633,
+    "walkOverEarly": 0.6898233890533447
+   },
+   {
+    "scene": "doorway-0008",
+    "family": "doorway",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.8984318971633911,
+    "total": 0.9777255058288574,
+    "earlyLos": 0.8943355679512024,
+    "totalLos": 0.9789444804191589,
+    "earlyShadow": 1.0610395669937134,
+    "totalShadow": 0.9232918620109558,
+    "walkOverEarly": 0.5852358341217041
+   },
+   {
+    "scene": "doorway-0009",
+    "family": "doorway",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.42787179350852966,
+    "total": 0.8674263954162598,
+    "earlyLos": 0.1469617784023285,
+    "totalLos": 0.8502066731452942,
+    "earlyShadow": 0.9192490577697754,
+    "totalShadow": 0.9347055554389954,
+    "walkOverEarly": 0.8301975131034851
+   },
+   {
+    "scene": "doorway-0009",
+    "family": "doorway",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.4991775453090668,
+    "total": 0.9183010458946228,
+    "earlyLos": 0.15131314098834991,
+    "totalLos": 0.8768593072891235,
+    "earlyShadow": 1.0452154874801636,
+    "totalShadow": 1.0585495233535767,
+    "walkOverEarly": 0.8558866381645203
+   },
+   {
+    "scene": "doorway-0010",
+    "family": "doorway",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.5584717988967896,
+    "total": 1.7916828393936157,
+    "earlyLos": 0.06239303946495056,
+    "totalLos": 2.0003252029418945,
+    "earlyShadow": 1.0494107007980347,
+    "totalShadow": 1.0873901844024658,
+    "walkOverEarly": 2.005948543548584
+   },
+   {
+    "scene": "doorway-0010",
+    "family": "doorway",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.6102446913719177,
+    "total": 1.876907467842102,
+    "earlyLos": 0.14900924265384674,
+    "totalLos": 2.1873295307159424,
+    "earlyShadow": 1.0316963195800781,
+    "totalShadow": 1.0147664546966553,
+    "walkOverEarly": 2.210458993911743
+   },
+   {
+    "scene": "doorway-0011",
+    "family": "doorway",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.5358566045761108,
+    "total": 0.533334493637085,
+    "earlyLos": 0.24196156859397888,
+    "totalLos": 0.21297186613082886,
+    "earlyShadow": 0.9784988164901733,
+    "totalShadow": 0.9927378296852112,
+    "walkOverEarly": 0.13694080710411072
+   },
+   {
+    "scene": "doorway-0011",
+    "family": "doorway",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.16568976640701294,
+    "total": 0.17224103212356567,
+    "earlyLos": 0.10346812754869461,
+    "totalLos": 0.09439132362604141,
+    "earlyShadow": 1.0225647687911987,
+    "totalShadow": 1.1365011930465698,
+    "walkOverEarly": 0.11877629905939102
+   }
+  ],
+  "rowsAfter": [
+   {
+    "scene": "barriers-0001",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.2843739688396454,
+    "total": 0.2843739688396454,
+    "earlyLos": 0.23517516255378723,
+    "totalLos": 0.23517514765262604,
+    "earlyShadow": 0.4409673511981964,
+    "totalShadow": 0.4409673511981964,
+    "walkOverEarly": 5.6145342597346826e-08
+   },
+   {
+    "scene": "barriers-0001",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.22527141869068146,
+    "total": 0.22527141869068146,
+    "earlyLos": 0.14967043697834015,
+    "totalLos": 0.14967045187950134,
+    "earlyShadow": 0.5808002948760986,
+    "totalShadow": 0.5808002948760986,
+    "walkOverEarly": 5.385633627952302e-08
+   },
+   {
+    "scene": "barriers-0004",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.18729166686534882,
+    "total": 0.1872916966676712,
+    "earlyLos": 0.17797717452049255,
+    "totalLos": 0.17797718942165375,
+    "earlyShadow": 0.33322247862815857,
+    "totalShadow": 0.33322247862815857,
+    "walkOverEarly": 4.666956954224588e-08
+   },
+   {
+    "scene": "barriers-0004",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.1568007618188858,
+    "total": 0.1568007618188858,
+    "earlyLos": 0.13680902123451233,
+    "totalLos": 0.13680902123451233,
+    "earlyShadow": 0.37392956018447876,
+    "totalShadow": 0.37392956018447876,
+    "walkOverEarly": 4.570544120952036e-08
+   },
+   {
+    "scene": "barriers-0007",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.09261813759803772,
+    "total": 0.09261813759803772,
+    "earlyLos": 0.0734657496213913,
+    "totalLos": 0.0734657570719719,
+    "earlyShadow": 0.19899742305278778,
+    "totalShadow": 0.19899742305278778,
+    "walkOverEarly": 3.801723735818996e-08
+   },
+   {
+    "scene": "barriers-0007",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.07342185080051422,
+    "total": 0.07342185080051422,
+    "earlyLos": 0.0683407336473465,
+    "totalLos": 0.0683407261967659,
+    "earlyShadow": 0.10756021738052368,
+    "totalShadow": 0.10756022483110428,
+    "walkOverEarly": 3.367302880974421e-08
+   },
+   {
+    "scene": "barriers-0008",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.11330444365739822,
+    "total": 0.11330444365739822,
+    "earlyLos": 0.11302369832992554,
+    "totalLos": 0.11302369832992554,
+    "earlyShadow": 0.11668215692043304,
+    "totalShadow": 0.11668215692043304,
+    "walkOverEarly": 3.419879135435622e-08
+   },
+   {
+    "scene": "barriers-0008",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.07474501430988312,
+    "total": 0.07474501430988312,
+    "earlyLos": 0.06867216527462006,
+    "totalLos": 0.06867215782403946,
+    "earlyShadow": 0.14773452281951904,
+    "totalShadow": 0.14773452281951904,
+    "walkOverEarly": 1.2531679693950082e-08
+   },
+   {
+    "scene": "barriers-0009",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.16232801973819733,
+    "total": 0.16232801973819733,
+    "earlyLos": 0.11230511218309402,
+    "totalLos": 0.11230511963367462,
+    "earlyShadow": 0.45444563031196594,
+    "totalShadow": 0.45444560050964355,
+    "walkOverEarly": 4.2653994114516536e-08
+   },
+   {
+    "scene": "barriers-0009",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.16187982261180878,
+    "total": 0.16187982261180878,
+    "earlyLos": 0.0904834121465683,
+    "totalLos": 0.0904834121465683,
+    "earlyShadow": 0.5601291060447693,
+    "totalShadow": 0.5601291060447693,
+    "walkOverEarly": 3.5921690511031557e-08
+   },
+   {
+    "scene": "barriers-0010",
+    "family": "barriers",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.3357415497303009,
+    "total": 0.3357415497303009,
+    "earlyLos": 0.18164809048175812,
+    "totalLos": 0.18164809048175812,
+    "earlyShadow": 0.9833200573921204,
+    "totalShadow": 0.9833200573921204,
+    "walkOverEarly": 2.9348941055218347e-08
+   },
+   {
+    "scene": "barriers-0010",
+    "family": "barriers",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.17545422911643982,
+    "total": 0.17545422911643982,
+    "earlyLos": 0.11203289777040482,
+    "totalLos": 0.11203289777040482,
+    "earlyShadow": 0.6773741245269775,
+    "totalShadow": 0.6773741245269775,
+    "walkOverEarly": 2.3063739362783053e-08
+   },
+   {
+    "scene": "canopy-0002",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.03684833273291588,
+    "total": 0.03684832155704498,
+    "earlyLos": 0.03684833273291588,
+    "totalLos": 0.03684832155704498,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 6.355489290399419e-08
+   },
+   {
+    "scene": "canopy-0002",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.02139062061905861,
+    "total": 0.021390628069639206,
+    "earlyLos": 0.02139062061905861,
+    "totalLos": 0.021390628069639206,
+    "earlyShadow": null,
+    "totalShadow": null,
+    "walkOverEarly": 5.568278282908068e-08
+   },
+   {
+    "scene": "canopy-0004",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.30473271012306213,
+    "total": 0.30473271012306213,
+    "earlyLos": 0.2821119427680969,
+    "totalLos": 0.2821119427680969,
+    "earlyShadow": 0.5733566284179688,
+    "totalShadow": 0.5733566284179688,
+    "walkOverEarly": 3.907961598770271e-08
+   },
+   {
+    "scene": "canopy-0004",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.2631867527961731,
+    "total": 0.2631867825984955,
+    "earlyLos": 0.24252702295780182,
+    "totalLos": 0.24252699315547943,
+    "earlyShadow": 0.5399335026741028,
+    "totalShadow": 0.5399335026741028,
+    "walkOverEarly": 7.061313311851336e-08
+   },
+   {
+    "scene": "canopy-0008",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.28345656394958496,
+    "total": 0.28345656394958496,
+    "earlyLos": 0.2835410535335541,
+    "totalLos": 0.2835410535335541,
+    "earlyShadow": 0.2676471173763275,
+    "totalShadow": 0.2676471173763275,
+    "walkOverEarly": 5.7478846571257236e-08
+   },
+   {
+    "scene": "canopy-0008",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.21337249875068665,
+    "total": 0.21337249875068665,
+    "earlyLos": 0.211440771818161,
+    "totalLos": 0.211440771818161,
+    "earlyShadow": 0.4479781985282898,
+    "totalShadow": 0.4479781985282898,
+    "walkOverEarly": 6.229952731473531e-08
+   },
+   {
+    "scene": "canopy-0009",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.6865078210830688,
+    "total": 0.6865078210830688,
+    "earlyLos": 0.6870837807655334,
+    "totalLos": 0.6870837807655334,
+    "earlyShadow": 0.6675388216972351,
+    "totalShadow": 0.6675388216972351,
+    "walkOverEarly": 7.494384135497967e-08
+   },
+   {
+    "scene": "canopy-0009",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.545143187046051,
+    "total": 0.545143187046051,
+    "earlyLos": 0.5442155003547668,
+    "totalLos": 0.5442155003547668,
+    "earlyShadow": 0.6026923060417175,
+    "totalShadow": 0.6026923060417175,
+    "walkOverEarly": 7.298150705992157e-08
+   },
+   {
+    "scene": "canopy-0010",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": true,
+    "early": 0.1789606809616089,
+    "total": 0.1789606809616089,
+    "earlyLos": 0.17137953639030457,
+    "totalLos": 0.17137955129146576,
+    "earlyShadow": 0.33368784189224243,
+    "totalShadow": 0.33368784189224243,
+    "walkOverEarly": 3.601835274480436e-08
+   },
+   {
+    "scene": "canopy-0010",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": true,
+    "early": 0.11410082876682281,
+    "total": 0.11410082876682281,
+    "earlyLos": 0.09602061659097672,
+    "totalLos": 0.09602061659097672,
+    "earlyShadow": 0.40254396200180054,
+    "totalShadow": 0.40254396200180054,
+    "walkOverEarly": 4.1666140759843984e-08
+   },
+   {
+    "scene": "canopy-0011",
+    "family": "canopy",
+    "hz": 125.0,
+    "settled": false,
+    "early": 0.9242697954177856,
+    "total": 0.9242697954177856,
+    "earlyLos": 0.9143646359443665,
+    "totalLos": 0.9143646359443665,
+    "earlyShadow": 1.096745491027832,
+    "totalShadow": 1.096745491027832,
+    "walkOverEarly": 5.45803899854036e-08
+   },
+   {
+    "scene": "canopy-0011",
+    "family": "canopy",
+    "hz": 250.0,
+    "settled": false,
+    "early": 0.4059659242630005,
+    "total": 0.4059659242630005,
+    "earlyLos": 0.37924426794052124,
+    "totalLos": 0.37924426794052124,
+    "earlyShadow": 1.2175688743591309,
+    "totalShadow": 1.2175688743591309,
+    "walkOverEarly": 5.5199190995836034e-08
+   }
+  ]
+ },
+ "bem": {
+  "before": [
+   {
+    "rays": 2,
+    "seed": 0,
+    "whole": 0.2923522147436152,
+    "shadow": 0.8692164976102258,
+    "visible": 0.22448033128142528,
+    "medianSolveMs": 2.83295
+   },
+   {
+    "rays": 2,
+    "seed": 17,
+    "whole": 0.31569666919557615,
+    "shadow": 0.906828918651474,
+    "visible": 0.24866039910301166,
+    "medianSolveMs": 2.88825
+   },
+   {
+    "rays": 512,
+    "seed": 0,
+    "whole": 4.655331725154924,
+    "shadow": 8.858131224554711,
+    "visible": 4.3242221289890885,
+    "medianSolveMs": 3.6327
+   },
+   {
+    "rays": 512,
+    "seed": 17,
+    "whole": 2.184654632417937,
+    "shadow": 8.883191198499096,
+    "visible": 0.9442096449948187,
+    "medianSolveMs": 3.6266
+   }
+  ],
+  "after": [
+   {
+    "rays": 2,
+    "seed": 0,
+    "whole": 0.2923522147436152,
+    "shadow": 0.8692164976102258,
+    "visible": 0.22448033128142528,
+    "medianSolveMs": 3.9716500000000003
+   },
+   {
+    "rays": 2,
+    "seed": 17,
+    "whole": 0.31569666919557615,
+    "shadow": 0.906828918651474,
+    "visible": 0.24866039910301166,
+    "medianSolveMs": 3.9898
+   },
+   {
+    "rays": 512,
+    "seed": 0,
+    "whole": 0.2923522147436152,
+    "shadow": 0.8692164976102258,
+    "visible": 0.22448033128142528,
+    "medianSolveMs": 4.56815
+   },
+   {
+    "rays": 512,
+    "seed": 17,
+    "whole": 0.31569666919557615,
+    "shadow": 0.906828918651474,
+    "visible": 0.24866039910301166,
+    "medianSolveMs": 4.9094500000000005
+   }
+  ]
+ },
+ "labels": {
+  "before": [
+   {
+    "scene": "barriers-0000",
+    "family": "barriers",
+    "early": {
+     "relativeStandardError": 0.06198480322232282,
+     "validFraction": 0.7712765957446809,
+     "accepted": false
+    },
+    "total": {
+     "relativeStandardError": 0.9999363026061397,
+     "validFraction": 0.7659574468085106,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "barriers-0001",
+    "family": "barriers",
+    "early": {
+     "relativeStandardError": 0.03852937349720459,
+     "validFraction": 0.985,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 1.0011747333851329,
+     "validFraction": 0.148125,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "canopy-0000",
+    "family": "canopy",
+    "early": {
+     "relativeStandardError": 0.04770795239437074,
+     "validFraction": 0.9910714285714286,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.9720691833537887,
+     "validFraction": 0.0,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "canopy-0001",
+    "family": "canopy",
+    "early": {
+     "relativeStandardError": 0.04942822769458765,
+     "validFraction": 0.9851190476190477,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.8848356535054339,
+     "validFraction": 0.12648809523809523,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "corridor-0000",
+    "family": "corridor",
+    "early": {
+     "relativeStandardError": 0.04881149454029479,
+     "validFraction": 0.9453125,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.9975354515487597,
+     "validFraction": 0.08353365384615384,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "corridor-0001",
+    "family": "corridor",
+    "early": {
+     "relativeStandardError": 0.019844211231697547,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.9722127759559265,
+     "validFraction": 0.0,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "doorway-0000",
+    "family": "doorway",
+    "early": {
+     "relativeStandardError": 0.019801390032856518,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.9996605298519262,
+     "validFraction": 0.19407894736842105,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "doorway-0001",
+    "family": "doorway",
+    "early": {
+     "relativeStandardError": 0.03015164641323133,
+     "validFraction": 0.9910714285714286,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.9871568660989206,
+     "validFraction": 0.125,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "furnished-0000",
+    "family": "furnished",
+    "early": {
+     "relativeStandardError": 0.08932014110266605,
+     "validFraction": 0.8473011363636364,
+     "accepted": false
+    },
+    "total": {
+     "relativeStandardError": 1.0013786863500453,
+     "validFraction": 0.23295454545454544,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "furnished-0001",
+    "family": "furnished",
+    "early": {
+     "relativeStandardError": 0.03422070023072992,
+     "validFraction": 0.9975,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.9976424226559254,
+     "validFraction": 0.02,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "shoebox-0000",
+    "family": "shoebox",
+    "early": {
+     "relativeStandardError": 0.006958913560099242,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.4766765878907822,
+     "validFraction": 0.0026041666666666665,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "shoebox-0001",
+    "family": "shoebox",
+    "early": {
+     "relativeStandardError": 0.007091487016122664,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.856634716002792,
+     "validFraction": 0.0,
+     "accepted": false
+    }
+   }
+  ],
+  "after": [
+   {
+    "scene": "barriers-0000",
+    "family": "barriers",
+    "early": {
+     "relativeStandardError": 0.06198480322232282,
+     "validFraction": 0.7712765957446809,
+     "accepted": false
+    },
+    "total": {
+     "relativeStandardError": 0.06209200267757107,
+     "validFraction": 0.7706117021276596,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "barriers-0001",
+    "family": "barriers",
+    "early": {
+     "relativeStandardError": 0.03852937349720459,
+     "validFraction": 0.985,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.05117830765411105,
+     "validFraction": 0.98375,
+     "accepted": true
+    }
+   },
+   {
+    "scene": "canopy-0000",
+    "family": "canopy",
+    "early": {
+     "relativeStandardError": 0.04770795239437074,
+     "validFraction": 0.9910714285714286,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.05116893537652179,
+     "validFraction": 0.9747023809523809,
+     "accepted": true
+    }
+   },
+   {
+    "scene": "canopy-0001",
+    "family": "canopy",
+    "early": {
+     "relativeStandardError": 0.04942822769458765,
+     "validFraction": 0.9851190476190477,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.04982290794049487,
+     "validFraction": 0.9841269841269841,
+     "accepted": true
+    }
+   },
+   {
+    "scene": "corridor-0000",
+    "family": "corridor",
+    "early": {
+     "relativeStandardError": 0.04881149454029479,
+     "validFraction": 0.9453125,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.8515411330094029,
+     "validFraction": 0.015024038461538462,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "corridor-0001",
+    "family": "corridor",
+    "early": {
+     "relativeStandardError": 0.019844211231697547,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.5871724091929401,
+     "validFraction": 0.0,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "doorway-0000",
+    "family": "doorway",
+    "early": {
+     "relativeStandardError": 0.019801390032856518,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.3692718202806153,
+     "validFraction": 0.20449561403508773,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "doorway-0001",
+    "family": "doorway",
+    "early": {
+     "relativeStandardError": 0.03015164641323133,
+     "validFraction": 0.9910714285714286,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.612047541736904,
+     "validFraction": 0.16852678571428573,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "furnished-0000",
+    "family": "furnished",
+    "early": {
+     "relativeStandardError": 0.08932014110266605,
+     "validFraction": 0.8473011363636364,
+     "accepted": false
+    },
+    "total": {
+     "relativeStandardError": 0.9615197950531774,
+     "validFraction": 0.0,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "furnished-0001",
+    "family": "furnished",
+    "early": {
+     "relativeStandardError": 0.03422070023072992,
+     "validFraction": 0.9975,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.6412851422733387,
+     "validFraction": 0.004375,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "shoebox-0000",
+    "family": "shoebox",
+    "early": {
+     "relativeStandardError": 0.006958913560099242,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.2203928487133912,
+     "validFraction": 0.16145833333333334,
+     "accepted": false
+    }
+   },
+   {
+    "scene": "shoebox-0001",
+    "family": "shoebox",
+    "early": {
+     "relativeStandardError": 0.007091487016122664,
+     "validFraction": 1.0,
+     "accepted": true
+    },
+    "total": {
+     "relativeStandardError": 0.9990382868851083,
+     "validFraction": 0.6358418367346939,
+     "accepted": false
+    }
+   }
+  ]
+ },
+ "cost": {
+  "rigidBefore": [
+   {
+    "scene": "barriers-0001",
+    "medianMs": 2.2014999389648438
+   },
+   {
+    "scene": "barriers-0004",
+    "medianMs": 1.382200002670288
+   },
+   {
+    "scene": "barriers-0007",
+    "medianMs": 2.059000015258789
+   },
+   {
+    "scene": "barriers-0008",
+    "medianMs": 1.7680000066757202
+   },
+   {
+    "scene": "barriers-0009",
+    "medianMs": 1.8004000186920166
+   },
+   {
+    "scene": "barriers-0010",
+    "medianMs": 1.9316998720169067
+   },
+   {
+    "scene": "canopy-0002",
+    "medianMs": 1.8542499542236328
+   },
+   {
+    "scene": "canopy-0004",
+    "medianMs": 1.4758000373840332
+   },
+   {
+    "scene": "canopy-0008",
+    "medianMs": 2.5590500831604004
+   },
+   {
+    "scene": "canopy-0009",
+    "medianMs": 2.764349937438965
+   },
+   {
+    "scene": "canopy-0010",
+    "medianMs": 2.164400100708008
+   },
+   {
+    "scene": "canopy-0011",
+    "medianMs": 2.441349983215332
+   },
+   {
+    "scene": "corridor-0000",
+    "medianMs": 3.4693000316619873
+   },
+   {
+    "scene": "corridor-0001",
+    "medianMs": 2.4418997764587402
+   },
+   {
+    "scene": "corridor-0004",
+    "medianMs": 2.6417500972747803
+   },
+   {
+    "scene": "corridor-0007",
+    "medianMs": 2.3417000770568848
+   },
+   {
+    "scene": "corridor-0008",
+    "medianMs": 2.621649980545044
+   },
+   {
+    "scene": "corridor-0011",
+    "medianMs": 3.6401000022888184
+   },
+   {
+    "scene": "doorway-0006",
+    "medianMs": 1.577449917793274
+   },
+   {
+    "scene": "doorway-0007",
+    "medianMs": 2.5142500400543213
+   },
+   {
+    "scene": "doorway-0008",
+    "medianMs": 2.6915500164031982
+   },
+   {
+    "scene": "doorway-0009",
+    "medianMs": 2.345050096511841
+   },
+   {
+    "scene": "doorway-0010",
+    "medianMs": 2.3670499324798584
+   },
+   {
+    "scene": "doorway-0011",
+    "medianMs": 2.453399896621704
+   }
+  ],
+  "rigidAfter": [
+   {
+    "scene": "barriers-0001",
+    "medianMs": 2.0206501483917236
+   },
+   {
+    "scene": "barriers-0004",
+    "medianMs": 1.8992000818252563
+   },
+   {
+    "scene": "barriers-0007",
+    "medianMs": 2.008200168609619
+   },
+   {
+    "scene": "barriers-0008",
+    "medianMs": 1.4205000400543213
+   },
+   {
+    "scene": "barriers-0009",
+    "medianMs": 1.4045500755310059
+   },
+   {
+    "scene": "barriers-0010",
+    "medianMs": 1.6101999282836914
+   },
+   {
+    "scene": "canopy-0002",
+    "medianMs": 1.6250499486923218
+   },
+   {
+    "scene": "canopy-0004",
+    "medianMs": 1.7689999341964722
+   },
+   {
+    "scene": "canopy-0008",
+    "medianMs": 2.203350067138672
+   },
+   {
+    "scene": "canopy-0009",
+    "medianMs": 2.1261000633239746
+   },
+   {
+    "scene": "canopy-0010",
+    "medianMs": 2.121500015258789
+   },
+   {
+    "scene": "canopy-0011",
+    "medianMs": 2.353750228881836
+   }
+  ],
+  "presetsBefore": [
+   {
+    "scene": "barriers-0000",
+    "medianMs": 0.9326000213623047
+   },
+   {
+    "scene": "barriers-0001",
+    "medianMs": 0.7294999957084656
+   },
+   {
+    "scene": "canopy-0000",
+    "medianMs": 1.6115999221801758
+   },
+   {
+    "scene": "canopy-0001",
+    "medianMs": 1.9326499700546265
+   },
+   {
+    "scene": "corridor-0000",
+    "medianMs": 1.9553499221801758
+   },
+   {
+    "scene": "corridor-0001",
+    "medianMs": 1.2493499517440796
+   },
+   {
+    "scene": "doorway-0000",
+    "medianMs": 1.3244000673294067
+   },
+   {
+    "scene": "doorway-0001",
+    "medianMs": 1.6484500169754028
+   },
+   {
+    "scene": "furnished-0000",
+    "medianMs": 2.581350088119507
+   },
+   {
+    "scene": "furnished-0001",
+    "medianMs": 2.2544500827789307
+   },
+   {
+    "scene": "shoebox-0000",
+    "medianMs": 2.4280500411987305
+   },
+   {
+    "scene": "shoebox-0001",
+    "medianMs": 2.4452497959136963
+   }
+  ],
+  "presetsAfter": [
+   {
+    "scene": "barriers-0000",
+    "medianMs": 1.833400011062622
+   },
+   {
+    "scene": "barriers-0001",
+    "medianMs": 2.1523499488830566
+   },
+   {
+    "scene": "canopy-0000",
+    "medianMs": 2.2701499462127686
+   },
+   {
+    "scene": "canopy-0001",
+    "medianMs": 2.476799964904785
+   },
+   {
+    "scene": "corridor-0000",
+    "medianMs": 2.0601000785827637
+   },
+   {
+    "scene": "corridor-0001",
+    "medianMs": 1.5779000520706177
+   },
+   {
+    "scene": "doorway-0000",
+    "medianMs": 2.188849925994873
+   },
+   {
+    "scene": "doorway-0001",
+    "medianMs": 1.7101999521255493
+   },
+   {
+    "scene": "furnished-0000",
+    "medianMs": 2.442500114440918
+   },
+   {
+    "scene": "furnished-0001",
+    "medianMs": 2.3257498741149902
+   },
+   {
+    "scene": "shoebox-0000",
+    "medianMs": 2.293750286102295
+   },
+   {
+    "scene": "shoebox-0001",
+    "medianMs": 2.482450008392334
+   }
+  ]
+ },
+ "diagnosis": {
+  "seed": 1234567,
+  "raysPerBin": 16384,
+  "maxBounces": 8,
+  "cases": [
+   {
+    "case": "barriers-rigid",
+    "scene": "barriers-0001",
+    "variant": "tracer-rigid",
+    "receivers": [
+     20,
+     45
+    ],
+    "edgeToEdgeSteps": 4099,
+    "modelAgreementWithin1Percent": 1.0,
+    "probabilityEdgeAfterEdge": 0.318988326848249,
+    "meanAbsTransfer": 5.0332035849920524,
+    "meanSignedTransfer": 0.8592090519656899,
+    "secondMoment": 191.98752186933368,
+    "medianAbs": 0.7864459750271159,
+    "absTransferPerStep": 1.6055331902632235,
+    "signedTransferPerStep": 0.27407765789940564,
+    "secondMomentPerStep": 61.241778376840365,
+    "sharedFaceSteps": 1787,
+    "sharedFaceMeanAbs": 6.632216628817142,
+    "otherMeanAbs": 3.7972882262916037,
+    "tailIndexTop50": 2.379311658281124,
+    "rawRatioMax": 59418.55126880121,
+    "rawRatioMinIncomingLeg": 0.002795562948048462,
+    "surfaceSteps": 406,
+    "surfaceMeanAbs": 1.0,
+    "surfaceSecondMoment": 1.0,
+    "surfaceMax": 1.0
+   },
+   {
+    "case": "canopy-rigid",
+    "scene": "canopy-0004",
+    "variant": "tracer-rigid",
+    "receivers": [
+     30,
+     22
+    ],
+    "edgeToEdgeSteps": 3184,
+    "modelAgreementWithin1Percent": 1.0,
+    "probabilityEdgeAfterEdge": 0.2599608099281515,
+    "meanAbsTransfer": 4.847372911024237,
+    "meanSignedTransfer": -0.5802705534797884,
+    "secondMoment": 250.22685455228347,
+    "medianAbs": 0.304533992917344,
+    "absTransferPerStep": 1.2601269879736423,
+    "signedTransferPerStep": -0.15084760306006256,
+    "secondMomentPerStep": 65.04917577518538,
+    "sharedFaceSteps": 1247,
+    "sharedFaceMeanAbs": 7.202706772864291,
+    "otherMeanAbs": 3.331058339153021,
+    "tailIndexTop50": 1.609603712059959,
+    "rawRatioMax": 5634.3610836791195,
+    "rawRatioMinIncomingLeg": 0.009233072191929067,
+    "surfaceSteps": 76,
+    "surfaceMeanAbs": 1.0,
+    "surfaceSecondMoment": 1.0,
+    "surfaceMax": 1.0
+   },
+   {
+    "case": "barriers-preset",
+    "scene": "barriers-0001",
+    "variant": "tracer",
+    "receivers": [
+     20,
+     45
+    ],
+    "edgeToEdgeSteps": 4234,
+    "modelAgreementWithin1Percent": 0.0,
+    "probabilityEdgeAfterEdge": 0.32075757575757574,
+    "meanAbsTransfer": 4.9551411315168865,
+    "meanSignedTransfer": 0.8751514038914168,
+    "secondMoment": 185.69132602212926,
+    "medianAbs": 0.7831580014808512,
+    "absTransferPerStep": 1.5893990568820073,
+    "signedTransferPerStep": 0.2807114427330499,
+    "secondMomentPerStep": 59.56189957406782,
+    "sharedFaceSteps": 1844,
+    "sharedFaceMeanAbs": 6.470630115073003,
+    "otherMeanAbs": 3.7858684596853043,
+    "tailIndexTop50": 2.7744971068467876,
+    "rawRatioMax": 57983.27942015669,
+    "rawRatioMinIncomingLeg": 0.002795562948048462,
+    "surfaceSteps": 152,
+    "surfaceMeanAbs": 2.53165324800971,
+    "surfaceSecondMoment": 6.855063940136259,
+    "surfaceMax": 3.7535773397677934
+   },
+   {
+    "case": "canopy-preset",
+    "scene": "canopy-0004",
+    "variant": "tracer",
+    "receivers": [
+     30,
+     22
+    ],
+    "edgeToEdgeSteps": 2998,
+    "modelAgreementWithin1Percent": 0.0,
+    "probabilityEdgeAfterEdge": 0.24330465833468592,
+    "meanAbsTransfer": 9.222129695343288,
+    "meanSignedTransfer": 0.9018169746861703,
+    "secondMoment": 2036.1144598899782,
+    "medianAbs": 0.540468423348576,
+    "absTransferPerStep": 2.2437871146436597,
+    "signedTransferPerStep": 0.21941627090643875,
+    "secondMomentPerStep": 495.39613299384473,
+    "sharedFaceSteps": 943,
+    "sharedFaceMeanAbs": 10.469997248010968,
+    "otherMeanAbs": 8.649507261199435,
+    "tailIndexTop50": 1.4384076636329528,
+    "rawRatioMax": 4080.9558570112727,
+    "rawRatioMinIncomingLeg": 0.0034345506727833028,
+    "surfaceSteps": 523,
+    "surfaceMeanAbs": 2.531415883057049,
+    "surfaceSecondMoment": 7.702139481245426,
+    "surfaceMax": 5.701247355394854
+   }
+  ]
+ }
+}

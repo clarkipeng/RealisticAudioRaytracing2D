@@ -19,9 +19,10 @@ Inputs and labels are separate solver runs with separate seeds; nothing is decim
 | `walk` | residual random walk (later interactions) | Monte Carlo, heavy-tailed |
 
 **The primary label is the early field: every family except `walk`.**
-The residual walk does not converge at any affordable budget: its seed-to-seed spread does not shrink, and grows, as rays increase from 128 to 8,192 per bin, and single walk paths can outweigh the direct sound (pilot benchmark, "Residual walk").
-It stays in every input as its own buffer, and an auxiliary `total_target_mean` (all families) is stored, but no current label can include it.
-Fixing the walk's weights is a tracer change and comes before any late-field label.
+In the pilot renders (`denoise-pilot-v1`) the residual walk does not converge: its seed-to-seed spread grows as rays increase from 128 to 8,192 per bin, and single walk paths can outweigh the direct sound (pilot benchmark, "Residual walk").
+It stays in every input as its own buffer, and an auxiliary `total_target_mean` (all families) is stored, but no pilot label can include it.
+The tracer fix of 2 November ([residual-walk benchmark](../benchmarks/residual-walk-2026-11-02/README.md)) makes the walk converge in open scenes: re-rendered barrier and canopy labels that include it have the same 5–6% standard error as the early field.
+In closed and semi-open rooms it still does not converge, so walk-including labels need a re-render with the fixed tracer and remain limited to open families.
 
 ## Budgets
 

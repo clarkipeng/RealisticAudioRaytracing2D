@@ -16,7 +16,7 @@ Research update, 2026-10-18: the [planar wave reference](#wave-reference-suite-r
 
 **Production approach, narrowed 2026-10-20:** use one iterative stochastic ray-tracing loop with surface and edge events. A fixed launch budget explores alternate reflection/diffraction paths, with one sampled continuation per bounce; alternatives do not create an exponentially branching ray tree. Explicitly sample edges because ordinary rays do not reliably hit zero-width edges. Keep guidance small: local geometric candidates plus a broad-support proposal, correct branch/edge/point densities, and stable sample dimensions across motion. Diffraction also contributes in lit regions. Preserve signed pressure and physical delay/phase, validate every segment, and count overlapping arrival techniques once or combine them with derived weights. Ideal specular connections require reflection-law solutions, not arbitrary straight receiver connections from mirror hits.
 
-The existing `TracePaths` already has this loop structure; alternate paths are not a newly added feature. Its rare high-weight samples and missing general specular/edge connections remain defects to solve. Previous local/global and visible-edge proposal changes failed broad tests, so a simpler description does not establish a fix. Keep exhaustive route enumeration in the offline diagnostic. Defer route graphs, caches and new edge hierarchies; reuse BLAS/TLAS, edge records and the GPU response pipeline. Compare each sampler/connection correction at a fixed total budget against the 2D wave reference before finite-3D validation. Finite nonparallel edges require new proposal bounds/densities; planar height symmetry and height-independent visibility do not transfer. The [BEDRF paper](https://arxiv.org/html/2306.01974v1) supports local edge interactions in a path tracer, but its full integrator adds triangle–triangle intersection and biased outlier suppression; adopting it wholesale would not satisfy the minimal-code direction.
+The existing `TracePaths` already has this loop structure; alternate paths are not a newly added feature. Its rare high-weight samples (diagnosed on 2026-11-02 as pure-edge chains with an absolute transfer above one, and removed) and missing general specular/edge connections remain defects to solve. Previous local/global and visible-edge proposal changes failed broad tests, so a simpler description does not establish a fix. Keep exhaustive route enumeration in the offline diagnostic. Defer route graphs, caches and new edge hierarchies; reuse BLAS/TLAS, edge records and the GPU response pipeline. Compare each sampler/connection correction at a fixed total budget against the 2D wave reference before finite-3D validation. Finite nonparallel edges require new proposal bounds/densities; planar height symmetry and height-independent visibility do not transfer. The [BEDRF paper](https://arxiv.org/html/2306.01974v1) supports local edge interactions in a path tracer, but its full integrator adds triangle–triangle intersection and biased outlier suppression; adopting it wholesale would not satisfy the minimal-code direction.
 
 **Offline experiment, 2026-10-21:** `edge_integral.py --route-budget` now counts visible planar continuations and addresses complete routes by integer rank. It covers all routes when they fit the budget and samples ranks otherwise, preserving the physical integrand and selection weights. Its budget bounds pure-edge height samples; geometry setup and the existing enumerated mirror/mixed stage remain explicit costs. This CPU diagnostic is not a finite-3D implementation or a qualification of the renderer as training truth. [Results and limits](cleanup-results.md#bounded-complete-route-monte-carlo--2026-10-21).
 
@@ -25,6 +25,13 @@ The existing `TracePaths` already has this loop structure; alternate paths are n
 **Sampling tuning, 2026-10-21:** a narrower height proposal gives modest improvements at 65,536 samples, with mixed held-out/seed results and little difference at 1,048,576. Keep width scaling opt-in and accept the numerical inverse-CDF correction; do not change the physical kernel or declare the field training truth. [Selection, held-out checks and whole-map results](cleanup-results.md#gpu-sampling-tuning--2026-10-21).
 
 **Physical boundary bake, 2026-10-28 (implemented):** explicit `AcousticSolid` groups replace fixed closed members with their material-preserving exterior before shared scene compilation. The Editor regenerates that exterior automatically, cached by the group's local-frame source hash and stored with the scene; there is no manual bake. The group may move rigidly without regeneration; independent doors stay separate. Capture never uses a boundary from a different source hash, and running captures reject relative motion. Different surface responses are retained, but one group must share interior IOR/damping, matching the existing owner-medium model. Original source geometry stays editable; old takes retain their original triangles. [Authoring contract](acoustic-solid-bake.md). This removes the measured cube partition discrepancy and improves the finite room from 40.73% to 29.24% complex error; it does not establish full-wave accuracy. [Validation](benchmarks/solid-boundary-2026-10-28/README.md).
+
+**Residual walk, 2026-11-02 (implemented):** the walk's non-convergence came from its pure-edge chains.
+Each extra edge multiplies a path weight by a factor whose mean absolute value, times the chance of continuing, is 1.3–2.2 in the pilot's barrier and canopy scenes, so the absolute series over chain length diverges and no proposal density can bound its variance.
+The walk therefore never forms an edge-to-edge leg when complete routes are on (the legacy walk keeps one, its DD); transmission and scattering are drawn in proportion to their pressure amplitudes; and surface-to-edge legs restart from the surface vertex's weight.
+Rigid barrier/canopy totals now equal the early field (15–23% from FDTD, previously 690–2,700%), preset open scenes converge, and closed rooms still do not, because their branching pressure amplitudes sum to more than one per bounce.
+Walk-including labels are usable for barrier and canopy scenes only; preset solves cost 16–31% more (median), rigid open scenes the same.
+D³ and longer edge chains are omitted rather than estimated. [Evidence](benchmarks/residual-walk-2026-11-02/README.md).
 
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
@@ -2144,7 +2151,8 @@ nonempty route families and retain the selection-PDF weight.
 
 Complete arrivals append after the existing direct/mirror/walk prefix. Walk
 addresses must derive from that prefix, never from the end of a pair. Only pure
-D/DD walk outputs are suppressed; later walk records remain unchanged. Retaining
+D/DD walk outputs are suppressed. Since 2 November the walk forms no consecutive
+edges at all when complete routes are on. Retaining
 32 walk interactions does not supply all possible high-order specular/mixed
 connections. Every complete arrival retains delay, signed/complex material gain,
 direction, velocity ratio and emission birth/phase. Planar height symmetry creates
@@ -2174,3 +2182,9 @@ This does not construct a union boundary for arbitrary overlapping solids or
 complete higher-order paths. The residual walk remains unchanged. See the
 [finite-room audit](benchmarks/finite-diffraction-2026-10-28/README.md) for the
 independent controls, representation comparison and remaining quality failures.
+
+**Residual walk, 2 November:** with complete routes on, a walk edge vertex is always followed by a surface event, so the walk holds no pure D³+ chain and no adjacent-edge mixed path.
+Those families are omitted, not estimated: their absolute edge-to-edge transfer exceeds one, so sampling cannot converge.
+Transmission and scatter branches are drawn in proportion to their pressure amplitudes, and a diffuse surface-to-edge leg restarts from the surface vertex's weight divided by the probability that the edge branch was reachable.
+The walk remains unconverged in closed rooms.
+See the [residual-walk benchmark](benchmarks/residual-walk-2026-11-02/README.md).
