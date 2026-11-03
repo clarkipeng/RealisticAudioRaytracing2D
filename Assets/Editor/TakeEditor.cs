@@ -148,6 +148,7 @@ public sealed class TakeEditor : Editor
         settings.spectralHop=EditorGUILayout.IntField("Convolution block (samples)",settings.spectralHop);
         settings.diffractionFactor=EditorGUILayout.FloatField("Diffraction factor",settings.diffractionFactor);
         settings.completeRouteSamples=EditorGUILayout.IntField(new GUIContent("Complete route samples", "Tuned early diffraction/mixed routes per emission; zero selects the legacy walk. This budget multiplies retained emission sites."),settings.completeRouteSamples);
+        settings.familyGains=EditorGUILayout.Toggle(new GUIContent("Family gains","Opt-in level-preserving shrinkage of sampled first-order images and complete routes (Resources/Acoustics/FamilyGains.json). Needs complete routes and First Images; off renders the unbiased estimator."),settings.familyGains);
         settings.airAbsorption=EditorGUILayout.Toggle("Air absorption",settings.airAbsorption);
     }
     void DrawConfiguration(RayTraceManager manager)

@@ -19,6 +19,7 @@ public partial class TakeChecks
         public bool bakeSolids;
         public string[] surfaceMaterials;
         public DatasetRender render;
+        public bool familyGains; // Opt-in renderer gains; the dataset itself is rendered without them.
     }
     [Serializable] sealed class DatasetBudgetRun
     {
@@ -36,6 +37,8 @@ public partial class TakeChecks
         public int[] bins;
         public int points, primitives, sampleRate, fftSize, maxBounces;
         public float speedOfSound, maximumDelaySeconds, workFraction;
+        public bool familyGains;
+        public string familyGainsHash;
         public DatasetBudgetRun[] budgets;
         public double wallSeconds;
     }
@@ -114,6 +117,7 @@ public partial class TakeChecks
             unityVersion=Application.unityVersion,families=DatasetFamilies,frequencies=job.frequencies,bins=bins,points=points,
             primitives=geometry.Length,sampleRate=job.sampleRate,fftSize=job.fftSize,maxBounces=job.maxBounces,
             speedOfSound=job.speedOfSound,maximumDelaySeconds=job.maximumDelaySeconds,workFraction=(float)workFraction,
+            familyGains=job.familyGains,familyGainsHash=job.familyGains?FamilyGainTable.Shipped().hash:null,
             budgets=new DatasetBudgetRun[job.render.budgets.Length]};
         var visible=new byte[points];bool visibleKnown=false;var direct=new TakeRender.DirectPath[1];
         for(int b=0;b<job.render.budgets.Length;b++)
@@ -130,6 +134,7 @@ public partial class TakeChecks
                 settings.completeRouteSamples=spec.completeRouteSamples;settings.raysPerBin=spec.raysPerBin;
                 settings.seed=spec.seeds[s];settings.maxBounces=job.maxBounces;settings.diffractionFactor=1;
                 settings.speedOfSound=job.speedOfSound;settings.maximumDelaySeconds=job.maximumDelaySeconds;settings.minimumDistance=.01f;
+                settings.familyGains=job.familyGains;
                 using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:job.sampleRate);
                 int bins0=settings.FrequencyBins,walkStart=bins0*(1+settings.MirrorCandidates(scene));
                 int completeStart=walkStart+settings.RaysPerPair*settings.PathSlotsPerRay;
@@ -261,32 +266,43 @@ public partial class TakeChecks
         foreach(float v in values)writer.Write(v); // BinaryWriter is little-endian on every platform.
     }
 
+    // Two rigid boxes (24 triangles, 24 edges) that exercise every complete-route family.
+    void TwoWallFixture(out AcousticTake.Scene scene,out AcousticTake.Primitive[] geometry,out AcousticTake.State[] state)
+    {
+        var walls=new[]{(new Vector3(0,0,0),new Vector3(.2f,1.5f,1f)),(new Vector3(0,0,-2.5f),new Vector3(3,2,.2f))};
+        scene=Scene(1+walls.Length);scene.listeners=new[]{1};
+        scene.materials=new[]{new AcousticTake.MaterialDefinition {name="rigid",frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f}}};
+        state=States(1+walls.Length);state[0].position=new Vector3(-2,1,.3f);state[1].position=new Vector3(2,.8f,-.2f);
+        var list=new List<AcousticTake.Primitive>();
+        for(int w=0;w<walls.Length;w++)
+        {
+            int owner=w+2;state[owner].position=walls[w].Item1;state[owner].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
+            scene.objects[owner].primitiveStart=list.Count;var mesh=TransportBox(scene.dimension,owner,0,1);scene.objects[owner].primitiveCount=mesh.Length;
+            foreach(var triangle in mesh)
+            {var p=triangle;p.a=Vector3.Scale(p.a,walls[w].Item2);p.b=Vector3.Scale(p.b,walls[w].Item2);p.c=Vector3.Scale(p.c,walls[w].Item2);list.Add(p);}
+        }
+        geometry=list.ToArray();
+    }
+    TakeRender.Settings TwoWallSettings(int completeSamples)
+    {
+        var settings=EdgeSettings();settings.useBvh=true;settings.airAbsorption=false;settings.fftSize=8;settings.spectralHop=4;
+        settings.completeRouteSamples=completeSamples;settings.raysPerBin=2;settings.maxBounces=4;settings.seed=29;
+        settings.maximumDelaySeconds=.1f;settings.minimumDistance=.01f;return settings;
+    }
+
     // The dataset export classifies complete-route samples from the route tables of
     // the ordinary dispatch. It must agree with the separate debug capture.
     [Test, Category("GPU"), Category("CompleteRoutes")]
     public void CompleteSampleFamiliesMatchDebugCapture()
     {
         var shader=RequireGpu();
-        var walls=new[]{(new Vector3(0,0,0),new Vector3(.2f,1.5f,1f)),(new Vector3(0,0,-2.5f),new Vector3(3,2,.2f))};
-        var scene=Scene(1+walls.Length);scene.listeners=new[]{1};
-        scene.materials=new[]{new AcousticTake.MaterialDefinition {name="rigid",frequencies=new[]{0f},absorption=new[]{0f},scattering=new[]{0f},transmission=new[]{0f}}};
-        var state=States(1+walls.Length);state[0].position=new Vector3(-2,1,.3f);state[1].position=new Vector3(2,.8f,-.2f);
-        var geometry=new List<AcousticTake.Primitive>();
-        for(int w=0;w<walls.Length;w++)
-        {
-            int owner=w+2;state[owner].position=walls[w].Item1;state[owner].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
-            scene.objects[owner].primitiveStart=geometry.Count;var mesh=TransportBox(scene.dimension,owner,0,1);scene.objects[owner].primitiveCount=mesh.Length;
-            foreach(var triangle in mesh)
-            {var p=triangle;p.a=Vector3.Scale(p.a,walls[w].Item2);p.b=Vector3.Scale(p.b,walls[w].Item2);p.c=Vector3.Scale(p.c,walls[w].Item2);geometry.Add(p);}
-        }
-        var settings=EdgeSettings();settings.useBvh=true;settings.airAbsorption=false;settings.fftSize=8;settings.spectralHop=4;
-        settings.completeRouteSamples=4096;settings.raysPerBin=2;settings.maxBounces=4;settings.seed=29;
-        settings.maximumDelaySeconds=.1f;settings.minimumDistance=.01f;
-        using var solver=new TransportSolver(scene,geometry.ToArray(),settings,shader,sampleRate:1000);
+        TwoWallFixture(out var scene,out var geometry,out var state);
+        var settings=TwoWallSettings(4096);
+        using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:1000);
         solver.Solve(state,new TakeRender.DirectPath[1]);
         var hook=solver.CompleteSampleFamilies();const int bin=1;
         var segments=solver.CaptureRays(state,0,bin);
-        int start=geometry.Count+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
+        int start=geometry.Length+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
         var seen=new HashSet<int>();int captured=0;
         for(int sample=0;sample<settings.CompleteSamples;sample++)
         {

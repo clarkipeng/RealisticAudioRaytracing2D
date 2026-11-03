@@ -1,0 +1,44 @@
+{
+ "schema": "acoustic-family-gains-v1",
+ "method": "rho-energy",
+ "formula": "g = (1 + k * rho)^(-power); rho = routes per sample of the path's family: primitives / mirror candidates for first-order images; for complete routes total candidates / samples when every candidate is enumerated, otherwise the route's inclusion weight (family size * nonempty families / samples). Direct sound and the residual walk are not gained.",
+ "families": [
+  "R",
+  "D",
+  "DD",
+  "RD",
+  "DR",
+  "RR"
+ ],
+ "k": [
+  0.0031927649397403,
+  5.172669410705566,
+  8.54904842376709,
+  2.0998425483703613,
+  2.1931910514831543,
+  0.8885149359703064
+ ],
+ "power": 0.5,
+ "fittedRhoMin": [
+  1.0,
+  0.018310546875,
+  0.14208984375,
+  0.14208984375,
+  0.14208984375,
+  0.14208984375
+ ],
+ "fittedRhoMax": [
+  1.0,
+  2.109375,
+  227.8125,
+  261.5625,
+  261.5625,
+  300.3125
+ ],
+ "dataset": "denoise-pilot-v1",
+ "datasetSha256": "ef63b2f055efa248260214f25d9d0ea0119a85b47886098fce67321f1caa9fda",
+ "selection": "docs/benchmarks/family-gains-2026-11-03/selection.json",
+ "selectionSha256": "c3ea458250d4e4c1f7686a06b606cee0ecd66fedb0d77a89bb9b43094dd09487",
+ "report": "docs/benchmarks/family-gains-2026-11-03/README.md",
+ "fittedAt": "2026-11-03T12:38:20-08:00"
+}

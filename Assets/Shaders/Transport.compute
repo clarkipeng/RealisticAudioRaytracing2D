@@ -24,10 +24,14 @@
 #pragma kernel PrepareComplete3DBvh USE_BVH
 #pragma kernel IntegrateComplete3DBvh USE_BVH
 #pragma kernel CompactComplete
+#pragma kernel GainMirrors
+#pragma kernel GainComplete2D
+#pragma kernel GainComplete3D
 #pragma multi_compile_local _ ACOUSTIC_DEBUG
 
 #include "Geometry.hlsl"
 #include "Transport.hlsl"
+#include "FamilyGains.hlsl"
 
 void EvaluateDirectProbe(uint pair, bool is2D)
 {
@@ -97,3 +101,7 @@ void EvaluateDirectProbe(uint pair, bool is2D)
 [numthreads(64,1,1)] void IntegrateComplete3DBvh(uint3 id:SV_DispatchThreadID) { IntegrateCompleteRoutes(id.x,false); }
 
 [numthreads(1,1,1)] void CompactComplete(uint3 id:SV_DispatchThreadID) { CompactCompleteRoutes(); }
+
+[numthreads(64,1,1)] void GainMirrors(uint3 id:SV_DispatchThreadID) { GainMirrors(id.x); }
+[numthreads(64,1,1)] void GainComplete2D(uint3 id:SV_DispatchThreadID) { GainComplete(id.x,true); }
+[numthreads(64,1,1)] void GainComplete3D(uint3 id:SV_DispatchThreadID) { GainComplete(id.x,false); }

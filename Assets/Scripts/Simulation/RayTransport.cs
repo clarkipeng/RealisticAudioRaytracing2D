@@ -87,6 +87,13 @@ internal sealed class RayTransport : IDisposable
     readonly ComputeBuffer completeCandidates,completeSelected,completeCount,completeDraws,completeSteps;
     readonly bool visibleMirrors;
     readonly int[] mirrorCounts,mirrorSites;
+    // Opt-in per-family gains; null renders the unbiased estimator unchanged.
+    readonly FamilyGainTable familyGains;
+    readonly Vector4 familyGainK0,familyGainK1;
+    readonly int gainMirrors,gainComplete;
+    readonly int edgeCount,primitiveCount,maxBounces;
+    readonly float diffractionFactor;
+    internal FamilyGainTable FamilyGains => familyGains;
     readonly Layout layout;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     struct Volume
@@ -126,6 +133,14 @@ internal sealed class RayTransport : IDisposable
         completeSamples=settings.CompleteSamples;completeSlots=settings.CompleteSlots(scene);pathSlots=settings.PathSlotsPerRay;
         pairs = checked(scene.sources.Length * scene.listeners.Length);
         visibleMirrors=settings.reflectionSampling==TakeRender.ReflectionSampling.FirstImages;
+        TakeRender.ValidateFamilyGains(settings);
+        familyGains=settings.FamilyGains;
+        if(familyGains!=null)
+        {
+            familyGainK0=new Vector4(familyGains.k[0],familyGains.k[1],familyGains.k[2],familyGains.k[3]);
+            familyGainK1=new Vector4(familyGains.k[4],familyGains.k[5],0,0);
+        }
+        primitiveCount=geometry.Length;maxBounces=settings.maxBounces;diffractionFactor=settings.diffractionFactor;
         mirrorCounts=new int[pairs];mirrorSites=new int[pairs];
         everActive = new bool[scene.sources.Length];
         enabledPairs = new uint[checked(pairs * maximumFrames)];
@@ -152,6 +167,9 @@ internal sealed class RayTransport : IDisposable
             prepareComplete=shader.FindKernel((planar?"PrepareComplete2D":"PrepareComplete3D")+(settings.useBvh?"Bvh":""));
             integrateComplete=shader.FindKernel((planar?"IntegrateComplete2D":"IntegrateComplete3D")+(settings.useBvh?"Bvh":""));
             compactComplete=shader.FindKernel("CompactComplete");
+            gainMirrors=shader.FindKernel("GainMirrors");gainComplete=shader.FindKernel(planar?"GainComplete2D":"GainComplete3D");
+            if(familyGains!=null && (!shader.IsSupported(gainMirrors) || !shader.IsSupported(gainComplete)))
+                throw new NotSupportedException("Family gain kernels are unavailable on this GPU.");
             if(completeSamples>0 && (!shader.IsSupported(prepareComplete) || !shader.IsSupported(compactComplete) || !shader.IsSupported(integrateComplete)))
                 throw new NotSupportedException("Complete-route kernels are unavailable on this GPU.");
             if (!shader.IsSupported(directKernel) || !shader.IsSupported(traceKernel))
@@ -177,7 +195,7 @@ internal sealed class RayTransport : IDisposable
             materialBuffer = new ComputeBuffer(materials.Length, 32);
             materialBuffer.SetData(materials);
             var volumes = Volumes(scene, geometry, materials, bins, planar);
-            var edges = Edges(geometry, planar, materials, bins, volumes);
+            var edges = Edges(geometry, planar, materials, bins, volumes);edgeCount=edges.Length;
             long candidates=edges.Length+(settings.maxBounces>1?(long)edges.Length*edges.Length+2L*geometry.Length*edges.Length+(long)geometry.Length*geometry.Length:0);
             completeCapacity=(int)Math.Max(1,Math.Min(completeSamples,candidates));
             completeCandidates=new ComputeBuffer(completeCapacity,16);completeSelected=new ComputeBuffer(completeCapacity,4);
@@ -220,7 +238,7 @@ internal sealed class RayTransport : IDisposable
             edgeIndexBuffer = new ComputeBuffer(Math.Max(1, edgeIndices.Count), 4);
             if (edgeIndices.Count > 0)
                 edgeIndexBuffer.SetData(edgeIndices);
-            foreach (int kernel in new[] { directKernel, traceKernel, mirrorKernel,prepareComplete,compactComplete,integrateComplete })
+            foreach (int kernel in new[] { directKernel, traceKernel, mirrorKernel,prepareComplete,compactComplete,integrateComplete,gainMirrors,gainComplete })
             {
                 shader.SetBuffer(kernel,"CompleteCandidates",completeCandidates);shader.SetBuffer(kernel,"CompleteSelected",completeSelected);
                 shader.SetBuffer(kernel,"CompleteCount",completeCount);shader.SetBuffer(kernel,"CompleteDraws",completeDraws);shader.SetBuffer(kernel,"CompleteSteps",completeSteps);
@@ -314,6 +332,19 @@ internal sealed class RayTransport : IDisposable
         }
         return families;
     }
+    // CPU mirror of the shader's rho for ApplyFamilyGain (family 0 first-order images,
+    // 1-5 complete D, DD, RD, DR, RR), for checks and diagnostics.
+    internal float RoutesPerSample(int family)
+    {
+        if(family==0)return (float)primitiveCount/Math.Max(1,mirrorCounts[0]);
+        float e=edgeCount,p=primitiveCount;bool second=maxBounces>1;
+        var sizes=diffractionFactor<=0?new float[4]:new[]{e,second?e*e:0,second?p*e:0,second?p*e:0};
+        float pairs=second?p*p:0,total=sizes[0]+sizes[1]+sizes[2]+sizes[3]+pairs;
+        if(total<=completeCapacity)return total/completeSamples;
+        int families=(pairs>0?1:0);foreach(float size in sizes)families+=size>0?1:0;
+        return (family<5?sizes[family-1]:pairs)*families/completeCapacity;
+    }
+    internal int EdgeCount => edgeCount;
     internal void BindDebug(ComputeBuffer segments)
     {
         shader.SetBuffer(directKernel, "DebugSegments", segments);
@@ -572,6 +603,12 @@ internal sealed class RayTransport : IDisposable
     {
         if (pending)
             throw new InvalidOperationException("Ray responses are still in flight.");
+        // Bound per dispatch: transports sharing this shader may differ.
+        if(familyGains!=null)
+        {
+            commands.SetComputeVectorParam(shader,"FamilyGainK0",familyGainK0);commands.SetComputeVectorParam(shader,"FamilyGainK1",familyGainK1);
+            commands.SetComputeFloatParam(shader,"FamilyGainPower",familyGains.power);
+        }
         commands.BeginSample("Acoustics.GPU.Direct");
         commands.DispatchCompute(shader,directKernel,(checked(frames*layout.DirectSites.Length*frequencyBins)+63)/64,1,1);
         commands.EndSample("Acoustics.GPU.Direct");
@@ -589,6 +626,7 @@ internal sealed class RayTransport : IDisposable
                 {
                     int rows=checked(frames*mirrorSites[pair]*frequencyBins);
                     commands.DispatchCompute(shader,mirrorKernel,(checked(rows*mirrorCounts[pair])+63)/64,1,1);
+                    if(familyGains!=null)commands.DispatchCompute(shader,gainMirrors,(checked(rows*mirrorCounts[pair])+63)/64,1,1);
                 }
                 commands.DispatchCompute(shader,traceKernel,(checked(frames*layout.RayCounts[pair])+63)/64,1,1);
                 if(completeSamples>0)for(int frame=0;frame<frames;frame++)for(int site=0;site<mirrorSites[pair];site++)
@@ -599,6 +637,8 @@ internal sealed class RayTransport : IDisposable
                     commands.DispatchCompute(shader,prepareComplete,(completeCapacity+63)/64,1,1);
                     commands.DispatchCompute(shader,compactComplete,1,1,1);
                     commands.DispatchCompute(shader,integrateComplete,(completeSamples+63)/64,1,1);
+                    // The gain pass reads this site's route tables before the next site reuses them.
+                    if(familyGains!=null)commands.DispatchCompute(shader,gainComplete,(checked(completeSlots*frequencyBins)+63)/64,1,1);
                 }
             }
             commands.EndSample("Acoustics.GPU.Trace");

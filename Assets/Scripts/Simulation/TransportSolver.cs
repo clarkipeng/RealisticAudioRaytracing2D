@@ -62,6 +62,10 @@ public sealed class TransportSolver : IDisposable
     // Offline dataset diagnostic; see RayTransport.CompleteSampleFamilies.
     internal int[] CompleteSampleFamilies() =>
         transport?.CompleteSampleFamilies() ?? throw new InvalidOperationException("Requires GPU raytraced transport.");
+    // Opt-in family gains: the table in use (null when off) and the shader's rho per family.
+    internal FamilyGainTable FamilyGains => transport?.FamilyGains;
+    internal float FamilyRoutesPerSample(int family) =>
+        transport?.RoutesPerSample(family) ?? throw new InvalidOperationException("Requires GPU raytraced transport.");
     ComputeBuffer bvhNodes, bvhIndices;
     ComputeBuffer primitives, states, sources, listeners, responses;
     readonly TakeRender.DirectPath[] completedPaths;

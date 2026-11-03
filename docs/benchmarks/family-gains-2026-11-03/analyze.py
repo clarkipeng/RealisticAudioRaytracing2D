@@ -454,6 +454,102 @@ def stage_test():
     print(tables(report))
 
 
+ASSET = ROOT / 'Assets/Resources/Acoustics/FamilyGains.json'
+GAIN_FAMILIES = FAMILIES[1:EARLY]           # R, D, DD, RD, DR, RR: the gained families, in shader order
+
+
+def stage_export():
+    """Write the selected rho-based gains as the renderer's data asset (float32 values)."""
+    sel = json.loads((HERE / 'selection.json').read_text())
+    spec = sel['candidates'][sel['selected']]
+    if spec['kind'] != 'rho':
+        raise SystemExit(f"selected candidate {sel['selected']} is not a runtime rho law; the renderer reads k and power")
+    rho = np.array([routes_per_sample(g['edges'], g['primitives']) for n, g in sel['geometry'].items()
+                    if n in sel['scenes']['train']])
+    asset = dict(
+        schema='acoustic-family-gains-v1', method=sel['selected'],
+        formula='g = (1 + k * rho)^(-power); rho = routes per sample of the path\'s family: primitives / mirror candidates '
+                'for first-order images; for complete routes total candidates / samples when every candidate is enumerated, '
+                'otherwise the route\'s inclusion weight (family size * nonempty families / samples). Direct sound and the '
+                'residual walk are not gained.',
+        families=GAIN_FAMILIES, k=[float(np.float32(v)) for v in spec['k']], power=float(spec['power']),
+        fittedRhoMin=[float(np.float32(v)) for v in rho[..., 1:EARLY].min((0, 1))],
+        fittedRhoMax=[float(np.float32(v)) for v in rho[..., 1:EARLY].max((0, 1))],
+        dataset='denoise-pilot-v1', datasetSha256=sel['datasetSha256'],
+        selection='docs/benchmarks/family-gains-2026-11-03/selection.json',
+        selectionSha256=dd.sha256(HERE / 'selection.json'),
+        report='docs/benchmarks/family-gains-2026-11-03/README.md', fittedAt=sel['at'])
+    ASSET.write_text(json.dumps(asset, indent=1) + '\n')
+    print(json.dumps(asset, indent=1))
+
+
+# Validated categorical palette (dataviz reference, light surface; same order as the denoiser
+# report); markers double-encode identity because three hues are below 3:1 contrast.
+PLOT = [('raw', '#2a78d6', 'o'), ('ls', '#eb6834', 's'), ('rho-energy', '#1baf7a', 'D'),
+        ('energy', '#eda100', '^'), ('rho-wiener', '#e87ba4', 'v')]
+SURFACE, INK, MUTED, GRID = '#fcfcfb', '#0b0b0b', '#52514e', '#e4e3df'
+
+
+def stage_figures():
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({'figure.facecolor': SURFACE, 'axes.facecolor': SURFACE, 'savefig.facecolor': SURFACE,
+                         'axes.edgecolor': MUTED, 'axes.labelcolor': INK, 'xtick.color': MUTED, 'ytick.color': MUTED,
+                         'text.color': INK, 'axes.grid': True, 'grid.color': GRID, 'grid.linewidth': .8,
+                         'axes.spines.top': False, 'axes.spines.right': False, 'font.size': 10})
+    r = json.loads((HERE / 'report.json').read_text())
+    x = np.arange(B)
+
+    def panel(ax, key, subset, title, ylabel, log):
+        for name, color, marker in PLOT:
+            v = r['test'][name]['all'][subset][key]
+            ax.plot(x, v, color=color, marker=marker, lw=2, ms=7, label=name + (' (selected)' if name == r['selected'] else ''))
+        ax.set_xticks(x, SHORT)
+        ax.set_xlabel('budget (fraction of the label budget; 1/256 is live)')
+        ax.set_ylabel(ylabel)
+        ax.set_title(title, loc='left', color=INK)
+        if log:
+            ax.set_yscale('log')
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
+    for ax, subset, title in zip(axes, ['view', 'shadow'], ['In view (line of sight)', 'Shadow (no line of sight)']):
+        panel(ax, 'error', subset, title, 'early-field error, % (log)', True)
+        ax.axhline(100, color=MUTED, lw=1, ls='--')
+        ax.text(B - 1, 104, 'silence = 100%', color=MUTED, ha='right', va='bottom', fontsize=9)
+    axes[0].legend(frameon=False, loc='upper right', fontsize=9)
+    fig.suptitle('Test split (canopy + wide doorways): error against the converged early field', x=.01, ha='left', color=INK)
+    fig.tight_layout()
+    fig.savefig(HERE / 'fig1-error-view-shadow.png', dpi=160)
+    plt.close(fig)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=True)
+    for ax, subset, title in zip(axes, ['view', 'shadow'], ['In view', 'Shadow']):
+        ax.axhspan(-RULE['levelLimitDb'], RULE['levelLimitDb'], color=GRID, alpha=.6, lw=0)
+        panel(ax, 'energyDb', subset, title, 'predicted / label energy, dB', False)
+        ax.axhline(0, color=MUTED, lw=1)
+    axes[0].text(0, RULE['levelLimitDb'] - .4, '±3 dB eligibility band', color=MUTED, fontsize=9, va='top')
+    axes[0].legend(frameon=False, loc='upper right', fontsize=9)
+    fig.suptitle('Test split: level of the rendered early field (muting is below 0 dB, spikes above)', x=.01, ha='left', color=INK)
+    fig.tight_layout()
+    fig.savefig(HERE / 'fig2-level-view-shadow.png', dpi=160)
+    plt.close(fig)
+    spec = r['candidates']['rho-energy']
+    rho = np.logspace(-2, 3, 200)
+    fig, ax = plt.subplots(figsize=(7, 4.2))
+    styles = [('D', '#2a78d6', '-'), ('DD', '#eb6834', '-'), ('RD', '#1baf7a', '-'), ('DR', '#1baf7a', ':'), ('RR', '#eda100', '-')]
+    for name, color, ls in styles:
+        f = GAIN_FAMILIES.index(name)
+        ax.plot(rho, (1 + spec['k'][f] * rho) ** -spec['power'], color=color, ls=ls, lw=2, label=f'{name} (k = {spec["k"][f]:.2f})')
+    ax.set_xscale('log')
+    ax.set_xlabel('rho: candidate routes per sample of the family (run time)')
+    ax.set_ylabel('gain')
+    ax.set_ylim(0, 1.02)
+    ax.set_title('Selected law g = (1 + k rho)^-1/2 (R: k = %.4f, gain ≈ 1)' % spec['k'][0], loc='left', color=INK)
+    ax.legend(frameon=False, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(HERE / 'fig3-gain-law.png', dpi=160)
+    plt.close(fig)
+
+
 def fmt(v, d=1):
     return '–' if v is None else f'{v:.{d}f}'
 
@@ -507,11 +603,9 @@ def main():
     elif a.stage == 'test':
         stage_test()
     elif a.stage == 'export':
-        import export
-        export.main()
+        stage_export()
     else:
-        import figures
-        figures.main()
+        stage_figures()
 
 
 if __name__ == '__main__':

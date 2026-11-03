@@ -45,6 +45,10 @@ public static partial class TakeRender
         [Min(0),Tooltip("Complete one/two-interaction diffraction and mixed reflection paths per emission. Zero retains the legacy walk for comparisons.")]
         public int completeRouteSamples;
         internal int CompleteSamples => maxBounces>0?completeRouteSamples:0;
+        [Tooltip("Opt-in level-preserving gains for the sampled early families (first-order images and complete routes), fitted offline; data in Resources/Acoustics/FamilyGains.json. Needs complete routes and First Images. Off renders the unbiased estimator.")]
+        public bool familyGains;
+        [NonSerialized] internal FamilyGainTable familyGainTable; // Checks only; null reads the shipped table.
+        internal FamilyGainTable FamilyGains => familyGains?familyGainTable??FamilyGainTable.Shipped():null;
         internal int CompleteSlots(AcousticTake.Scene scene) => checked(CompleteSamples*(scene.dimension==AcousticTake.Dimension.Planar2D?2:1));
         [Min(0), Tooltip("Zero renders direct sound only, including material transmission, with no reflection or diffraction paths.")]
         public int maxBounces=5;
@@ -116,6 +120,7 @@ public static partial class TakeRender
         public string[] audioHashes;
         public AcousticTake.Provenance provenance;
         public string settingsHash,audioShaderDependencyHash;
+        public string familyGainsHash; // SHA-256 of the gain table text when settings.familyGains is on.
         public int dspLatencySamples;
         public long responseSupportSamples;
         public bool tailCoversResponseSupport;
@@ -234,6 +239,7 @@ public static partial class TakeRender
         Directory.CreateDirectory(outputDirectory);
         var report=new Report {takeSourceHash=AcousticTake.SourceHash(metadata), sceneHash=metadata.sceneHash, takeStateHash=metadata.stateHash, takeEventHash=metadata.eventHash,
             settings=settings, provenance=AcousticTake.Provenance.Capture(shader), settingsHash=AcousticTake.HashText(JsonUtility.ToJson(settings)),
+            familyGainsHash=settings.FamilyGains?.hash,
             dspLatencySamples=settings.DspLatencySamples, sampleRate=metadata.sampleRate, sourceCount=scene.sources.Length,
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
@@ -674,6 +680,7 @@ public static partial class TakeRender
         if(settings.audioBackend!=AudioBackend.Gpu && settings.audioBackend!=AudioBackend.CpuReference)throw new ArgumentException("Unknown audio backend.");
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
+        ValidateFamilyGains(settings);
         if(settings.transport==Transport.Raytraced)
         {
             if(settings.completeRouteSamples<0 || settings.reflectionCandidates<1 || (settings.reflectionSampling!=ReflectionSampling.FirstImages && settings.reflectionSampling!=ReflectionSampling.PrimitiveBaseline))
@@ -686,6 +693,13 @@ public static partial class TakeRender
         }
     }
     static bool PositiveFinite(float value) { return value>0 && !float.IsInfinity(value); }
+    // The gains were fitted for the complete-route families and first-image mirrors;
+    // the legacy walk and primitive-baseline mirrors mix other families into those slots.
+    internal static void ValidateFamilyGains(Settings settings)
+    {
+        if(settings.familyGains && (settings.transport!=Transport.Raytraced || settings.CompleteSamples==0 || settings.reflectionSampling!=ReflectionSampling.FirstImages))
+            throw new ArgumentException("Family gains need raytraced transport with complete routes (completeRouteSamples > 0 with bounces) and First Images reflection sampling.");
+    }
     internal static void WriteWaveHeader(BinaryWriter writer,int rate,long length,int channels=1)
     {
         writer.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); writer.Write((uint)(36+length*4*channels));
