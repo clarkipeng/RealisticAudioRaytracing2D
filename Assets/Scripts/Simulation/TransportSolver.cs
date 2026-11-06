@@ -26,7 +26,7 @@ public sealed class TransportSolver : IDisposable
         public Vector4 start, end; // xyz position, w travel time
         public RayEvent kind;
         public int material;
-        public uint path;      // 0 direct; 1 + 2*ray mirror; 2 + 2*ray sampled walk
+        public uint path;      // 0 direct; 1 + 2*candidate mirror; complete routes use their identity
         public float pressure; // Signed estimator weight; final gain on listener connections.
     }
     [StructLayout(LayoutKind.Sequential)]
@@ -59,6 +59,8 @@ public sealed class TransportSolver : IDisposable
         if(Emission.HasBursts(scene))transport.PrepareEmissions(signals,first,frames,evaluate);
     }
     internal int RayPathsPerFrame => transport?.PathsPerFrame ?? 0;
+    // The late energy histogram of one solved frame, for either audio backend.
+    internal RayTransport.LateFrame Late(int frame) => transport==null?default:new RayTransport.LateFrame(transport,frame);
     // Offline dataset diagnostic; see RayTransport.CompleteSampleFamilies.
     internal int[] CompleteSampleFamilies() =>
         transport?.CompleteSampleFamilies() ?? throw new InvalidOperationException("Requires GPU raytraced transport.");
@@ -232,8 +234,7 @@ public sealed class TransportSolver : IDisposable
             throw new ArgumentException("Ray capture shape or selection is invalid.");
         if (Marshal.SizeOf<RaySegment>() != 48)
             throw new InvalidOperationException("Ray capture GPU ABI mismatch.");
-        int slots = checked(geometry.Length + 1 + settings.RaysPerBin * checked(2 + 2 * settings.maxBounces));
-        slots=checked(slots+2*settings.MirrorCandidates(scene)+3*settings.CompleteSamples);
+        int slots = checked(geometry.Length + 1 + 2*(settings.reflectionSampling==TakeRender.ReflectionSampling.PrimitiveBaseline?settings.RaysPerBin:settings.MirrorCandidates(scene))+3*settings.CompleteSamples);
         var segments = new RaySegment[slots];
         using var buffer = new ComputeBuffer(slots, 48);
         buffer.SetData(segments);

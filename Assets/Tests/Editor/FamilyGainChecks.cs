@@ -153,7 +153,7 @@ public partial class TakeChecks
     {
         var settings=TwoWallSettings(256);settings.familyGains=true;
         Assert.DoesNotThrow(()=>TakeRender.ValidateFamilyGains(settings));
-        settings.completeRouteSamples=0;Assert.Throws<ArgumentException>(()=>TakeRender.ValidateFamilyGains(settings),"Legacy walk");
+        settings.completeRouteSamples=0;Assert.Throws<ArgumentException>(()=>TakeRender.ValidateFamilyGains(settings),"No complete routes");
         settings.completeRouteSamples=256;settings.maxBounces=0;Assert.Throws<ArgumentException>(()=>TakeRender.ValidateFamilyGains(settings),"Direct only");
         settings.maxBounces=4;settings.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline;
         Assert.Throws<ArgumentException>(()=>TakeRender.ValidateFamilyGains(settings),"Primitive-baseline mirrors");

@@ -131,7 +131,7 @@ public partial class TakeChecks
                     if(families!=null && diffraction!=0)
                     {
                         var segments=solver.CaptureRays(state,0,(int)bin);
-                        int start=geometry.Count+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
+                        int start=geometry.Count+1+2*settings.MirrorCandidates(scene);
                         var sums=new System.Numerics.Complex[5];var counts=new int[5];var peaks=new double[5];
                         for(int sample=0;sample<settings.CompleteSamples;sample++)
                         {

@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 // Owns GPU DSP and its asynchronous PCM readback. Scene/timeline contracts are
 // shared with the CPU reference, but no path or intermediate spectrum is read back.
-internal sealed class GpuAudio : IDisposable
+internal sealed partial class GpuAudio : IDisposable
 {
     struct ClipInfo { public int first,length,row,enabled; }
     readonly ComputeShader shader;
@@ -58,7 +58,8 @@ internal sealed class GpuAudio : IDisposable
             shader=UnityEngine.Object.Instantiate(asset);
             reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");match=Kernel("AudioMatch");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
-            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly};
+            lateEnvelope=Kernel("LateEnvelope");lateBuild=Kernel("LateBuild");lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
+            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateBuild,lateInput,lateSum,lateInverse,lateWrite};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(slots*2+1);
             Buffer("AudioRanges",pairs,8).SetData(layout.Ranges);Buffer("AudioOwners",capacity,4).SetData(layout.Owners);
@@ -111,6 +112,7 @@ internal sealed class GpuAudio : IDisposable
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
             PrepareEars(hrtf);
+            PrepareLate(scene,rate);
             Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
             Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
             Set("AudioWorkStride",workStride);
@@ -146,7 +148,8 @@ internal sealed class GpuAudio : IDisposable
         foreach(var item in rings){item.Value.Sort((a,b)=>a.x.CompareTo(b.x));rows[row++]=new Vector4(item.Key,offset,item.Value.Count,0);foreach(var angle in item.Value)angles[offset++]=angle;}
         Buffer("AudioRings",rows.Length,16).SetData(rows);Buffer("AudioAngles",angles.Length,8).SetData(angles);Set("AudioRingCount",rows.Length);
     }
-    public void SetResponse(long sample,bool cut,ComputeBuffer arrivals,int offset,AcousticTake.Scene scene,AcousticTake.State[] states,long? anchor=null,AcousticTake.State[] headStates=null)
+    // late: the solved frame's late energy; default renders no late field.
+    public void SetResponse(long sample,bool cut,ComputeBuffer arrivals,int offset,AcousticTake.Scene scene,AcousticTake.State[] states,long? anchor=null,AcousticTake.State[] headStates=null,RayTransport.LateFrame late=default)
     {
         if(disposed || pending || sample!=cursor)throw new InvalidOperationException("GPU response must match the owned audio cursor.");
         int changed=0;headStates??=states;
@@ -182,7 +185,9 @@ internal sealed class GpuAudio : IDisposable
                 FftGlobal(work,fft,false,pair,0);Dispatch(filterGlobal,pair,0);
             }
         }
-        commands.EndSample("Acoustics.GPU.Filters");Submit();initialized=true;responseSample=sample;
+        commands.EndSample("Acoustics.GPU.Filters");
+        SetLateResponse(sample,cut,late);
+        Submit();initialized=true;responseSample=sample;
     }
     void Dispatch(int kernel,int pair,int which)=>commands.DispatchCompute(shader,kernel,args,(uint)((which*pairs+pair)*3*4));
     void BindTransform(ComputeBuffer buffer)
@@ -256,9 +261,12 @@ internal sealed class GpuAudio : IDisposable
                     commands.EndSample("Acoustics.GPU.Mix");
                 }
             }
+            if(now%settings.spectralHop==0)QueueLateBlock(now);
             int first=(int)(now%settings.spectralHop),length=Math.Min(count-at,settings.spectralHop-first);
             Set("AudioWriteOffset",queued+at);Set("AudioWriteAt",first);Set("AudioWriteCount",length);
-            commands.BeginSample("Acoustics.GPU.PCM");commands.DispatchCompute(shader,write,(length*listeners*channels+63)/64,1,1);commands.EndSample("Acoustics.GPU.PCM");at+=length;
+            commands.BeginSample("Acoustics.GPU.PCM");commands.DispatchCompute(shader,write,(length*listeners*channels+63)/64,1,1);
+            if(lateReady)commands.DispatchCompute(shader,lateWrite,(length*listeners*channels+63)/64,1,1);
+            commands.EndSample("Acoustics.GPU.PCM");at+=length;
         }
         Submit();cursor+=count;queued+=count;
     }
@@ -292,7 +300,7 @@ internal sealed class GpuAudio : IDisposable
         Diagnostics.readbacks++;Diagnostics.readbackSeconds+=latency;Diagnostics.maximumReadbackSeconds=Math.Max(Diagnostics.maximumReadbackSeconds,latency);
         Diagnostics.maximumConsumeDelaySeconds=Math.Max(Diagnostics.maximumConsumeDelaySeconds,TakeRender.Elapsed(readbackCompleted));
         if(download[0]!=0)throw new InvalidOperationException("GPU audio validation failed ("+download[0]+"): 1 invalid path, 2 missing source history, 3 non-finite audio, 4 invalid path grouping, 5 geometric group capacity mismatch.");
-        ResponseSupportSamples=(int)download[1];int length=requested*listeners*channels;
+        ResponseSupportSamples=Math.Max(lateSupport,(int)download[1]);int length=requested*listeners*channels;
         uint responses=unchecked((uint)BitConverter.SingleToInt32Bits(download[2])),reused=unchecked((uint)BitConverter.SingleToInt32Bits(download[3]));
         Diagnostics.responseUpdates+=unchecked(responses-previousResponses);Diagnostics.reusedResponses+=unchecked(reused-previousReused);
         previousResponses=responses;previousReused=reused;

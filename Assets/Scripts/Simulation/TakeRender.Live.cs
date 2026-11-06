@@ -80,7 +80,7 @@ public static partial class TakeRender
         {
             if(gpuAudio==null)return;
             Array.Copy(state,batchStates,state.Length);solver.BeginSolve(batchStates,1,false);
-            gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state);
+            gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state,late:solver.Late(0));
             gpuAudio.CompletePreparation();solver.CompleteAfterGpuAudio();prepared=!bursts;
         }
         public void Append(AcousticTake.VoiceEvent e) { AudioSourcePlane.ValidateEvent(scene,e); signals[e.sourceIndex].Append(e); }
@@ -171,8 +171,8 @@ public static partial class TakeRender
             if(!prepared && Cursor==0 && settings.ResponseSample(0)>0)
             {
                 EvaluateObserved(0,evaluated);solver.PrepareEmissions(signals,0,1,EvaluateObserved);solver.Solve(evaluated,paths);
-                if(gpuAudio!=null){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,evaluated,0);gpuAudio.CompletePreparation();}
-                else mixer.SetResponse(0,paths,evaluated,true,solver.RayPaths,0,0);
+                if(gpuAudio!=null){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,evaluated,0,late:solver.Late(0));gpuAudio.CompletePreparation();}
+                else mixer.SetResponse(0,paths,evaluated,true,solver.RayPaths,0,0,late:solver.Late(0));
                 prepared=true;
             }
             for(int f=0;f<batchCount;f++)
@@ -197,8 +197,8 @@ public static partial class TakeRender
             long anchor=settings.ResponseSample(sample);if(headStates!=null)EvaluateObserved(sample,headStates);
             int cut=cuts.BinarySearch(anchor);if(cut<0)cut=~cut-1;
             long start=Stopwatch.GetTimestamp();
-            if(gpuAudio!=null)gpuAudio.SetResponse(sample,cut>=0 && cuts[cut]>previousResponse,solver.RayBuffer,index*solver.RayPathsPerFrame,scene,evaluated,anchor,headStates);
-            else mixer.SetResponse(sample,paths,evaluated,cut>=0 && cuts[cut]>previousResponse,solver.RayPaths,index*solver.RayPathsPerFrame,anchor,headStates);
+            if(gpuAudio!=null)gpuAudio.SetResponse(sample,cut>=0 && cuts[cut]>previousResponse,solver.RayBuffer,index*solver.RayPathsPerFrame,scene,evaluated,anchor,headStates,solver.Late(index));
+            else mixer.SetResponse(sample,paths,evaluated,cut>=0 && cuts[cut]>previousResponse,solver.RayPaths,index*solver.RayPathsPerFrame,anchor,headStates,solver.Late(index));
             previousResponse=anchor;
             double elapsed=Elapsed(start);AudioSeconds+=elapsed;ResponsePreparationSeconds+=elapsed;
             ResponseCount++;

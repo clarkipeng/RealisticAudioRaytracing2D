@@ -10,6 +10,7 @@ public partial class TakeChecks
         RequireGpu();const int rate=8192;var scene=Scene();var states=States();
         var settings=SpectralSettings();settings.raysPerBin=1;settings.maxBounces=1;settings.delayFilter=TakeRender.DelayFilter.WindowedSinc;
         settings.responseStepSamples=step;settings.transitionSamples=0;
+        settings.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline; // Owns a second slot per bin.
         var clip=new float[rate*2];for(int n=0;n<clip.Length;n++)clip[n]=.2f*(float)Math.Sin(2*Math.PI*1000*n/rate);
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1});
         using var gpu=accelerated?new GpuAudio(scene,rate,settings,new[]{signal},2):null;

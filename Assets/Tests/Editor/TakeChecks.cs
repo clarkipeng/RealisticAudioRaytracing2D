@@ -543,6 +543,7 @@ public partial class TakeChecks
     {
         TakeRender.Validate(JsonUtility.FromJson<TakeRender.Settings>("{}"));
         var migrated=JsonUtility.FromJson<TakeRender.Settings>("{\"fftSize\":1024,\"raysPerPair\":1024}");
+        migrated.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline; // The only estimator that still traces rays per bin.
         Check(migrated.raysPerPair==0 && migrated.raysPerBin==2 && migrated.RaysPerPair==1026,"Legacy total-ray budgets migrate to complete frequency bins.");
         migrated.raysPerBin=3;Check(migrated.RaysPerPair==1539,"Migrated settings remain editable through the new field.");
         const int rate=1000,count=256,start=100;

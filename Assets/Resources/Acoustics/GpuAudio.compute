@@ -16,6 +16,12 @@
 #pragma kernel AudioSaveGlobal
 #pragma kernel AudioBitReverse
 #pragma kernel AudioButterfly
+#pragma kernel LateEnvelope
+#pragma kernel LateBuild
+#pragma kernel LateInput
+#pragma kernel LateSum
+#pragma kernel LateInverse
+#pragma kernel LateWrite
 
 // CPU and GPU exchange scene inputs and finished PCM. Paths, filters, FFTs and
 // sums stay here. The small-transform fast path uses one workgroup per path;
@@ -554,4 +560,125 @@ void AudioButterfly(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
         float scale=AudioTransformInverse!=0 && step==n?1.0/n:1;
         AudioTransform[at]=(a+b)*scale;AudioTransform[at+step/2]=(a-b)*scale;
     }
+}
+
+// Late field (LateReverb.cs is the CPU reference). Kernels of the current bank are
+// LateBasis noise shaped by the histogram envelope; each source's emitted signal,
+// delayed by the DSP latency, is convolved by uniform partitioned overlap-save in
+// blocks of LatePartition samples, and the previous bank fades out over one step.
+StructuredBuffer<uint> LateHistogram;
+StructuredBuffer<uint4> LateEmissionRanges,LateEmissionClocks;
+StructuredBuffer<float4> LateEmissionPoints;
+StructuredBuffer<float2> LateBasisSpectra;
+StructuredBuffer<float> LateEarWeights;
+StructuredBuffer<uint> LateOffsets;
+RWStructuredBuffer<float> LateGains,LateBlocks;
+RWStructuredBuffer<float2> LateKernels,LateInputs,LateSums;
+RWStructuredBuffer<uint> LateActive;
+uint LatePartition,LateCount,LateBasisCount,LateBins,LateBank,LateHistogramOffset,LateRays,LateEmissionRow,LateValid,LateTiles,LateWhich,LateBlend,LateStep,LateBlock;
+uint2 LateSwap;
+static const uint LATE_BANDS=8,LATE_DIRECTIONS=6;
+[numthreads(64,1,1)]
+void LateEnvelope(uint3 id:SV_DispatchThreadID)
+{
+    uint count=AudioPairs*AudioChannels*LATE_BANDS*LateCount;if(id.x>=count)return;
+    uint k=id.x%LateCount,b=(id.x/LateCount)%LATE_BANDS,c=(id.x/(LateCount*LATE_BANDS))%AudioChannels,pair=id.x/(LateCount*LATE_BANDS*AudioChannels);
+    bool active=LateValid!=0 && AudioFilterPairs[pair]>=0 && AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x!=0;
+    if(id.x%(LateCount*LATE_BANDS*AudioChannels)==0)LateActive[LateBank*AudioPairs+pair]=active?1:0;
+    float energy=0;
+    if(active)for(uint d=0;d<LATE_DIRECTIONS;d++)
+    {
+        uint cell=LateHistogramOffset/2+((pair*LATE_DIRECTIONS+d)*LATE_BANDS+b)*LateCount+k;
+        energy+=LateEarWeights[(d*2+c)*LATE_BANDS+b]*((LateHistogram[2*cell+1]+LateHistogram[2*cell]/4294967296.0)/LateRays);
+    }
+    LateGains[id.x]=sqrt(max(0,energy)/LatePartition);
+}
+[numthreads(64,1,1)]
+void LateBuild(uint3 id:SV_DispatchThreadID)
+{
+    uint count=AudioPairs*AudioChannels*LateCount*LateBins;if(id.x>=count)return;
+    uint bin=id.x%LateBins,k=(id.x/LateBins)%LateCount,c=(id.x/(LateBins*LateCount))%AudioChannels,pair=id.x/(LateBins*LateCount*AudioChannels);
+    uint noise=(LateOffsets[pair]+k)%LateBasisCount;float2 value=0;
+    for(uint b=0;b<LATE_BANDS;b++)
+    {
+        float gain=LateGains[((pair*AudioChannels+c)*LATE_BANDS+b)*LateCount+k];
+        if(gain!=0)value+=LateBasisSpectra[((c*LATE_BANDS+b)*LateBasisCount+noise)*LateBins+bin]*gain;
+    }
+    LateKernels[LateBank*count+id.x]=value;
+}
+float LateDry(uint source,int at)
+{
+    uint4 row=LateEmissionRanges[LateEmissionRow+source];
+    AudioPath path=(AudioPath)0;
+    if(row.w==0)return AudioRead(source,at,path);
+    float value=0;
+    for(uint n=0;n<row.y;n++)
+    {
+        float amplitude=LateEmissionPoints[row.x+n].w;if(amplitude==0)continue;
+        if(row.w==2){uint4 clock=LateEmissionClocks[row.x+n];path.emissionPhase=clock.x;path.birthLow=clock.y;path.birthHigh=clock.z;}
+        else path.emissionPhase=AudioHash(row.z^(n*0x85ebca6bu+0x9e3779b9u))>>16;
+        value+=amplitude*AudioRead(source,at,path);
+    }
+    return value;
+}
+[numthreads(256,1,1)]
+void LateInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
+{
+    uint source=group.x,t=tid.x,ring=LateBlock%LateCount,size=2*LatePartition;
+    if(t==0)
+    {
+        uint used=0;
+        for(uint l=0;l<AudioListeners;l++)used|=LateActive[LateBank*AudioPairs+source*AudioListeners+l]|LateActive[(LateBank^1)*AudioPairs+source*AudioListeners+l];
+        AudioSkip=used!=0?0:1;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    // An unheard source contributes silence to every later block that reads this slot.
+    if(AudioSkip!=0){for(uint k=t;k<LateBins;k+=256)LateInputs[(source*LateCount+ring)*LateBins+k]=0;return;}
+    // Declared DSP latency = AudioLatency + AudioSize/2 (the centred path filter).
+    for(uint n=t;n<size;n+=256)AudioShared[n]=float2(LateDry(source,(int)n-(int)LatePartition-AudioLatency-(int)AudioSize/2),0);
+    GroupMemoryBarrierWithGroupSync();
+    AudioFftShared(size,false,t);
+    for(uint k=t;k<LateBins;k+=256)LateInputs[(source*LateCount+ring)*LateBins+k]=AudioShared[k];
+}
+[numthreads(64,1,1)]
+void LateSum(uint3 id:SV_DispatchThreadID)
+{
+    uint bin=id.x,tile=id.y,channel=id.z;if(bin>=LateBins)return;
+    uint listener=channel/AudioChannels,c=channel%AudioChannels,bank=LateBank^LateWhich,count=AudioPairs*AudioChannels*LateCount*LateBins;
+    float2 value=0;
+    for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)
+    {
+        if(LateActive[bank*AudioPairs+pair]==0)continue;uint source=pair/AudioListeners;
+        for(uint k=tile;k<LateCount && k<=LateBlock;k+=LateTiles)
+            value+=AudioMultiply(LateInputs[(source*LateCount+(LateBlock-k)%LateCount)*LateBins+bin],LateKernels[bank*count+((pair*AudioChannels+c)*LateCount+k)*LateBins+bin]);
+    }
+    LateSums[((LateWhich*AudioListeners*AudioChannels+channel)*LateTiles+tile)*LateBins+bin]=value;
+}
+[numthreads(256,1,1)]
+void LateInverse(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
+{
+    uint channel=group.x,t=tid.x,size=2*LatePartition,lanes=AudioListeners*AudioChannels;
+    for(uint k=t;k<LateBins;k+=256)
+    {
+        float2 value=0;for(uint tile=0;tile<LateTiles;tile++)value+=LateSums[((LateWhich*lanes+channel)*LateTiles+tile)*LateBins+k];
+        if(k==0 || k==LatePartition)value.y=0;
+        AudioShared[k]=value;if(k>0 && k<LatePartition)AudioShared[size-k]=float2(value.x,-value.y);
+    }
+    GroupMemoryBarrierWithGroupSync();
+    AudioFftShared(size,true,t);
+    for(uint n=t;n<LatePartition;n+=256)LateBlocks[(LateWhich*lanes+channel)*LatePartition+n]=AudioShared[LatePartition+n].x;
+}
+[numthreads(64,1,1)]
+void LateWrite(uint3 id:SV_DispatchThreadID)
+{
+    uint i=id.x,channels=AudioListeners*AudioChannels;if(i>=AudioWriteCount*channels)return;
+    uint n=i/channels,c=i%channels;
+    int time=AudioDifference(AudioBlockSample,LateSwap)+(int)AudioWriteAt+(int)n;
+    uint at=(uint)(((int)AudioBlockSample.x+(int)AudioWriteAt+(int)n)&(int)(LatePartition-1));
+    float weight=LateBlend!=0?saturate(time/(float)LateStep):1;
+    float value=LateBlocks[c*LatePartition+at]*weight;
+    if(weight<1)value+=LateBlocks[(channels+c)*LatePartition+at]*(1-weight);
+    value+=AudioOutput[8+AudioWriteOffset*channels+i];
+    if(!isfinite(value))AudioError(3);
+    AudioOutput[8+AudioWriteOffset*channels+i]=value;
 }

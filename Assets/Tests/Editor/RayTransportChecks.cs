@@ -14,7 +14,7 @@ public partial class TakeChecks
     public void RayDebugPreservesArrivals(bool planar,bool bvh)
     {
         var shader=RequireGpu();KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);
-        var settings=EdgeSettings();settings.raysPerBin=32;settings.maxBounces=3;settings.useBvh=bvh;
+        var settings=EdgeSettings();settings.completeRouteSamples=64;settings.maxBounces=3;settings.useBvh=bvh;
         // Two pair slots ensure the capture selects the requested pair, rather than always pair zero.
         scene.listeners=new[]{0,1};state[0].flags|=AcousticTake.StateFlags.Listener;
         using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
@@ -84,7 +84,7 @@ public partial class TakeChecks
         var settings=SpectralSettings();settings.speedOfSound=1000;settings.raysPerBin=1;
         using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
         var segments=solver.CaptureRays(state,0,1);
-        int first=geometry.Length+1+settings.RaysPerBin*(2+2*settings.maxBounces);
+        int first=geometry.Length+1;
         Near(Vector3.Distance(segments[first].start,state[0].position),0,"Mirror starts at emitter");
         Near(Vector3.Distance(segments[first].end,Vector3.zero),0,"Mirror hits image-source reflection point");
         Near(segments[first].end.w,Mathf.Sqrt(2)/1000,"Mirror first leg delay",1e-7f);
@@ -132,39 +132,6 @@ public partial class TakeChecks
             Assert.That(mirror.pressureImag,Is.EqualTo(expected.Imaginary).Within(1e-6));
         }
     }
-    [TestCase(false), TestCase(true), Category("GPU")]
-    public void SurfaceBranchWeightsPreservePressure(bool planar)
-    {
-        var scene=Scene(2);scene.listeners=new[]{1};scene.objects[2].primitiveCount=1;
-        scene.dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D;
-        scene.materials=new[]{new AcousticTake.MaterialDefinition {frequencies=new[]{0f},
-            absorption=new[]{.25f},transmission=new[]{.25f},scattering=new[]{.4f}}};
-        var state=States(2);state[0].position=new Vector3(-1,0,0);state[1].position=new Vector3(-2,0,0);
-        state[2].position=Vector3.zero;state[2].flags=AcousticTake.StateFlags.Active|AcousticTake.StateFlags.Geometry;
-        var geometry=new[]{new AcousticTake.Primitive {objectIndex=2,
-            a=new Vector3(0,-1000,-1000),b=new Vector3(0,1000,-1000),c=new Vector3(0,0,1000)}};
-        var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=4;settings.raysPerBin=32768;
-        settings.maxBounces=1;settings.diffractionFactor=0;settings.airAbsorption=false;
-        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
-        var sums=new double[3];int hits=0;double[] energy={.25,.75*.6,.75*.4};
-        // Branches are drawn in proportion to pressure amplitude, so each carries the amplitude sum.
-        double split=Math.Sqrt(.25)+Math.Sqrt(.75);double[] weight={split,split*(Math.Sqrt(.6)+Math.Sqrt(.4)),split*(Math.Sqrt(.6)+Math.Sqrt(.4))};
-        foreach(var segment in solver.CaptureRays(state,0,1))
-        {
-            if(segment.path<2 || segment.path%2!=0)continue; // Exclude separately connected mirrors.
-            int branch=segment.kind==TransportSolver.RayEvent.Transmission?0:
-                segment.kind==TransportSolver.RayEvent.Reflection?1:segment.kind==TransportSolver.RayEvent.Scatter?2:-1;
-            if(branch<0)continue;
-            Assert.That(segment.pressure*settings.raysPerBin,Is.EqualTo(Math.Sqrt(.75)*weight[branch]).Within(1e-5),
-                "Surviving pressure is coefficient divided by branch probability.");
-            hits++;sums[branch]+=segment.pressure;
-        }
-        Assert.That(hits,Is.GreaterThan(8000));
-        TestContext.WriteLine($"hits={hits}; pressure T/R/S={sums[0]*settings.raysPerBin/hits}, {sums[1]*settings.raysPerBin/hits}, {sums[2]*settings.raysPerBin/hits}");
-        for(int i=0;i<3;i++)Assert.That(sums[i]*settings.raysPerBin/hits,
-            Is.EqualTo(Math.Sqrt(.75*energy[i])).Within(.035),"Each sampled branch estimates its pressure coefficient.");
-    }
-
     [Test, Category("GPU")]
     public void TransportGeometry()
     {
@@ -192,11 +159,11 @@ public partial class TakeChecks
             }
             scene.materials[0].transmission[0]=0;
             {
-                settings.diffractionFactor=.5f;
+                settings.diffractionFactor=.5f;settings.completeRouteSamples=64; // Diffraction lives in the complete early routes.
                 using var edgeSolver=new TransportSolver(scene,geometry,settings,shader,sampleRate:8000);
                 edgeSolver.Solve(state,direct);var edgeRays=edgeSolver.RayPaths;double edgeEnergy=0;
                 for(int i=65;i<edgeRays.Length;i++)edgeEnergy+=Math.Pow(edgeRays[i].pressureGain,2);
-                Check(edgeEnergy>0,"Wavelength edge paths carry sound around an opaque geometry");settings.diffractionFactor=0;
+                Check(edgeEnergy>0,"Wavelength edge paths carry sound around an opaque geometry");settings.diffractionFactor=0;settings.completeRouteSamples=0;
             }
             state[1].position=new Vector3(-1,1,0);
             RayTransport.Path[] baseline=null;
@@ -436,6 +403,7 @@ public partial class TakeChecks
         var scene=Scene();var state=States();
         // Reusing an indirect slot for an unrelated longer arrival must not discard it as negative velocity.
         var changedSettings=SpectralSettings();changedSettings.raysPerBin=1;changedSettings.maxBounces=1;
+        changedSettings.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline; // Owns one sampled slot per bin.
         var pulse=new float[768];pulse[400]=1;var changedSignal=new TakeRender.Signal(pulse);
         changedSignal.SetActive(0,true);changedSignal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
         var changedMixer=new TakeRender.Mixer(scene,8192,changedSettings,new[]{changedSignal});
@@ -541,8 +509,8 @@ public partial class TakeChecks
         }
         foreach(int fft in new[]{128,1024,2048})foreach(int rays in new[]{1,2,3})
         {
-            var settings=SpectralSettings();settings.fftSize=fft;settings.raysPerBin=rays;
-            Check(settings.RaysPerPair==settings.FrequencyBins*rays,"Every configured bin gets its requested samples");
+            var settings=SpectralSettings();settings.fftSize=fft;settings.raysPerBin=rays;settings.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline;
+            Check(settings.RaysPerPair==settings.FrequencyBins*rays,"Every configured bin gets its requested baseline mirror samples");
         }
     }
     [TestCase(false),TestCase(true),Category("GPU")]
@@ -734,28 +702,11 @@ public partial class TakeChecks
         }
     }
 
-    // Deterministic double-precision quadrature of Svensson et al. (2009),
-    // equations 1-6, truncated at the same 0.1-second horizon. These constants
-    // include complex phase, not just pressure magnitude or the old ITU fit.
-    [TestCase(false,false),TestCase(false,true),TestCase(true,false),TestCase(true,true),Category("GPU"),Category("Diffraction")]
-    public void EdgeIntegralMatchesRigidHalfPlane(bool planar,bool bvh)
-    {
-        KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        settings.useBvh=bvh;settings.fftSize=16;settings.spectralHop=4;settings.raysPerBin=65536;
-        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);solver.Solve(state,new TakeRender.DirectPath[1]);
-        int[] bins={0,1,4,8};double[] real={.156429101689,.112431573523,.004442267995,-.066639430815};
-        double[] imaginary={0,.020944020787,.083451251431,-.016598353630};
-        for(int i=0;i<bins.Length;i++)
-        {
-            var actual=EdgeResponse(solver.RayPaths,bins[i],bins[i]*62.5f);
-            Assert.That((actual-new System.Numerics.Complex(real[i],imaginary[i])).Magnitude,Is.LessThan(.004),"Complex rigid half-plane response, bin "+bins[i]);
-        }
-    }
     [TestCase(false),TestCase(true),Category("GPU"),Category("Diffraction")]
     public void EdgeShadowBoundaryRetainsPhaseAndContinuity(bool planar)
     {
         KnifeEdgeFixture(planar,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        settings.fftSize=4;settings.spectralHop=1;settings.raysPerBin=65536;
+        settings.fftSize=4;settings.spectralHop=1;settings.completeRouteSamples=65536;settings.useBvh=true;
         using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
         var expected=new System.Numerics.Complex(-.022105881,-.127143985);
         foreach(float dy in new[]{-.005f,0,.005f})
@@ -764,47 +715,11 @@ public partial class TakeChecks
             Assert.That((EdgeResponse(solver.RayPaths,1,250)-expected).Magnitude,Is.LessThan(.006),"The complex total field stays continuous across the geometrical shadow.");
         }
     }
-    [TestCase(false,false),TestCase(false,true),TestCase(true,false),TestCase(true,true),Category("GPU"),Category("Diffraction")]
-    public void EdgeChainsMatchRigidSecondOrder(bool planar,bool transformed)
-    {
-        KnifeEdgeFixture(planar,out var scene,out _,out var state);var settings=EdgeSettings();
-        settings.fftSize=8;settings.spectralHop=2;settings.raysPerBin=65536;settings.useBvh=true;settings.seed=17;
-        var geometry=TransportBox(scene.dimension,2,0,1);scene.objects[2].primitiveCount=geometry.Length;
-        state[0].position=Vector3.left*3;state[1].position=Vector3.right*3;
-        if(transformed)
-        {
-            var rotation=planar?Quaternion.Euler(0,0,37):Quaternion.Euler(12,37,9);var translation=new Vector3(4,-2,3);
-            state[2].rotation=rotation;state[2].position=translation;
-            for(int i=0;i<2;i++)state[i].position=rotation*state[i].position+translation;
-        }
-        foreach(int order in new[]{1,2})
-        {
-            settings.maxBounces=order;
-            using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);solver.Solve(state,new TakeRender.DirectPath[1]);
-            int arrivals=0;
-            foreach(var p in solver.RayPaths)if(p.pressureGain!=0)
-            {
-                arrivals++;Assert.That(float.IsFinite(p.pressureGain),Is.True);
-                Assert.That(p.delaySeconds,Is.GreaterThanOrEqualTo((2*Mathf.Sqrt(5)+2)/343-1e-6f),"No path can shortcut the solid.");
-            }
-            if(order==1)Assert.That(arrivals,Is.Zero);else Assert.That(arrivals,Is.GreaterThan(0),"Two edge events share the ordinary bounce loop.");
-            if(order!=2)continue;
-            // EDtoolbox EDwedge2nd (67e53c4f), continuous double quadrature:
-            // a shared solid face contributes 1/2, independently of triangle seams.
-            // 3D: four finite edge pairs. 2D: two infinite pairs, same 0.1 s horizon.
-            int[] bins=planar?new[]{0}:new[]{0,1,4};
-            double[] real=planar?new[]{.199807}:new[]{.160990476380,-.132356150111,-.065193018566};
-            double[] imag=planar?new[]{0d}:new[]{0d,-.077646144425,.063496034679};
-            for(int i=0;i<bins.Length;i++)
-                Assert.That((EdgeResponse(solver.RayPaths,bins[i],bins[i]*125)-new System.Numerics.Complex(real[i],imag[i])).Magnitude,
-                    Is.LessThan(.012),"Second-order complex pressure, bin "+bins[i]);
-        }
-    }
     [Test,Category("GPU"),Category("Diffraction")]
     public void MovingEdgeUsesLocalVelocityAndCurrentPose()
     {
         KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        settings.raysPerBin=64;settings.useBvh=true;
+        settings.completeRouteSamples=64;settings.useBvh=true;
         state[2].flags|=AcousticTake.StateFlags.VelocityValid;state[2].velocity=Vector3.up;
         using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);
         foreach(float y in new[]{0f,.01f})
@@ -826,7 +741,7 @@ public partial class TakeChecks
     [Test,Category("GPU"),Category("Diffraction")]
     public void TransparentGeometryDoesNotGenerateEdgeSound()
     {
-        KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();
+        KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();settings.completeRouteSamples=64;
         scene.materials[0].transmission[0]=1;
         using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
         Assert.That(solver.RayPaths[4].pressureGain,Is.EqualTo(1/Vector3.Distance(state[0].position,state[1].position)).Within(1e-6));
@@ -867,6 +782,7 @@ public partial class TakeChecks
     {
         RequireGpu();var scene=Scene();var state=States();var settings=SpectralSettings();
         settings.synthesis=method;settings.fftSize=64;settings.spectralHop=16;settings.raysPerBin=1;settings.maxBounces=1;
+        settings.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline; // Owns one sampled slot per bin.
         var signal=new TakeRender.Signal(new[]{1f});signal.SetActive(0,true);
         signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1});
         var paths=new RayTransport.Path[settings.SpectralSlotsPerPair];
@@ -889,7 +805,7 @@ public partial class TakeChecks
     public void DiffractedAudioMatchesCpuReference(TakeRender.Synthesis method)
     {
         KnifeEdgeFixture(false,out var scene,out var geometry,out var state);var settings=EdgeSettings();
-        settings.raysPerBin=16;settings.synthesis=method;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=32;
+        settings.completeRouteSamples=128;settings.synthesis=method;settings.listenerOutput=TakeRender.ListenerOutput.Binaural;settings.transitionSamples=32;
         var clip=new float[257];for(int i=0;i<clip.Length;i++)clip[i]=.2f*Mathf.Sin(i*.17f);
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
         var signals=new[]{signal};var cpu=new TakeRender.Mixer(scene,8000,settings,signals);

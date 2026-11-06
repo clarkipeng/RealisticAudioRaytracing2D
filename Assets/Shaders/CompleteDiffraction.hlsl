@@ -315,7 +315,7 @@ void DebugComplete(uint index,uint family,uint first,uint second,float3 source,f
 {
 #if defined(ACOUSTIC_DEBUG)
     if(!DebugSelected(CompleteFrame*PairCount+RayTracePair,path.frequencyBin) || (path.pressureGain==0 && path.pressureImag==0))return;
-    uint slot=PrimitiveCount+1+RaysPerBin*(2+2*MaxBounces)+2*MirrorCandidateCount+3*index;
+    uint slot=DebugCompleteBase()+3*index;
     uint identity=2*max(RaysPerBin,MirrorCandidateCount)+2+index;
     float t=length(a-source)/SpeedOfSound,pressure=path.pressureImag==0?path.pressureGain:length(float2(path.pressureGain,path.pressureImag));
     bool firstMirror=family==2 || family==4;

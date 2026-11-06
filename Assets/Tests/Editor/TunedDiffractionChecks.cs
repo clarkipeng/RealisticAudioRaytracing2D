@@ -169,7 +169,7 @@ public partial class TakeChecks
         settings.completeRouteSamples=65536;settings.maxBounces=2;settings.useBvh=true;
         using var solver=new TransportSolver(scene,geometry.ToArray(),settings,RequireGpu(),sampleRate:1000);
         var segments=solver.CaptureRays(state,0,0);
-        int start=geometry.Count+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
+        int start=geometry.Count+1+2*settings.MirrorCandidates(scene);
         double actual=0;var inverse=Quaternion.Inverse(rotation);
         for(int i=0;i<settings.CompleteSamples;i++)
         {
@@ -185,35 +185,13 @@ public partial class TakeChecks
             "Outer-edge field must follow continuous solid coverage, independent of mesh ownership and pose.");
     }
 
-    [TestCase(false),TestCase(true),Category("GPU"),Category("TunedDiffraction")]
-    public void TunedEarlyRoutesPreserveExistingDeeperInteractions(bool planar)
-    {
-        KnifeEdgeFixture(planar,out var scene,out _,out var state);
-        var geometry=TransportBox(scene.dimension,2,0,1);scene.objects[2].primitiveCount=geometry.Length;
-        scene.materials=new[]{new AcousticTake.MaterialDefinition{frequencies=new[]{0f,500f},absorption=new[]{.2f,.3f},
-            scattering=new[]{.2f,.35f},transmission=new[]{.1f,.2f},ior=new[]{1f,1.1f}}};
-        state[0].position=new Vector3(-3,.4f,0);state[1].position=new Vector3(3,-.2f,0);
-        var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=2;settings.raysPerBin=128;
-        settings.maxBounces=32;settings.maximumDelaySeconds=1.25f;settings.useBvh=true;
-        RayTransport.Path[] before;
-        using(var baseline=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000))
-        {baseline.Solve(state,new TakeRender.DirectPath[1]);before=(RayTransport.Path[])baseline.RayPaths.Clone();}
-        settings.completeRouteSamples=64;
-        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
-        solver.Solve(state,new TakeRender.DirectPath[1]);int first=settings.FrequencyBins*(1+settings.MirrorCandidates(scene));
-        for(int ray=0;ray<settings.RaysPerPair;ray++)for(int bounce=2;bounce<32;bounce++)
-        {
-            int at=first+ray*settings.PathSlotsPerRay+bounce;
-            Assert.That(solver.RayPaths[at],Is.EqualTo(before[at]),"Later interaction "+at+" (ray "+ray+", bounce "+bounce+"): before="+JsonUtility.ToJson(before[at])+" after="+JsonUtility.ToJson(solver.RayPaths[at]));
-        }
-    }
     [Test,Category("GPU"),Category("TunedDiffraction")]
     public void TunedRoutesAppearInRayCapture()
     {
         KnifeEdgeFixture(false,out var scene,out var geometry,out var state);
         var settings=EdgeSettings();settings.raysPerBin=2;settings.completeRouteSamples=128;settings.fftSize=8;settings.spectralHop=2;
         using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000);
-        var segments=solver.CaptureRays(state,0,1);int first=geometry.Length+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
+        var segments=solver.CaptureRays(state,0,1);int first=geometry.Length+1+2*settings.MirrorCandidates(scene);
         int diffracted=0,arrivals=0;
         for(int i=first;i<segments.Length;i++)
         {

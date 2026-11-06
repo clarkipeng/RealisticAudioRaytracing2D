@@ -44,7 +44,10 @@ public partial class TakeChecks
     }
 
     // Family order of every stored family axis. R is the deterministic first-order
-    // image set; D..RR are complete early routes; walk is the residual random walk.
+    // image set; D..RR are complete early routes. "walk" was the coherent residual
+    // walk, removed in solver v14; the slot stays (always zero) so the dataset schema
+    // and older renders keep one family axis. The late field is an energy histogram
+    // and is not a complex-pressure family.
     static readonly string[] DatasetFamilies={"direct","R","D","DD","RD","DR","RR","walk"};
 
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
@@ -136,8 +139,8 @@ public partial class TakeChecks
                 settings.speedOfSound=job.speedOfSound;settings.maximumDelaySeconds=job.maximumDelaySeconds;settings.minimumDistance=.01f;
                 settings.familyGains=job.familyGains;
                 using var solver=new TransportSolver(scene,geometry,settings,shader,sampleRate:job.sampleRate);
-                int bins0=settings.FrequencyBins,walkStart=bins0*(1+settings.MirrorCandidates(scene));
-                int completeStart=walkStart+settings.RaysPerPair*settings.PathSlotsPerRay;
+                int bins0=settings.FrequencyBins,mirrorEnd=bins0*(1+settings.MirrorCandidates(scene));
+                int completeStart=mirrorEnd+settings.RaysPerPair*settings.PathSlotsPerRay;
                 state[1].position=WaveVector(job.points);solver.Solve(state,direct); // Exclude cold dispatch.
                 long paced=System.Diagnostics.Stopwatch.GetTimestamp();
                 for(int point=0;point<points;point++)
@@ -156,7 +159,7 @@ public partial class TakeChecks
                         var path=paths[i];
                         if(path.pressureGain==0 && path.pressureImag==0)continue;
                         int q=binIndex[path.frequencyBin];if(q<0)continue;
-                        int family=i<bins0?0:i<walkStart?1:i<completeStart?7:-1;
+                        int family=i<bins0?0:i<completeStart?1:-1;
                         if(family<0)
                         {
                             int route=sampleFamilies[(i-completeStart)/bins0];
@@ -302,7 +305,7 @@ public partial class TakeChecks
         solver.Solve(state,new TakeRender.DirectPath[1]);
         var hook=solver.CompleteSampleFamilies();const int bin=1;
         var segments=solver.CaptureRays(state,0,bin);
-        int start=geometry.Length+1+settings.RaysPerBin*(2+2*settings.maxBounces)+2*settings.MirrorCandidates(scene);
+        int start=geometry.Length+1+2*settings.MirrorCandidates(scene);
         var seen=new HashSet<int>();int captured=0;
         for(int sample=0;sample<settings.CompleteSamples;sample++)
         {

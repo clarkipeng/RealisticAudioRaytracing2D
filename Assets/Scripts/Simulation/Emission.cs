@@ -87,6 +87,15 @@ internal static class Emission
         internal readonly Range[] Ranges;
         internal readonly Vector4[] Points;
         internal readonly Clock[] Clocks;
+        // Stable emission sites for the late energy field, independent of the burst
+        // schedule: a point source's origin, a legacy plane's fixed sites, or fixed
+        // draws from a burst plane's density (projected impacts use the first
+        // prepared pose). w is the site's energy weight, mean 1 over its source.
+        internal struct LateRange { public int first,count,world,reserved; }
+        internal readonly Vector4[] LateSites;
+        internal readonly LateRange[] LateRanges;
+        internal const int LateSitesPerPlane=64;
+        bool latePlaced;
         readonly AcousticTake.Scene scene;
         readonly TakeRender.Settings settings;
         readonly PlaneSampler[] samplers;
@@ -117,6 +126,14 @@ internal static class Emission
                 if(p.generatorVersion!=0){samplers[p.source]=new PlaneSampler(p);positions[p.source]=new Dictionary<long,Placement>();keys[p.source]=SourceKey(scene.objects[scene.sources[p.source].objectIndex].id,p.seed);}
             }
             for(int s=0;s<planes.Length;s++)PointsPerFrame=checked(PointsPerFrame+(planes[s]?.samples??1));
+            LateRanges=new LateRange[planes.Length];int lateCapacity=0;
+            for(int s=0;s<planes.Length;s++)
+            {
+                var p=planes[s];int capacity=Math.Min(settings.lateRays,p==null?1:p.generatorVersion==0?p.samples:LateSitesPerPlane);
+                LateRanges[s]=new LateRange{first=lateCapacity,world=p!=null&&p.generatorVersion==3?1:0};lateCapacity=checked(lateCapacity+capacity);
+            }
+            LateSites=new Vector4[lateCapacity];
+            for(int s=0;s<planes.Length;s++)if(planes[s]==null || planes[s].generatorVersion!=3)PlaceLateSites(s,null);
             Points=new Vector4[checked(PointsPerFrame*frames)];Clocks=new Clock[Points.Length];Ranges=new Range[checked(planes.Length*frames)];pose=new AcousticTake.State[scene.objects.Length];
             for(int f=0;f<frames;f++)for(int s=0,at=f*PointsPerFrame;s<planes.Length;s++)
             {
@@ -126,9 +143,45 @@ internal static class Emission
                 at+=count;
             }
         }
-        internal void Prepare(TakeRender.Signal[] signals,long first,int frames,Action<long,AcousticTake.State[]> evaluate)
+        // Fills one source's late sites. Projected impacts land on the surface below
+        // their plane point at the given pose; misses are not sites.
+        bool PlaceLateSites(int s,AcousticTake.State[] state)
+        {
+            var p=planes[s];var range=LateRanges[s];int capacity=(s+1<LateRanges.Length?LateRanges[s+1].first:LateSites.Length)-range.first;
+            var sites=new List<Vector4>();
+            if(p==null)sites.Add(new Vector4(0,0,0,1));
+            else if(p.generatorVersion==0)for(int n=0;n<capacity;n++){var site=AudioSourcePlane.Sample(p,n);if(site.w>0)sites.Add(new Vector4(site.x,site.y,site.z,site.w*site.w));}
+            else if(samplers[s].Mass>0)for(int n=0;n<capacity;n++)
+            {
+                var local=samplers[s].Sample(Random(keys[s],-1,n,16),Random(keys[s],-1,n,17),Random(keys[s],-1,n,18),out double pdf);
+                if(pdf<=0 || local.w<=0)continue;
+                Vector3 position=local;
+                if(p.generatorVersion==3)
+                {
+                    var pose=state[scene.sources[s].objectIndex];
+                    if(!surfaces.Raycast(pose.position+pose.rotation*position,Vector3.down,state,out var hit))continue;
+                    position=hit.position+hit.normal*SurfaceOffset;
+                }
+                sites.Add(new Vector4(position.x,position.y,position.z,(float)(local.w/pdf)));
+            }
+            double mean=0;foreach(var site in sites)mean+=site.w;mean/=Math.Max(1,sites.Count);
+            bool changed=range.count!=sites.Count;
+            for(int n=0;n<sites.Count;n++)
+            {
+                var site=sites[n];site.w=(float)(site.w/mean);
+                changed|=!site.Equals(LateSites[range.first+n]);LateSites[range.first+n]=site;
+            }
+            range.count=sites.Count;LateRanges[s]=range;return changed;
+        }
+        // Returns whether the late sites changed (projected impacts follow the pose).
+        internal bool Prepare(TakeRender.Signal[] signals,long first,int frames,Action<long,AcousticTake.State[]> evaluate)
         {
             Configure(scene,signals);
+            // Projected late sites land once, at the first prepared pose; impacts keep their own births.
+            bool lateChanged=false;
+            for(int s=0;s<planes.Length;s++)if(planes[s]!=null && planes[s].generatorVersion==3 && !latePlaced)
+            {evaluate(first,pose);surfaces.Update(pose);lateChanged|=PlaceLateSites(s,pose);}
+            latePlaced=true;
             for(int s=0;s<planes.Length;s++)if(positions[s]!=null)
             {
                 expired.Clear();foreach(long birth in positions[s].Keys)if(birth<first-history-planes[s].burstDurationSamples)expired.Add(birth);
@@ -186,6 +239,7 @@ internal static class Emission
                 }
                 Ranges[row]=range;
             }
+            return lateChanged;
         }
     }
 }

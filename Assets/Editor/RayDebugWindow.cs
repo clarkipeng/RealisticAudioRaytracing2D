@@ -135,8 +135,10 @@ public sealed class RayDebugWindow : EditorWindow
         Repaint();
     }
 
+    // Direct, first-image mirrors (1 + 2 * candidate) and complete routes (identity hashes).
+    // The late energy field is a histogram, not captured rays.
     static string PathName(uint id) => id == 0 ? "Direct"
-                                               : $"Ray {(id - 1) / 2} · {(id % 2 == 1 ? "mirror" : "walk")}";
+                                               : id % 2 == 1 && id < 0x10000 ? $"Mirror {(id - 1) / 2}" : $"Route {id:x8}";
     Vector3 World(AcousticTake.Primitive primitive, Vector3 point) => states[primitive.objectIndex].position
                                                                       + states[primitive.objectIndex].rotation
                                                                             * point;

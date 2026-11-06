@@ -153,12 +153,12 @@ class Worker:
         finally:
             if process.poll() is None:
                 if suspended:
-                    os.killpg(process.pid, signal.SIGCONT)
-                os.killpg(process.pid, signal.SIGTERM)
+                    self._signal(process, signal.SIGCONT)
+                self._signal(process, signal.SIGTERM)
                 try:
                     process.wait(timeout=30)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    self._signal(process, signal.SIGKILL)
                     process.wait()
             awake.wait(timeout=10)
             for s, h in previous.items():
@@ -166,6 +166,18 @@ class Worker:
         return dict(exitCode=process.returncode, wallSeconds=time.monotonic() - started,
                     pausedSeconds=self.paused_seconds, peakTreeRssBytes=max([s['treeRssBytes'] for s in self.samples] or [0]),
                     samples=self.samples[::6])
+
+    @staticmethod
+    def _signal(process, number):
+        """Signal the worker's group during cleanup; macOS refuses killpg (EPERM) once the
+        leader is exiting, so fall back to the process itself and ignore a finished one."""
+        try:
+            os.killpg(process.pid, number)
+        except (PermissionError, ProcessLookupError):
+            try:
+                process.send_signal(number)
+            except ProcessLookupError:
+                pass
 
     @staticmethod
     def _interrupt(signum, frame):

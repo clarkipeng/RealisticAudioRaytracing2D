@@ -45,9 +45,13 @@ public partial class TakeChecks
         var scene=Scene();scene.sources=new[]{scene.sources[0],new AcousticTake.SourceDefinition{objectIndex=0,clipIndex=0}};
         var p=BurstPlane(16);p.generatorVersion=2;p.burstDurationSamples=5;scene.planes=new[]{p};
         var settings=BurstSettings();settings.raysPerBin=1;
+        // Only the baseline mirror estimator still assigns sampled rays to burst events.
+        settings.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline;
         var layout=new RayTransport.Layout(scene,settings);
         Assert.That(layout.RayCounts[0],Is.EqualTo(16*settings.FrequencyBins));
         Assert.That(layout.RayCounts[1],Is.EqualTo(settings.FrequencyBins));
+        settings.reflectionSampling=TakeRender.ReflectionSampling.FirstImages;
+        Assert.That(new RayTransport.Layout(scene,settings).RayCounts[0],Is.Zero,"First Images trace no sampled path rays.");
         var pcm=new[]{0f,.4f,-.2f,.1f,0f};var signals=new[]{BurstSignal(pcm),BurstSignal(pcm)};
         var batch=new Emission.Batch(scene,settings,8192,1);
         batch.Prepare(signals,64,1,(_,pose)=>Array.Copy(States(),pose,pose.Length));
@@ -62,7 +66,8 @@ public partial class TakeChecks
         scene.objects[1].primitiveCount=256;settings.reflectionCandidates=2;
         Assert.That(settings.MirrorCandidates(scene),Is.EqualTo(2),"Event capacity must not increase the per-event reflection budget.");
         var bounded=new RayTransport.Layout(scene,settings);
-        Assert.That(bounded.Ranges[0].y,Is.EqualTo(settings.FrequencyBins*(16*3+16*settings.maxBounces)));
+        // Direct plus two mirror candidates per retained event; the late field owns no path slots.
+        Assert.That(bounded.Ranges[0].y,Is.EqualTo(settings.FrequencyBins*16*3));
     }
 
     [Test,Category("Core")]

@@ -37,12 +37,12 @@ public static partial class TakeRender
         public Transport transport;
         public Synthesis synthesis=Synthesis.Spectral;
         public AudioBackend audioBackend;
-        [Min(1)] public int raysPerBin=1;
+        [Min(1),Tooltip("Rays per frequency bin for the PrimitiveBaseline mirror estimator; also the floor of the First Images candidate budget.")] public int raysPerBin=1;
         [Tooltip("Keep complete first-order mirror routes as delayed audio arrivals. PrimitiveBaseline preserves the old estimator for comparisons.")]
         public ReflectionSampling reflectionSampling;
         [Min(1), Tooltip("Minimum mirror candidates per emission. The candidate budget also grows with rays per bin; small scenes enumerate every primitive.")]
         public int reflectionCandidates=128;
-        [Min(0),Tooltip("Complete one/two-interaction diffraction and mixed reflection paths per emission. Zero retains the legacy walk for comparisons.")]
+        [Min(0),Tooltip("Complete one/two-interaction diffraction and mixed reflection paths per emission (D, DD, RD, DR, RR). Zero keeps only direct sound and first images in the early part.")]
         public int completeRouteSamples;
         internal int CompleteSamples => maxBounces>0?completeRouteSamples:0;
         [Tooltip("Opt-in level-preserving gains for the sampled early families (first-order images and complete routes), fitted offline; data in Resources/Acoustics/FamilyGains.json. Needs complete routes and First Images. Off renders the unbiased estimator.")]
@@ -50,8 +50,21 @@ public static partial class TakeRender
         [NonSerialized] internal FamilyGainTable familyGainTable; // Checks only; null reads the shipped table.
         internal FamilyGainTable FamilyGains => familyGains?familyGainTable??FamilyGainTable.Shipped():null;
         internal int CompleteSlots(AcousticTake.Scene scene) => checked(CompleteSamples*(scene.dimension==AcousticTake.Dimension.Planar2D?2:1));
-        [Min(0), Tooltip("Zero renders direct sound only, including material transmission, with no reflection or diffraction paths.")]
+        [Min(0), Tooltip("Maximum interactions per path, early and late. Zero renders direct sound only, including material transmission, with no reflection or diffraction paths.")]
         public int maxBounces=5;
+        [Min(1),Tooltip("Energy rays per octave band and source/listener pair for the late field. Its variance falls as one over this count.")]
+        public int lateRays=512;
+        [Tooltip("Receiver sphere radius (m) for late specular energy. Larger spheres lower variance and smear arrival times by up to 2r/c.")]
+        public float lateReceiverRadius=.5f;
+        internal const int LateBands=8,LateDirections=6;
+        // One late histogram bin per DSP partition. A partition never exceeds the
+        // DSP latency (so its block convolution is causal) and divides the response
+        // step (so late responses change on block boundaries).
+        internal int LatePartition => Math.Min(Math.Min(fftSize,1024),responseStepSamples&-responseStepSamples);
+        internal int LateBins(int rate) => maxBounces==0?0:checked((int)Math.Ceiling(maximumDelaySeconds*(double)rate/LatePartition));
+        // Specular order held by the phase-exact early part: first images, plus
+        // second-order images in the complete routes' RR family.
+        internal int LateEarlyOrder => CompleteSamples>0 && maxBounces>1?2:1;
         public int seed;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
         public int FrequencyBins => fftSize/2+1;
@@ -61,8 +74,9 @@ public static partial class TakeRender
         {
             if(raysPerPair>0 && FrequencyBins>0){raysPerBin=RaysPerBin;raysPerPair=0;}
         }
-        public int RaysPerPair => maxBounces==0 ? 0:checked(FrequencyBins*RaysPerBin);
-        public int PathSlotsPerRay => checked(maxBounces+(reflectionSampling==ReflectionSampling.PrimitiveBaseline?1:0));
+        // Sampled mirror rays of the PrimitiveBaseline estimator; First Images enumerate candidates instead.
+        public int RaysPerPair => maxBounces==0 || reflectionSampling!=ReflectionSampling.PrimitiveBaseline ? 0:checked(FrequencyBins*RaysPerBin);
+        public int PathSlotsPerRay => reflectionSampling==ReflectionSampling.PrimitiveBaseline?1:0;
         // Geometry-free point-source capacity. Use SlotsPerPair(scene) or Layout
         // for real scenes, whose complete mirrors have their own route range.
         public int SpectralSlotsPerPair => checked(FrequencyBins+RaysPerPair*PathSlotsPerRay);
@@ -89,7 +103,7 @@ public static partial class TakeRender
             }
             return maximum;
         }
-        [Tooltip("Experimental sampled edge transport: 1 uses signed rigid-wedge contributions; 0 disables diffraction. Use completeRouteSamples for tuned early routes; raysPerBin controls the residual walk.")]
+        [Tooltip("Signed rigid-wedge diffraction in the complete early routes: 1 uses the wedge model; 0 disables diffraction. The late energy field has no diffraction.")]
         [Min(0)] public float diffractionFactor=1;
         public bool airAbsorption=true;
         [Min(2)] public int fftSize=1024,spectralHop=256;
@@ -244,14 +258,14 @@ public static partial class TakeRender
             listenerCount=scene.listeners.Length, objectCount=scene.objects.Length, primitiveCount=take.Geometry.Length, outputSamples=length,channelsPerListener=settings.ChannelsPerListener };
         if(settings.transport==Transport.Raytraced)
         {
-            report.method=settings.CompleteSamples>0?"complete-early-routes-edge-preview-v13":"integrated-first-mirrors-edge-preview-v13";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-complex-fir-hrtf-v2":"path-clock-complex-spectral-v4";
+            report.method=settings.CompleteSamples>0?"complete-early-routes-late-energy-v14":"first-images-late-energy-v14";report.provenance.solverContract=report.method;report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"partitioned-complex-fir-hrtf-late-noise-v3":"path-clock-complex-spectral-late-noise-v5";
             if(useGpuAudio)
             {
-                report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-complex-path-filter-overlap-save-v2":"gpu-path-clock-complex-spectral-v4";
+                report.provenance.dspContract=settings.synthesis==Synthesis.ImpulseResponse?"gpu-complex-path-filter-overlap-save-late-noise-v3":"gpu-path-clock-complex-spectral-late-noise-v5";
                 report.audioShaderDependencyHash=AcousticTake.Provenance.Capture(Resources.Load<ComputeShader>("Acoustics/GpuAudio")).shaderDependencyHash;
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
-            report.transportDescription="Synthesis="+settings.synthesis+". Frequency-dependent geometric reflection/scattering/transmission/refraction, air/material attenuation and sampled signed finite-edge diffraction inside the path loop (experimental rigid-wedge model); not a validated wave reference. CPU IR uses partitioned linear convolution; GPU IR uses equivalent delayed short filters with overlap-save. Spectral uses continuous path clocks and short filters with overlap-save. First mirrors use retarded image sources with locally constant rigid velocity; other occluders and diffuse/diffraction geometry remain frozen at solve time. Mirror selection="+settings.reflectionSampling+", candidate budget floor="+settings.reflectionCandidates+". FirstImages retains each candidate as a separate delayed arrival. Complete early-route samples="+settings.CompleteSamples+"; positive values use the wave-tuned signed one/two-edge integral with D/DD/RD/DR/RR route families; the walk then forms no consecutive edges (the legacy walk keeps one edge-to-edge leg), so D3+ edge chains are omitted. Walk branches are drawn in proportion to pressure amplitude. Planar walls share the original integral; finite 3D edges extend its sampling and are not validated as a full room-wave solution.";
+            report.transportDescription="Synthesis="+settings.synthesis+". Phase-exact early sound: retarded direct arrivals with material transmission, first-order image sources (selection="+settings.reflectionSampling+", candidate budget floor="+settings.reflectionCandidates+"; First Images keep each candidate as a separate delayed arrival) and, with complete early-route samples="+settings.CompleteSamples+", the wave-tuned signed one/two-edge integral for D/DD/RD/DR/RR. Late field: incoherent energy from "+settings.lateRays+" rays per octave band (8 bands, 125 Hz-16 kHz) with deterministic absorption/air loss and transmission/diffuse/specular continuations chosen by energy fraction, detected by diffuse rain and a "+settings.lateReceiverRadius+" m receiver sphere into a head-frame six-direction energy histogram; paths held by the early part (direct/transmitted-only and unobstructed specular paths up to order "+settings.LateEarlyOrder+") are excluded and the late field has no diffraction. It is synthesized as seeded band-split noise shaped by the histogram envelope (Polack), with diffuse-field interaural coherence for binaural output, by partitioned convolution of each source's emitted signal. First mirrors use retarded image sources with locally constant rigid velocity; other geometry is frozen at solve time. Not a validated wave reference.";
             if(settings.maxBounces==0)
                 report.transportDescription="Synthesis="+settings.synthesis+". Direct sound only: retarded direct arrivals, occlusion, material transmission/interior travel and air/material attenuation. No reflected, scattered or diffracted paths are allocated or traced. Existing source recordings may contain their own reverberation.";
         }
@@ -301,8 +315,8 @@ public static partial class TakeRender
                     if(settings.ResponseSample(0)>0)
                     {
                         take.Evaluate(0,state);solver.PrepareEmissions(signals,0,1,EvaluateEmission);solver.Solve(state,response);
-                        if(useGpuAudio){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state,0);gpuAudio.CompletePreparation();}
-                        else mixer.SetResponse(0,response,state,true,solver.RayPaths,0,0);
+                        if(useGpuAudio){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state,0,late:solver.Late(0));gpuAudio.CompletePreparation();}
+                        else mixer.SetResponse(0,response,state,true,solver.RayPaths,0,0,late:solver.Late(0));
                         writer.Write(0L);foreach(var path in response)WritePath(writer,path);report.responseCount++;
                     }
                     for (long first=0; first<length; first+=(long)batchCapacity*settings.responseStepSamples)
@@ -337,8 +351,8 @@ public static partial class TakeRender
                             long anchor=settings.ResponseSample(sample);
                             if(headStates!=null){take.Evaluate(Math.Min(sample,metadata.durationSamples),headStates);if(sample>metadata.durationSamples)FreezeMotion(headStates);}
                             bool cut=(settings.transport==Transport.Raytraced || settings.transitionSamples>0) && take.HasCut(settings.ResponseSample(sample-settings.responseStepSamples),anchor);
-                            if(useGpuAudio)gpuAudio.SetResponse(sample,cut,solver.RayBuffer,f*solver.RayPathsPerFrame,scene,state,anchor,headStates);
-                            else mixer.SetResponse(sample,response,state,cut,solver.RayPaths,f*solver.RayPathsPerFrame,anchor,headStates);
+                            if(useGpuAudio)gpuAudio.SetResponse(sample,cut,solver.RayBuffer,f*solver.RayPathsPerFrame,scene,state,anchor,headStates,solver.Late(f));
+                            else mixer.SetResponse(sample,response,state,cut,solver.RayPaths,f*solver.RayPathsPerFrame,anchor,headStates,solver.Late(f));
                             double responseTime=Elapsed(start);report.audioSeconds+=responseTime;report.responsePreparationSeconds+=responseTime;
                             start=Stopwatch.GetTimestamp();
                             writer.Write(anchor);
@@ -514,6 +528,7 @@ public static partial class TakeRender
         readonly Hrtf hrtf;
         readonly SpectralAudio spectral;
         readonly ImpulseResponseAudio ir;
+        readonly LateReverb late;
         readonly TakeRender.DelayFilter delayFilter;
         readonly int sincRadius;
         readonly Hrtf.Blend[] earBlend,oldEarBlend;
@@ -521,9 +536,10 @@ public static partial class TakeRender
         bool initialized;
         int fade;
         long directSupport;
-        public long ResponseSupportSamples => spectral?.ResponseSupportSamples??ir?.ResponseSupportSamples??directSupport;
-        public long NumericBytes => spectral?.NumericBytes??ir?.NumericBytes??(long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
-            (long)(earBlend.Length+oldEarBlend.Length)*32+(long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0);
+        readonly long lateSupport;
+        public long ResponseSupportSamples => Math.Max(lateSupport,spectral?.ResponseSupportSamples??ir?.ResponseSupportSamples??directSupport);
+        public long NumericBytes => (late?.NumericBytes??0)+(spectral?.NumericBytes??ir?.NumericBytes??(long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
+            (long)(earBlend.Length+oldEarBlend.Length)*32+(long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0));
         public Mixer(AcousticTake.Scene scene,int sampleRate,Settings settings,Signal[] signals)
         {
             AudioSourcePlane.ValidateRender(scene,settings);
@@ -534,6 +550,11 @@ public static partial class TakeRender
             {
                 if(settings.synthesis==Synthesis.ImpulseResponse)ir=new ImpulseResponseAudio(scene,sampleRate,settings,signals);
                 else spectral=new SpectralAudio(scene,sampleRate,settings,signals);
+                if(settings.maxBounces>0)
+                {
+                    Emission.Configure(scene,signals);late=new LateReverb(scene,sampleRate,settings,signals);
+                    lateSupport=(long)settings.LateBins(sampleRate)*settings.LatePartition+settings.DspLatencySamples;
+                }
                 return;
             }
             earBlend=new Hrtf.Blend[scene.sources.Length*scene.listeners.Length];oldEarBlend=new Hrtf.Blend[earBlend.Length];
@@ -551,12 +572,18 @@ public static partial class TakeRender
             delay=new long[current.Length]; oldDelay=new long[delay.Length];
         }
         public void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut=false) => SetResponse(sample,paths,state,cut,null,0);
-        internal void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut,RayTransport.Path[] arrivals,int offset,long? anchor=null,AcousticTake.State[] headStates=null)
+        // late: the solved frame's late energy; default renders no late field.
+        internal void SetResponse(long sample,DirectPath[] paths,AcousticTake.State[] state,bool cut,RayTransport.Path[] arrivals,int offset,long? anchor=null,AcousticTake.State[] headStates=null,RayTransport.LateFrame late=default)
         {
             if(paths.Length!=signals.Length*scene.listeners.Length || state.Length!=scene.objects.Length || (initialized && sample<responseSample)) throw new ArgumentException("Invalid response order/shape.");
             if(spectral!=null || ir!=null)
             {
                 if(spectral!=null)spectral.SetResponse(sample,cut,arrivals,offset,scene,state,anchor,headStates);else ir.SetResponse(sample,cut,arrivals,offset,scene,state);
+                if(this.late!=null)
+                {
+                    bool lateCut=cut;foreach(var s in state)lateCut|=(s.flags&AcousticTake.StateFlags.Cut)!=0;
+                    this.late.SetResponse(sample,lateCut,late,state);
+                }
                 responseSample=sample;initialized=true;return;
             }
             ValidatePaths(paths);
@@ -603,8 +630,13 @@ public static partial class TakeRender
             using(mixMarker.Auto())
             {
                 if(!initialized || sample<responseSample || count<0 || count>maximumBlock || interleaved.Length<(long)count*scene.listeners.Length*channels) throw new ArgumentException("Invalid mix block.");
-                if(spectral!=null){spectral.Render(sample,count,interleaved);return;}
-                if(ir!=null){ir.Render(sample,count,interleaved);return;}
+                if(spectral!=null || ir!=null)
+                {
+                    if(spectral!=null)spectral.Render(sample,count,interleaved);else ir.Render(sample,count,interleaved);
+                    late?.Render(sample,count,interleaved);
+                    for(int i=0;i<count*scene.listeners.Length*channels;i++)if(!float.IsFinite(interleaved[i]))throw new InvalidOperationException("Non-finite late audio.");
+                    return;
+                }
                 int length=count*enabled.Length*channels; Array.Clear(mixed,0,length);
                 for(int s=0;s<signals.Length;s++) for(int l=0;l<enabled.Length;l++)
                 {
@@ -687,14 +719,15 @@ public static partial class TakeRender
                 throw new ArgumentException("Invalid mirror route sampling settings.");
             if(settings.fftSize<2 || (settings.fftSize&(settings.fftSize-1))!=0 || settings.spectralHop<1 || settings.spectralHop>settings.fftSize/2 ||
                 settings.fftSize%settings.spectralHop!=0 || settings.responseStepSamples%settings.spectralHop!=0 ||
-                settings.RaysPerBin<1 || settings.maxBounces<0 || !float.IsFinite(settings.diffractionFactor) || settings.diffractionFactor<0)
-                throw new ArgumentException("Raytraced transport needs a power-of-two FFT, a dividing hop no larger than half the FFT, response steps divisible by the hop, positive ray counts and nonnegative bounce counts (zero is direct sound only).");
+                settings.RaysPerBin<1 || settings.maxBounces<0 || !float.IsFinite(settings.diffractionFactor) || settings.diffractionFactor<0 ||
+                settings.lateRays<1 || !PositiveFinite(settings.lateReceiverRadius))
+                throw new ArgumentException("Raytraced transport needs a power-of-two FFT, a dividing hop no larger than half the FFT, response steps divisible by the hop, positive ray counts, a positive late receiver radius and nonnegative bounce counts (zero is direct sound only).");
             checked { _=settings.SpectralSlotsPerPair; }
         }
     }
     static bool PositiveFinite(float value) { return value>0 && !float.IsInfinity(value); }
-    // The gains were fitted for the complete-route families and first-image mirrors;
-    // the legacy walk and primitive-baseline mirrors mix other families into those slots.
+    // The gains were fitted for the complete-route families together with first-image
+    // mirrors; primitive-baseline mirrors use a different estimator in those slots.
     internal static void ValidateFamilyGains(Settings settings)
     {
         if(settings.familyGains && (settings.transport!=Transport.Raytraced || settings.CompleteSamples==0 || settings.reflectionSampling!=ReflectionSampling.FirstImages))

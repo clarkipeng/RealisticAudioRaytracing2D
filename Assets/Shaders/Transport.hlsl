@@ -1,6 +1,7 @@
 #include "DiffractionIntegral.hlsl"
-// Shared geometric preview: surface and signed edge events share a path loop.
-// This is not a validated wave/diffraction reference.
+// Shared transport: phase-exact direct sound, first-order images and complete
+// early routes (CompleteDiffraction.hlsl); the late field is incoherent energy
+// (LateEnergy.hlsl). This is not a validated wave/diffraction reference.
 struct RayMaterial
 {
     // surface: absorption, scattering, transmission, relative slowness (air speed / material speed).
@@ -47,7 +48,7 @@ StructuredBuffer<uint4> EmissionClocks; // phase/clip offset, birth low/high, re
 uint EmissionFrameStride;
 uint RaysPerBin, RaySeed, RayTracePair;
 uint FrequencyBins, RaysPerPair, MaxBounces, EdgeCount, VolumeCount, UseAirAbsorption;
-uint MirrorCandidateCount, MirrorSiteCapacity, UseVisibleMirrors,UseCompleteRoutes;
+uint MirrorCandidateCount, MirrorSiteCapacity, UseVisibleMirrors;
 float FrequencyStep, DiffractionFactor, MaximumPathDelay;
 // Fixed slots per captured ray avoid atomics and never truncate a path. All stores
 // and selection checks compile out of the normal transport variant.
@@ -73,6 +74,10 @@ bool DebugSelected(uint query, uint bin)
     return true;
 #endif
 }
+// Capture slots: direct crossings, then baseline (2 per ray) or visible (2 per
+// candidate) mirrors, then complete routes (3 per sample).
+uint DebugMirrorBase() { return PrimitiveCount + 1; }
+uint DebugCompleteBase() { return DebugMirrorBase() + 2 * (UseVisibleMirrors != 0 ? MirrorCandidateCount : RaysPerBin); }
 void DebugClearDirect()
 {
 #if defined(ACOUSTIC_DEBUG)
@@ -265,53 +270,9 @@ void EdgeFrame(uint id, uint stateOffset, bool is2D, out float3 a, out float3 ax
     normal = Rotate(pose.rotation, edge.normal.xyz);
     angle = edge.face.w;
 }
-float EdgeAngle(float3 direction, float3 face, float3 normal, float exterior)
-{
-    float2 radial = float2(dot(direction, face), dot(direction, normal));
-    float angle = atan2(radial.y, radial.x);
-    angle = angle < 0 ? angle + 2 * RayPi : angle;
-    // Face-grazing connections use the visibility tolerance. Rigid rotation
-    // must not wrap roundoff at zero to 2*pi and classify the ray as solid.
-    if (min(angle, 2 * RayPi - angle) * length(radial) <= RayEpsilon)
-        angle = 0;
-    if (abs(angle - exterior) * length(radial) <= RayEpsilon)
-        angle = exterior;
-    return angle;
-}
 float4 EdgeAngles(float source, float receiver)
 {
     return RayPi + float4(source + receiver, source - receiver, -source + receiver, -source - receiver);
-}
-float EdgeKernel(uint id, uint stateOffset, float3 source, float3 edgePoint, float3 receiver, bool is2D)
-{
-    float3 a, axis, face, normal;
-    float extent, angle;
-    EdgeFrame(id, stateOffset, is2D, a, axis, face, normal, extent, angle);
-    float3 incoming = source - edgePoint, outgoing = receiver - edgePoint;
-    float m = length(incoming), l = length(outgoing), zs = dot(incoming, axis), zr = dot(outgoing, axis);
-    float rs = length(incoming - zs * axis), rr = length(outgoing - zr * axis);
-    if (rs <= RayEpsilon || rr <= RayEpsilon)
-        return 0;
-    float ts = EdgeAngle(incoming, face, normal, angle), tr = EdgeAngle(outgoing, face, normal, angle);
-    if (ts > angle || tr > angle)
-        return 0; // Inside the solid wedge.
-    float nu = RayPi / angle;
-    // Rationalize cosh(eta)-1; subtracting nearly equal products loses the
-    // narrow peak next to a shadow boundary in single precision.
-    float axial = rs * zr + rr * zs;
-    float x = abs(axial) / sqrt(2 * rs * rr * (m * l + rs * rr - zs * zr));
-    float sinhHalf = x < .01 ? nu * x * (1 + (nu * nu - 1) * x * x / 6) : sinh(nu * log(x + sqrt(1 + x * x)));
-    float4 phi = nu * EdgeAngles(ts, tr), halfSine = sin(phi * .5);
-    float beta = 0;
-    for (uint i = 0; i < 4; i++)
-    {
-        float denominator = 2 * (sinhHalf * sinhHalf + halfSine[i] * halfSine[i]);
-        // Principal value at the exact zone boundary; geometrical components
-        // use half weight there. Avoid subtracting nearly equal cosh/cos values.
-        if (abs(halfSine[i]) > 1e-6)
-            beta += sin(phi[i]) / denominator;
-    }
-    return -nu * beta / (4 * RayPi);
 }
 // EDtoolbox EDwedge2nd/EDwedgeN: an edge-to-edge leg on a shared
 // solid face has multiplicity 1/2. Thin-sheet edge pairs retain both sides.
@@ -374,58 +335,6 @@ float EdgeHeight(float center, float scale, float span, float extent, float u, b
     float2 weights = lengths * sin(float2(u, 1 - u) * span);
     return extent * (weights.x / (weights.x + weights.y));
 }
-// A mixture of the current listener-blocking face's edges and all scene edges.
-// The global component keeps every edge reachable, including multi-edge routes.
-// Sampling probability includes both components even when they select the same edge.
-bool SampleEdge(uint stateOffset, float3 source, float3 receiver, bool is2D, inout uint rng, out uint id,
-                out float3 edgePoint, out float inversePdf)
-{
-    id = 0;
-    edgePoint = 0;
-    inversePdf = 0;
-    float distance = length(receiver - source);
-    uint hit;
-    float t;
-    float3 n;
-    uint2 local = 0;
-    if (distance > RayEpsilon && NearestHit(stateOffset, source, (receiver - source) / distance,
-                                            distance - RayEpsilon, is2D, hit, t, n))
-        local = EdgeRanges[hit];
-    bool localSample = local.y > 0 && RandomRay(rng) < .5;
-    id = localSample ? EdgeIndices[local.x + min(local.y - 1, (uint)(RandomRay(rng) * local.y))]
-                     : min(EdgeCount - 1, (uint)(RandomRay(rng) * EdgeCount));
-    float probability = (local.y > 0 ? .5 : 1) / EdgeCount;
-    for (uint i = 0; i < local.y; i++)
-        if (EdgeIndices[local.x + i] == id)
-            probability += .5 / local.y;
-    if ((States[stateOffset + Edges[id].ids.x].flags.x & 3) != 3)
-        return false;
-    float3 a, axis, face, normal;
-    float extent, angle;
-    EdgeFrame(id, stateOffset, is2D, a, axis, face, normal, extent, angle);
-    float3 s = source - a, r = receiver - a;
-    float zs = dot(s, axis), zr = dot(r, axis);
-    float rs = length(s - zs * axis), rr = length(r - zr * axis);
-    if (rs <= RayEpsilon || rr <= RayEpsilon)
-        return false;
-    float apex = (zs * rr + zr * rs) / (rs + rr);
-    float m = length(s - apex * axis), l = length(r - apex * axis), nu = RayPi / angle;
-    float4 phi = nu * EdgeAngles(EdgeAngle(s, face, normal, angle), EdgeAngle(r, face, normal, angle));
-    // Cauchy importance sampling resolves narrow zone-boundary contributions.
-    // Planar scenes model point sources around infinitely extruded XY geometry.
-    float4 scale = max(RayEpsilon, 2 * abs(sin(phi * .5)) * (m * l / (m + l)) / nu);
-    float4 span = EdgeHeightSpan(apex, scale, extent, is2D);
-    uint component = min(3u, (uint)(RandomRay(rng) * 4));
-    float u = clamp(RandomRay(rng), 1e-7, 1 - 1e-7);
-    float z = EdgeHeight(apex, scale[component], span[component], extent, u, is2D);
-    float4 delta = z - apex;
-    float4 density = scale / ((scale * scale + delta * delta) * span);
-    float pdf = probability * dot(density, float4(.25, .25, .25, .25));
-    edgePoint = a + axis * z;
-    inversePdf = 1 / pdf;
-    return isfinite(inversePdf) && inversePdf > 0;
-}
-
 // Retarded source position; interfaces retain the scene pose of this solve.
 // Iteration follows piecewise material travel time, not distance / air speed.
 void EvaluateDirect(uint index, bool is2D)
@@ -666,13 +575,15 @@ void PrepareMirrors(uint index, bool is2D)
     uint primitive=(candidate+HashRay(source*0x85ebca6b+listener+RaySeed+birthSeed)%PrimitiveCount)%PrimitiveCount;
     float3 emission=EmissionPosition(stateOffset,pair/ListenerCount,site);
     float3 velocity=plane.w==2?float3(0,0,0):PointVelocity(stateOffset+source,emission);
-    uint debug=PrimitiveCount+1+RaysPerBin*(2+2*MaxBounces)+2*candidate;
+    uint debug=DebugMirrorBase()+2*candidate;
     RayPath arrival=FirstReflection(stateOffset,source,listener,bin,candidate,is2D,debug,emission,velocity,
         primitive,(float)PrimitiveCount/MirrorCandidateCount,true);
     RayPaths[slot]=ApplyEmission(arrival,emissionRow,site,0);
 }
 #include "CompleteDiffraction.hlsl"
-void TracePaths(uint index, bool is2D)
+// PrimitiveBaseline comparison estimator: each ray samples one primitive's first
+// image. First Images (the default) enumerate candidates in PrepareMirrors instead.
+void BaselineMirrors(uint index, bool is2D)
 {
     if (index >= FrameCount * RaysPerPair)
         return;
@@ -680,17 +591,11 @@ void TracePaths(uint index, bool is2D)
          query = frame * PairCount + pair;
     uint stateOffset = frame * ObjectCount, source = Sources[pair / ListenerCount],
          listener = Listeners[pair % ListenerCount];
-    // Walks follow the direct/mirror prefix. Complete routes append after the
-    // walk, so the end of the pair is no longer its starting-offset invariant.
-    uint first = frame*RayPathsPerFrame + RayPairRanges[pair].x +
-        MirrorSiteCapacity*FrequencyBins*(1+(UseVisibleMirrors!=0?MirrorCandidateCount:0)) + ray*PathSlotsPerRay;
-    for (uint k = 0; k < PathSlotsPerRay; k++)
-        RayPaths[first + k] = (RayPath)0;
+    uint slot = frame*RayPathsPerFrame + RayPairRanges[pair].x + MirrorSiteCapacity*FrequencyBins + ray*PathSlotsPerRay;
+    RayPaths[slot] = (RayPath)0;
     if (RayPairEnabled[query] == 0 || !DebugSelected(query, ray / RaysPerBin))
         return;
-    uint frequencyBin = ray / RaysPerBin, rng = HashRay((ray % RaysPerBin) + pair * 0x85ebca6b + RaySeed + 1);
-    uint debugBase = PrimitiveCount + 1 + (ray % RaysPerBin) * (2 + 2 * MaxBounces),
-         debugPath = 2 + 2 * (ray % RaysPerBin);
+    uint frequencyBin = ray / RaysPerBin;
     uint sourceIndex=pair/ListenerCount,emissionRow=frame*EmissionFrameStride+sourceIndex;
     uint4 plane=EmissionRanges[emissionRow];
     if(plane.y==0)return;
@@ -698,214 +603,13 @@ void TracePaths(uint index, bool is2D)
     uint localRay=plane.w==2?(ray%RaysPerBin)/plane.y:ray%RaysPerBin;
     uint raysForEmission=plane.w==2?1+(RaysPerBin-1-sampleIndex)/plane.y:RaysPerBin;
     uint birthSeed=0;
-    if(plane.w==2){uint4 clock=EmissionClocks[plane.x+sampleIndex];birthSeed=HashRay(clock.y)^HashRay(clock.z);rng=HashRay(localRay^birthSeed^HashRay(pair+RaySeed));}
+    if(plane.w==2){uint4 clock=EmissionClocks[plane.x+sampleIndex];birthSeed=HashRay(clock.y)^HashRay(clock.z);}
     if(EmissionPoints[plane.x+sampleIndex].w==0)return;
     float3 emission=EmissionPosition(stateOffset,sourceIndex,sampleIndex);
     float3 emissionVelocity=plane.w==2?float3(0,0,0):PointVelocity(stateOffset+source,emission);
-    if(UseVisibleMirrors==0)
-    {
-        uint primitive=PrimitiveCount==0?0:(localRay+birthSeed+HashRay(source*0x85ebca6b+listener+RaySeed))%PrimitiveCount;
-        RayPath mirror=FirstReflection(stateOffset,source,listener,frequencyBin,localRay+birthSeed,is2D,debugBase,emission,emissionVelocity,
-            primitive,(float)PrimitiveCount/RaysPerBin,true);
-        RayPaths[first++]=ApplyEmission(mirror,emissionRow,sampleIndex,raysForEmission);
-    }
-    debugBase+=2;
-    float frequencyHz = max(1, frequencyBin * FrequencyStep);
-    float3 position = emission,
-           end = States[stateOffset + listener].position.xyz;
-    if (is2D)
-    {
-        position.z = 0;
-        end.z = 0;
-    }
-    float3 direction = UnitDirection(rng, is2D);
-    float gain = 1, time = 0;
-    float2 materialWeight=float2(1,0);
-    uint medium = MediumAt(stateOffset, position, is2D);
-    float3 sourceVelocity = emissionVelocity,
-           listenerVelocity = Velocity(stateOffset + listener);
-    if (is2D)
-    {
-        sourceVelocity.z = 0;
-        listenerVelocity.z = 0;
-    }
-    float frequencyRatio = 1;
-    uint identity = HashRay(0x80000000u ^ localRay);
-    float weight = 1.0 / RaysPerBin;
-    uint previousEdge = 0xffffffff;
-    float3 edgeSource = position, vertexVelocity = sourceVelocity;
-    float edgeDistance = 0, spreadingDistance = 0;
-    bool canSampleEdge = true,hadSurface=false;
-    float3 surfaceNormal = 0;
-    float surfaceScatter = 1, edgeGain = 0;
-    float2 edgeMaterialWeight = materialWeight;
-    for (uint bounce = 0; bounce < MaxBounces; bounce++)
-    {
-        float3 segmentStart = position;
-        float segmentTime = time;
-        uint debugSlot = debugBase + 2 * bounce;
-        float currentIor = MediumIor(medium, frequencyBin), speed = SpeedOfSound / currentIor,
-              limit = (MaximumPathDelay - time) * speed;
-        if (limit <= 0 || gain == 0)
-            break;
-        // Edge and surface choices share the same path state, bounce budget,
-        // BVH and arrival slots. No route graph or separate diffraction dispatch.
-        float edgeProbability =
-            DiffractionFactor > 0 && EdgeCount > 0 && medium == AirMedium && canSampleEdge ? .5 : 0;
-        if (edgeProbability > 0 && RandomRay(rng) < edgeProbability)
-        {
-            uint edge;
-            float3 edgePoint;
-            float inversePdf;
-            if (!SampleEdge(stateOffset, position, end, is2D, rng, edge, edgePoint, inversePdf) ||
-                edge == previousEdge)
-                break;
-            float distance = length(edgePoint - position);
-            if (distance <= RayEpsilon || distance > limit ||
-                !Visible(stateOffset, position, edgePoint, is2D))
-            {
-                DebugWrite(debugSlot, debugPath, DebugRejected, -1, position, edgePoint, time,
-                           time + distance / speed, gain * weight);
-                break;
-            }
-            float3 incoming = (edgePoint - position) / distance;
-            frequencyRatio /= 1 - dot(vertexVelocity, incoming) / speed;
-            if (previousEdge != 0xffffffff)
-            {
-                gain *= EdgeConnectionWeight(previousEdge, edge) *
-                        EdgeKernel(previousEdge, stateOffset, edgeSource, position, edgePoint, is2D) / edgeDistance;
-                spreadingDistance = 0;
-            }
-            else if (bounce > 0)
-            {
-                // Diffuse surface-to-edge leg: restart from the surface vertex. The
-                // continuation draws made there belong to the discarded direction.
-                gain = edgeGain * surfaceScatter * max(0, dot(surfaceNormal, incoming));
-                materialWeight = edgeMaterialWeight;
-            }
-            Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
-            spreadingDistance += distance;
-            gain *= inversePdf * DiffractionFactor * EdgeOpacity(edge, frequencyBin) / edgeProbability;
-            // Preserve the previous vertex exactly when this is an edge-to-edge leg.
-            edgeSource = position - incoming * (spreadingDistance - distance);
-            edgeDistance = spreadingDistance;
-            vertexVelocity = PointVelocity(stateOffset + Edges[edge].ids.x, edgePoint);
-            frequencyRatio *= 1 - dot(vertexVelocity, incoming) / speed;
-            position = edgePoint;
-            DebugWrite(debugSlot, debugPath, DebugDiffraction, Primitives[Edges[edge].ids.y].indices.y,
-                       segmentStart, position, segmentTime, time, gain * weight);
-            identity = HashRay(identity ^ (edge + 1) ^ 0x20000000u);
-            float last = length(end - position);
-            if ((UseCompleteRoutes==0 || hadSurface) && last > RayEpsilon && Visible(stateOffset, position, end, is2D))
-            {
-                float3 outgoing = (end - position) / last;
-                float ratio = frequencyRatio * (1 - dot(listenerVelocity, outgoing) / speed) /
-                              (1 - dot(vertexVelocity, outgoing) / speed);
-                float pressure = gain * EdgeKernel(edge, stateOffset, edgeSource, position, end, is2D) /
-                                 (edgeDistance * last) * ReferenceDistance * weight *
-                                 exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last);
-                RayPath candidate =
-                    ApplyEmission(ApplyMaterial(Arrival(position, end, time + last / speed, pressure, frequencyBin, ratio, identity),materialWeight),emissionRow,sampleIndex,raysForEmission);
-                RayPaths[first+bounce]=candidate;
-                DebugArrival(debugSlot+1,debugPath,position,end,time,candidate);
-            }
-            // Each edge-to-edge leg multiplies the weight by K / (leg * pdf), whose
-            // absolute mean exceeds one in measured box scenes: longer pure-edge
-            // chains have no usable variance. Runs stop at the complete-route order.
-            canSampleEdge = UseCompleteRoutes == 0 && previousEdge == 0xffffffff;
-            previousEdge = edge;
-            direction = UnitDirection(rng, is2D);
-            continue;
-        }
-        gain /= 1 - edgeProbability;
-        uint hit;
-        float distance;
-        float3 normal;
-        bool intersects = NearestHit(stateOffset, position, direction, limit, is2D, hit, distance, normal);
-        if (!intersects)
-        {
-            DebugWrite(debugSlot, debugPath, DebugEscape, -1, position, position + direction * limit, time,
-                       MaximumPathDelay, gain * weight);
-            break;
-        }
-        frequencyRatio /= 1 - dot(vertexVelocity, direction) / speed;
-        if (previousEdge != 0xffffffff)
-        {
-            gain *= EdgeKernel(previousEdge, stateOffset, edgeSource, position,
-                               position + direction * distance, is2D) /
-                    edgeDistance;
-            spreadingDistance = 0;
-            previousEdge = 0xffffffff;
-        }
-        hadSurface=true;
-        position += direction * distance;
-        Travel(distance, medium, frequencyBin, frequencyHz, time, gain);
-        spreadingDistance += distance;
-        RayMaterial material = RayMaterials[Primitives[hit].indices.y * FrequencyBins + frequencyBin];
-        gain *= sqrt(saturate(1 - material.surface.x));
-        bool entering = dot(direction, normal) < 0;
-        float3 n = entering ? normal : -normal;
-        float3 velocity = PointVelocity(stateOffset + Primitives[hit].indices.x, position);
-        if (is2D)
-            velocity.z = 0;
-        identity = HashRay(identity ^ (hit + 1));
-        float3 toListener = normalize(end - position);
-        vertexVelocity = velocity;
-        frequencyRatio *= 1 - dot(velocity, direction) / speed;
-        float arrivalRatio = frequencyRatio / (1 - dot(velocity, toListener) / speed) *
-                             (1 - dot(listenerVelocity, toListener) / speed);
-        float last = length(end - position), cosine = last > 0 ? max(0, dot(n, (end - position) / last)) : 0;
-        if (cosine > 0 && Visible(stateOffset, position + n * RayEpsilon, end, is2D))
-        {
-            RayPath candidate =
-                ApplyEmission(ApplyMaterial(Arrival(position, end, time + last / speed,
-                        gain * sqrt(saturate((1 - material.surface.z) * material.surface.y)) * weight *
-                            cosine * .5 * exp(-MediumLoss(medium, frequencyBin, frequencyHz) * last) *
-                            ReferenceDistance / max(MinimumDistance, spreadingDistance + last),
-                        frequencyBin, arrivalRatio, identity),materialWeight),emissionRow,sampleIndex,raysForEmission);
-            RayPaths[first+bounce]=candidate;
-            DebugArrival(debugSlot+1,debugPath,position,end,time,candidate);
-        }
-        surfaceNormal = n;
-        surfaceScatter = sqrt(saturate((1 - material.surface.z) * material.surface.y));
-        canSampleEdge = surfaceScatter > 0;
-        uint nextMedium = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
-        float nextIor = MediumIor(nextMedium, frequencyBin);
-        float transmission = saturate(material.surface.z);
-        float3 transmitted = refract(direction, n, currentIor / nextIor);
-        if (dot(transmitted, transmitted) == 0)
-            transmission = 0; // Total internal reflection leaves no transmitted branch.
-        // Energy fractions give pressure coefficients sqrt(t), sqrt((1-t)s) and
-        // sqrt((1-t)(1-s)). Branches are drawn in proportion to those amplitudes,
-        // so every choice carries the same bounded weight (their sum).
-        float passed = sqrt(transmission), reflected = sqrt(1 - transmission);
-        float chooseTransmission = passed / (passed + reflected);
-        edgeGain = chooseTransmission < 1 ? gain / (1 - chooseTransmission) : 0;
-        edgeMaterialWeight = materialWeight;
-        gain *= passed + reflected;
-        uint eventKind;
-        if (RandomRay(rng) < chooseTransmission)
-        {
-            identity = HashRay(identity ^ 0x10000000u);
-            direction = normalize(transmitted);
-            medium = nextMedium;
-            canSampleEdge = false;
-            eventKind = DebugTransmission;
-        }
-        else
-        {
-            float3 diffuse = UnitDirection(rng, is2D);
-            if (dot(diffuse, n) < 0)
-                diffuse = -diffuse;
-            float scattering = sqrt(saturate(material.surface.y)), specular = sqrt(1 - saturate(material.surface.y));
-            bool scattered = RandomRay(rng) < scattering / (scattering + specular);
-            gain *= scattering + specular;
-            if(material.medium.w!=0)
-                materialWeight=ComplexProduct(materialWeight,ReflectionPressure(material,abs(dot(direction,n))));
-            direction = scattered ? diffuse : reflect(direction, n);
-            eventKind = scattered ? DebugScatter : DebugReflection;
-        }
-        DebugWrite(debugSlot, debugPath, eventKind,
-                   Primitives[hit].indices.y, segmentStart, position, segmentTime, time, gain * weight);
-    }
+    uint primitive=PrimitiveCount==0?0:(localRay+birthSeed+HashRay(source*0x85ebca6b+listener+RaySeed))%PrimitiveCount;
+    RayPath mirror=FirstReflection(stateOffset,source,listener,frequencyBin,localRay+birthSeed,is2D,DebugMirrorBase()+2*(ray%RaysPerBin),
+        emission,emissionVelocity,primitive,(float)PrimitiveCount/RaysPerBin,true);
+    RayPaths[slot]=ApplyEmission(mirror,emissionRow,sampleIndex,raysForEmission);
 }
+#include "LateEnergy.hlsl"

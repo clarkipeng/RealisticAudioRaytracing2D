@@ -7,10 +7,15 @@
 #pragma kernel EvaluateDirect2DBvh USE_BVH
 #pragma kernel EvaluateDirect3D
 #pragma kernel EvaluateDirect3DBvh USE_BVH
-#pragma kernel Trace2D
-#pragma kernel Trace2DBvh USE_BVH
-#pragma kernel Trace3D
-#pragma kernel Trace3DBvh USE_BVH
+#pragma kernel BaselineMirrors2D
+#pragma kernel BaselineMirrors2DBvh USE_BVH
+#pragma kernel BaselineMirrors3D
+#pragma kernel BaselineMirrors3DBvh USE_BVH
+#pragma kernel TraceLate2D
+#pragma kernel TraceLate2DBvh USE_BVH
+#pragma kernel TraceLate3D
+#pragma kernel TraceLate3DBvh USE_BVH
+#pragma kernel ClearLate
 #pragma kernel PrepareMirrors2D
 #pragma kernel PrepareMirrors2DBvh USE_BVH
 #pragma kernel PrepareMirrors3D
@@ -75,10 +80,15 @@ void EvaluateDirectProbe(uint pair, bool is2D)
 [numthreads(64, 1, 1)] void EvaluateDirect3D(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, false); }
 [numthreads(64, 1, 1)] void EvaluateDirect3DBvh(uint3 id : SV_DispatchThreadID) { EvaluateDirect(id.x, false); }
 
-[numthreads(64, 1, 1)] void Trace2D(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, true); }
-[numthreads(64, 1, 1)] void Trace2DBvh(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, true); }
-[numthreads(64, 1, 1)] void Trace3D(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, false); }
-[numthreads(64, 1, 1)] void Trace3DBvh(uint3 id : SV_DispatchThreadID) { TracePaths(id.x, false); }
+[numthreads(64, 1, 1)] void BaselineMirrors2D(uint3 id : SV_DispatchThreadID) { BaselineMirrors(id.x, true); }
+[numthreads(64, 1, 1)] void BaselineMirrors2DBvh(uint3 id : SV_DispatchThreadID) { BaselineMirrors(id.x, true); }
+[numthreads(64, 1, 1)] void BaselineMirrors3D(uint3 id : SV_DispatchThreadID) { BaselineMirrors(id.x, false); }
+[numthreads(64, 1, 1)] void BaselineMirrors3DBvh(uint3 id : SV_DispatchThreadID) { BaselineMirrors(id.x, false); }
+[numthreads(64, 1, 1)] void TraceLate2D(uint3 id : SV_DispatchThreadID) { TraceLate(id.x, true); }
+[numthreads(64, 1, 1)] void TraceLate2DBvh(uint3 id : SV_DispatchThreadID) { TraceLate(id.x, true); }
+[numthreads(64, 1, 1)] void TraceLate3D(uint3 id : SV_DispatchThreadID) { TraceLate(id.x, false); }
+[numthreads(64, 1, 1)] void TraceLate3DBvh(uint3 id : SV_DispatchThreadID) { TraceLate(id.x, false); }
+[numthreads(64, 1, 1)] void ClearLate(uint3 id : SV_DispatchThreadID) { ClearLateCells(id.x); }
 [numthreads(64, 1, 1)] void PrepareMirrors2D(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, true); }
 [numthreads(64, 1, 1)] void PrepareMirrors2DBvh(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, true); }
 [numthreads(64, 1, 1)] void PrepareMirrors3D(uint3 id : SV_DispatchThreadID) { PrepareMirrors(id.x, false); }
