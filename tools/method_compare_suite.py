@@ -34,6 +34,7 @@ import numpy as np
 
 import dlss_scenes as ds
 import fdtd_wave as fw
+import heavy_guard as hg
 import method_compare as mc
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -292,7 +293,7 @@ def fdtd_transfer_spectrum(pressure, q, dt, pad_seconds=.3):
     return H.T, f[1] - f[0]
 
 
-def run_band(scene, fc, work_fraction=.2, memory_gib=4.0, power=None):
+def run_band(scene, fc, work_fraction=hg.WORK_FRACTION, memory_gib=4.0, power=None):
     """Solve one band and store its band energy and raw receiver record."""
     folder = FDTD / scene['sceneId']
     folder.mkdir(parents=True, exist_ok=True)
@@ -336,7 +337,7 @@ def run_band(scene, fc, work_fraction=.2, memory_gib=4.0, power=None):
     return info
 
 
-def run_gt(ids=None, work_fraction=.2, memory_gib=4.0, bands=None):
+def run_gt(ids=None, work_fraction=hg.WORK_FRACTION, memory_gib=4.0, bands=None):
     import dlss_jobs as dj
     power = dj.PowerCheck()
     order = sorted(plan(ids), key=lambda r: r['gcell'])          # cheapest first
@@ -499,14 +500,14 @@ def main(argv=None):
     g = sub.add_parser('gt', help='Run missing ground-truth bands (cheapest first)')
     g.add_argument('scenes', nargs='*')
     g.add_argument('--bands', type=float, nargs='*')
-    g.add_argument('--work-fraction', type=float, default=.2)
+    g.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     g.add_argument('--memory-gib', type=float, default=4.0)
     a_ = sub.add_parser('assemble', help='Write gt/ref/0 from finished band runs')
     a_.add_argument('scenes', nargs='*')
     sub.add_parser('selftest', help='Harness self-test: gt vs gt and a perturbed method, in a separate root')
     v = sub.add_parser('validate', help='Absorbing-wall validation studies')
     v.add_argument('study', choices=['reflection', 'shoebox', 'refine', 'report'])
-    v.add_argument('--work-fraction', type=float, default=.2)
+    v.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     a = p.parse_args(argv)
     if a.command == 'build':
         suite = build()
@@ -519,7 +520,7 @@ def main(argv=None):
             print(f'{r["scene"]:24s} {r["band"]:6g} Hz h={r["spacing"]*100:6.4g} cm {r["cells"]/1e6:7.1f} M cells '
                   f'{r["steps"]:6d} steps {r["gcell"]:8.0f} Gcell {r["gib"]:5.2f} GiB {"done" if r["done"] else ""}')
         print(f'remaining {total:.0f} Gcell updates = {total / 1.9 / 60:.0f} GPU min at 1.9 Gcell/s '
-              f'({total / 1.9 / 60 / .2 / 60:.1f} h at 20% pacing)')
+              f'({total / 1.9 / 60 / hg.WORK_FRACTION / 60:.1f} h at {hg.WORK_FRACTION:.0%} pacing)')
     elif a.command == 'gt':
         run_gt(a.scenes or None, a.work_fraction, a.memory_gib, a.bands)
     elif a.command == 'assemble':

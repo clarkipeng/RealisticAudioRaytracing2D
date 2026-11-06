@@ -23,6 +23,7 @@ MIN_START_LEVEL = 25                     # kern.memorystatus_level: percent of m
 MIN_RUN_LEVEL = 12
 NORMAL, WARNING, CRITICAL = 1, 2, 4      # kern.memorystatus_vm_pressure_level
 MAX_SWAP_GROWTH = 1 * GIB
+WORK_FRACTION = .5                       # default pacing: work half the time, idle half
 
 _libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
 

@@ -24,6 +24,7 @@ import numpy as np
 from scipy.special import wofz
 
 import fdtd_wave as fw
+import heavy_guard as hg
 import method_compare as mc
 import method_compare_suite as suite
 
@@ -75,7 +76,7 @@ def weyl_van_der_pol(zeta, theta, k, r2):
 
 # --------------------------------------------------------------------------- reflection
 
-def reflection(work_fraction=.2):
+def reflection(work_fraction=hg.WORK_FRACTION):
     OUT.mkdir(parents=True, exist_ok=True)
     hs, r2 = .25, 2.5
     thetas = np.radians(np.arange(0, 81, 10))
@@ -248,7 +249,7 @@ def shoebox_case(alpha, furnished, fc, spacing, duration, work_fraction):
     return e[:, 0], vb, timing
 
 
-def shoebox(work_fraction=.2):
+def shoebox(work_fraction=hg.WORK_FRACTION):
     OUT.mkdir(parents=True, exist_ok=True)
     rows = []
     duration = 1.25
@@ -303,7 +304,7 @@ REFINE = [('barriers-0020-presets', 250.), ('canopy-0009-presets', 250.), ('furn
           ('doorway-0008-presets', 250.)]
 
 
-def refine(work_fraction=.2):
+def refine(work_fraction=hg.WORK_FRACTION):
     OUT.mkdir(parents=True, exist_ok=True)
     import dlss_jobs as dj
     results = []
@@ -444,5 +445,5 @@ def report(work_fraction=None):
     print(json.dumps(out, indent=1, default=mc._json)[:6000])
 
 
-def main(study, work_fraction=.2):
+def main(study, work_fraction=hg.WORK_FRACTION):
     dict(reflection=reflection, shoebox=shoebox, refine=refine, report=report)[study](work_fraction)

@@ -207,7 +207,7 @@ public partial class TakeChecks
         }
         finally {UnityEngine.Object.DestroyImmediate(root);UnityEngine.Object.DestroyImmediate(a);UnityEngine.Object.DestroyImmediate(b);}
     }
-    [TestCase(0,false),TestCase(17,false),TestCase(17,true),Category("SolidBake"),Category("GPU")]
+    [TestCase(0,false),TestCase(17,false),TestCase(17,true),Category("SolidBake"),Category("GPU"),Category("Slow")]
     public void SolidPartitionsHaveMatchingTransport(int seed,bool moving)
     {
         SolidPython();var material=RigidSolidMaterial("rigid");

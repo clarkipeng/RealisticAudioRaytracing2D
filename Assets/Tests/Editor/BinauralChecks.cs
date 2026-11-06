@@ -96,7 +96,7 @@ public partial class TakeChecks
     }
 
     [TestCase(false, Category="Core")]
-    [TestCase(true, Category="GPU")]
+    [TestCase(true, Category="GPU,Slow")]
     public void BinauralStreaming(bool gpu)
     {
         var shader=gpu?RequireGpu():null;

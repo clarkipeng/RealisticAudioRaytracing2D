@@ -7,7 +7,7 @@ using UnityEngine;
 public partial class TakeChecks
 {
     [TestCase(128,TakeRender.ListenerOutput.Mono),TestCase(128,TakeRender.ListenerOutput.Binaural)]
-    [TestCase(2048,TakeRender.ListenerOutput.Binaural),Category("GPU")]
+    [TestCase(2048,TakeRender.ListenerOutput.Binaural,Category="Slow"),Category("GPU")]
     public void GpuPathReductionMatchesReference(int size,TakeRender.ListenerOutput ears)
     {
         RequireGpu();const int rate=8192;var scene=Scene(2);var state=States(2);
@@ -172,7 +172,7 @@ public partial class TakeChecks
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Binaural, TakeRender.DelayFilter.Linear, 128, 1)]
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Binaural, TakeRender.DelayFilter.WindowedSinc, 128, 1)]
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Mono, TakeRender.DelayFilter.Linear, 2048, 1)]
-    [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Binaural, TakeRender.DelayFilter.Linear, 2048, 1)]
+    [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Binaural, TakeRender.DelayFilter.Linear, 2048, 1, Category="Slow")]
     [TestCase(TakeRender.Synthesis.Spectral, TakeRender.ListenerOutput.Mono, TakeRender.DelayFilter.Linear, 128, 32)]
     [Category("GPU")]
     public void GpuAudioParity(TakeRender.Synthesis method,TakeRender.ListenerOutput ears,TakeRender.DelayFilter delay,int size,int rays)

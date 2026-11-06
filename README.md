@@ -426,6 +426,16 @@ The current GPU stores one material spectrum per path group and response bank, s
 
 ## Checks
 
+From a terminal, use the tiered runner instead of ad hoc filters.
+It runs in an isolated copy of the project, one heavy job at a time, and waits until macOS reports normal memory pressure.
+
+```sh
+PY=.context/fdtd-teacher/venv/bin/python
+$PY tools/unity_tests.py quick                  # every change: everything except Slow
+$PY tools/unity_tests.py full                   # once before a commit
+$PY tools/unity_tests.py run "TakeChecks.Late"  # one area
+```
+
 Open **Window → General → Test Runner → EditMode → Acoustics.Tests**. Tests use fresh scenes and temporary directories; Unity restores the original scene setup. Unexpected Unity errors fail. GPU cases skip unsupported hardware and never substitute CPU results.
 
 | Category | Coverage |
@@ -435,6 +445,7 @@ Open **Window → General → Test Runner → EditMode → Acoustics.Tests**. Te
 | `Integration` | Streaming/offline agreement, response batching and audio files |
 | `Voice` | Source persistence, resampling, Opus order/loss, self-monitor masks and tail draining |
 | `EndToEnd` | Offline comparison; church/station recording/reconstruction/replay; explicit realtime delivery |
+| `Slow` | Cases over 10 s (solid partitions, 2048-sample GPU audio/binaural streaming); excluded from the quick tier |
 | `Realtime` | Short silent callback/recording smoke; explicit station deadline benchmark |
 | `Device` | Explicit microphone lifecycle test; no microphone PCM saved or transmitted |
 

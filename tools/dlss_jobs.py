@@ -1,7 +1,7 @@
 """Guarded workers for the audio-DLSS dataset: scene generation, Unity tracer
 renders and the FDTD wave subset.
 
-Every heavy job runs at nice 19 with one worker, 20% work pacing, a memory guard
+Every heavy job runs at nice 19 with one worker, 50% work pacing, a memory guard
 and a pause while the Mac runs on battery (the FDTD study's power hook; Unity
 workers are suspended with SIGSTOP and resumed with SIGCONT). Bulk outputs stay
 under the data root (default .context/audio-dlss-data), never in Assets/.
@@ -431,21 +431,21 @@ def main():
     r = sub.add_parser('render')
     r.add_argument('--batch', type=int, default=6)
     r.add_argument('--scenes', nargs='*')
-    r.add_argument('--work-fraction', type=float, default=.2)
+    r.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     r.add_argument('--variant', choices=['tracer', 'tracer-rigid'], default='tracer')
     r.add_argument('--fdtd-subset', type=int, help='render only the FDTD-selected scenes')
     q = sub.add_parser('reproduce')
     q.add_argument('scenes', nargs='+')
-    q.add_argument('--work-fraction', type=float, default=.2)
+    q.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     t = sub.add_parser('test')
     t.add_argument('filter')
-    t.add_argument('--work-fraction', type=float, default=.2)
+    t.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     f = sub.add_parser('fdtd')
     f.add_argument('--select', type=int, default=24)
     f.add_argument('--scenes', nargs='*')
     f.add_argument('--spacing', type=float)
     f.add_argument('--tag', default='fdtd')
-    f.add_argument('--work-fraction', type=float, default=.2)
+    f.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     f.add_argument('--list', action='store_true')
     a = p.parse_args()
     data = a.data.resolve()

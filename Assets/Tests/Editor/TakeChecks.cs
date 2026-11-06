@@ -40,7 +40,7 @@ public partial class TakeChecks
                 double fraction=double.Parse(budget,System.Globalization.CultureInfo.InvariantCulture);
                 if(!(fraction>0 && fraction<=1))throw new ArgumentException("Invalid acoustic test work fraction.");
                 double work=System.Diagnostics.Process.GetCurrentProcess().TotalProcessorTime.TotalSeconds-pacedTestCpuStarted;
-                UnityEngine.Debug.Log($"Acoustic test CPU work: {work:F3}s; pacing fraction {fraction:F2}; {TestContext.CurrentContext.Test.Name}");
+                UnityEngine.Debug.LogFormat(LogType.Log,LogOption.NoStacktrace,null,"Acoustic test CPU work: {0:F3}s; pacing fraction {1:F2}; {2}",work,fraction,TestContext.CurrentContext.Test.Name);
                 // Credit waits and pacing already performed inside long measurements.
                 double elapsed=TakeRender.Elapsed(pacedTestWallStarted);
                 double idle=Math.Max(0,work/fraction-elapsed);

@@ -84,7 +84,7 @@ public partial class TakeChecks
 
     [TestCase(128,TakeRender.Synthesis.Spectral,false,false)]
     [TestCase(128,TakeRender.Synthesis.ImpulseResponse,false,false)]
-    [TestCase(2048,TakeRender.Synthesis.Spectral,false,false)]
+    [TestCase(2048,TakeRender.Synthesis.Spectral,false,false,Category="Slow")]
     [TestCase(128,TakeRender.Synthesis.Spectral,true,false)]
     [TestCase(128,TakeRender.Synthesis.Spectral,false,true)]
     [Category("GPU"),Category("CompleteRoutes")]

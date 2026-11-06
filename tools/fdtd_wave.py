@@ -407,13 +407,13 @@ class Simulation:
         self.steps += 1
 
     def run(self, source, receivers, duration, peak_hz, plane=None, plane_hz=(),
-            work_fraction=.2, batch_seconds=.1, progress=None, pause=None):
+            work_fraction=hg.WORK_FRACTION, batch_seconds=.1, progress=None, pause=None):
         """Run under the machine-wide heavy-job lock so FDTD and Unity jobs never overlap."""
         with hg.HeavyLock():
             return self._run(source, receivers, duration, peak_hz, plane, plane_hz, work_fraction, batch_seconds, progress, pause)
 
     def _run(self, source, receivers, duration, peak_hz, plane=None, plane_hz=(),
-            work_fraction=.2, batch_seconds=.1, progress=None, pause=None):
+            work_fraction=hg.WORK_FRACTION, batch_seconds=.1, progress=None, pause=None):
         """Inject a monopole pulse at `source` and record pressure at `receivers`.
 
         Returns time series p^n (n = 0..N) at the receivers, the source signal
@@ -551,7 +551,7 @@ def material_ids(wall_admittance):
 
 
 def solve(scene, spacing, hz, duration, peak_hz=None, pml=16, margin=.5, reflection=1e-6,
-          order=3, alpha=0.0, free_field=False, plane=None, work_fraction=.2,
+          order=3, alpha=0.0, free_field=False, plane=None, work_fraction=hg.WORK_FRACTION,
           memory_limit=4 * GIB, progress=None, pause=None, wall_admittance=None, extra_points=None):
     """Complex pressure at the scene's receivers, normalised to exp(-ikr)/r.
 
@@ -639,7 +639,7 @@ def main():
     r.add_argument('--reflection', type=float, default=1e-6)
     r.add_argument('--free-field', action='store_true', help='Ignore walls (analytic control)')
     r.add_argument('--plane', nargs=2, type=float, metavar=('AXIS', 'VALUE'))
-    r.add_argument('--work-fraction', type=float, default=.2)
+    r.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     r.add_argument('--memory-gib', type=float, default=4)
     b = sub.add_parser('bench', help='Measure throughput')
     b.add_argument('--sizes', type=int, nargs='+', default=[128, 192, 256, 320])
