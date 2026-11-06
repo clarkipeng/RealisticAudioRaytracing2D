@@ -1,5 +1,8 @@
 """Machine-wide guard for heavy Unity/GPU jobs on a shared 16 GB Mac.
 
+A heavy job starts only when macOS reports normal memory pressure, and stops if
+pressure turns critical, available memory falls below 12% or swap grows 1 GiB.
+
 `ps` RSS omits Metal/MPS allocations, so an RSS limit cannot see GPU memory.
 `phys_footprint` (Activity Monitor's "Memory" column) includes it. Every heavy
 job takes one machine-wide lock, so FDTD and Unity runs never overlap, and stops
@@ -18,6 +21,7 @@ LOCK_PATH = Path.home() / '.cache' / 'acoustics-heavy-job.lock'
 HELD_ENV = 'ACOUSTICS_HEAVY_LOCK_HELD'   # set for children of a lock holder
 MIN_START_LEVEL = 25                     # kern.memorystatus_level: percent of memory available
 MIN_RUN_LEVEL = 12
+NORMAL, WARNING, CRITICAL = 1, 2, 4      # kern.memorystatus_vm_pressure_level
 MAX_SWAP_GROWTH = 1 * GIB
 
 _libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
@@ -55,6 +59,11 @@ def memory_level():
                               capture_output=True, text=True).stdout)
 
 
+def memory_pressure():
+    return int(subprocess.run(['sysctl', '-n', 'kern.memorystatus_vm_pressure_level'],
+                              capture_output=True, text=True).stdout)
+
+
 def swap_used():
     text = subprocess.run(['sysctl', '-n', 'vm.swapusage'], capture_output=True, text=True).stdout
     value, unit = re.search(r'used = ([\d.]+)([MG])', text).groups()
@@ -68,6 +77,8 @@ class SystemWatch:
         self.swap_start = swap_used()
 
     def problem(self):
+        if memory_pressure() >= CRITICAL:
+            return 'macOS memory pressure is critical'
         level = memory_level()
         if level < MIN_RUN_LEVEL:
             return f'system memory available fell to {level}%'
@@ -93,8 +104,10 @@ class HeavyLock:
         except BlockingIOError:
             self.log(f'waiting for another heavy job ({LOCK_PATH})')
             fcntl.flock(self.file, fcntl.LOCK_EX)
-        while (level := memory_level()) < MIN_START_LEVEL:
-            self.log(f'waiting: system memory available {level}% < {MIN_START_LEVEL}%')
+        while (pressure := memory_pressure()) != NORMAL or (level := memory_level()) < MIN_START_LEVEL:
+            reason = f'macOS memory pressure {"warning" if pressure == WARNING else "critical"}' \
+                if pressure != NORMAL else f'system memory available {level}% < {MIN_START_LEVEL}%'
+            self.log(f'waiting to start: {reason}; close other apps or wait')
             time.sleep(self.poll)
         os.environ[HELD_ENV] = '1'
         return self

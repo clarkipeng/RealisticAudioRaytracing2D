@@ -112,7 +112,7 @@ class Worker:
     physical-footprint guard (GPU memory included), a system memory/swap guard and
     battery suspension."""
 
-    def __init__(self, command, env, log, rss_limit=4 * GIB):
+    def __init__(self, command, env, log, rss_limit=3 * GIB):
         self.command, self.env, self.log, self.limit = command, env, log, rss_limit
         self.samples, self.paused_seconds = [], 0.0
 
