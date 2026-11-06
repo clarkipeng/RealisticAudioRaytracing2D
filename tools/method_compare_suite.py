@@ -95,12 +95,14 @@ def material_table(names):
         if name == 'rigid':
             zero = [0.0] * len(mc.BANDS)
             out[name] = dict(absorption=zero, scattering=zero, transmission=zero, presetScattering=zero,
-                             source='rigid (no absorption)')
+                             admittance=zero, source='rigid (no absorption)')
             continue
         a, s = preset_bands(name)
         path = MATERIALS / f'Church {name}.asset'
-        out[name] = dict(absorption=np.round(a, 8).tolist(), scattering=[0.0] * len(mc.BANDS),
+        a = np.round(a, 8)
+        out[name] = dict(absorption=a.tolist(), scattering=[0.0] * len(mc.BANDS),
                          transmission=[0.0] * len(mc.BANDS), presetScattering=np.round(s, 8).tolist(),
+                         admittance=[round(fw.admittance_from_absorption(v, 'random'), 10) for v in a],
                          source=f'Assets/Materials/Church {name}.asset energyCurve (sha256 {mc.sha256_file(path)[:16]})')
     return out
 
@@ -180,10 +182,15 @@ def write_scene(scene):
     data = (json.dumps(scene, indent=1, sort_keys=True, allow_nan=False) + '\n').encode()
     path = folder / 'scene.json'
     if path.exists() and path.read_bytes() != data:
-        stale = [p for p in folder.iterdir() if p.is_dir()]
+        # bem is rewritten by build and gt by assemble; any other method's output would be stale.
+        stale = [p for p in folder.iterdir() if p.is_dir() and p.name not in ('bem', 'gt')]
         if stale:
             raise RuntimeError(f'{scene["sceneId"]}: scene.json changed but outputs exist: {stale}')
-    path.write_bytes(data)
+        if (folder / 'gt').exists():
+            shutil.rmtree(folder / 'gt')
+    tmp = path.with_suffix('.json.partial')
+    tmp.write_bytes(data)
+    tmp.rename(path)
     return path
 
 

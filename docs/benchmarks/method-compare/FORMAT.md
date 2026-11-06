@@ -47,7 +47,7 @@ Additions used by the comparison:
 | `closed` | true for rooms without openings (`shoebox`, `furnished`) |
 | `shadow` | per receiver, 1 when the straight segment from the source is blocked by a box (no direct line of sight), else 0; `lineOfSight` is its complement |
 | `bands` | `[125, 250, 500, 1000, 2000, 4000, 8000, 16000]` |
-| `materials` | `{name: {absorption: [8], scattering: [8], transmission: [8], source: "..."}}`, per band; `rigid` is all zeros |
+| `materials` | `{name: {absorption: [8], admittance: [8], scattering: [8], transmission: [8], source: "..."}}`, per band; `rigid` is all zeros |
 | `airAbsorption` | `false`: no method applies air absorption in this suite (the ground truth has none) |
 | `gtBands` | as in `suite.json` |
 | `origin` | where the scene came from (generator version and index, or the BEM fixture file and its hash) |
@@ -56,6 +56,9 @@ Additions used by the comparison:
 `absorption` is the existing preset's energy curve (`Assets/Materials/Church <name>.asset`) evaluated at each band centre with the renderer's rule (linear in Hz between knots, clamped outside).
 `scattering` and `transmission` are **zero** in this suite: the ground truth has smooth, opaque, locally reacting walls, so a method that scatters or transmits would be compared against physics the reference does not contain.
 The preset's own scattering is kept beside it as `presetScattering` for information only.
+`admittance` **(addition)** is the normalised real admittance `y = ρc/Z` of the locally reacting wall the ground truth simulates in that band, chosen so its random-incidence (Paris) absorption equals `absorption`.
+Its plane-wave energy reflection at incidence angle θ is `|R(θ)|² = ((cosθ − y)/(cosθ + y))²`, which absorbs less than `absorption` near grazing and more near normal incidence.
+A method may use either `absorption` (angle independent) or `|R(θ)|²` (the same wall as the ground truth); it records which in `meta.json` as `"wallModel": "absorption"` or `"wallModel": "admittance"` **(addition)**, because in specular rooms the two give different decays even with exact transport.
 
 ## `meta.json`
 
