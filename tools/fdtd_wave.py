@@ -1,7 +1,8 @@
 """3D time-domain acoustic wave solver (FDTD) for low-frequency teacher data.
 
 Staggered pressure/velocity (Yee) scheme on a uniform Cartesian grid, fused
-Metal kernels through PyTorch MPS, rigid axis-aligned boxes, convolutional PML
+Metal kernels through PyTorch MPS, axis-aligned boxes that are rigid or locally
+reacting with a real (frequency-independent) impedance, convolutional PML
 (CPML) on all six domain faces, a band-limited monopole source, and trilinear
 off-grid receivers. Complex pressure follows the renderer/reference convention:
 time dependence exp(+iwt) and free-field pressure exp(-ikr)/r.
@@ -39,6 +40,11 @@ using namespace metal;
 // Fields are (nx, ny, nz) row-major, z fastest. u_a[c] is the scaled velocity
 // rho*c*v on the +a face of cell c; the outer +a face is never written (rigid).
 // CPML memory lives in slabs of 2L layers per axis: low side then high side.
+// solid[c] is 0 for air, else a material id; admit[id] is the wall's normalised
+// admittance y = rho*c/Z (0 = rigid). On a face between air and a wall the
+// boundary pressure is the mean of the air cell and a ghost cell, and equals
+// Z times the time-centred normal velocity into the wall; eliminating the ghost
+// gives the face update in face_update (unconditionally stable for y >= 0).
 
 inline uint3 cell_of(uint g, int ny, int nz) {
     return uint3(g / uint(ny * nz), (g / uint(nz)) % uint(ny), g % uint(nz));
@@ -46,12 +52,27 @@ inline uint3 cell_of(uint g, int ny, int nz) {
 
 inline uint slab(int i, int n, int L) { return uint(i < L ? i : i - (n - 2 * L)); }
 
+// Normal velocity on a face between cells with materials (lo, hi), lo on the
+// low side. Air-air faces take the ordinary update; wall-wall faces stay zero.
+inline float face_update(float u, float d, uchar lo, uchar hi, float plo, float phi,
+                         device const float* admit, float lam) {
+    if (lo == 0 && hi == 0) return u - lam * d;
+    if (lo != 0 && hi != 0) return 0.0f;
+    const float y = admit[lo != 0 ? lo : hi];
+    if (y <= 0.0f) return 0.0f;
+    // Wall on the high side: u points into it, u+ (y+lam) = u- (y-lam) + 2 lam y p_air.
+    // Wall on the low side: u points out of it, the sign of the pressure term flips.
+    const float drive = hi != 0 ? plo : -phi;
+    return ((y - lam) * u + 2.0f * lam * y * drive) / (y + lam);
+}
+
 kernel void update_velocity(
     device float* ux [[buffer(0)]], device float* uy [[buffer(1)]], device float* uz [[buffer(2)]],
     device const float* p [[buffer(3)]], device const uchar* solid [[buffer(4)]],
     device float* qx [[buffer(5)]], device float* qy [[buffer(6)]], device float* qz [[buffer(7)]],
     device const float* coef [[buffer(8)]], device const int* dims [[buffer(9)]],
-    constant float& lam [[buffer(10)]], uint g [[thread_position_in_grid]])
+    constant float& lam [[buffer(10)]], device const float* admit [[buffer(11)]],
+    uint g [[thread_position_in_grid]])
 {
     const int nx = dims[0], ny = dims[1], nz = dims[2], L = dims[3];
     if (g >= uint(nx) * uint(ny) * uint(nz)) return;
@@ -59,7 +80,7 @@ kernel void update_velocity(
     const int i = c.x, j = c.y, k = c.z;
     const uint sy = nz, sx = uint(ny) * uint(nz);
     const float pc = p[g];
-    const bool here = solid[g] != 0;
+    const uchar here = solid[g];
     // Face coefficients: b then a, per axis, packed [x | y | z].
     device const float* bx = coef; device const float* ax = bx + nx;
     device const float* by = ax + nx; device const float* ay = by + ny;
@@ -70,7 +91,7 @@ kernel void update_velocity(
             const uint s = slab(i, nx, L) * sx + uint(j) * sy + uint(k);
             const float m = bx[i] * qx[s] + ax[i] * d; qx[s] = m; d += m;
         }
-        ux[g] = (here || solid[g + sx]) ? 0.0f : ux[g] - lam * d;
+        ux[g] = face_update(ux[g], d, here, solid[g + sx], pc, p[g + sx], admit, lam);
     }
     if (j < ny - 1) {
         float d = p[g + sy] - pc;
@@ -78,7 +99,7 @@ kernel void update_velocity(
             const uint s = (uint(i) * uint(2 * L) + slab(j, ny, L)) * uint(nz) + uint(k);
             const float m = by[j] * qy[s] + ay[j] * d; qy[s] = m; d += m;
         }
-        uy[g] = (here || solid[g + sy]) ? 0.0f : uy[g] - lam * d;
+        uy[g] = face_update(uy[g], d, here, solid[g + sy], pc, p[g + sy], admit, lam);
     }
     if (k < nz - 1) {
         float d = p[g + 1] - pc;
@@ -86,7 +107,7 @@ kernel void update_velocity(
             const uint s = (uint(i) * uint(ny) + uint(j)) * uint(2 * L) + slab(k, nz, L);
             const float m = bz[k] * qz[s] + az[k] * d; qz[s] = m; d += m;
         }
-        uz[g] = (here || solid[g + 1]) ? 0.0f : uz[g] - lam * d;
+        uz[g] = face_update(uz[g], d, here, solid[g + 1], pc, p[g + 1], admit, lam);
     }
 }
 
@@ -170,11 +191,18 @@ def box_bounds(walls):
     return low, high
 
 
-def voxelize(grid, walls):
-    """Solid flags (cell centre inside a box) and the largest face snap in metres."""
+def voxelize(grid, walls, ids=None):
+    """Material ids (cell centre inside a box; 0 = air) and the largest face snap in metres.
+
+    `ids` gives each wall's material id (1-255, default 1); a later box wins
+    where boxes overlap.
+    """
     solid = np.zeros(grid.shape, dtype=np.uint8)
     snap = 0.0
-    for low, high in zip(*box_bounds(walls)):
+    ids = [1] * len(walls) if ids is None else list(ids)
+    if any(not 1 <= v <= 255 for v in ids):
+        raise ValueError('Material ids must lie in 1..255.')
+    for wall_id, low, high in zip(ids, *box_bounds(walls)):
         ranges = []
         for axis in range(3):
             c = grid.centers(axis)
@@ -188,8 +216,57 @@ def voxelize(grid, walls):
         if ranges is None:
             snap = max(snap, float(np.min(high - low)))  # Box thinner than a cell vanished.
             continue
-        solid[tuple(ranges)] = 1
+        solid[tuple(ranges)] = wall_id
     return solid, snap
+
+
+def admittance_from_absorption(alpha, incidence='random'):
+    """Normalised real admittance y = rho*c/Z of a locally reacting wall.
+
+    `random`: the Paris (London) statistical absorption of a locally reacting
+    surface with real impedance zeta = 1/y,
+        alpha_st = 8/zeta^2 * (zeta + 1 - 1/(1+zeta) - 2 ln(1+zeta)),
+    equals `alpha` (the diffuse-field reading of a tabulated coefficient). It
+    peaks at 0.951 for zeta = 1.567; the hard branch zeta >= 1.567 is used.
+    `normal`: normal-incidence absorption 4 zeta/(zeta+1)^2 equals `alpha`.
+    alpha = 0 returns 0 (rigid).
+    """
+    alpha = float(alpha)
+    if alpha <= 0:
+        return 0.0
+    if incidence == 'normal':
+        if alpha > 1:
+            raise ValueError('Absorption must lie in [0, 1].')
+        r = math.sqrt(1 - alpha)
+        return (1 - r) / (1 + r)
+    if incidence != 'random':
+        raise ValueError(incidence)
+    if alpha > STATISTICAL_ABSORPTION_MAX:
+        raise ValueError(f'Statistical absorption {alpha} exceeds {STATISTICAL_ABSORPTION_MAX:.4f} for a real impedance.')
+    lo, hi = math.log(ZETA_AT_MAX), math.log(1e9)   # alpha_st falls monotonically on this branch
+    for _ in range(200):
+        mid = .5 * (lo + hi)
+        if statistical_absorption(math.exp(mid)) > alpha:
+            lo = mid
+        else:
+            hi = mid
+    return 1 / math.exp(.5 * (lo + hi))
+
+
+def statistical_absorption(zeta):
+    """Paris random-incidence absorption of a real normalised impedance zeta."""
+    z = float(zeta)
+    return 8 / z ** 2 * (z + 1 - 1 / (1 + z) - 2 * math.log1p(z))
+
+
+def reflection_coefficient(zeta, theta):
+    """Plane-wave pressure reflection of a locally reacting wall at incidence theta."""
+    c = np.cos(theta)
+    return (zeta * c - 1) / (zeta * c + 1)
+
+
+ZETA_AT_MAX = 1.56692
+STATISTICAL_ABSORPTION_MAX = 0.95122
 
 
 def pml_coefficients(grid, dt, c=SPEED_OF_SOUND, reflection=1e-6, order=3, alpha=0.0):
@@ -282,7 +359,7 @@ class Simulation:
     """One FDTD domain on the GPU. Pressure p^n lives at t = n dt."""
 
     def __init__(self, grid, solid, c=SPEED_OF_SOUND, courant=COURANT, reflection=1e-6,
-                 order=3, alpha=0.0, memory_limit=4 * GIB):
+                 order=3, alpha=0.0, memory_limit=4 * GIB, admittance=None):
         if torch is None or not torch.backends.mps.is_available():
             raise RuntimeError('PyTorch with the MPS backend is required.')
         need = memory_bytes(grid)
@@ -308,13 +385,21 @@ class Simulation:
         self.face_coef = torch.from_numpy(faces).to(dev)
         self.cell_coef = torch.from_numpy(cells).to(dev)
         self.dims = torch.tensor([nx, ny, nz, L], dtype=torch.int32, device=dev)
+        # admittance: material id -> normalised admittance (missing ids are rigid).
+        table = np.zeros(256, np.float32)
+        for key, value in (admittance or {}).items():
+            if not 1 <= int(key) <= 255 or not value >= 0:
+                raise ValueError(f'Bad admittance {key}: {value}')
+            table[int(key)] = value
+        self.admittance = table
+        self.admit = torch.from_numpy(table).to(dev)
         self.lib = _library()
         self.steps = 0
 
     def step(self):
         lib, n = _library(), self.grid.cells
         lib.update_velocity(self.ux, self.uy, self.uz, self.p, self.solid, *self.velocity_memory,
-                            self.face_coef, self.dims, float(self.courant), threads=n, group_size=256)
+                            self.face_coef, self.dims, float(self.courant), self.admit, threads=n, group_size=256)
         lib.update_pressure(self.p, self.ux, self.uy, self.uz, self.solid, *self.pressure_memory,
                             self.cell_coef, self.dims, float(self.courant), threads=n, group_size=256)
         self.steps += 1
@@ -444,20 +529,42 @@ def scene_bounds(scene, margin, free_field=False):
     return every.min(0) - margin, every.max(0) + margin
 
 
+def material_ids(wall_admittance):
+    """Per-wall material ids (1..255) and the id -> admittance table."""
+    values = sorted(set(float(v) for v in wall_admittance))
+    if len(values) > 255:
+        raise ValueError('At most 255 distinct wall admittances.')
+    table = {n + 1: v for n, v in enumerate(values)}
+    lookup = {v: n for n, v in table.items()}
+    return [lookup[float(v)] for v in wall_admittance], table
+
+
 def solve(scene, spacing, hz, duration, peak_hz=None, pml=16, margin=.5, reflection=1e-6,
           order=3, alpha=0.0, free_field=False, plane=None, work_fraction=.2,
-          memory_limit=4 * GIB, progress=None, pause=None):
-    """Complex pressure at the scene's receivers, normalised to exp(-ikr)/r."""
+          memory_limit=4 * GIB, progress=None, pause=None, wall_admittance=None, extra_points=None):
+    """Complex pressure at the scene's receivers, normalised to exp(-ikr)/r.
+
+    `wall_admittance` gives each wall's normalised admittance rho*c/Z (0 or
+    None = rigid). `extra_points` are recorded after the scene's receivers and
+    widen the domain (used for image points in the reflection check).
+    """
     c = float(scene.get('speedOfSound', SPEED_OF_SOUND))
     hz = np.atleast_1d(hz).astype(float)
     peak_hz = float(peak_hz or hz.max() * 1.2)
-    low, high = scene_bounds(scene, margin, free_field)
+    points = np.array(scene['points'], float).reshape(-1, 3)
+    if extra_points is not None:
+        points = np.vstack([points, np.asarray(extra_points, float).reshape(-1, 3)])
+    low, high = scene_bounds(dict(scene, points=points.ravel().tolist()), margin, free_field)
     grid = make_grid(low, high, spacing, pml)
     walls = [] if free_field else scene['walls']
-    solid, snap = voxelize(grid, walls)
+    admit = [0.0] * len(walls) if wall_admittance is None or free_field else \
+        [float(v or 0.0) for v in wall_admittance]
+    if len(admit) != len(walls):
+        raise ValueError('One admittance per wall is required.')
+    ids, table = material_ids(admit)
+    solid, snap = voxelize(grid, walls, ids)
     sim = Simulation(grid, solid, c=c, reflection=reflection, order=order, alpha=alpha,
-                     memory_limit=memory_limit)
-    points = np.array(scene['points'], float).reshape(-1, 3)
+                     memory_limit=memory_limit, admittance=table)
     result = sim.run(scene['source'], points, duration, peak_hz, plane=plane, plane_hz=hz,
                      work_fraction=work_fraction, progress=progress, pause=pause)
     H = transfer(result['pressure'], result['source'], result['dt'], hz, c)
@@ -465,7 +572,8 @@ def solve(scene, spacing, hz, duration, peak_hz=None, pml=16, margin=.5, reflect
                 margin=margin, reflection=reflection, order=order, alpha=alpha, freeField=free_field,
                 shape=list(grid.shape), origin=list(grid.origin), cells=grid.cells, dt=result['dt'],
                 courant=sim.courant, speedOfSound=c, maxBoxSnap=snap, solidCells=int(solid.sum()),
-                pointsPerWavelength=c / hz.max() / spacing, timing=result['timing'])
+                pointsPerWavelength=c / hz.max() / spacing, timing=result['timing'],
+                admittances=sorted(set(admit)))
     out = dict(H=H, pressure=result['pressure'], source=result['source'], meta=meta, grid=grid)
     if plane is not None:
         out['plane'] = result['plane']

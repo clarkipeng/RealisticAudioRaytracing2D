@@ -8,8 +8,14 @@ import fdtd_wave as fw
 MPS = fw.torch is not None and fw.torch.backends.mps.is_available()
 
 
-def reference_step(state, solid, faces, cells, lam, L):
-    """Plain NumPy transcription of the scheme, for checking the Metal kernels."""
+def reference_step(state, solid, faces, cells, lam, L, admit=None):
+    """Plain NumPy transcription of the scheme, for checking the Metal kernels.
+
+    `solid` holds material ids (0 = air); `admit` maps id -> normalised admittance.
+    """
+    table = np.zeros(256)
+    for key, value in (admit or {}).items():
+        table[key] = value
     p, u, qv, qp = state['p'], state['u'], state['qv'], state['qp']
     shape = p.shape
     for axis in range(3):
@@ -22,10 +28,15 @@ def reference_step(state, solid, faces, cells, lam, L):
         expand = [None] * 3; expand[axis] = slice(None)
         qv[axis] = b[tuple(expand)] * qv[axis] + a[tuple(expand)] * d
         d = d + qv[axis]
-        blocked = np.zeros(shape, bool)
-        blocked[tuple(lo)] = (solid[tuple(lo)] | solid[tuple(hi)]) != 0
+        mlo = np.zeros(shape, int); mhi = np.zeros(shape, int)
+        mlo[tuple(lo)] = solid[tuple(lo)]; mhi[tuple(lo)] = solid[tuple(hi)]
+        phi = np.zeros(shape); phi[tuple(lo)] = p[tuple(hi)]
+        y = table[np.maximum(mlo, mhi)]
+        drive = np.where(mhi != 0, p, -phi)
+        wall = ((y - lam) * u[axis] + 2 * lam * y * drive) / (y + lam)
+        one_wall = (mlo != 0) ^ (mhi != 0)
+        new = np.where((mlo == 0) & (mhi == 0), u[axis] - lam * d, np.where(one_wall & (y > 0), wall, 0))
         last = [slice(None)] * 3; last[axis] = n - 1
-        new = np.where(blocked, 0, u[axis] - lam * d)
         new[tuple(last)] = 0
         u[axis] = new
     div = np.zeros(shape)
@@ -113,6 +124,67 @@ class Kernels(unittest.TestCase):
         np.testing.assert_allclose(got, state['p'], atol=2e-5 * np.abs(state['p']).max())
         for axis, u in enumerate([sim.ux, sim.uy, sim.uz]):
             np.testing.assert_allclose(u.cpu().numpy().reshape(grid.shape), state['u'][axis], atol=2e-5)
+
+    def test_metal_matches_reference_with_impedance(self):
+        grid = fw.Grid(.1, (0., 0., 0.), (14, 11, 9), 3)
+        solid = np.zeros(grid.shape, np.uint8)
+        solid[6:8, 4:9, 2:5] = 2       # absorbing block
+        solid[3:5, 2:4, 3:7] = 1       # rigid id (no admittance entry)
+        solid[9:11, 6:9, 1:4] = 3      # very soft block
+        admit = {2: .2, 3: 4.0}
+        sim = fw.Simulation(grid, solid, admittance=admit)
+        rng = np.random.default_rng(3)
+        p0 = rng.standard_normal(grid.shape) * (solid == 0)
+        sim.p.copy_(fw.torch.from_numpy(p0.ravel().astype(np.float32)))
+        faces, cells = (split(c, grid.shape) for c in fw.pml_coefficients(grid, sim.dt))
+        state = dict(p=p0.astype(float), u=[np.zeros(grid.shape) for _ in range(3)],
+                     qv=[np.zeros(grid.shape) for _ in range(3)], qp=[np.zeros(grid.shape) for _ in range(3)])
+        for _ in range(25):
+            sim.step()
+            reference_step(state, solid, faces, cells, sim.courant, grid.pml, admit)
+        got = sim.p.cpu().numpy().reshape(grid.shape)
+        np.testing.assert_allclose(got, state['p'], atol=2e-5 * np.abs(state['p']).max())
+        for axis, u in enumerate([sim.ux, sim.uy, sim.uz]):
+            np.testing.assert_allclose(u.cpu().numpy().reshape(grid.shape), state['u'][axis], atol=2e-5)
+
+    def test_impedance_room_is_stable_and_passive(self):
+        # Closed box without PML: rigid walls conserve the discrete energy, any
+        # admittance (hard, matched, very soft) only removes it, and nothing grows.
+        grid = fw.Grid(.1, (0., 0., 0.), (16, 12, 10), 0)
+        solid = np.zeros(grid.shape, np.uint8)
+        solid[[0, -1]] = 1; solid[:, [0, -1]] = 1; solid[:, :, [0, -1]] = 1
+        solid[6:9, 1:6, 3:6] = 1
+        p0 = np.random.default_rng(4).standard_normal(grid.shape) * (solid == 0)
+        energies = {}
+        for y in (0.0, .02, 1.0, 20.0):
+            sim = fw.Simulation(grid, solid, admittance={1: y})
+            sim.p.copy_(fw.torch.from_numpy(p0.ravel().astype(np.float32)))
+            curve = []
+            for n in range(6000):
+                if n % 200 == 199:
+                    # Leapfrog's conserved form: |p^n|^2 + u^(n-1/2) . u^(n+1/2).
+                    p = sim.p.cpu().numpy().astype(float)
+                    before = [v.cpu().numpy().astype(float) for v in (sim.ux, sim.uy, sim.uz)]
+                    sim.step()
+                    after = [v.cpu().numpy().astype(float) for v in (sim.ux, sim.uy, sim.uz)]
+                    curve.append(float((p ** 2).sum() + sum((a * b).sum() for a, b in zip(before, after))))
+                else:
+                    sim.step()
+            energies[y] = np.array(curve)
+            self.assertTrue(np.all(np.isfinite(curve)))
+        rigid = energies[0.0]
+        self.assertLess(np.ptp(rigid) / rigid.mean(), 1e-4)
+        for y in (.02, 1.0, 20.0):
+            self.assertLess(energies[y][-1], .5 * rigid[-1])
+            self.assertTrue(np.all(np.diff(energies[y]) <= 1e-5 * energies[y][0]))   # never grows
+
+    def test_admittance_inverts_statistical_absorption(self):
+        for alpha in (.01, .025, .12, .3, .6, .95):
+            y = fw.admittance_from_absorption(alpha)
+            self.assertAlmostEqual(fw.statistical_absorption(1 / y), alpha, places=9)
+        y = fw.admittance_from_absorption(.36, 'normal')
+        self.assertAlmostEqual(1 - fw.reflection_coefficient(1 / y, 0.0) ** 2, .36, places=12)
+        self.assertEqual(fw.admittance_from_absorption(0.0), 0.0)
 
     def test_free_field_matches_analytic(self):
         # 125 Hz at 27 and 55 points per wavelength, receivers 1.5-2.6 m away in
