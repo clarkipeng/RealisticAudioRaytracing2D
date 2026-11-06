@@ -97,16 +97,24 @@ Required: `schema`, `method`, `budget`, `seed`, `sceneId`, `sceneSha256`, `code`
 - Energy is the direction-summed total, including direct sound.
 
 **Band filters and energy from a coherent response.**
-A method that has a complex transfer function `H(f)` (or an impulse response) derives its band energies exactly as the ground truth does, which `tools/method_compare.py` implements as `energy_from_complex` / `energy_from_impulse`:
+A method that has a coherent response derives its band energies exactly as the ground truth does, with the helpers in `tools/method_compare.py`:
+
+- `energy_from_impulse(h, sample_rate)`: discrete impulse responses `[R, N]` (free field at 1 m is a unit sample); bands whose nominal upper edge exceeds Nyquist are NaN, and a band whose upper skirt alone exceeds it is normalised by the part of the filter below Nyquist.
+- `energy_from_spectrum(H, df)`: a dense spectrum on a uniform grid `k·df` from 0 Hz (its period `1/df` must exceed 2 s plus 0.1 s).
+- `energy_from_arrivals(delays, gains)`: one receiver's discrete arrivals with signed real gains per band; arrivals within a band filter's time resolution add as pressures.
+- `levels_from_complex(H, hz)`: on a sparse grid (for example the renderer's 125 Hz steps) only the band total (the `|G_b|²`-weighted mean of `|H|²`) is defined, with no time structure; the scorer uses it for the level metric when a method writes `complex.f32` but NaN energy for a band.
+
+The definition they implement:
 
 1. Band `b` with centre `fc` uses a zero-phase filter `G_b` whose power response is a raised cosine in log frequency between neighbouring centres: `|G_b(f)|² = sin²(π/2 · log2(2f/fc))` on `[fc/2, fc]`, `cos²(π/2 · log2(f/fc))` on `[fc, 2fc]`, zero elsewhere.
    Adjacent bands are power complementary (`Σ_b |G_b|² = 1` between 125 Hz and 16 kHz), so band energies add up to the broadband energy, and the shape mirrors the renderer's late-field synthesis bands.
 2. `p_b(t) = IFFT[G_b(f) H(f)]`, the band-limited impulse response on a fine time grid.
-3. `E[b, k] = ∫_{bin k} p_b(t)² dt / ∫ |G_b(f)|² df` (the integral over positive frequencies in Hz, with the same two-sided convention as the IFFT), which makes a free-field `1/d` path integrate to `1/d²`.
+3. `E[b, k] = ∫_{bin k} p_b(t)² dt / ∫ g_b(t)² dt`, where `g_b` is the band filter's impulse response and `∫ g_b² dt = 2 ∫_0^∞ |G_b(f)|² df ≈ 1.43 fc`; this makes a free-field `1/d` path integrate to `1/d²`.
+   Energy at negative times (pre-ringing of an arrival shortly after emission) is added to bin 0.
    Consequently the band total equals the `|G_b|²`-weighted mean of `|H(f)|²` over the band.
 
 A zero-phase band filter spreads each arrival over a few milliseconds (about ±4 ms at 125 Hz, ±1 ms at 500 Hz).
-The scorer therefore convolves histograms that were not produced through a band filter (`"bandLimited": false` in `meta.json`, the default for methods without a coherent response) with the same band's energy kernel `|g_b(t)|² / ∫|g_b|²` before every time-resolved metric, so both sides have the same time resolution.
+The scorer therefore convolves histograms that were not produced through a band filter (`"bandLimited": false` in `meta.json`, the default) with the same band's energy kernel `|g_b(t)|² / ∫|g_b|²` before every metric, so both sides have the same time resolution (`method_compare.smooth`); a method writes plain arrival-time histograms and should not smooth them itself.
 Methods that derive energy through `energy_from_complex` set `"bandLimited": true` **(addition)**.
 
 ## `complex.f32` (optional)
