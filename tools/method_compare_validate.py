@@ -141,15 +141,34 @@ def room_walls(furnished):
     return walls
 
 
-def image_energy(alpha_st, receiver, duration, fc, bins):
+def image_energy(alpha_st, receiver, duration, fc, bins, spherical=False):
     """Analytic image-lattice band energy [bins] for the empty uniform shoebox.
 
     Each image's energy is prod_walls |R(theta_axis)|^(2 n_axis) / d^2 with
     theta_axis the incidence angle on that wall pair (the same for every
     reflection on it), binned at d / c and smoothed with the band's energy
-    kernel so it has the band filter's time resolution.
+    kernel so it has the band filter's time resolution. With `spherical`, R is
+    replaced by the Weyl-van der Pol factor Q(theta, k, d) at the image distance
+    (Suh & Nelson's spherical-wave image model), averaged as |Q|^2 over the band
+    with the band filter's weights.
     """
     zeta = 1 / fw.admittance_from_absorption(alpha_st)
+    if spherical:
+        hz = fc * 2.0 ** np.linspace(-1, 1, 9)
+        weight = mc.band_power(hz, fc) * hz          # |G|^2 df on a log grid
+        weight /= weight.sum()
+
+        def gain(cos, n, d):
+            th = np.arccos(np.minimum(cos, 1))
+            out = 0
+            for f, w in zip(hz, weight):
+                if w > 0:
+                    q, _ = weyl_van_der_pol(zeta, th, 2 * np.pi * f / C, d)
+                    out = out + w * np.abs(q) ** (2 * n)
+            return out
+    else:
+        def gain(cos, n, d):
+            return np.abs(fw.reflection_coefficient(zeta, np.arccos(np.minimum(cos, 1)))) ** (2 * n)
     L = ROOM
     s, r = SB_SOURCE, receiver
     nmax = np.ceil(duration * C / (2 * L)).astype(int) + 1
@@ -169,12 +188,37 @@ def image_energy(alpha_st, receiver, duration, fc, bins):
             NY, NZ = ny.ravel()[:, None], nz.ravel()[None, :]
             d = np.sqrt(x * x + Y * Y + Z * Z)
             keep = d < duration * C
-            g = (np.abs(fw.reflection_coefficient(zeta, np.arccos(np.minimum(abs(x) / d, 1)))) ** (2 * nx) *
-                 np.abs(fw.reflection_coefficient(zeta, np.arccos(np.minimum(np.abs(Y) / d, 1)))) ** (2 * NY) *
-                 np.abs(fw.reflection_coefficient(zeta, np.arccos(np.minimum(np.abs(Z) / d, 1)))) ** (2 * NZ)) / d ** 2
+            g = gain(abs(x) / d, nx, d) * gain(np.abs(Y) / d, NY, d) * gain(np.abs(Z) / d, NZ, d) / d ** 2
             kbin = np.floor(d[keep] / C / mc.BIN_SECONDS).astype(int)
             e += np.bincount(kbin, weights=g[keep], minlength=bins)[:bins]
     return mc.smooth(e[None, None], [fc])[0, 0]
+
+
+def modal_edc(alpha, receiver, fc, bins):
+    """Schroeder curve (dB) of the empty shoebox from its modes (added after the image check, see README).
+
+    Rigid-room modes cos(n pi x / L) perturbed by a small uniform admittance
+    beta decay at 2 delta_n = c beta sum_axis (4 or 2 if n_axis = 0) / L_axis
+    (Morse & Ingard): oblique modes at the Sabine rate of alpha = 8 beta,
+    tangential and axial modes slower. Modes add incoherently with weight
+    |G_b(f_n)|^2 psi_n(s)^2 psi_n(r)^2 / (Lambda_n^2 f_n^2); cross terms are dropped.
+    """
+    beta = fw.admittance_from_absorption(alpha)
+    L = ROOM
+    nmax = np.ceil(2 * fc * 2 * L / C).astype(int) + 1
+    n = np.stack(np.meshgrid(*[np.arange(k + 1) for k in nmax], indexing='ij'), -1).reshape(-1, 3)
+    n = n[n.sum(1) > 0]
+    f = C / 2 * np.sqrt(((n / L) ** 2).sum(1))
+    g = mc.band_power(f, fc)
+    keep = g > 0
+    n, f, g = n[keep], f[keep], g[keep]
+    psi = lambda p: np.prod(np.cos(np.pi * n * np.asarray(p) / L), 1)
+    lam = np.prod(np.where(n > 0, .5, 1.), 1)
+    two_delta = C * beta * (np.where(n > 0, 4., 2.) / L).sum(1)
+    a2 = g * psi(SB_SOURCE) ** 2 * psi(receiver) ** 2 / lam ** 2 / f ** 2
+    t = np.arange(bins) * mc.BIN_SECONDS
+    edc = (a2[None] * np.exp(-two_delta[None] * t[:, None]) / two_delta[None]).sum(1)
+    return 10 * np.log10(edc / edc[0])
 
 
 def diffuse_predictions(alpha, furnished):
@@ -232,6 +276,11 @@ def shoebox(work_fraction=.2):
                         ref = image_energy(alpha, SB_RECEIVERS[r], duration, fc, mc.TIME_BINS)
                         rec['images'] = mc.receiver_metrics(ref, vb, mc.onset_bin(ref[:vb]))
                         rec['imageCurve'] = mc.schroeder(ref[:vb])[::10].tolist()
+                        sph = image_energy(alpha, SB_RECEIVERS[r], duration, fc, mc.TIME_BINS, spherical=True)
+                        rec['imagesSpherical'] = mc.receiver_metrics(sph, vb, mc.onset_bin(sph[:vb]))
+                        modal = modal_edc(alpha, SB_RECEIVERS[r], fc, vb)
+                        rec['modal'] = {k: mc.decay_time(modal, *mc.DECAY_FITS[k]) for k in mc.DECAY_FITS}
+                        rec['modalCurve'] = modal[::10].tolist()
                     rec['curve'] = mc.schroeder(e[r, :vb])[::10].tolist()
                     row['receivers'].append(rec)
                 row['diffuse'] = diffuse_predictions(alpha, furnished)
@@ -299,5 +348,101 @@ def refine(work_fraction=.2):
     return results
 
 
+# --------------------------------------------------------------------------- figures and summary
+
+DOCS = suite.ROOT / 'docs/benchmarks/method-compare'
+ALPHA_COLORS = {.1: '#0072B2', .3: '#D55E00', .6: '#009E73'}
+
+
+def report(work_fraction=None):
+    """Validation figures (docs PNGs) and validation.json with pass/fail against TOLERANCES."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    out = dict(tolerances=TOLERANCES)
+    # Reflection factor vs angle.
+    ref = json.loads((OUT / 'reflection.json').read_text())
+    rows = ref['rows']
+    fig, axs = plt.subplots(1, 3, figsize=(12, 3.6), sharey=True, constrained_layout=True)
+    for ax, f in zip(axs, (250., 500., 1000.)):
+        for alpha, color in ALPHA_COLORS.items():
+            rs = sorted([r for r in rows if r['hz'] == f and r['alpha'] == alpha and r['spacing'] == .025],
+                        key=lambda r: r['theta'])
+            th = [r['theta'] for r in rs]
+            ax.plot(th, [abs(complex(*r['theory'])) for r in rs], '-', color=color, lw=2, label=f'alpha {alpha} theory')
+            ax.plot(th, [abs(r['planeWave']) for r in rs], ':', color=color, lw=1.5)
+            ax.plot(th, [abs(complex(*r['measured'])) for r in rs], 'o', color=color, ms=6, mfc='white', mew=1.5)
+        ax.set_title(f'{f:g} Hz, h = 2.5 cm ({343 / f / .025:.0f} ppw)', fontsize=10)
+        ax.set_xlabel('incidence angle (deg)')
+        ax.grid(True, color='#e6e6e6', lw=.6)
+        for sp in ('top', 'right'):
+            ax.spines[sp].set_visible(False)
+    axs[0].set_ylabel('|Q|')
+    axs[0].legend(fontsize=8, frameon=False, loc='lower left')
+    fig.suptitle('Reflection factor of an impedance plane: FDTD (circles), Weyl-van der Pol (solid), '
+                 'plane-wave R (dotted)', fontsize=10)
+    fig.savefig(DOCS / 'fig-reflection.png', dpi=130)
+    plt.close(fig)
+    worst = {}
+    for h in sorted({r['spacing'] for r in rows}):
+        sel = [r for r in rows if r['spacing'] == h and r['ppw'] >= 13]
+        worst[f'{h:g}'] = dict(maxError=max(r['error'] for r in sel) if sel else None,
+                               maxErrorAll=max(r['error'] for r in rows if r['spacing'] == h))
+    tol = TOLERANCES['reflection']['maxAbsQError']
+    out['reflection'] = dict(worstByGrid=worst, passed=all(v['maxError'] is None or v['maxError'] <= tol
+                                                             for v in worst.values()))
+    # Shoebox decay.
+    if (OUT / 'shoebox.json').exists():
+        sb = json.loads((OUT / 'shoebox.json').read_text())
+        table = []
+        for row in sb['rows']:
+            recs = row['receivers']
+            mean = lambda key, src: float(np.nanmean([r[src][key] for r in recs if src in r])) if src in recs[0] else None
+            lv = lambda src: 10 * math.log10(np.mean([10 ** (r[src]['level'] / 10) for r in recs])) if src in recs[0] else None
+            entry = dict(tag=row['tag'], alpha=row['alpha'], furnished=row['furnished'], band=row['band'],
+                         spacing=row['spacing'], gpuSeconds=row['gpuSeconds'],
+                         fdtd={k: mean(k, 'fdtd') for k in ('EDT', 'T20', 'T30')}, levelFdtd=lv('fdtd'),
+                         eyring=row['diffuse']['eyring'], sabine=row['diffuse']['sabine'])
+            if not row['furnished']:
+                entry['images'] = {k: mean(k, 'images') for k in ('EDT', 'T20', 'T30')}
+                entry['imagesSpherical'] = {k: mean(k, 'imagesSpherical') for k in ('EDT', 'T20', 'T30')}
+                entry['modal'] = {k: mean(k, 'modal') for k in ('EDT', 'T20', 'T30')}
+                entry['levelImages'] = lv('images')
+                entry['perReceiverT30'] = dict(fdtd=[r['fdtd']['T30'] for r in recs],
+                                               modal=[r['modal']['T30'] for r in recs],
+                                               images=[r['images']['T30'] for r in recs])
+            table.append(entry)
+        out['shoebox'] = table
+        fig, axs = plt.subplots(1, 4, figsize=(14, 3.6), sharey=True, constrained_layout=True)
+        panels = [(a, f, fc) for a in (.1, .3) for f in (False, True) for fc in (500.,)]
+        for ax, (alpha, furnished, fc) in zip(axs, panels):
+            row = next(r for r in sb['rows'] if r['alpha'] == alpha and r['furnished'] == furnished and r['band'] == fc)
+            for k, rec in enumerate(row['receivers']):
+                t = np.arange(len(rec['curve'])) * .01
+                ax.plot(t, rec['curve'], '-', color='#000000', lw=1.4, label='FDTD' if k == 0 else None)
+                if 'modalCurve' in rec:
+                    ax.plot(np.arange(len(rec['modalCurve'])) * .01, rec['modalCurve'], '-', color='#009E73', lw=1.2,
+                            label='modal sum' if k == 0 else None)
+                    ax.plot(np.arange(len(rec['imageCurve'])) * .01, rec['imageCurve'], '--', color='#0072B2', lw=1.2,
+                            label='image lattice, plane-wave R' if k == 0 else None)
+            for name, T, color in (('Eyring', row['diffuse']['eyring'], '#D55E00'), ('Sabine', row['diffuse']['sabine'], '#CC79A7')):
+                ax.plot([0, 1.2], [0, -60 * 1.2 / T], ':', color=color, lw=1.5, label=name)
+            ax.set_ylim(-60, 2)
+            ax.set_xlim(0, 1.2)
+            ax.set_title(f'{"furnished" if furnished else "empty"} 5 x 3.5 x 4 m, alpha {alpha}, {fc:g} Hz', fontsize=9)
+            ax.set_xlabel('time after emission (s)')
+            ax.grid(True, color='#e6e6e6', lw=.6)
+            for sp in ('top', 'right'):
+                ax.spines[sp].set_visible(False)
+            ax.legend(fontsize=7, frameon=False, loc='lower left')
+        axs[0].set_ylabel('Schroeder curve (dB)')
+        fig.savefig(DOCS / 'fig-shoebox-decay.png', dpi=130)
+        plt.close(fig)
+    if (OUT / 'refine.json').exists():
+        out['refine'] = json.loads((OUT / 'refine.json').read_text())['rows']
+    (DOCS / 'validation.json').write_text(json.dumps(out, indent=1, default=mc._json) + '\n')
+    print(json.dumps(out, indent=1, default=mc._json)[:6000])
+
+
 def main(study, work_fraction=.2):
-    dict(reflection=reflection, shoebox=shoebox, refine=refine)[study](work_fraction)
+    dict(reflection=reflection, shoebox=shoebox, refine=refine, report=report)[study](work_fraction)

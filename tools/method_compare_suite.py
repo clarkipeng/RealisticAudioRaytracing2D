@@ -432,6 +432,62 @@ def assemble(ids=None):
     return written
 
 
+# --------------------------------------------------------------------------- harness self-test
+
+SELFTEST = WORK / 'selftest'
+SELFTEST_BIAS_DB = 1.0
+SELFTEST_BUDGETS = (16, 256, 4096)
+
+
+def selftest(seeds=3):
+    """Copy every scene's gt into a separate root and add a perturbed method with known errors.
+
+    `synthetic` = gt energy x 10^(bias/10) x max(0, 1 + n * 2/sqrt(N)) per bin (independent
+    Gaussian n per seed) and gt complex x 10^(bias/20) x (1 + complex noise * 0.5/sqrt(N)).
+    Expected: level bias -> +1 dB, complex error -> 12.2%, every other metric and the
+    seed spread -> 0 as N grows; gt against itself scores exactly zero.
+    """
+    import shutil as sh
+    if SELFTEST.exists():
+        sh.rmtree(SELFTEST)
+    found = mc.discover(DATA)
+    scenes = []
+    for sid, runs in found.items():
+        if 'gt' not in runs:
+            continue
+        (SELFTEST / sid).mkdir(parents=True)
+        sh.copy2(DATA / sid / 'scene.json', SELFTEST / sid / 'scene.json')
+        sh.copytree(runs['gt']['ref'][0], SELFTEST / sid / 'gt/ref/0')
+        meta, e, cp, _ = mc.read_output(runs['gt']['ref'][0])
+        scene_path = SELFTEST / sid / 'scene.json'
+        for N in SELFTEST_BUDGETS:
+            for seed in range(seeds):
+                rng = np.random.default_rng(mc_seed(sid, N, seed))
+                gain = 10 ** (SELFTEST_BIAS_DB / 10)
+                noisy = e * gain * np.maximum(0, 1 + rng.standard_normal(e.shape) * 2 / math.sqrt(N))
+                c = None
+                if cp is not None:
+                    c = cp * 10 ** (SELFTEST_BIAS_DB / 20) * (1 + (rng.standard_normal(cp.shape) +
+                                                                     1j * rng.standard_normal(cp.shape)) * .5 / math.sqrt(N))
+                m = dict(method='synthetic', budget=f'r{N:05d}', seed=seed, budgetValue=N, budgetUnit='synthetic rays',
+                         sceneId=sid, sceneSha256=mc.sha256_file(scene_path), wallSeconds=N * 1e-4,
+                         validSeconds=meta['validSeconds'], bandsProvided=meta['bandsProvided'], bandLimited=True,
+                         code=dict(name='method_compare_suite.selftest', sha256=mc.sha256_file(Path(__file__))),
+                         notes=f'gt x {SELFTEST_BIAS_DB} dB with 2/sqrt(N) per-bin noise')
+                if c is not None:
+                    m['frequenciesHz'] = meta['frequenciesHz']
+                mc.write_output(SELFTEST / sid / f'synthetic/r{N:05d}/{seed}', m, noisy, c)
+        scenes.append(dict(id=sid))
+    suite = json.loads((DATA / 'suite.json').read_text())
+    suite['scenes'] = [s for s in suite['scenes'] if s['id'] in {x['id'] for x in scenes}]
+    (SELFTEST / 'suite.json').write_text(json.dumps(suite, indent=1) + '\n')
+    return mc.score(SELFTEST, SELFTEST.parent / 'selftest-score')
+
+
+def mc_seed(*parts):
+    return int.from_bytes(hashlib.sha256('/'.join(map(str, parts)).encode()).digest()[:4], 'little')
+
+
 # --------------------------------------------------------------------------- CLI
 
 def main(argv=None):
@@ -447,6 +503,7 @@ def main(argv=None):
     g.add_argument('--memory-gib', type=float, default=4.0)
     a_ = sub.add_parser('assemble', help='Write gt/ref/0 from finished band runs')
     a_.add_argument('scenes', nargs='*')
+    sub.add_parser('selftest', help='Harness self-test: gt vs gt and a perturbed method, in a separate root')
     v = sub.add_parser('validate', help='Absorbing-wall validation studies')
     v.add_argument('study', choices=['reflection', 'shoebox', 'refine', 'report'])
     v.add_argument('--work-fraction', type=float, default=.2)
@@ -467,6 +524,9 @@ def main(argv=None):
         run_gt(a.scenes or None, a.work_fraction, a.memory_gib, a.bands)
     elif a.command == 'assemble':
         assemble(a.scenes or None)
+    elif a.command == 'selftest':
+        report = selftest()
+        print((SELFTEST.parent / 'selftest-score' / 'summary.md').read_text())
     elif a.command == 'validate':
         import method_compare_validate as mv
         mv.main(a.study, a.work_fraction)

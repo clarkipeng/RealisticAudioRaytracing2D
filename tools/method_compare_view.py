@@ -88,9 +88,9 @@ def scene_data(root, sid, runs, report_rows):
                 tot = complex_levels[:, b]
             with np.errstate(divide='ignore', invalid='ignore'):
                 lv = 10 * np.log10(tot)
-            levels[str(mc.BANDS[b])] = [round(float(v), 2) if np.isfinite(v) else None for v in lv]
+            levels[f'{mc.BANDS[b]:g}'] = [round(float(v), 2) if np.isfinite(v) else None for v in lv]
             if np.isfinite(e[:, b]).all():
-                curves[str(mc.BANDS[b])] = [curve_db(e[r, b], valid) for r in range(e.shape[0])]
+                curves[f'{mc.BANDS[b]:g}'] = [curve_db(e[r, b], valid) for r in range(e.shape[0])]
         data['levels'][m] = levels
         data['curves'][m] = curves
         if cp is not None:
@@ -159,6 +159,13 @@ def convergence_figure(report, path, metric='level', title=None):
             ax.annotate(m, (xs[-1], mean[-1]), xytext=(4, 0), textcoords='offset points', color='#333333',
                         fontsize=8, va='center')
         ax.set_xscale('log')
+        from matplotlib.ticker import FixedLocator, NullFormatter, NullLocator
+        values = sorted({max(1, r['budgetValue'] or 1) for r in rows})
+        ax.xaxis.set_major_locator(FixedLocator(values))
+        ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f'{v:g}'))
+        ax.xaxis.set_minor_locator(NullLocator())
+        ax.xaxis.set_minor_formatter(NullFormatter())
+        ax.set_ylim(bottom=0)
         ax.set_title(f'{group} receivers', fontsize=10)
         ax.set_xlabel('budget (budgetValue)')
         ax.grid(True, color='#e6e6e6', lw=.6)
@@ -210,6 +217,50 @@ def sketch_figure(root, scenes, path):
     plt.close(fig)
 
 
+def gt_figure(root, scenes, path):
+    """Ground-truth echograms (one in-view and one shadow receiver per scene) and band levels."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    band_colors = {125.0: '#0072B2', 250.0: '#009E73', 500.0: '#D55E00', 1000.0: '#CC79A7'}
+    fig, axs = plt.subplots(len(scenes), 2, figsize=(11, 2.3 * len(scenes)), constrained_layout=True, squeeze=False)
+    found = mc.discover(root)
+    for row, sid in zip(axs, scenes):
+        scene = mc.load_scene(root, sid)
+        meta, e, _, _ = mc.read_output(found[sid]['gt']['ref'][0])
+        shadow = np.asarray(scene['shadow'], bool)
+        pts = np.array(scene['points']).reshape(-1, 3)
+        dist = np.linalg.norm(pts - scene['source'], axis=1)
+        valid = int(round(meta['validSeconds'] / mc.BIN_SECONDS))
+        for ax, flag, name in ((row[0], False, 'in view'), (row[1], True, 'shadow')):
+            idx = np.flatnonzero(shadow == flag)
+            if not len(idx):
+                ax.text(.5, .5, f'no {name} receivers', ha='center', transform=ax.transAxes, color='#666666')
+                ax.axis('off')
+                continue
+            r = idx[np.argsort(dist[idx])[len(idx) // 2]]
+            for b, fc in enumerate(mc.BANDS):
+                if not np.isfinite(e[r, b, 0]):
+                    continue
+                x = e[r, b, :valid].reshape(-1, 2).sum(1) if valid % 2 == 0 else e[r, b, :valid - 1].reshape(-1, 2).sum(1)
+                ax.plot(np.arange(len(x)) * 2e-3, 10 * np.log10(np.maximum(x, 1e-12)), color=band_colors.get(fc, '#999'),
+                        lw=1.2, label=f'{fc:g} Hz')
+            top = 10 * np.log10(np.nanmax(e[r, :, :valid]) * 2)
+            ax.set_ylim(top - 70, top + 3)
+            ax.set_xlim(0, meta['validSeconds'])
+            ax.set_title(f'{sid}: receiver {r} ({name}, {dist[r]:.1f} m)', fontsize=9)
+            ax.grid(True, color='#e6e6e6', lw=.6)
+            for sp in ('top', 'right'):
+                ax.spines[sp].set_visible(False)
+            ax.tick_params(labelsize=7)
+        row[0].set_ylabel('dB / 2 ms', fontsize=8)
+    axs[0, 0].legend(fontsize=7, frameon=False, ncol=4)
+    axs[-1, 0].set_xlabel('time after emission (s)')
+    axs[-1, 1].set_xlabel('time after emission (s)')
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+
+
 def build(root, out, figures=None):
     root, out = Path(root), Path(out)
     (out / 'data').mkdir(parents=True, exist_ok=True)
@@ -235,16 +286,17 @@ def build(root, out, figures=None):
             conv.append(name)
     if scenes:
         sketch_figure(root, [s['id'] for s in scenes], out / 'scenes.png')
+        gt_figure(root, [s['id'] for s in scenes], out / 'gt-echograms.png')
     index = dict(scenes=scenes, summary=summary_table(report), convergence=conv,
                  spreads=report['spreads'], missing=report['missing'],
                  colors={m: mc.method_color(m, {r['method'] for r in report['rows']})
                          for m in {r['method'] for r in report['rows']}})
     (out / 'data' / 'index.js').write_text('window.MC_INDEX = ' + json.dumps(index, allow_nan=False, default=mc._json) + ';\n')
-    (out / 'index.html').write_text(HTML)
+    (out / 'index.html').write_text(HTML.replace('%FLOOR%', str(CURVE_FLOOR)))
     if figures:
         figures = Path(figures)
         figures.mkdir(parents=True, exist_ok=True)
-        for name in conv + (['scenes.png'] if scenes else []):
+        for name in conv + (['scenes.png', 'gt-echograms.png'] if scenes else []):
             (figures / name).write_bytes((out / name).read_bytes())
     print(f'viewer: {out / "index.html"} ({len(scenes)} scenes, methods '
           f'{sorted({m for s in scenes for m in s["methods"]})})')
@@ -317,7 +369,7 @@ canvas { display: block; }
 <div id="tip"></div>
 <script src="data/index.js"></script>
 <script>
-const IDX = window.MC_INDEX, tip = document.getElementById('tip');
+const IDX = window.MC_INDEX, tip = document.getElementById('tip'), FLOOR = %FLOOR%;
 const state = { scene: null, band: null, receiver: 0 };
 const CIVIDIS = ['#00224e','#123570','#3b496c','#575d6d','#707173','#8a8678','#a59c74','#c3b369','#e1cc55','#fee838'];
 const DIVERGE = ['#2166ac','#4393c3','#92c5de','#d1e5f0','#efefef','#fddbc7','#f4a582','#d6604d','#b2182b'];
@@ -332,10 +384,13 @@ function showTip(e, text) { tip.style.display = 'block'; tip.textContent = text;
 function hideTip() { tip.style.display = 'none'; }
 
 // ---------------------------------------------------------------- pages
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
-  ['summary', 'scene', 'convergence'].forEach(p => document.getElementById('page-' + p).hidden = p !== b.dataset.page);
-});
+function showPage(page) {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x.dataset.page === page));
+  ['summary', 'scene', 'convergence'].forEach(p => document.getElementById('page-' + p).hidden = p !== page);
+}
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => showPage(b.dataset.page));
+// Deep links: #scene=<id>&band=<Hz>&r=<receiver> or #convergence.
+const HASH = Object.fromEntries(location.hash.slice(1).split('&').filter(Boolean).map(kv => kv.split('=')));
 
 function summaryPage() {
   const el = document.getElementById('page-summary');
@@ -350,7 +405,7 @@ function summaryPage() {
     if (!any) continue;
     html += `<div class="card" style="margin-bottom:12px"><h3>${title}</h3><table><tr><th class="name">method</th><th>budget</th><th>cost s/scene</th>`;
     for (const o of ['open', 'closed']) for (const g of ['view', 'shadow']) html += `<th>${o} ${g}</th>`;
-    for (const b of bands) html += `<th>${b} Hz all</th>`;
+    for (const b of bands) html += `<th>${+b} Hz</th>`;
     html += '</tr>';
     for (const m of IDX.summary) {
       html += `<tr><td class="name"><span class="sw" style="background:${m.color}"></span>${m.method}</td><td>${m.budget}</td><td>${fmt(m.cost, 3)}</td>`;
@@ -385,8 +440,8 @@ sceneSel.onchange = () => loadScene(sceneSel.value);
 bandSel.onchange = () => { state.band = bandSel.value; drawScene(); };
 errSel.onchange = () => drawScene();
 
-function loadScene(id) {
-  const ready = () => { state.scene = window.MC_SCENES[id]; state.receiver = 0;
+function loadScene(id, receiver = 0) {
+  const ready = () => { state.scene = window.MC_SCENES[id]; state.receiver = receiver;
     const keep = bandSel.value; bandSel.innerHTML = '';
     state.scene.bands.forEach(b => bandSel.add(new Option(b + ' Hz', String(b))));
     bandSel.value = state.scene.bands.map(String).includes(keep) ? keep : String(state.scene.bands[0]);
@@ -529,7 +584,7 @@ function drawCurves() {
     const c = (S.curves[m.name] || {})[band]; if (!c) continue;
     const y = c[r].map(v => v / 10), x = y.map((_, i) => i * S.curveBin / 1000);
     etc.push({ x, y, color: m.color, label: m.name });
-    const e = y.map(v => Math.pow(10, v / 10)); let acc = 0; const rev = e.map((_, i) => e[e.length - 1 - i]).map(v => acc += v).reverse();
+    const e = y.map(v => v <= FLOOR + .05 ? 0 : Math.pow(10, v / 10)); let acc = 0;   // floor bins hold no energy const rev = e.map((_, i) => e[e.length - 1 - i]).map(v => acc += v).reverse();
     edc.push({ x, y: rev.map(v => 10 * Math.log10(v / rev[0])), color: m.color, label: m.name });
   }
   const top = Math.max(...etc.flatMap(s => s.y));
@@ -552,6 +607,11 @@ function drawScene() { if (!state.scene) return; drawSketch(); drawMaps(); drawC
 
 summaryPage(); convergencePage();
 document.getElementById('status').textContent = `${IDX.scenes.length} scenes · methods: ${[...new Set(IDX.scenes.flatMap(s => s.methods))].join(', ')}`;
-if (IDX.scenes.length) { sceneSel.value = IDX.scenes[0].id; loadScene(IDX.scenes[0].id); }
+if ('convergence' in HASH) showPage('convergence');
+if (IDX.scenes.length) {
+  const first = HASH.scene && IDX.scenes.some(s => s.id === HASH.scene) ? HASH.scene : IDX.scenes[0].id;
+  if (HASH.scene) { showPage('scene'); if (HASH.band) bandSel.add(new Option(HASH.band, HASH.band)), bandSel.value = HASH.band; }
+  sceneSel.value = first; loadScene(first, HASH.r ? +HASH.r : 0);
+}
 </script></body></html>
 """
