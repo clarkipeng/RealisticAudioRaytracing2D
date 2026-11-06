@@ -27,6 +27,8 @@ The [denoiser dataset](dataset.md) pipeline is built and a 72-scene pilot is pac
 The converged early field (all path families except the residual walk) is a usable label in most families.
 Since the residual-walk fix of 2 November ([benchmark](../benchmarks/residual-walk-2026-11-02/README.md)) the walk converges in open scenes and may be included in barrier and canopy labels (label SE 5–6%, as for the early field); in corridors, doorways, furnished rooms and shoeboxes it still dominates the label error (22–100%) and stays excluded.
 With rigid walls the walk is now exactly zero, so rigid labels equal the early field.
+Since 4 November (solver v14) the walk is gone: the late field is an energy histogram per band and head-frame direction whose seed spread falls as 1/√N in every family, closed rooms included ([late-energy benchmark](../benchmarks/late-energy-2026-11-04/README.md)).
+It cannot join the complex-pressure labels, but it can be a separate energy-time label; the dataset keeps an always-zero `walk` slot so older renders stay readable.
 Against FDTD, the rigid tracer's early field is 15–23% off in open scenes and 41–51% off in shadow.
 
 **First denoiser, 2 November 2026.**

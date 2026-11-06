@@ -1,0 +1,725 @@
+{
+ "physics": [
+  {
+   "job": "diffuse-a10",
+   "band": 125,
+   "absorption": 0.1,
+   "scattering": 1,
+   "eyring": 1.410541545734598,
+   "sabine": 1.4861538461538462,
+   "EDT": 1.4573051576046816,
+   "T20": 1.4432061765087,
+   "T30": 1.4433679141428466,
+   "levelVsDiffuseDb": [
+    0.07779973266287714,
+    -0.2871289138642078,
+    -0.5968115127153093,
+    -0.7190234032220821
+   ],
+   "levelVsBarronDb": [
+    0.2638814065909722,
+    0.057108220779760153,
+    -0.04522240146439919,
+    -0.05721878753318265
+   ],
+   "solveSeconds": 0.020769899943843484
+  },
+  {
+   "job": "diffuse-a20",
+   "band": 125,
+   "absorption": 0.2,
+   "scattering": 1,
+   "eyring": 0.6660079744187563,
+   "sabine": 0.7430769230769231,
+   "EDT": 0.7199811775146912,
+   "T20": 0.6960326781300289,
+   "T30": 0.6965502805738207,
+   "levelVsDiffuseDb": [
+    0.06056683954871391,
+    -0.5880409148244419,
+    -1.170125706215578,
+    -1.4132166236078518
+   ],
+   "levelVsBarronDb": [
+    0.454670126682004,
+    0.14102059592355506,
+    -0.0019124302810836957,
+    -0.011577391881226765
+   ],
+   "solveSeconds": 0.01020157488528639
+  },
+  {
+   "job": "diffuse-a30",
+   "band": 125,
+   "absorption": 0.3,
+   "scattering": 1,
+   "eyring": 0.4166689786903363,
+   "sabine": 0.49538461538461537,
+   "EDT": 0.47404128129196593,
+   "T20": 0.44617654029090964,
+   "T30": 0.44535604066880774,
+   "levelVsDiffuseDb": [
+    -0.039052475038329724,
+    -0.9210516696404587,
+    -1.7434266837272983,
+    -2.095535166167161
+   ],
+   "levelVsBarronDb": [
+    0.5908862662627972,
+    0.24428773605793114,
+    0.123857413206787,
+    0.14485937561580384
+   ],
+   "solveSeconds": 0.018351662438362837
+  },
+  {
+   "job": "partial-s20-a20",
+   "band": 125,
+   "absorption": 0.2,
+   "scattering": 0.2,
+   "eyring": 0.6660079744187563,
+   "sabine": 0.7430769230769231,
+   "EDT": 0.6882639225743086,
+   "T20": 0.6941928565440276,
+   "T30": 0.6974680551795661,
+   "levelVsDiffuseDb": [
+    -0.26987306624027035,
+    -0.7447584033285386,
+    -1.0697918563406852,
+    -1.370823739273968
+   ],
+   "levelVsBarronDb": [
+    0.1242302208930195,
+    -0.015696892580542306,
+    0.09842141959380935,
+    0.03081549245265746
+   ],
+   "solveSeconds": 0.011632375069893897
+  },
+  {
+   "job": "stone-air",
+   "band": 125,
+   "absorption": 0.02,
+   "scattering": 0.3,
+   "eyring": 7.32538411441085,
+   "sabine": 7.399315286626198,
+   "EDT": 7.365696044785674,
+   "T20": 7.349938979843689,
+   "T30": 7.321991753073758,
+   "levelVsDiffuseDb": [
+    -0.07000810462266148,
+    -0.06654684242085104,
+    -0.14160110517102378,
+    -0.09328902705564454
+   ],
+   "levelVsBarronDb": [
+    -0.03417709182169991,
+    -0.00026215721987564547,
+    -0.0353896976267239,
+    0.03414496016035471
+   ],
+   "solveSeconds": 0.04863850027322769
+  },
+  {
+   "job": "stone-air",
+   "band": 250,
+   "absorption": 0.025,
+   "scattering": 0.3,
+   "eyring": 5.811448696172717,
+   "sabine": 5.8845795903067035,
+   "EDT": NaN,
+   "T20": 5.83805339814797,
+   "T30": 5.837350873864195,
+   "levelVsDiffuseDb": [
+    -0.07691970926697861,
+    -0.0893911544001118,
+    -0.17722232820034123,
+    -0.11487153590022431
+   ],
+   "levelVsBarronDb": [
+    -0.031754390652314335,
+    -0.005838703817569377,
+    -0.043341879749229414,
+    0.045760167895577054
+   ],
+   "solveSeconds": 0.04863850027322769
+  },
+  {
+   "job": "stone-air",
+   "band": 500,
+   "absorption": 0.03,
+   "scattering": 0.3,
+   "eyring": 4.785656309469758,
+   "sabine": 4.857485035778025,
+   "EDT": NaN,
+   "T20": 4.801700945035609,
+   "T30": 4.815026116919948,
+   "levelVsDiffuseDb": [
+    -0.08279348820214243,
+    -0.1125218980253464,
+    -0.21294541177832302,
+    -0.13915769163641886
+   ],
+   "levelVsBarronDb": [
+    -0.027947106639798523,
+    -0.0110602073813417,
+    -0.050368054090796685,
+    0.05590498006880037
+   ],
+   "solveSeconds": 0.04863850027322769
+  },
+  {
+   "job": "stone-air",
+   "band": 1000,
+   "absorption": 0.04,
+   "scattering": 0.3,
+   "eyring": 3.530285362433873,
+   "sabine": 3.600590769705803,
+   "EDT": NaN,
+   "T20": 3.5577002573127174,
+   "T30": 3.549986097826348,
+   "levelVsDiffuseDb": [
+    -0.09185477036745088,
+    -0.1559184268916511,
+    -0.28075394805828174,
+    -0.19136205401481018
+   ],
+   "levelVsBarronDb": [
+    -0.017504992650202264,
+    -0.018376916744382146,
+    -0.060364014181142615,
+    0.07306498509132342
+   ],
+   "solveSeconds": 0.04863850027322769
+  },
+  {
+   "job": "stone-air",
+   "band": 2000,
+   "absorption": 0.05,
+   "scattering": 0.3,
+   "eyring": 2.738497875678103,
+   "sabine": 2.8053528182420338,
+   "EDT": NaN,
+   "T20": 2.7676122984617897,
+   "T30": 2.764296300427122,
+   "levelVsDiffuseDb": [
+    -0.10154609986927869,
+    -0.20191509424471293,
+    -0.35278873108287245,
+    -0.2537863607870484
+   ],
+   "levelVsBarronDb": [
+    -0.00569941899119946,
+    -0.024605926210496967,
+    -0.06867700526983876,
+    0.08709500847709867
+   ],
+   "solveSeconds": 0.04863850027322769
+  },
+  {
+   "job": "stone-air",
+   "band": 4000,
+   "absorption": 0.05,
+   "scattering": 0.3,
+   "eyring": 2.4854087994678884,
+   "sabine": 2.5403534739603324,
+   "EDT": NaN,
+   "T20": 2.5166904380159445,
+   "T30": 2.507847075682958,
+   "levelVsDiffuseDb": [
+    -0.11399951285160756,
+    -0.23109593187082744,
+    -0.3934285180437027,
+    -0.2903536254421155
+   ],
+   "levelVsBarronDb": [
+    -0.008392768387030451,
+    -0.03573137852092864,
+    -0.0803857068326024,
+    0.08523967968658938
+   ],
+   "solveSeconds": 0.04863850027322769
+  },
+  {
+   "job": "stone-air",
+   "band": 8000,
+   "absorption": 0.06,
+   "scattering": 0.3,
+   "eyring": 1.6683112044052195,
+   "sabine": 1.7041890064087586,
+   "EDT": NaN,
+   "T20": 1.6815243816363925,
+   "T30": 1.6866372004805126,
+   "levelVsDiffuseDb": [
+    -0.15728911977939106,
+    -0.3570348931894225,
+    -0.5799182538500836,
+    -0.47352555026099785
+   ],
+   "levelVsBarronDb": [
+    4.1198018835946706e-05,
+    -0.06598561010733593,
+    -0.11355481066286573,
+    0.08602407280883059
+   ],
+   "solveSeconds": 0.04863850027322769
+  },
+  {
+   "job": "stone-air",
+   "band": 16000,
+   "absorption": 0.07,
+   "scattering": 0.3,
+   "eyring": 0.894782499916333,
+   "sabine": 0.9088493151540104,
+   "EDT": NaN,
+   "T20": 0.8954670872430364,
+   "T30": 0.8999879957504919,
+   "levelVsDiffuseDb": [
+    -0.2814824547461041,
+    -0.6755217002096653,
+    -1.05609190393252,
+    -0.9880915601811882
+   ],
+   "levelVsBarronDb": [
+    0.011858029673248777,
+    -0.13286381402463823,
+    -0.1865628757418887,
+    0.055181979115120496
+   ],
+   "solveSeconds": 0.04863850027322769
+  }
+ ],
+ "lattice": [
+  {
+   "job": "lattice-first-images",
+   "earlyOrder": 1,
+   "binSeconds": 0.00800000037997961,
+   "lateOverLattice": 0.9945844437989018,
+   "imagesOverLattice": 0.9999998051705516,
+   "totalOverLattice": 0.9947615126753524
+  },
+  {
+   "job": "lattice-complete-routes",
+   "earlyOrder": 2,
+   "binSeconds": 0.00800000037997961,
+   "lateOverLattice": 0.992719149374006,
+   "imagesOverLattice": 0.9999998126699878,
+   "totalOverLattice": 0.9932967100628208
+  }
+ ],
+ "convergence": [
+  {
+   "job": "converge-shoebox",
+   "rays": 128,
+   "seeds": 4,
+   "spread": 0.4436880802792811,
+   "windows": [
+    0.446239470490635,
+    0.4107337159084826,
+    1.9316769674252896,
+    NaN
+   ],
+   "solveSeconds": 0.003926750039681792,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-shoebox",
+   "rays": 512,
+   "seeds": 4,
+   "spread": 0.2073211126854466,
+   "windows": [
+    0.20715511406519316,
+    0.20958211690580938,
+    1.7345197485096067,
+    NaN
+   ],
+   "solveSeconds": 0.00446259998716414,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-shoebox",
+   "rays": 2048,
+   "seeds": 4,
+   "spread": 0.09131597559968975,
+   "windows": [
+    0.0901619609314648,
+    0.1057556001337612,
+    1.2149387520923183,
+    NaN
+   ],
+   "solveSeconds": 0.00782150006853044,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-shoebox",
+   "rays": 8192,
+   "seeds": 4,
+   "spread": 0.0513620806551889,
+   "windows": [
+    0.05095885417657076,
+    0.056458249227727055,
+    0.47638631901452255,
+    NaN
+   ],
+   "solveSeconds": 0.02538670040667057,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-doorway",
+   "rays": 128,
+   "seeds": 4,
+   "spread": 0.4728848104764548,
+   "windows": [
+    0.470354345146495,
+    0.5242014733775249,
+    2.0,
+    NaN
+   ],
+   "solveSeconds": 0.005840800004079938,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-doorway",
+   "rays": 512,
+   "seeds": 4,
+   "spread": 0.2660400888818756,
+   "windows": [
+    0.26542795698862376,
+    0.27828355731784366,
+    1.9837823951401645,
+    NaN
+   ],
+   "solveSeconds": 0.0070189000107347965,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-doorway",
+   "rays": 2048,
+   "seeds": 4,
+   "spread": 0.13380121584587829,
+   "windows": [
+    0.13370445443709492,
+    0.13579280522407922,
+    1.6118153334692797,
+    NaN
+   ],
+   "solveSeconds": 0.00851354980841279,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-doorway",
+   "rays": 8192,
+   "seeds": 4,
+   "spread": 0.06455110078147032,
+   "windows": [
+    0.06430504493324364,
+    0.06945012970019926,
+    0.973935343269896,
+    NaN
+   ],
+   "solveSeconds": 0.027493000030517578,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-corridor",
+   "rays": 128,
+   "seeds": 4,
+   "spread": 1.7499849264248934,
+   "windows": [
+    1.7663756296906787,
+    1.583974644376394,
+    2.0,
+    NaN
+   ],
+   "solveSeconds": 0.005373549880459905,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-corridor",
+   "rays": 512,
+   "seeds": 4,
+   "spread": 1.228357181951014,
+   "windows": [
+    1.2281545850036153,
+    1.230457366691907,
+    2.0,
+    NaN
+   ],
+   "solveSeconds": 0.00834855018183589,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-corridor",
+   "rays": 2048,
+   "seeds": 4,
+   "spread": 0.8651496897675649,
+   "windows": [
+    0.8776913940877881,
+    0.7632975660754912,
+    2.0,
+    NaN
+   ],
+   "solveSeconds": 0.015154399909079075,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-corridor",
+   "rays": 8192,
+   "seeds": 4,
+   "spread": 0.4179888816421399,
+   "windows": [
+    0.4185801833860734,
+    0.4143126446973509,
+    1.2143867655350056,
+    NaN
+   ],
+   "solveSeconds": 0.05007675103843212,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-furnished",
+   "rays": 128,
+   "seeds": 4,
+   "spread": 0.6668314031898849,
+   "windows": [
+    0.6449043023078478,
+    0.7722533017074966,
+    1.4746198743198733,
+    NaN
+   ],
+   "solveSeconds": 0.006977700162678957,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-furnished",
+   "rays": 512,
+   "seeds": 4,
+   "spread": 0.33964879593589437,
+   "windows": [
+    0.3268565855381607,
+    0.40491296477366606,
+    1.2783234679741884,
+    NaN
+   ],
+   "solveSeconds": 0.008322699926793575,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-furnished",
+   "rays": 2048,
+   "seeds": 4,
+   "spread": 0.16569290680196366,
+   "windows": [
+    0.15921968775985001,
+    0.19726347334141645,
+    0.7674878963506887,
+    NaN
+   ],
+   "solveSeconds": 0.022040500305593014,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-furnished",
+   "rays": 8192,
+   "seeds": 4,
+   "spread": 0.08094354420128251,
+   "windows": [
+    0.07695814835355372,
+    0.09985097013062033,
+    0.429300080978199,
+    NaN
+   ],
+   "solveSeconds": 0.07651979848742485,
+   "maxBounces": 32
+  },
+  {
+   "job": "converge-shoebox-deep",
+   "rays": 512,
+   "seeds": 4,
+   "spread": 0.207324008831687,
+   "windows": [
+    0.20715511406519316,
+    0.20954461504603716,
+    0.2222585664809613,
+    0.25024010090409066
+   ],
+   "solveSeconds": 0.01346860034391284,
+   "maxBounces": 1024
+  },
+  {
+   "job": "converge-shoebox-deep",
+   "rays": 2048,
+   "seeds": 4,
+   "spread": 0.09134223780063278,
+   "windows": [
+    0.0901619609314648,
+    0.10581591809352768,
+    0.11918564792686401,
+    0.12076387921832278
+   ],
+   "solveSeconds": 0.02985094953328371,
+   "maxBounces": 1024
+  }
+ ],
+ "convergenceWindows": [
+  [
+   0,
+   0.1
+  ],
+  [
+   0.1,
+   0.3
+  ],
+  [
+   0.3,
+   0.6
+  ],
+  [
+   0.6,
+   1.25
+  ]
+ ],
+ "church": {
+  "before-live": {
+   "rate": 44100,
+   "seconds": 17.496757369614514,
+   "peak": 7.316025733947754,
+   "clipped": 311,
+   "windows": {
+    "outside": {
+     "rmsDbfs": -35.01999982952566,
+     "peak": 0.688574492931366,
+     "crestDb": 31.779018448878723,
+     "quarterSecondSpreadDb": 9.192148527856418,
+     "spikes": 318
+    },
+    "doorway": {
+     "rmsDbfs": -18.301102119826876,
+     "peak": 7.316025733947754,
+     "crestDb": 35.58660660837988,
+     "quarterSecondSpreadDb": 27.148545843108383,
+     "spikes": 261
+    },
+    "interior": {
+     "rmsDbfs": -50.62626415372797,
+     "peak": 0.2596333622932434,
+     "crestDb": 38.91347410496286,
+     "quarterSecondSpreadDb": 66.43557908180243,
+     "spikes": 152
+    },
+    "tail": {
+     "rmsDbfs": -57.378823638039904,
+     "peak": 0.0448654443025589,
+     "crestDb": 30.417063096583274,
+     "quarterSecondSpreadDb": 115.2749458399949,
+     "spikes": 37
+    }
+   },
+   "method": "integrated-first-mirrors-edge-preview-v13",
+   "solveSeconds": 8.268773200000004,
+   "audioSeconds": 296.89658389999954,
+   "responses": 378,
+   "wallSeconds": 1563.8505486,
+   "numericBytes": 7730438052
+  },
+  "after-live": {
+   "rate": 44100,
+   "seconds": 17.496757369614514,
+   "peak": 7.3146891593933105,
+   "clipped": 311,
+   "windows": {
+    "outside": {
+     "rmsDbfs": -32.66867824924991,
+     "peak": 0.6947263479232788,
+     "crestDb": 29.504953650681166,
+     "quarterSecondSpreadDb": 10.770995779406825,
+     "spikes": 61
+    },
+    "doorway": {
+     "rmsDbfs": -18.292084268027548,
+     "peak": 7.3146891593933105,
+     "crestDb": 35.57600177478371,
+     "quarterSecondSpreadDb": 24.558536064752623,
+     "spikes": 69
+    },
+    "interior": {
+     "rmsDbfs": -71.43814888495,
+     "peak": 0.0048252297565341,
+     "crestDb": 25.108508832823155,
+     "quarterSecondSpreadDb": 0.25463745984863806,
+     "spikes": 0
+    },
+    "tail": {
+     "rmsDbfs": -76.36840364368626,
+     "peak": 0.0010278435656800866,
+     "crestDb": 16.606944074387634,
+     "quarterSecondSpreadDb": 109.86402392004344,
+     "spikes": 0
+    }
+   },
+   "method": "first-images-late-energy-v14",
+   "solveSeconds": 4.684162600000007,
+   "audioSeconds": 189.47744170000027,
+   "responses": 378,
+   "wallSeconds": 984.0711359,
+   "numericBytes": 6206384228
+  }
+ },
+ "cost": {
+  "before-live": {
+   "method": "integrated-first-mirrors-edge-preview-v13",
+   "responses": 378,
+   "solveMsPerResponse": 21.875061375661385,
+   "maximumSolveMs": 77.9214,
+   "dspMsPerResponse": 785.440698148147,
+   "responseStepMs": 46.439909297052154,
+   "numericGiB": 7.199531469494104,
+   "wallSeconds": 1563.8505486,
+   "lateRays": null,
+   "note": "Church weather segment (rain + wind, 2 pairs), live preset FFT 128/hop 32, 2048-sample steps, 32 bounces, 1.25 s horizon, GPU spectral, mono; offline batch of 1 response, 20% pacing outside the timed sections."
+  },
+  "after-live": {
+   "method": "first-images-late-energy-v14",
+   "responses": 378,
+   "solveMsPerResponse": 12.391964550264568,
+   "maximumSolveMs": 71.3688,
+   "dspMsPerResponse": 501.26307328042395,
+   "responseStepMs": 46.439909297052154,
+   "numericGiB": 5.780145738273859,
+   "wallSeconds": 984.0711359,
+   "lateRays": 512,
+   "note": "Church weather segment (rain + wind, 2 pairs), live preset FFT 128/hop 32, 2048-sample steps, 32 bounces, 1.25 s horizon, GPU spectral, mono; offline batch of 1 response, 20% pacing outside the timed sections."
+  }
+ },
+ "regression": {
+  "result": "Skipped:Ignored",
+  "total": "331",
+  "passed": "323",
+  "failed": "0",
+  "skipped": "8",
+  "duration": "624.5435706",
+  "skippedCases": [
+   "MeasureCompleteRoutes(\"\")",
+   "MeasureDatasetScenes",
+   "MeasureFamilyGainCost",
+   "MeasureLateEnergy",
+   "MeasureRoomMaterialMotion",
+   "MeasureRuntimeCompleteRoutes(\"\")",
+   "MeasureScalableRoutes(\"\")",
+   "MeasureWaveField"
+  ],
+  "late": {
+   "LateAudioMatchesCpuReference(Spectral,False,False)": "Passed",
+   "LateAudioMatchesCpuReference(ImpulseResponse,False,False)": "Passed",
+   "LateAudioMatchesCpuReference(Spectral,True,False)": "Passed",
+   "LateAudioMatchesCpuReference(ImpulseResponse,True,True)": "Passed",
+   "LateDiffuseRoomDecaysAtTheEyringRate": "Passed",
+   "LateHistogramIsStableForAStaticScene": "Passed",
+   "LateLosslessRoomKeepsConstantEnergyFlow": "Passed",
+   "LateSpecularEnergyCompletesTheImageLattice(0)": "Passed",
+   "LateSpecularEnergyCompletesTheImageLattice(256)": "Passed",
+   "LateSynthesisFollowsTheHistogramEnvelope": "Passed"
+  },
+  "log": ".context/late-energy/logs/tests-20261106-113911"
+ }
+}

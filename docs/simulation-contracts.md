@@ -33,6 +33,12 @@ Rigid barrier/canopy totals now equal the early field (15–23% from FDTD, previ
 Walk-including labels are usable for barrier and canopy scenes only; preset solves cost 16–31% more (median), rigid open scenes the same.
 D³ and longer edge chains are omitted rather than estimated. [Evidence](benchmarks/residual-walk-2026-11-02/README.md).
 
+**Late energy field, 2026-11-04 (implemented, solver v14):** the coherent residual walk is removed.
+The renderer is now a hybrid: phase-exact direct sound, first-order images and (opt-in) complete D/DD/RD/DR/RR routes, plus a late field computed as incoherent energy by stochastic ray tracing and synthesized as noise shaped by its energy envelope.
+Energy rays never gain weight, so closed rooms converge as one over the ray count instead of diverging with bounce count.
+Paths the early part already holds are excluded from the late field; the late field has no diffraction.
+[Contract](#late-energy-field-v14) · [evidence](benchmarks/late-energy-2026-11-04/README.md).
+
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
 **Invariant:** the take determines scene and source inputs; the render configuration determines computation. Changing quality never changes the recorded experiment.
@@ -93,7 +99,7 @@ Still unresolved before their respective milestones: the indirect estimator's re
 
 The existing Raytraced/Spectral renderer supports optional `maxBounces = 0`. The user's clarified scope retains Church's previous 32-bounce profile and existing reverberation; only object-vibration/radiation integration is deferred. Zero bounces keeps deterministic direct arrivals for each point or plane site, including retarded travel time, distance/air attenuation, occlusion, material transmission/interior travel and the selected listener filters. It sets the indirect ray count to zero, skips the trace dispatch and reserves no indirect path/filter rows. Reflections, scattering and diffraction are absent even if the diffraction factor is positive. No new transport enum or separate rain kernel is needed.
 
-For `F` frequency bins, each source/listener pair owns `F * directSiteCapacity` slots at zero bounces; positive bounce counts retain the existing additional `F * raysPerBin * (maxBounces + 1)` slots. Plane `samples` still bounds spatial sites or retained seeded bursts. Seeded bursts need ray coverage only when indirect transport is enabled; direct-only evaluation visits every retained burst independently of `raysPerBin`. Event seeds, world positions, timing, gain and batch ownership use the existing shared contracts. The older `Transport.Direct` baseline still rejects planes; select **Raytraced + Spectral + zero bounces** for direct plane audio.
+For `F` frequency bins, each source/listener pair owns `F * directSiteCapacity` slots at zero bounces; positive bounce counts add mirror and complete-route slots and, since v14, the late energy histogram instead of walk slots. Plane `samples` still bounds spatial sites or retained seeded bursts. Seeded bursts need ray coverage only when indirect transport is enabled; direct-only evaluation visits every retained burst independently of `raysPerBin`. Event seeds, world positions, timing, gain and batch ownership use the existing shared contracts. The older `Transport.Direct` baseline still rejects planes; select **Raytraced + Spectral + zero bounces** for direct plane audio.
 
 This optional mode removes renderer-generated room reflections, not acoustics embedded in source recordings. Delayed direct sound and finite source/material/HRTF filter tails still complete after a source stops; zero bounces must not truncate those. The physical drop/object-radiation integration remains deferred. Analytic impulse/occlusion/transmission checks, seeded live/offline CPU/GPU comparisons, streamed input and silent Church renders at the historical zero-bounce checkpoint `f65f212` are recorded in [direct-sound verification](benchmarks/direct-sound-2026-10-24/README.md). Those scene measurements do not describe the restored 32-bounce profile.
 
@@ -218,9 +224,14 @@ Limits: one dominant route, geometry frozen at solve time, magnitude-only thin-s
 
 ### First-reflection runtime integration, 2026-10-27
 
-`ReflectionSampling.FirstImages` is the default in live and offline transport. For each retained emission site and frequency, it checks `min(primitiveCount, max(reflectionCandidates, raysPerBin))` cyclic primitive candidates and retains every valid image-source arrival separately. The default candidate floor is 128. Retaining more emission events does not increase the candidates per event. Candidate pressure includes `primitiveCount / candidateCount`; enumeration therefore has unit weight, while bounded sampling retains its probability compensation. Candidate count does not merge different delays or replace event birth/phase, material phase, retarded mirror timing or Doppler. `PrimitiveBaseline` retains the old per-ray mirror estimator for comparisons. Zero bounces allocates neither mirror nor walk arrivals.
+`ReflectionSampling.FirstImages` is the default in live and offline transport. For each retained emission site and frequency, it checks `min(primitiveCount, max(reflectionCandidates, raysPerBin))` cyclic primitive candidates and retains every valid image-source arrival separately. The default candidate floor is 128. Retaining more emission events does not increase the candidates per event. Candidate pressure includes `primitiveCount / candidateCount`; enumeration therefore has unit weight, while bounded sampling retains its probability compensation. Candidate count does not merge different delays or replace event birth/phase, material phase, retarded mirror timing or Doppler. `PrimitiveBaseline` retains the old per-ray mirror estimator for comparisons. Zero bounces allocates no mirror arrivals and no late field.
 
-The direct, first-mirror and existing surface/edge ranges share one per-pair layout. All configured walk interactions remain. GPU audio reserves filters by a conservative geometric group bound: constant material IOR permits frequency sharing for direct/mirror routes; walks additionally require constant transmission and scattering probabilities. Frequency-dependent attenuation still has its own coefficients. Dispersive or frequency-dependent branching keeps the required separate capacity. Arbitrary injected test arrivals use full capacity; a violated transport bound raises an error before an out-of-range filter write. No amplitude clipping or path-weight threshold supplies the saving.
+The direct, first-mirror, baseline-mirror and complete-route ranges share one per-pair layout.
+Since solver v14 (4 November) there is no walk range; the late field is a separate energy histogram (see [late energy field](#late-energy-field-v14)).
+GPU audio reserves filters by a conservative geometric group bound: constant material IOR permits frequency sharing for direct/mirror routes.
+Frequency-dependent attenuation still has its own coefficients, and dispersive speeds keep the required separate capacity.
+Arbitrary injected test arrivals use full capacity; a violated transport bound raises an error before an out-of-range filter write.
+No amplitude clipping or path-weight threshold supplies the saving.
 
 This is a partial integration. The older improved complete-route pressure-map prototype was static 2.5D and did not output live arrival clocks. The attempted finite-3D complete-edge port failed its wave-reference gate and remains offline. Higher-order mirror and exact mixed mirror/edge connections, diffuse-model reciprocity and high-variance finite-edge sampling are still unresolved. [Measured rain output, cost, controls and rejected experiment](benchmarks/runtime-mirrors-2026-10-27/README.md).
 
@@ -552,11 +563,16 @@ python tools/compare_wave_field.py score .context/wave-study/pilot --split devel
 
 Open an existing 2D room and **Acoustics → 2D Ray Debugger**. Select its manager, source/listener pair, FFT frequency bin and probe rays per bin, then **Capture**. The window compiles the registered native geometry through `SceneToTake`, observes the current enabled objects, and dispatches the actual direct, mirror and sampled transport kernels. The probe clones renderer settings and overrides only the ray budget and transport selection; it does not edit the scene, play audio or alter the live solver. Source activity means enabled source component, not whether a clip is currently playing. Capture is synchronous and can stall the Editor, especially on the first Metal shader compilation.
 
-The scene and captured segments stay frozen together. **Play/Pause** animates one propagation sweep over four wall-clock seconds; **Travel ms** scrubs the same data. Its right-hand numeric field sets the visible time range, up to the solver's delay horizon. The initial range covers captured interactions and arrivals. Mouse wheel zooms, drag pans, **Fit** frames geometry, and the path selector isolates direct/mirror/walk paths. Click a segment to inspect interaction material, accumulated time and signed pressure weight. Weights are Monte Carlo contributions, not physical energy per drawn line. Listener connections report the actual final `RayPath` pressure gain; intermediate segments report their current estimator weight (mirror legs use their final contribution).
+The scene and captured segments stay frozen together. **Play/Pause** animates one propagation sweep over four wall-clock seconds; **Travel ms** scrubs the same data. Its right-hand numeric field sets the visible time range, up to the solver's delay horizon. The initial range covers captured interactions and arrivals. Mouse wheel zooms, drag pans, **Fit** frames geometry, and the path selector isolates direct, mirror and complete-route paths (the late energy field is a histogram, not captured rays). Click a segment to inspect interaction material, accumulated time and signed pressure weight. Weights are Monte Carlo contributions, not physical energy per drawn line. Listener connections report the actual final `RayPath` pressure gain; intermediate segments report their current estimator weight (mirror legs use their final contribution).
 
-`TransportSolver.CaptureRays(state, pair, bin)` returns a 48-byte segment ABI: `float4 start`, `float4 end` (XYZ and accumulated seconds), `uint kind`, `int material`, `uint path`, `float pressure`. Path 0 is direct; sampled ray `r` uses `1+2r` for its mirror candidate and `2+2r` for its random walk and receiver connections. Reflection, scatter, transmission, diffraction, listener arrival, escape and rejected candidate are distinct events. A segment is colored by the event at its endpoint; a transmitted incoming leg has the preceding medium's speed. Travel timestamps come from the shader's material-aware integration. Rejected edge proposals are optional dotted lines and are not successful propagation. Direct rays stopped by an opaque surface are also marked rejected. Escapes extend only to the configured delay horizon; exhausting the bounce budget leaves a partial walk, not a listener arrival.
+`TransportSolver.CaptureRays(state, pair, bin)` returns a 48-byte segment ABI: `float4 start`, `float4 end` (XYZ and accumulated seconds), `uint kind`, `int material`, `uint path`, `float pressure`. Path 0 is direct; mirror candidate (or baseline ray) `r` uses `1+2r`; complete routes use their route identity.
+Reflection, scatter, transmission, diffraction, listener arrival, escape and rejected candidate are distinct events.
+A segment is colored by the event at its endpoint; a transmitted incoming leg has the preceding medium's speed.
+Travel timestamps come from the shader's material-aware integration.
+Direct rays stopped by an opaque surface are marked rejected.
 
-The opt-in `ACOUSTIC_DEBUG` shader variant reserves `primitiveCount + 1 + raysPerBin * (2 + 2*maxBounces)` segment slots for one pair/bin, without append atomics or a separate capture cap. Direct root iterations replace prior proposals; mirror candidates record only validated connections; sampled walks record each accepted interaction and listener connection. No debug storage/readback exists in normal playback. The capture returns CPU data and disposes its temporary GPU buffer; the window also disposes its temporary solver immediately. Normal transport buffer sizing still includes the full configured frequency grid, so a large probe ray budget can be expensive even though capture traces only one bin.
+The opt-in `ACOUSTIC_DEBUG` shader variant reserves `primitiveCount + 1 + 2 * mirrorCandidates + 3 * completeRouteSamples` segment slots for one pair/bin (`2 * raysPerBin` mirror slots with `PrimitiveBaseline`), without append atomics or a separate capture cap.
+Direct root iterations replace prior proposals; mirror candidates and complete routes record only validated connections. No debug storage/readback exists in normal playback. The capture returns CPU data and disposes its temporary GPU buffer; the window also disposes its temporary solver immediately. Normal transport buffer sizing still includes the full configured frequency grid, so a large probe ray budget can be expensive even though capture traces only one bin.
 
 The initial window is a **frozen geometry probe**, with velocities zero, in Edit or Play mode; it is not the exact in-flight live audio response or a moving-scene replay. It projects XY while retaining the full 3D length of sampled points on infinitely extruded 2D edges. This displays the implemented sampler, including its approximation limits, not the complete wave field. The segment ABI can represent 3D paths, but a 3D viewer and capture of live motion states remain future work.
 
@@ -2149,12 +2165,10 @@ Candidate topology is prepared once per emission/receiver/pose; height samples
 share geometry across frequency bins. Truncated candidate sets stratify the
 nonempty route families and retain the selection-PDF weight.
 
-Complete arrivals append after the existing direct/mirror/walk prefix. Walk
-addresses must derive from that prefix, never from the end of a pair. Only pure
-D/DD walk outputs are suppressed. Since 2 November the walk forms no consecutive
-edges at all when complete routes are on. Retaining
-32 walk interactions does not supply all possible high-order specular/mixed
-connections. Every complete arrival retains delay, signed/complex material gain,
+Complete arrivals append after the direct/mirror prefix (and the baseline-mirror
+range when `PrimitiveBaseline` is selected); addresses derive from that prefix,
+never from the end of a pair. Higher-order specular and mixed paths belong to the
+late energy field (solver v14), not to coherent arrivals. Every complete arrival retains delay, signed/complex material gain,
 direction, velocity ratio and emission birth/phase. Planar height symmetry creates
 two directions. Both live/offline and CPU/GPU DSP consume the same path ABI.
 
@@ -2179,21 +2193,71 @@ union of coplanar active triangles, independently of owner IDs; a genuine gap
 retains full multiplicity. World poses participate in both checks. Visibility
 offsets use the existing tolerance and do not alter arrival vertices or delays.
 This does not construct a union boundary for arbitrary overlapping solids or
-complete higher-order paths. The residual walk remains unchanged. See the
+complete higher-order paths. See the
 [finite-room audit](benchmarks/finite-diffraction-2026-10-28/README.md) for the
 independent controls, representation comparison and remaining quality failures.
 
-**Residual walk, 2 November:** with complete routes on, a walk edge vertex is always followed by a surface event, so the walk holds no pure D³+ chain and no adjacent-edge mixed path.
+**Residual walk, 2 November (superseded by v14):** with complete routes on, a walk edge vertex was always followed by a surface event, so the walk held no pure D³+ chain and no adjacent-edge mixed path.
 Those families are omitted, not estimated: their absolute edge-to-edge transfer exceeds one, so sampling cannot converge.
 Transmission and scatter branches are drawn in proportion to their pressure amplitudes, and a diffuse surface-to-edge leg restarts from the surface vertex's weight divided by the probability that the edge branch was reachable.
-The walk remains unconverged in closed rooms.
+The walk remained unconverged in closed rooms, which is why v14 replaced it with the late energy field.
 See the [residual-walk benchmark](benchmarks/residual-walk-2026-11-02/README.md).
 
 **Per-family gains, 3 November (opt-in):** `TakeRender.Settings.familyGains` multiplies each first-order image and complete-route arrival by `(1 + k_f·rho)^-power`, where `f` is its family (R, D, DD, RD, DR, RR).
 `rho` is that family's candidate routes per sample, as sampled: primitives over mirror candidates for images, total candidates over samples when every complete candidate is enumerated, and otherwise the route's inclusion weight (family size times nonempty families over samples).
 `k`, the power, the fitted `rho` range and provenance are data in `Resources/Acoustics/FamilyGains.json`, never code constants.
 A pass right after the mirror and complete-route kernels (`FamilyGains.hlsl`) repeats their slot and sample-to-route mapping and scales the path pressure, so every audio backend consumes the same paths; no transport kernel changes.
-Direct sound and the residual walk are never gained, and with the setting off every path is bit-identical to the unbiased estimator.
+Direct sound and the late energy field are never gained, and with the setting off every path is bit-identical to the unbiased estimator.
 The setting requires raytraced transport with complete routes and First Images reflection sampling.
 It is a biased, level-preserving estimator for low budgets, not a physics change; labels, checks and benchmarks render with it off.
 See the [family-gain benchmark](benchmarks/family-gains-2026-11-03/README.md).
+
+## Late energy field (v14)
+
+Implemented 4 November 2026; the solver contract is `first-images-late-energy-v14` (or `complete-early-routes-late-energy-v14` with complete routes).
+It replaces the coherent residual walk, which carried diffusely scattered sound as a signed pressure whose per-bounce weight grew by about 2.6 and therefore never converged in closed rooms.
+Diffusely scattered sound has zero mean pressure; only its energy is meaningful, so the late field is computed and synthesized as energy (Vorländer 1989; Savioja & Svensson 2015).
+Old takes render unchanged in their inputs; only the solver and DSP contracts change.
+
+**Parts.**
+1. Direct sound with material transmission: unchanged.
+2. Early, phase-exact: first-order image sources (First Images or the baseline estimator) and, with `completeRouteSamples > 0`, the complete D/DD/RD/DR/RR routes: unchanged.
+3. Late, energy: `Transport.hlsl` → `LateEnergy.hlsl`, one GPU thread per ray and octave band (eight bands, 125 Hz to 16 kHz, the material model's band centres).
+4. Late synthesis: `LateReverb` (CPU reference) and `GpuAudio.Late` (GPU), shared by Spectral and Impulse Response synthesis, live and offline.
+
+**Energy rays.**
+`lateRays` rays per band and source/listener pair start at the source with weight one (times their emission site's weight) and share random numbers across bands.
+Absorption, impedance reflection (`|R(θ)|²`) and air/medium loss are deterministic factors no larger than one; transmission, diffuse (Lambert) and specular continuations are chosen with their energy fractions (ISO 17497-1 defines scattering as an energy fraction).
+A ray stops when it escapes, reaches `maximumDelaySeconds`, exceeds `maxBounces` interactions or falls below 1e-8 (−80 dB) of its emitted energy.
+A weight therefore never grows; total energy is conserved in a lossless room (`LateLosslessRoomKeepsConstantEnergyFlow`).
+Plane sources use stable late emission sites, independent of the burst schedule: a legacy plane's fixed sites, or 64 fixed draws from a burst plane's density (projected impacts land on the surface below, at the first prepared pose); the histogram is their energy-weighted mean.
+
+**Detection.**
+Diffuse rain: at every surface the scattered energy fraction `w (1−α)(1−t) s` is connected to the listener with the Lambert law, `4 cosθ / d²` in 3D (`π cosθ / (d L)` in `Planar2D`, whose spreading follows the total path length `L`), over visible connections only.
+Receiver sphere: segments whose last event is a specular reflection or a transmission are scored by their chord through a sphere of `lateReceiverRadius` (default 0.5 m) around the listener, a track-length estimator `3 w chord / r³` (`2 w chord / (r² L)` in 2D), with a visibility check from the listener to the scored point.
+Segments right after a diffuse event are not scored by the sphere, because diffuse rain already holds their direct connection.
+Energies use the direct-sound convention: direct sound at distance `d` has energy `(ReferenceDistance/d)²`.
+
+**No double counting.**
+A path is held by the early part, and never scored, when it has no scattering and either no reflection (direct and transmitted direct sound) or no transmission and at most `LateEarlyOrder` specular reflections.
+`LateEarlyOrder` is 1 (first images), or 2 when complete routes and at least two bounces are on and source and listener are in air (the RR family).
+Diffuse-rain scores always end in a scattering event, so they are never early.
+Edge diffraction is not part of the late field.
+`LateSpecularEnergyCompletesTheImageLattice` checks the rule against the analytic shoebox image lattice.
+
+**Histogram.**
+Per frame, pair, head-frame direction (±x, ±y, ±z of the listener's orientation at solve time), band and time bin of `LatePartition` samples, a 32.32 fixed-point sum of ray shares accumulated with integer atomics, so sums are exact and order-independent; energy is the sum divided by `lateRays`.
+`LatePartition = min(fftSize, 1024, largest power of two dividing responseStepSamples)`: never longer than the DSP latency (block convolution stays causal) and dividing the response step (late responses change on block boundaries).
+
+**Synthesis (Polack 1993).**
+A fixed noise basis per output channel: seeded white noise as long as the delay horizon, split into eight octave bands whose responses sum to one (linear in log frequency between band centres), cut into partitions and stored as their zero-padded spectra.
+Binaural channels mix two independent noises to the KEMAR set's diffuse-field interaural coherence (Borß & Martin 2009).
+Partition `k` of a pair's late impulse response is `Σ_b sqrt(E_b,k / P) · noise_b,k`, where `E_b,k` is the ear's energy: direction bins weighted by the HRTF's mean band energy toward each bin's axis (all ones for mono).
+Each source's emitted signal (a point source's signal, or a plane's emission rows summed with their amplitudes), delayed by the declared DSP latency, is convolved by uniform partitioned overlap-save, so late arrivals share the early paths' delay origin.
+A new response crossfades from the previous kernels over one response step; the noise never changes, so envelope updates never re-randomise the tail, and pairs start at hashed noise offsets so different pairs are decorrelated.
+
+**Limits.**
+The late field carries no Doppler, no interaural time structure beyond the diffuse coherence, and only six-direction energy resolution; head rotation updates at the solve rate.
+Rare branches (for example transmission into a closed room through walls with `t ≈ 1e-4`) are sampled by their energy fraction and remain high-variance at small ray budgets.
+Plane sources share one late response per source, averaged over their emission density.
+The direct path, images and complete routes are as validated before; the late field is a geometric-acoustics estimate, not a wave solution (no modes or low-frequency diffraction).
