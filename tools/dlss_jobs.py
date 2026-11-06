@@ -28,6 +28,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 import dlss_scenes as ds  # noqa: E402
+import heavy_guard as hg  # noqa: E402
 
 DATA = ROOT / '.context/audio-dlss-data'
 RUNNER = ROOT / '.context/gpu-audio/runner'
@@ -107,34 +108,34 @@ def generate(data, counts, start=0):
 # ---------------------------------------------------------------- guarded process
 
 class Worker:
-    """Run one low-priority child with an RSS guard and battery suspension."""
+    """Run one low-priority child under the machine-wide heavy-job lock, with a
+    physical-footprint guard (GPU memory included), a system memory/swap guard and
+    battery suspension."""
 
     def __init__(self, command, env, log, rss_limit=4 * GIB):
-        self.command, self.env, self.log, self.rss_limit = command, env, log, rss_limit
+        self.command, self.env, self.log, self.limit = command, env, log, rss_limit
         self.samples, self.paused_seconds = [], 0.0
 
-    def tree_rss(self, pid):
-        out = subprocess.run(['ps', '-A', '-o', 'pid=,ppid=,rss='], capture_output=True, text=True).stdout.split()
-        table = np.array(out, dtype=np.int64).reshape(-1, 3) if out else np.zeros((0, 3), np.int64)
-        members, frontier = {pid}, [pid]
-        while frontier:
-            children = table[np.isin(table[:, 1], frontier), 0].tolist()
-            frontier = [c for c in children if c not in members]
-            members.update(frontier)
-        return int(table[np.isin(table[:, 0], list(members)), 2].sum()) * 1024
-
     def run(self):
-        process = subprocess.Popen(self.command, env=self.env, start_new_session=True)
+        with hg.HeavyLock(self.log):
+            return self._run()
+
+    def _run(self):
+        watch = hg.SystemWatch()
+        env = dict(self.env or os.environ, **{hg.HELD_ENV: '1'})
+        process = subprocess.Popen(self.command, env=env, start_new_session=True)
         awake = subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
         started, suspended = time.monotonic(), False
         previous = {s: signal.signal(s, self._interrupt) for s in [signal.SIGINT, signal.SIGTERM]}
         try:
             last_power = 0.0
             while process.poll() is None:
-                rss = self.tree_rss(process.pid)
-                self.samples.append(dict(seconds=round(time.monotonic() - started, 1), treeRssBytes=rss))
-                if rss > self.rss_limit:
-                    raise MemoryError(f'Worker tree RSS {rss / GIB:.2f} GiB exceeded the guard.')
+                used = hg.tree_footprint(process.pid)
+                self.samples.append(dict(seconds=round(time.monotonic() - started, 1), treeFootprintBytes=used))
+                if used > self.limit:
+                    raise MemoryError(f'Worker footprint {used / GIB:.2f} GiB exceeded the {self.limit / GIB:.1f} GiB guard.')
+                if not suspended and (problem := watch.problem()):
+                    raise MemoryError(f'Stopped worker: {problem}.')
                 if time.time() - last_power > 30:
                     last_power = time.time()
                     mains = on_mains()
@@ -149,7 +150,7 @@ class Worker:
                         suspended = False
                         self.paused_seconds += time.monotonic() - paused_at
                         self.log(f'resumed worker on AC power at {time.strftime("%H:%M:%S")}')
-                time.sleep(5)
+                time.sleep(2)
         finally:
             if process.poll() is None:
                 if suspended:
@@ -164,8 +165,9 @@ class Worker:
             for s, h in previous.items():
                 signal.signal(s, h)
         return dict(exitCode=process.returncode, wallSeconds=time.monotonic() - started,
-                    pausedSeconds=self.paused_seconds, peakTreeRssBytes=max([s['treeRssBytes'] for s in self.samples] or [0]),
-                    samples=self.samples[::6])
+                    pausedSeconds=self.paused_seconds,
+                    peakTreeFootprintBytes=max([s['treeFootprintBytes'] for s in self.samples] or [0]),
+                    samples=self.samples[::15])
 
     @staticmethod
     def _signal(process, number):
@@ -303,7 +305,7 @@ def render_batch(logs, group, work_fraction, variant, runner, unity, rss_limit):
             (s / variant / 'provenance.json').write_text(json.dumps(record, indent=1) + '\n')
     good = sum(not v for v in valid.values())
     print(f'{name}: exit {resources["exitCode"]}, test runner passed={passed}, {good}/{len(group)} scenes verified, '
-          f'{resources["wallSeconds"]:.0f} s, peak RSS {resources["peakTreeRssBytes"] / GIB:.2f} GiB', flush=True)
+          f'{resources["wallSeconds"]:.0f} s, peak footprint {resources["peakTreeFootprintBytes"] / GIB:.2f} GiB', flush=True)
     for scene, reasons in valid.items():
         if reasons:
             print(f'{name}: {scene} invalid: {reasons[:3]}', flush=True)

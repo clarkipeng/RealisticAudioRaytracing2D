@@ -46,7 +46,7 @@ def run(job_file, work_fraction=.2, filter_='TakeChecks.MeasureResidualWalk'):
     (logs / 'resources.json').write_text(json.dumps(resources, indent=1) + '\n')
     root = xml.parse(logs / 'tests.xml').getroot() if (logs / 'tests.xml').exists() else None
     print(f'{logs.name}: exit {resources["exitCode"]}, result {root.get("result") if root is not None else None}, '
-          f'{resources["wallSeconds"]:.0f} s, peak RSS {resources["peakTreeRssBytes"] / dj.GIB:.2f} GiB', flush=True)
+          f'{resources["wallSeconds"]:.0f} s, peak footprint {resources["peakTreeFootprintBytes"] / dj.GIB:.2f} GiB', flush=True)
     missing = [j['output'] for j in jobs if not Path(j['output']).exists()]
     if missing:
         raise SystemExit(f'Missing outputs: {missing}; see {logs}/unity.log')

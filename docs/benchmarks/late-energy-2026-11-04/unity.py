@@ -63,7 +63,7 @@ def launch(name, arguments, env=None, work_fraction=.2):
     resources = dj.Worker(command, environment, lambda m: print(m, flush=True)).run()
     (logs / 'resources.json').write_text(json.dumps(resources, indent=1) + '\n')
     print(f'{logs.name}: exit {resources["exitCode"]}, {resources["wallSeconds"]:.0f} s, '
-          f'peak RSS {resources["peakTreeRssBytes"] / dj.GIB:.2f} GiB', flush=True)
+          f'peak footprint {resources["peakTreeFootprintBytes"] / dj.GIB:.2f} GiB', flush=True)
     return logs, resources
 
 

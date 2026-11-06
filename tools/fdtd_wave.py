@@ -17,10 +17,12 @@ import argparse
 from dataclasses import dataclass
 import json
 import math
-import resource
+import os
 import time
 
 import numpy as np
+
+import heavy_guard as hg
 
 try:
     import torch
@@ -351,8 +353,8 @@ def memory_bytes(grid):
     return grid.cells * (4 * 4 + 1) + 2 * slabs * 4
 
 
-def process_rss():
-    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss  # bytes on macOS
+def process_footprint():
+    return hg.footprint(os.getpid())  # includes MPS allocations, unlike RSS
 
 
 class Simulation:
@@ -406,6 +408,12 @@ class Simulation:
 
     def run(self, source, receivers, duration, peak_hz, plane=None, plane_hz=(),
             work_fraction=.2, batch_seconds=.1, progress=None, pause=None):
+        """Run under the machine-wide heavy-job lock so FDTD and Unity jobs never overlap."""
+        with hg.HeavyLock():
+            return self._run(source, receivers, duration, peak_hz, plane, plane_hz, work_fraction, batch_seconds, progress, pause)
+
+    def _run(self, source, receivers, duration, peak_hz, plane=None, plane_hz=(),
+            work_fraction=.2, batch_seconds=.1, progress=None, pause=None):
         """Inject a monopole pulse at `source` and record pressure at `receivers`.
 
         Returns time series p^n (n = 0..N) at the receivers, the source signal
@@ -438,7 +446,8 @@ class Simulation:
             layer = lambda j: view.select(axis, j)
             w = 2 * math.pi * np.asarray(plane_hz, float)
             planes = torch.zeros((len(w), 2) + tuple(np.delete(grid.shape, axis)), device=dev)
-        timing = dict(gpuSeconds=0.0, wallSeconds=0.0, peakDriverBytes=0)
+        timing = dict(gpuSeconds=0.0, wallSeconds=0.0, peakDriverBytes=0, peakFootprintBytes=0)
+        watch = hg.SystemWatch()
         start = time.time()  # Wall clock; perf_counter stops while the system sleeps.
         n = 0
         while n < steps:
@@ -462,10 +471,13 @@ class Simulation:
             torch.mps.synchronize()
             busy = time.perf_counter() - t0
             timing['gpuSeconds'] += busy
-            used = max(torch.mps.driver_allocated_memory(), process_rss())
+            used = max(torch.mps.driver_allocated_memory(), process_footprint())
             timing['peakDriverBytes'] = max(timing['peakDriverBytes'], torch.mps.driver_allocated_memory())
+            timing['peakFootprintBytes'] = max(timing['peakFootprintBytes'], used)
             if used > self.memory_limit:
                 raise MemoryError(f'Memory {used/GIB:.2f} GiB exceeded the guard.')
+            if problem := watch.problem():
+                raise MemoryError(f'Stopped FDTD: {problem}.')
             if progress:
                 progress(n, steps)
             if work_fraction < 1 and n < steps:
@@ -475,7 +487,6 @@ class Simulation:
         timing['wallSeconds'] = time.time() - start
         timing['steps'] = steps
         timing['gcellPerSecond'] = grid.cells * steps / timing['gpuSeconds'] / 1e9
-        timing['peakRssBytes'] = process_rss()
         out = dict(pressure=record.cpu().numpy(), source=q, dt=dt, timing=timing)
         if planes is not None:
             out['plane'] = (planes[:, 0] + 1j * planes[:, 1]).cpu().numpy()
