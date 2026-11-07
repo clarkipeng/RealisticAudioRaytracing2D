@@ -4,8 +4,10 @@ Any project can wrap a command with it (standard library only):
 
     python3 heavy_guard.py run --limit-gib 3 -- <command> [args...]
 
-A heavy job starts when memory pressure is not critical and 25% is available, and stops if
-pressure turns critical, available memory falls below 12% or swap grows 4 GiB.
+A heavy job starts when memory pressure is not critical and 25% is available. It is paused
+(not killed) while pressure is critical, available memory is below 12% or swap has grown
+4 GiB, and resumes when memory recovers. It is stopped only if its own footprint passes
+its limit.
 
 `ps` RSS omits Metal/MPS allocations, so an RSS limit cannot see GPU memory.
 `phys_footprint` (Activity Monitor's "Memory" column) includes it. Every heavy
@@ -106,6 +108,24 @@ class SystemWatch:
             return f'swap grew {grown / GIB:.1f} GiB during the job'
         return None
 
+    def wait_out(self, log=print, pause=None, resume=None, poll=15):
+        """Pause, rather than kill, while the machine is short of memory: other apps usually
+        cause it and killing a small job frees nothing. Returns the seconds spent paused."""
+        problem = self.problem()
+        if not problem:
+            return 0.0
+        log(f'pausing: {problem}')
+        if pause:
+            pause()
+        started = time.monotonic()
+        while start_problem() is not None:
+            time.sleep(poll)
+        if resume:
+            resume()
+        self.swap_start = swap_used()
+        log(f'resumed after {time.monotonic() - started:.0f} s')
+        return time.monotonic() - started
+
 
 class HeavyLock:
     """Hold the machine-wide heavy-job lock, then wait until memory is available."""
@@ -152,16 +172,16 @@ def run(command, limit=3 * GIB, log=print):
         watch = SystemWatch()
         process = subprocess.Popen(['nice', '-n', '19'] + command, start_new_session=True,
                                    env=dict(os.environ, **{HELD_ENV: '1'}))
+        group = lambda number: lambda: os.killpg(process.pid, number)
         peak, reason = 0, None
         try:
             while process.poll() is None:
                 used = tree_footprint(process.pid)
                 peak = max(peak, used)
-                if used > limit:
+                if used > limit:   # the job itself is too big: stop it
                     reason = f'footprint {used / GIB:.2f} GiB exceeded {limit / GIB:.1f} GiB'
-                reason = reason or watch.problem()
-                if reason:
                     break
+                watch.wait_out(log, pause=group(signal.SIGSTOP), resume=group(signal.SIGCONT))
                 time.sleep(2)
         finally:
             if process.poll() is None:

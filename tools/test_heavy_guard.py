@@ -86,6 +86,25 @@ class HeavyGuardTests(unittest.TestCase):
                 mock.patch.object(hg, 'memory_level', return_value=10):
             self.assertIn('available', hg.start_problem())
 
+    def test_wait_out_pauses_until_memory_recovers_and_resets_swap_baseline(self):
+        calls = []
+        with mock.patch.object(hg, 'swap_used', return_value=0):
+            watch = hg.SystemWatch()
+        pressure = iter([hg.CRITICAL, hg.CRITICAL, hg.WARNING])
+        with mock.patch.object(hg, 'memory_pressure', side_effect=lambda: next(pressure)), \
+                mock.patch.object(hg, 'memory_level', return_value=40), \
+                mock.patch.object(hg, 'swap_used', return_value=hg.GIB), \
+                mock.patch.object(hg.time, 'sleep'):
+            hg.SystemWatch.wait_out(watch, log=lambda m: None,
+                                    pause=lambda: calls.append('pause'), resume=lambda: calls.append('resume'))
+        self.assertEqual(calls, ['pause', 'resume'])
+        self.assertEqual(watch.swap_start, hg.GIB)
+        with mock.patch.object(hg, 'memory_pressure', return_value=hg.NORMAL), \
+                mock.patch.object(hg, 'memory_level', return_value=40), \
+                mock.patch.object(hg, 'swap_used', return_value=hg.GIB):
+            self.assertEqual(watch.wait_out(log=lambda m: None, pause=lambda: calls.append('x')), 0.0)
+        self.assertEqual(calls, ['pause', 'resume'])
+
     def test_cli_runs_a_command_and_stops_one_that_exceeds_its_limit(self):
         with mock.patch.object(hg, 'memory_level', return_value=100), \
                 mock.patch.object(hg, 'memory_pressure', return_value=hg.NORMAL), \

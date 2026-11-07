@@ -134,8 +134,10 @@ class Worker:
                 self.samples.append(dict(seconds=round(time.monotonic() - started, 1), treeFootprintBytes=used))
                 if used > self.limit:
                     raise MemoryError(f'Worker footprint {used / GIB:.2f} GiB exceeded the {self.limit / GIB:.1f} GiB guard.')
-                if not suspended and (problem := watch.problem()):
-                    raise MemoryError(f'Stopped worker: {problem}.')
+                if not suspended:   # pause while other apps exhaust memory; resume afterwards
+                    self.paused_seconds += watch.wait_out(
+                        self.log, pause=lambda: os.killpg(process.pid, signal.SIGSTOP),
+                        resume=lambda: os.killpg(process.pid, signal.SIGCONT))
                 if time.time() - last_power > 30:
                     last_power = time.time()
                     mains = on_mains()

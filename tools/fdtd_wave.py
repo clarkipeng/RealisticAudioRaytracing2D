@@ -476,8 +476,7 @@ class Simulation:
             timing['peakFootprintBytes'] = max(timing['peakFootprintBytes'], used)
             if used > self.memory_limit:
                 raise MemoryError(f'Memory {used/GIB:.2f} GiB exceeded the guard.')
-            if problem := watch.problem():
-                raise MemoryError(f'Stopped FDTD: {problem}.')
+            timing['pausedSeconds'] = timing.get('pausedSeconds', 0.0) + watch.wait_out()
             if progress:
                 progress(n, steps)
             if work_fraction < 1 and n < steps:
