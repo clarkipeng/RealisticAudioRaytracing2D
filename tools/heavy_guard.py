@@ -64,6 +64,46 @@ def tree_footprint(pid):
     return sum(footprint(p) for p in tree(pid))
 
 
+def start_time(pid):
+    """Kernel start time of `pid`, or None if it is gone (guards against PID reuse)."""
+    usage = _Usage()
+    return usage.proc_start_abstime if _libproc.proc_pid_rusage(pid, 0, ctypes.byref(usage)) == 0 else None
+
+
+class ProcessTree:
+    """Every process a job has spawned, including helpers that start their own process
+    group or are reparented when their parent dies (Unity's shader compiler does both)."""
+
+    POLL_SECONDS = .5
+
+    def __init__(self, root):
+        self.root, self.seen = root, {}
+
+    def alive(self):
+        return [p for p, started in self.seen.items() if start_time(p) == started]
+
+    def footprint(self):
+        for p in tree(self.root):
+            if p not in self.seen and (started := start_time(p)) is not None:
+                self.seen[p] = started
+        return sum(footprint(p) for p in self.alive())
+
+    def signal(self, number):
+        for p in self.alive():
+            try:
+                os.kill(p, number)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+    def kill(self, grace=10):
+        self.signal(signal.SIGCONT)
+        self.signal(signal.SIGTERM)
+        deadline = time.monotonic() + grace
+        while self.alive() and time.monotonic() < deadline:
+            time.sleep(.2)
+        self.signal(signal.SIGKILL)
+
+
 def memory_level():
     return int(subprocess.run(['sysctl', '-n', 'kern.memorystatus_level'],
                               capture_output=True, text=True).stdout)
@@ -172,29 +212,21 @@ def run(command, limit=3 * GIB, log=print):
         watch = SystemWatch()
         process = subprocess.Popen(['nice', '-n', '19'] + command, start_new_session=True,
                                    env=dict(os.environ, **{HELD_ENV: '1'}))
-        group = lambda number: lambda: os.killpg(process.pid, number)
+        jobs = ProcessTree(process.pid)
         peak, reason = 0, None
         try:
             while process.poll() is None:
-                used = tree_footprint(process.pid)
+                used = jobs.footprint()
                 peak = max(peak, used)
                 if used > limit:   # the job itself is too big: stop it
                     reason = f'footprint {used / GIB:.2f} GiB exceeded {limit / GIB:.1f} GiB'
                     break
-                watch.wait_out(log, pause=group(signal.SIGSTOP), resume=group(signal.SIGCONT))
-                time.sleep(2)
+                watch.wait_out(log, pause=lambda: jobs.signal(signal.SIGSTOP),
+                               resume=lambda: jobs.signal(signal.SIGCONT))
+                time.sleep(ProcessTree.POLL_SECONDS)
         finally:
-            if process.poll() is None:
-                for number, wait in ((signal.SIGTERM, 30), (signal.SIGKILL, None)):
-                    try:
-                        os.killpg(process.pid, number)
-                    except (PermissionError, ProcessLookupError):
-                        process.send_signal(number)
-                    try:
-                        process.wait(timeout=wait)
-                        break
-                    except subprocess.TimeoutExpired:
-                        continue
+            jobs.kill()   # also reaps helpers left behind by a finished or stopped job
+            process.wait()
         log(f'heavy_guard: {"stopped: " + reason if reason else f"exit {process.returncode}"}; '
             f'peak footprint {peak / GIB:.2f} GiB')
         return 3 if reason else process.returncode

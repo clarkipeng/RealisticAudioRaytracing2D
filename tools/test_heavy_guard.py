@@ -116,5 +116,30 @@ class HeavyGuardTests(unittest.TestCase):
             self.assertLess(__import__('time').monotonic() - started, 20)
 
 
+    def test_tree_kill_reaches_a_helper_in_its_own_group_after_the_parent_exits(self):
+        # Like Unity's shader compiler: a child that calls setsid and outlives its parent.
+        parent = ('import os, subprocess, sys, time\n'
+                  'c = subprocess.Popen([sys.executable, "-c", "import os, time; os.setsid(); time.sleep(60)"])\n'
+                  'print(c.pid, flush=True); time.sleep(1)')
+        process = subprocess.Popen([sys.executable, '-c', parent], stdout=subprocess.PIPE, text=True,
+                                   start_new_session=True)
+        helper = int(process.stdout.readline())
+        jobs = hg.ProcessTree(process.pid)
+        for _ in range(20):
+            jobs.footprint()
+            if helper in jobs.seen:
+                break
+            subprocess.run(['sleep', '0.05'])
+        process.wait()                                  # parent gone; helper reparented, own group
+        self.assertIsNotNone(hg.start_time(helper))
+        self.assertIn(helper, jobs.alive())
+        jobs.kill(grace=5)
+        for _ in range(50):
+            if hg.start_time(helper) is None:
+                break
+            subprocess.run(['sleep', '0.1'])
+        self.assertIsNone(hg.start_time(helper))
+
+
 if __name__ == '__main__':
     unittest.main()

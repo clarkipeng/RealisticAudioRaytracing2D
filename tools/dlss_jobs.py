@@ -126,43 +126,40 @@ class Worker:
         process = subprocess.Popen(self.command, env=env, start_new_session=True)
         awake = subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
         started, suspended = time.monotonic(), False
+        jobs = hg.ProcessTree(process.pid)
         previous = {s: signal.signal(s, self._interrupt) for s in [signal.SIGINT, signal.SIGTERM]}
         try:
-            last_power = 0.0
+            last_power, polls = 0.0, 0
             while process.poll() is None:
-                used = hg.tree_footprint(process.pid)
-                self.samples.append(dict(seconds=round(time.monotonic() - started, 1), treeFootprintBytes=used))
+                used = jobs.footprint()
+                polls += 1
+                if polls % 4 == 0 or used > self.limit:
+                    self.samples.append(dict(seconds=round(time.monotonic() - started, 1), treeFootprintBytes=used))
                 if used > self.limit:
+                    jobs.kill()
                     raise MemoryError(f'Worker footprint {used / GIB:.2f} GiB exceeded the {self.limit / GIB:.1f} GiB guard.')
                 if not suspended:   # pause while other apps exhaust memory; resume afterwards
                     self.paused_seconds += watch.wait_out(
-                        self.log, pause=lambda: os.killpg(process.pid, signal.SIGSTOP),
-                        resume=lambda: os.killpg(process.pid, signal.SIGCONT))
+                        self.log, pause=lambda: jobs.signal(signal.SIGSTOP),
+                        resume=lambda: jobs.signal(signal.SIGCONT))
                 if time.time() - last_power > 30:
                     last_power = time.time()
                     mains = on_mains()
                     if not mains and not suspended:
-                        os.killpg(process.pid, signal.SIGSTOP)
+                        jobs.signal(signal.SIGSTOP)
                         awake.terminate()   # Let the Mac sleep while the worker waits for AC power.
                         suspended, paused_at = True, time.monotonic()
                         self.log(f'suspended worker on battery at {time.strftime("%H:%M:%S")}')
                     elif mains and suspended:
-                        os.killpg(process.pid, signal.SIGCONT)
+                        jobs.signal(signal.SIGCONT)
                         awake = subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
                         suspended = False
                         self.paused_seconds += time.monotonic() - paused_at
                         self.log(f'resumed worker on AC power at {time.strftime("%H:%M:%S")}')
-                time.sleep(2)
+                time.sleep(hg.ProcessTree.POLL_SECONDS)
         finally:
-            if process.poll() is None:
-                if suspended:
-                    self._signal(process, signal.SIGCONT)
-                self._signal(process, signal.SIGTERM)
-                try:
-                    process.wait(timeout=30)
-                except subprocess.TimeoutExpired:
-                    self._signal(process, signal.SIGKILL)
-                    process.wait()
+            jobs.kill(grace=30)   # every spawned process, incl. own-group/reparented helpers
+            process.wait()
             awake.wait(timeout=10)
             for s, h in previous.items():
                 signal.signal(s, h)
@@ -170,18 +167,6 @@ class Worker:
                     pausedSeconds=self.paused_seconds,
                     peakTreeFootprintBytes=max([s['treeFootprintBytes'] for s in self.samples] or [0]),
                     samples=self.samples[::15])
-
-    @staticmethod
-    def _signal(process, number):
-        """Signal the worker's group during cleanup; macOS refuses killpg (EPERM) once the
-        leader is exiting, so fall back to the process itself and ignore a finished one."""
-        try:
-            os.killpg(process.pid, number)
-        except (PermissionError, ProcessLookupError):
-            try:
-                process.send_signal(number)
-            except ProcessLookupError:
-                pass
 
     @staticmethod
     def _interrupt(signum, frame):
