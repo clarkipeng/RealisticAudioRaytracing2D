@@ -4,7 +4,7 @@ Any project can wrap a command with it (standard library only):
 
     python3 heavy_guard.py run --limit-gib 3 -- <command> [args...]
 
-A heavy job starts only when macOS reports normal memory pressure, and stops if
+A heavy job starts when memory pressure is not critical and 25% is available, and stops if
 pressure turns critical, available memory falls below 12% or swap grows 4 GiB.
 
 `ps` RSS omits Metal/MPS allocations, so an RSS limit cannot see GPU memory.
@@ -78,6 +78,17 @@ def swap_used():
     return int(float(value) * (GIB if unit == 'G' else 1024 ** 2))
 
 
+def start_problem():
+    """Reason a heavy job should not start yet, else None. Warning pressure is this
+    machine's everyday state, so starting needs non-critical pressure and free memory."""
+    if memory_pressure() >= CRITICAL:
+        return 'macOS memory pressure is critical'
+    level = memory_level()
+    if level < MIN_START_LEVEL:
+        return f'system memory available {level}% < {MIN_START_LEVEL}%'
+    return None
+
+
 class SystemWatch:
     """Reason to stop when the whole machine is short of memory, else None."""
 
@@ -106,19 +117,25 @@ class HeavyLock:
         if os.environ.get(HELD_ENV):
             return self
         LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
-        self.file = open(LOCK_PATH, 'a+')
-        try:
-            fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self.log(f'waiting for another heavy job ({LOCK_PATH})')
-            fcntl.flock(self.file, fcntl.LOCK_EX)
-        while (pressure := memory_pressure()) != NORMAL or (level := memory_level()) < MIN_START_LEVEL:
-            reason = f'macOS memory pressure {"warning" if pressure == WARNING else "critical"}' \
-                if pressure != NORMAL else f'system memory available {level}% < {MIN_START_LEVEL}%'
-            self.log(f'waiting to start: {reason}; close other apps or wait')
-            time.sleep(self.poll)
+        while True:
+            self._wait_for_memory()            # never hold the lock while waiting for memory
+            self.file = open(LOCK_PATH, 'a+')
+            try:
+                fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                self.log(f'waiting for another heavy job ({LOCK_PATH})')
+                fcntl.flock(self.file, fcntl.LOCK_EX)
+            if start_problem() is None:
+                break
+            fcntl.flock(self.file, fcntl.LOCK_UN)   # memory went away while queued; let others try
+            self.file.close()
         os.environ[HELD_ENV] = '1'
         return self
+
+    def _wait_for_memory(self):
+        while reason := start_problem():
+            self.log(f'waiting to start: {reason}; close other apps or wait')
+            time.sleep(self.poll)
 
     def __exit__(self, *exc):
         if self.file is not None:

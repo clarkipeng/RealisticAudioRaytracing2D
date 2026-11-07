@@ -427,7 +427,7 @@ The current GPU stores one material spectrum per path group and response bank, s
 ## Checks
 
 From a terminal, use the tiered runner instead of ad hoc filters.
-It runs in an isolated copy of the project, one heavy job at a time, and waits until macOS reports normal memory pressure.
+It runs in an isolated copy of the project, one heavy job at a time, waits until at least 25% of memory is free, and stops if macOS memory pressure turns critical.
 
 ```sh
 PY=.context/fdtd-teacher/venv/bin/python

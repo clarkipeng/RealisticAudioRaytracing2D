@@ -75,6 +75,17 @@ class HeavyGuardTests(unittest.TestCase):
         self.assertEqual(out, 'free')
 
 
+    def test_start_allows_warning_pressure_but_not_critical_or_low_memory(self):
+        with mock.patch.object(hg, 'memory_pressure', return_value=hg.WARNING), \
+                mock.patch.object(hg, 'memory_level', return_value=40):
+            self.assertIsNone(hg.start_problem())
+        with mock.patch.object(hg, 'memory_pressure', return_value=hg.CRITICAL), \
+                mock.patch.object(hg, 'memory_level', return_value=40):
+            self.assertIn('critical', hg.start_problem())
+        with mock.patch.object(hg, 'memory_pressure', return_value=hg.WARNING), \
+                mock.patch.object(hg, 'memory_level', return_value=10):
+            self.assertIn('available', hg.start_problem())
+
     def test_cli_runs_a_command_and_stops_one_that_exceeds_its_limit(self):
         with mock.patch.object(hg, 'memory_level', return_value=100), \
                 mock.patch.object(hg, 'memory_pressure', return_value=hg.NORMAL), \
