@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -10,6 +11,16 @@ import heavy_guard as hg  # noqa: E402
 
 
 class HeavyGuardTests(unittest.TestCase):
+    def setUp(self):
+        # Never contend with real jobs holding the machine-wide lock.
+        self._tmp = tempfile.TemporaryDirectory()
+        patcher = mock.patch.object(hg, 'LOCK_PATH', Path(self._tmp.name) / 'heavy-jobs.lock')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+        self._held = os.environ.pop(hg.HELD_ENV, None)
+        self.addCleanup(lambda: self._held and os.environ.__setitem__(hg.HELD_ENV, self._held))
+
     def test_footprint_counts_a_child_allocation(self):
         child = subprocess.Popen([sys.executable, '-c', 'b = bytearray(300 * 1024 * 1024); b[::4096] = b"x" * len(b[::4096]); import time; time.sleep(5)'])
         try:
