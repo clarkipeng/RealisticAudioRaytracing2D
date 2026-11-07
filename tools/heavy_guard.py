@@ -1,5 +1,9 @@
 """Machine-wide guard for heavy Unity/GPU jobs on a shared 16 GB Mac.
 
+Any project can wrap a command with it (standard library only):
+
+    python3 heavy_guard.py run --limit-gib 3 -- <command> [args...]
+
 A heavy job starts only when macOS reports normal memory pressure, and stops if
 pressure turns critical, available memory falls below 12% or swap grows 1 GiB.
 
@@ -8,17 +12,20 @@ pressure turns critical, available memory falls below 12% or swap grows 1 GiB.
 job takes one machine-wide lock, so FDTD and Unity runs never overlap, and stops
 when the system itself runs short of memory, not only when its own tree is big.
 """
+import argparse
 import ctypes
 import fcntl
 import os
 import re
+import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 GIB = 1024 ** 3
-LOCK_PATH = Path.home() / '.cache' / 'acoustics-heavy-job.lock'
-HELD_ENV = 'ACOUSTICS_HEAVY_LOCK_HELD'   # set for children of a lock holder
+LOCK_PATH = Path.home() / '.cache' / 'heavy-jobs.lock'   # shared by every project on this Mac
+HELD_ENV = 'HEAVY_JOB_LOCK_HELD'          # set for children of a lock holder
 MIN_START_LEVEL = 25                     # kern.memorystatus_level: percent of memory available
 MIN_RUN_LEVEL = 12
 NORMAL, WARNING, CRITICAL = 1, 2, 4      # kern.memorystatus_vm_pressure_level
@@ -120,3 +127,67 @@ class HeavyLock:
             self.file.close()
             self.file = None
         return False
+
+
+def run(command, limit=3 * GIB, log=print):
+    """Run `command` at nice 19 under the lock; stop it if its tree or the system runs out of memory."""
+    with HeavyLock(log):
+        watch = SystemWatch()
+        process = subprocess.Popen(['nice', '-n', '19'] + command, start_new_session=True,
+                                   env=dict(os.environ, **{HELD_ENV: '1'}))
+        peak, reason = 0, None
+        try:
+            while process.poll() is None:
+                used = tree_footprint(process.pid)
+                peak = max(peak, used)
+                if used > limit:
+                    reason = f'footprint {used / GIB:.2f} GiB exceeded {limit / GIB:.1f} GiB'
+                reason = reason or watch.problem()
+                if reason:
+                    break
+                time.sleep(2)
+        finally:
+            if process.poll() is None:
+                for number, wait in ((signal.SIGTERM, 30), (signal.SIGKILL, None)):
+                    try:
+                        os.killpg(process.pid, number)
+                    except (PermissionError, ProcessLookupError):
+                        process.send_signal(number)
+                    try:
+                        process.wait(timeout=wait)
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+        log(f'heavy_guard: {"stopped: " + reason if reason else f"exit {process.returncode}"}; '
+            f'peak footprint {peak / GIB:.2f} GiB')
+        return 3 if reason else process.returncode
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Run one heavy job at a time on this Mac.')
+    sub = parser.add_subparsers(dest='action', required=True)
+    r = sub.add_parser('run', help='run a command under the shared lock and memory guard')
+    r.add_argument('--limit-gib', type=float, default=3.0)
+    r.add_argument('command', nargs=argparse.REMAINDER)
+    sub.add_parser('status', help='show memory pressure, swap and whether the lock is held')
+    args = parser.parse_args()
+    if args.action == 'status':
+        LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(LOCK_PATH, 'a+') as f:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held = False
+            except BlockingIOError:
+                held = True
+        names = {NORMAL: 'normal', WARNING: 'warning', CRITICAL: 'critical'}
+        print(f'pressure {names.get(memory_pressure(), "?")}, {memory_level()}% available, '
+              f'swap {swap_used() / GIB:.1f} GiB, lock {"held" if held else "free"} ({LOCK_PATH})')
+        return 0
+    command = args.command[1:] if args.command[:1] == ['--'] else args.command
+    if not command:
+        parser.error('give a command after --')
+    return run(command, int(args.limit_gib * GIB))
+
+
+if __name__ == '__main__':
+    sys.exit(main())

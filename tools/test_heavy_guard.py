@@ -64,5 +64,16 @@ class HeavyGuardTests(unittest.TestCase):
         self.assertEqual(out, 'free')
 
 
+    def test_cli_runs_a_command_and_stops_one_that_exceeds_its_limit(self):
+        with mock.patch.object(hg, 'memory_level', return_value=100), \
+                mock.patch.object(hg, 'memory_pressure', return_value=hg.NORMAL), \
+                mock.patch.object(hg, 'swap_used', return_value=0):
+            self.assertEqual(hg.run([sys.executable, '-c', 'pass'], log=lambda m: None), 0)
+            hog = 'b = bytearray(400 * 1024 * 1024); b[::4096] = b"x" * len(b[::4096]); import time; time.sleep(30)'
+            started = __import__('time').monotonic()
+            self.assertEqual(hg.run([sys.executable, '-c', hog], limit=200 * 1024 * 1024, log=lambda m: None), 3)
+            self.assertLess(__import__('time').monotonic() - started, 20)
+
+
 if __name__ == '__main__':
     unittest.main()
