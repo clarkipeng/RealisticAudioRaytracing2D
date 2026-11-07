@@ -1,5 +1,6 @@
 #!/bin/sh
-# Ground-truth queue: one worker, nice 19, 20% GPU pacing, 4 GiB guard, pause on battery.
+# Ground-truth queue: one worker, nice 19, pause on battery; every FDTD run takes the machine-wide
+# heavy-job lock (tools/heavy_guard.py: normal memory pressure to start, 50% pacing, footprint guard).
 # Every stage skips finished work, so the queue can be restarted after a failure.
 #   sh docs/benchmarks/method-compare/run_queue.sh [stage ...]
 # Stages: build shoebox gt refine assemble (default: all, in that order).
