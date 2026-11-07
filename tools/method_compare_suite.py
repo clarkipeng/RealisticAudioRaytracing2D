@@ -328,7 +328,7 @@ def run_band(scene, fc, work_fraction=hg.WORK_FRACTION, memory_gib=4.0, power=No
                 lastFiftyMsFraction=dict(max=float(tail.max()), median=float(np.median(tail))),
                 solverSha256=mc.sha256_file(ROOT / 'tools/fdtd_wave.py'),
                 suiteSha256=mc.sha256_file(Path(__file__)), elapsedSeconds=time.time() - started,
-                workFraction=work_fraction, **s, **{k: v for k, v in meta.items() if k not in ('hz',)})
+                workFraction=work_fraction, **s, **{k: v for k, v in meta.items() if k not in s and k != 'hz'})
     (folder / f'{int(fc)}.json').write_text(json.dumps(info, indent=1, default=mc._json) + '\n')
     t = meta['timing']
     print(f'  {scene["sceneId"]} {fc:g} Hz: done h={s["spacing"]*100:.4g} cm, {meta["cells"]/1e6:.1f} M cells, '
