@@ -33,7 +33,7 @@ class HeavyGuardTests(unittest.TestCase):
             watch = hg.SystemWatch()
         with mock.patch.object(hg, 'memory_pressure', return_value=hg.NORMAL), \
                 mock.patch.object(hg, 'memory_level', return_value=50), \
-                mock.patch.object(hg, 'swap_used', return_value=2 * hg.GIB):
+                mock.patch.object(hg, 'swap_used', return_value=5 * hg.GIB):
             self.assertIn('swap grew', watch.problem())
         with mock.patch.object(hg, 'memory_pressure', return_value=hg.NORMAL), \
                 mock.patch.object(hg, 'memory_level', return_value=5), \

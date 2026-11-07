@@ -5,7 +5,7 @@ Any project can wrap a command with it (standard library only):
     python3 heavy_guard.py run --limit-gib 3 -- <command> [args...]
 
 A heavy job starts only when macOS reports normal memory pressure, and stops if
-pressure turns critical, available memory falls below 12% or swap grows 1 GiB.
+pressure turns critical, available memory falls below 12% or swap grows 4 GiB.
 
 `ps` RSS omits Metal/MPS allocations, so an RSS limit cannot see GPU memory.
 `phys_footprint` (Activity Monitor's "Memory" column) includes it. Every heavy
@@ -29,7 +29,7 @@ HELD_ENV = 'HEAVY_JOB_LOCK_HELD'          # set for children of a lock holder
 MIN_START_LEVEL = 25                     # kern.memorystatus_level: percent of memory available
 MIN_RUN_LEVEL = 12
 NORMAL, WARNING, CRITICAL = 1, 2, 4      # kern.memorystatus_vm_pressure_level
-MAX_SWAP_GROWTH = 1 * GIB
+MAX_SWAP_GROWTH = 4 * GIB
 WORK_FRACTION = .5                       # default pacing: work half the time, idle half
 
 _libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
