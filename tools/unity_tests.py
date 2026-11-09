@@ -2,7 +2,7 @@
 
     PY=.context/fdtd-teacher/venv/bin/python
     $PY tools/unity_tests.py quick              # every change: all TakeChecks except category Slow
-    $PY tools/unity_tests.py full               # before a commit: everything
+    $PY tools/unity_tests.py full               # before a commit: non-Slow, then Slow in a fresh process
     $PY tools/unity_tests.py run "TakeChecks.Late"   # one area (NUnit -testFilter)
 
 Runs in the isolated runner (.context/gpu-audio/runner) under tools/heavy_guard: one heavy job
@@ -24,7 +24,9 @@ import dlss_jobs as dj  # noqa: E402
 import heavy_guard as hg  # noqa: E402
 
 LOGS = ROOT / '.context/unity-tests'
-TIERS = {'quick': ('TakeChecks', '!Slow'), 'full': ('TakeChecks', None)}
+# Each batch is a fresh Unity process: memory accumulates over a long run, so the slow cases
+# (largest footprints) get their own process instead of running after hundreds of others.
+TIERS = {'quick': [('TakeChecks', '!Slow')], 'full': [('TakeChecks', '!Slow'), ('TakeChecks', 'Slow')]}
 
 
 def clear_stale_lock():
@@ -59,7 +61,13 @@ def run(test_filter, category=None, work_fraction=hg.WORK_FRACTION, env=None):
     environment = dict(os.environ, ACOUSTIC_TEST_WORK_FRACTION=str(work_fraction),
                        ACOUSTIC_SOLID_PYTHON=str(dj.SOLID_PYTHON), **(env or {}))
     print(f'{logs.name}: filter {test_filter}' + (f', category {category}' if category else ''), flush=True)
-    resources = dj.Worker(command, environment, lambda m: print(m, flush=True)).run()
+    worker = dj.Worker(command, environment, lambda m: print(m, flush=True))
+    try:
+        resources = worker.run()
+    except MemoryError as stopped:   # keep the footprint trace for diagnosis, then report the stop
+        (logs / 'resources.json').write_text(json.dumps(dict(stopped=str(stopped), samples=worker.samples), indent=1) + '\n')
+        print(f'STOPPED {stopped}; footprint trace in {logs / "resources.json"}', flush=True)
+        return 3
     (logs / 'resources.json').write_text(json.dumps(resources, indent=1) + '\n')
     print(f'exit {resources["exitCode"]}, {resources["wallSeconds"]:.0f} s, '
           f'peak footprint {resources["peakTreeFootprintBytes"] / hg.GIB:.2f} GiB', flush=True)
@@ -89,10 +97,11 @@ def main():
     if args.tier == 'run':
         if not args.filter:
             parser.error('"run" needs a test filter')
-        test_filter, category = args.filter, args.category
+        batches = [(args.filter, args.category)]
     else:
-        test_filter, category = TIERS[args.tier]
-    sys.exit(run(test_filter, category, args.work_fraction))
+        batches = TIERS[args.tier]
+    codes = [run(test_filter, category, args.work_fraction) for test_filter, category in batches]
+    sys.exit(max(codes))
 
 
 if __name__ == '__main__':

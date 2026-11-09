@@ -432,7 +432,7 @@ It runs in an isolated copy of the project, one heavy job at a time, waits until
 ```sh
 PY=.context/fdtd-teacher/venv/bin/python
 $PY tools/unity_tests.py quick                  # every change: everything except Slow
-$PY tools/unity_tests.py full                   # once before a commit
+$PY tools/unity_tests.py full                   # once before a commit (slow cases in their own process)
 $PY tools/unity_tests.py run "TakeChecks.Late"  # one area
 ```
 
