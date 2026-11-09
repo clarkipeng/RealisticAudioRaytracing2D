@@ -16,6 +16,7 @@ There are now three, selected by one setting, `TakeRender.Settings.method` (defa
 `MethodCommon.hlsl` holds what the two loops share (band outputs, straight connections through transmitting walls, specular-chain detection, edge choice); geometry, BVH, media and the wedge kernels are the renderer's own (`Geometry.hlsl`, `Transport.hlsl`, `CompleteDiffraction.hlsl`).
 `MethodTransport.cs` dispatches the two loops; `TransportSolver` runs it when the method is not `Hybrid`.
 Pressure and energy are offline measurement kernels: they produce band responses, not audio, and audio rendering refuses them (`TakeRender.RequireAudioMethod`).
+*Update, 9 November 2026:* the energy method now also renders audio, and its roulette and specular scoring changed; see the [energy-audio benchmark](../energy-audio-2026-11-09/README.md).
 
 All numbers are measured on this Mac (Apple M5, 16 GB, Unity 6000.4.1f1 on Metal) in the isolated runner under `nice 19`, one job worker, `tools/heavy_guard.py` (one heavy job machine-wide, memory-pressure start/stop, 3 GiB footprint limit) and 50% work pacing, paused on battery.
 

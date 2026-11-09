@@ -222,6 +222,13 @@ The late field converges as one over the ray count and decays at the Eyring rate
 [Contract](docs/simulation-contracts.md#late-energy-field-v14) · [evidence](docs/benchmarks/late-energy-2026-11-04/README.md).
 The transmitted direct connection stays straight; late rays refract at interfaces.
 
+**Method → Energy** (opt-in; **Hybrid** stays the default) renders audio from the single energy loop of the [method comparison](docs/benchmarks/methods-2026-11-06/README.md), which had the smallest level error against the wave ground truth.
+Each solve splits the loop into exact discrete arrivals — direct sound, reflections up to second order and edge diffraction (D, DD, RD, DR) from the source, each with its delay, band energies, direction and Doppler delay rate — and a diffuse energy histogram holding every other path, so nothing is counted twice.
+The strongest **Method Arrival Slots** arrivals per pair (64) play as delayed paths with gain √(band energy) and no phase, through the same continuous path clocks, HRTF and Spectral synthesis as the hybrid's arrivals; the histogram plays through the hybrid's late noise field.
+**Method Rays**, **Method Roulette Floor** (1e-6: paths keep going over the first 60 dB of decay) and **Specular Detection Radius** (the walk's receiver sphere) set its cost and noise.
+It needs raytraced transport, 3D and point sources.
+[Contract](docs/simulation-contracts.md#energy-method-audio-v1) · [evidence and listening render](docs/benchmarks/energy-audio-2026-11-09/README.md).
+
 **Reflection Sampling → First Images** keeps first-order mirror candidates as separate delayed arrivals in both live and offline audio. It enumerates scenes up to the candidate budget (128 primitives by default); larger scenes use compensated candidate sampling, with a budget that also grows with rays per bin. GPU filter storage shares frequency records whose geometry is guaranteed identical; dispersive speeds retain the needed separate capacity. This does not integrate or validate the offline prototype’s complete multi-edge and mixed mirror/edge solver.
 
 **Family Gains** (off by default) scales the sampled early families before the audio stage: first-order images and the complete D/DD/RD/DR/RR routes, each by `(1 + k·rho)^-1/2`, where `rho` is that family's candidate routes per sample.

@@ -39,6 +39,12 @@ Energy rays never gain weight, so closed rooms converge as one over the ray coun
 Paths the early part already holds are excluded from the late field; the late field has no diffraction.
 [Contract](#late-energy-field-v14) · [evidence](benchmarks/late-energy-2026-11-04/README.md).
 
+**Energy method audio, 2026-11-09 (implemented, opt-in):** `TakeRender.Settings.method = Energy` now renders audio, live and offline; `Hybrid` stays the default.
+The energy loop is split into discrete arrivals (direct sound, pure specular paths up to second order and the D/DD/RD/DR edge routes from the source, enumerated exactly) and a diffuse energy histogram (everything else), so each path is counted once.
+Arrivals are played as delayed paths with gain √(band energy), no phase, and Doppler; the histogram is the late noise field.
+Russian roulette now keeps the path count constant over the first 60 dB of decay, and specular segments are scored by a receiver sphere instead of the exact-retrace detection, which was biased low in cluttered rooms.
+[Contract](#energy-method-audio-v1) · [evidence](benchmarks/energy-audio-2026-11-09/README.md).
+
 **Workflow:** edit a native 2D/3D scene → walk or run a scenario → record once → render the same take at several budgets → compare sound and cost → generate validated examples → train and deploy optional reconstruction.
 
 **Invariant:** the take determines scene and source inputs; the render configuration determines computation. Changing quality never changes the recorded experiment.
@@ -2261,3 +2267,47 @@ The late field carries no Doppler, no interaural time structure beyond the diffu
 Rare branches (for example transmission into a closed room through walls with `t ≈ 1e-4`) are sampled by their energy fraction and remain high-variance at small ray budgets.
 Plane sources share one late response per source, averaged over their emission density.
 The direct path, images and complete routes are as validated before; the late field is a geometric-acoustics estimate, not a wave solution (no modes or low-frequency diffraction).
+
+## Energy method audio (v1)
+
+Implemented 9 November 2026; offline reports name the solver contract `energy-arrivals-diffuse-v1`.
+`TakeRender.Settings.method = Energy` selects it for audio, live and offline (`TransportSolver` with `methodAudio`); `Hybrid` remains the default, and `Pressure` stays a measurement kernel.
+The method is 3D with point sources only (no emission planes), like its measurement mode.
+Kernels: `Assets/Shaders/MethodEnergy.hlsl` in `Resources/Acoustics/EnergyMethod.compute`, driven by `MethodTransport`.
+
+**One solve, two disjoint outputs.**
+1. Discrete arrivals (`EnergyArrivals`): one GPU thread per candidate route from the source, evaluated exactly with the walk's own kernels: the direct sound (with transmission, as `MethodConnect`), every mirror plane (order 1) and ordered plane pair (order 2, `methodArrivalOrder`), and the UTD edge routes D, DD (parallel edges), RD and DR.
+   A mirror plane is the set of coplanar primitives of one object; a specular candidate is retraced and accepted only if each hit lies on the expected plane, so each image path appears once.
+   Each arrival has its exact delay, band energies (direct-sound convention, eight octave bands), arrival direction and delay rate.
+2. Diffuse histogram (`TraceEnergy`): the energy walk with every path class the arrivals hold excluded: no direct connection, no D/DD/RD edge connection from the source, no receiver-sphere score for pure reflections from the source up to the enumerated order, and none for one reflection after an edge ray from the source (DR).
+   Everything else — scattered at least once, higher specular orders, transmitted chains, edge rays — is scored there.
+The exclusion is by path class, so arrivals plus histogram estimate exactly what the walk alone estimates (`EnergyArrivalsAndDiffuseFieldSumToTheWalk`).
+Arrivals and the walk require source and listener in air; otherwise only the direct sound is an arrival.
+A family whose candidate count exceeds 2^18 (order 2 above 512 planes; DD above 512 edges; RD/DR above 2^18 plane–edge pairs) is left to the walk, which then holds it; the audio render logs the families in use.
+
+**Walk changes (also in measurement).**
+Russian roulette survives with `min(1, throughput / (probability · methodRouletteFloor))`, floor 1e-6: paths above −60 dB always continue, so the path count stays constant over the decay instead of falling with the energy (at the energy rate, 2,048 rays left a handful of paths 0.3 s into a wood room).
+Specular segments reach the listener through a track-length receiver sphere of radius `specularDetectionRadius` (score `Φ · chord · 3 / (4π r³)` for a ray of flux `Φ`, listener-visible chords only), as the hybrid's late field; the exact-retrace detection it replaces divided by the full cone probability and was biased low wherever the cone straddled a visibility boundary.
+The sphere's time smear (up to `2r/c`) applies only to the diffuse part; arrivals are exact.
+
+**Doppler.**
+Velocities come from the solve's states (`VelocityValid`).
+The delay is retarded for a moving source: an image source moves with the mirrored velocity, whose component along the departure direction is the source's, so `τ = (b + √(b² + a ℓ²)) / a` with `a = c² − |v_S|²`, `b = ℓ v_S·u_dep`.
+The delay rate is `1 − (c − v_L·u_arr) / (c − v_S·u_emit)` with the retarded emission direction; the arrival direction is not retarded, an O(v²/c²) error when both ends move.
+Geometry is frozen at solve time (no moving-mirror Doppler).
+
+**Audio.**
+Per solve the arrivals are ordered deterministically (broadband energy, then identity), and the strongest `methodArrivalSlots` (default 64) per pair become `RayTransport.Path` entries in the energy method's `RayTransport.Layout` (each pair owns `slots × FFT bins` paths): one entry per FFT bin with pressure gain `√E(f)`, where `E(f)` interpolates the band energies with the comparison's power-complementary raised-cosine bands (flat outside 125 Hz–16 kHz), no phase, the arrival's delay, direction, delay rate and identity.
+Identities are stable across solves (a plane multiset, or the edge and plane indices), so `GpuAudio` and `SpectralAudio` keep continuous path clocks and Doppler, and crossfade only where a path appears or disappears.
+Arrivals beyond the slots are deposited into the histogram, never dropped.
+The histogram has the hybrid late field's layout (frame, pair, head-frame direction, band, `LatePartition` bins; energy = sum / `methodRays`) and plays through the same late synthesis (`GpuAudio.Late`, `LateReverb`): fixed seeded noise, so movement changes envelopes, never the noise.
+The walk uses the same seed every solve, so its estimate changes smoothly with movement.
+`ILateField` lets the audio backends read the hybrid's or the energy method's late field; the energy method has no emission rows.
+
+**Measurement output.**
+In the comparison format every arrival is also deposited into the 1 ms world-frame histogram, so `energy.f32` is arrivals plus diffuse; `MethodTransport.ReadArrivals` lists them.
+
+**Limits.**
+Arrivals have no phase (the 6 November listening test found exact phase unnecessary) and no wave effects; UTD double diffraction over thin walls stays 5–8 dB loud.
+Specular orders above two (or above the plane-count limit) are diffuse, i.e. heard as noise shaped by their envelope, not as distinct echoes.
+The constant path count costs 1.5–2.7× the previous energy solve over the comparison suite (2–82 ms per solve at 2,048 rays on the M5); dropping the exact retrace halved it in the stone shoebox.

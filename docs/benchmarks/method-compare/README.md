@@ -29,7 +29,8 @@ For each band, every wall becomes the locally reacting surface whose Paris rando
 alpha_st(zeta) = 8/zeta² · (zeta + 1 − 1/(1+zeta) − 2 ln(1+zeta)),   zeta = Z/(ρc) on the hard branch zeta ≥ 1.567
 ```
 
-**Incidence assumption, stated:** the match holds in a diffuse field; at a single reflection the wall absorbs `1 − |R(θ)|²` with `R(θ) = (zeta cos θ − 1)/(zeta cos θ + 1)`, less than `alpha` near grazing and more near normal incidence (stone at 125 Hz: `alpha` 0.025, zeta 309; wood 0.12, zeta 58).
+**Incidence assumption, stated:** the match holds in a diffuse field; at a single reflection the wall absorbs `1 − |R(θ)|²` with `R(θ) = (zeta cos θ − 1)/(zeta cos θ + 1)`, less than `alpha` at normal incidence (about `4/zeta`) and most near grazing, where `zeta cos θ = 1`, falling to zero at exact grazing (stone at 125 Hz: `alpha` 0.025, zeta 309; wood 0.12, zeta 58).
+*Corrected 9 November 2026* (the earlier text had normal and grazing incidence swapped; see the [energy-audio benchmark](../energy-audio-2026-11-09/README.md#not-the-cause-the-wall-model)).
 The per-band admittance is published in every suite `scene.json` (`materials.<name>.admittance`), so a method can use the very same wall (`|R(θ)|²`) or the angle-independent `absorption`; it records which in `meta.json` `wallModel`.
 
 **Why one run per band.**
