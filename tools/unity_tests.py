@@ -6,7 +6,7 @@
     $PY tools/unity_tests.py run "TakeChecks.Late"   # one area (NUnit -testFilter)
 
 Runs in the isolated runner (.context/gpu-audio/runner) under tools/heavy_guard: one heavy job
-machine-wide, non-critical pressure and 25% free memory to start, 3 GiB footprint limit, nice 19, one job worker,
+machine-wide, non-critical pressure and 25% free memory to start, 4 GiB footprint limit, nice 19, one job worker,
 50% pacing. Opt-in measurements skip themselves unless their environment variables are set.
 """
 import argparse
