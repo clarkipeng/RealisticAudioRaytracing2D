@@ -4,8 +4,24 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+// A late energy histogram [frame][pair][head-frame direction][band][bin] of
+// (low, high) 32.32 sums, energy = value / LateRays, with optional plane emission
+// rows (null for point sources only). RayTransport (hybrid) and MethodTransport
+// (energy method) both provide one; the audio backends read either.
+internal interface ILateField
+{
+    uint[] Late {get;}
+    ComputeBuffer LateBuffer {get;}
+    int LateUintsPerFrame {get;}
+    int LateBins {get;}
+    int LateRays {get;}
+    Emission.Batch Emissions {get;}
+    ComputeBuffer EmissionRanges {get;}
+    ComputeBuffer EmissionPoints {get;}
+    ComputeBuffer EmissionClocks {get;}
+}
 // Shared 2D/3D GPU transport: phase-exact direct/early arrivals and the late energy histogram.
-internal sealed class RayTransport : IDisposable
+internal sealed class RayTransport : IDisposable, ILateField
 {
     public const int PathStride = 48;
     // The same prefix ranges own transport paths, CPU groups and GPU FFT rows.
@@ -25,17 +41,20 @@ internal sealed class RayTransport : IDisposable
             bool sharedGeometry=true;
             foreach(var material in scene.materials)sharedGeometry&=Constant(material.ior);
             var direct=new List<Vector2Int>();
+            // Energy method: each pair owns methodArrivalSlots discrete arrivals, one path per FFT bin.
+            bool energy=settings.method==TakeRender.Method.Energy;
             for(int s=0;s<scene.sources.Length;s++)
             {
                 int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
-                int rays=settings.RaysPerPair==0?0:checked(settings.FrequencyBins*settings.SourceRaysPerBin(scene,s));
-                int slots=checked(sites*settings.FrequencyBins*(1+settings.MirrorCandidates(scene)+settings.CompleteSlots(scene))+rays*settings.PathSlotsPerRay);
+                int rays=energy || settings.RaysPerPair==0?0:checked(settings.FrequencyBins*settings.SourceRaysPerBin(scene,s));
+                int slots=energy?checked(settings.FrequencyBins*settings.methodArrivalSlots):
+                    checked(sites*settings.FrequencyBins*(1+settings.MirrorCandidates(scene)+settings.CompleteSlots(scene))+rays*settings.PathSlotsPerRay);
                 int geometricBins=sharedGeometry?1:settings.FrequencyBins;
                 int mirrors=settings.MirrorCandidates(scene)*sites;
                 if(settings.reflectionSampling==TakeRender.ReflectionSampling.PrimitiveBaseline)mirrors=rays/settings.FrequencyBins;
                 // Frequency-dependent loss changes pressure, not route geometry;
                 // only a frequency-dependent speed splits a route into per-bin groups.
-                int groups=checked((sites+mirrors)*geometricBins+sites*settings.CompleteSlots(scene));
+                int groups=energy?settings.methodArrivalSlots:checked((sites+mirrors)*geometricBins+sites*settings.CompleteSlots(scene));
                 MaximumSlots=Math.Max(MaximumSlots,slots);
                 for(int l=0;l<scene.listeners.Length;l++)
                 {
@@ -52,9 +71,9 @@ internal sealed class RayTransport : IDisposable
     // One solved frame's late energy and emission rows, read by the audio backends.
     internal readonly struct LateFrame
     {
-        internal readonly RayTransport Transport;
+        internal readonly ILateField Transport;
         internal readonly int Frame;
-        internal LateFrame(RayTransport transport,int frame){Transport=transport;Frame=frame;}
+        internal LateFrame(ILateField transport,int frame){Transport=transport;Frame=frame;}
         internal bool Valid => Transport!=null && Transport.LateUintsPerFrame>0;
         // Energy of one histogram cell (direct-sound units, (ReferenceDistance/distance)^2).
         internal double Energy(int pair,int direction,int band,int bin)
@@ -115,15 +134,16 @@ internal sealed class RayTransport : IDisposable
     // Late energy histogram: per frame, pair, head-frame direction, band and bin, a
     // (low, high) 32.32 fixed-point sum of ray shares; energy = value / LateRays.
     public readonly uint[] Late;
-    internal int LateBins {get;}
+    uint[] ILateField.Late => Late;
+    public int LateBins {get;}
     internal int LateCells {get;}
-    internal int LateUintsPerFrame {get;}
-    internal int LateRays => lateRays;
-    internal ComputeBuffer LateBuffer => lateHistogram;
-    internal Emission.Batch Emissions => emissions;
-    internal ComputeBuffer EmissionRanges => emissionRanges;
-    internal ComputeBuffer EmissionPoints => emissionPoints;
-    internal ComputeBuffer EmissionClocks => emissionClocks;
+    public int LateUintsPerFrame {get;}
+    public int LateRays => lateRays;
+    public ComputeBuffer LateBuffer => lateHistogram;
+    public Emission.Batch Emissions => emissions;
+    public ComputeBuffer EmissionRanges => emissionRanges;
+    public ComputeBuffer EmissionPoints => emissionPoints;
+    public ComputeBuffer EmissionClocks => emissionClocks;
     readonly bool[] everActive;
     readonly uint[] enabledPairs;
     readonly Action<AsyncGPUReadbackRequest> completion;

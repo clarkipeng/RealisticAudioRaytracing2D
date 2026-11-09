@@ -26,16 +26,46 @@
 //   - source and every scattering point: straight leg, transmitting as the direct
 //     sound; and through one edge (stationary point on Keller's cone, D) or one
 //     mirror and one edge (RD), from the same points;
-//   - specular chains: point-to-point delta paths cannot be sampled by any
-//     unidirectional or bidirectional estimator (a delta vertex next to a point
-//     receiver), so the walk detects them: the exact image path is retraced and scored
-//     with its exact energy divided by the probability that the walk's ray passed
-//     within MethodDetectRadius of the listener image (MethodCommon.hlsl). Unlike a
-//     receiver sphere it scores the exact path (delay, direction, energy), not a chord,
-//     and it is unbiased wherever the detection cone lies in the chain's visibility
-//     beam; a glossy-lobe regularization would instead bias every reflection by a
-//     width our material data does not specify.
-// Russian roulette: survival min(1, max over bands of energy factor / probability).
+//   - specular chains: point-to-point delta paths cannot be sampled by a walk (a delta
+//     vertex next to a point receiver). Pure specular paths from the source up to
+//     MethodArrivalOrder reflections are enumerated exactly instead (EnergyArrivals
+//     below, with the direct sound and the D/DD/RD/DR edge routes from the source);
+//     every other specular segment is scored by a track-length receiver sphere of
+//     radius MethodDetectRadius (as LateEnergy.hlsl), which estimates the energy
+//     averaged over the sphere. The earlier exact-retrace detection (score the image
+//     path when the ray passes within r of the listener image, divided by the cone
+//     probability) is biased low wherever the cone straddles a visibility boundary:
+//     in the furnished suite room 95% of its detections failed the retrace and the
+//     early decay was 40-50% short (docs/benchmarks/energy-audio-2026-11-09).
+// Output split (docs/simulation-contracts.md): the enumerated paths are discrete
+// arrivals (exact delay, band energies, direction and delay rate); everything else is
+// the diffuse histogram. Each path class is counted by exactly one of the two.
+// Russian roulette: survival min(1, max over bands of energy factor / (probability * floor)):
+// paths whose throughput is above MethodRouletteFloor always continue, so the number of
+// paths stays constant over the decay instead of falling with the energy.
+float MethodRouletteFloor;
+// Arrival enumeration (EnergyArrivals/EnergySelect/EnergyExpand) and the solve's endpoints.
+struct EnergyArrival
+{
+    float4 direction;   // xyz: listener-to-arrival (world); w: delay rate, 1 - received/emitted frequency
+    float4 low, high;   // band energies 125 Hz ... 16 kHz, direct-sound convention
+    float delay;        // seconds, retarded for a moving source
+    uint identity;      // stable across solves: plane multiset or edge/plane indices
+    uint family;        // EnergyFamily* | interaction depth << 8
+    float length;       // geometric path length (m)
+};
+static const uint EnergyFamilyDirect = 0, EnergyFamilySpecular = 1, EnergyFamilyD = 2, EnergyFamilyDD = 3, EnergyFamilyRD = 4,
+                  EnergyFamilyDR = 5;
+static const uint CounterArrivalOverflow = 13;
+RWStructuredBuffer<EnergyArrival> MethodArrivals;
+RWStructuredBuffer<uint> MethodArrivalCounts, MethodSelected;
+StructuredBuffer<uint> MethodPrimitivePlane, MethodPlanePrimitive;
+uint MethodSourceObject, MethodArrivalFamilies, MethodArrivalOrder, MethodPlaneCount;
+uint MethodArrivalBase, MethodArrivalCapacity, MethodArrivalSlots, MethodArrivalDeposit, MethodCountIndex, MethodSelectedBase;
+uint MethodPathBase, MethodFrequencyBins, MethodFftSize, MethodCountCells;
+uint4 MethodFamilyEnds0, MethodFamilyEnds1; // cumulative candidates: direct, order 1, order 2, D, DD, RD, DR
+float MethodSampleRate;
+bool EnergyEnumerated(uint family) { return ((MethodArrivalFamilies >> family) & 1) != 0; }
 float EnergyDirectivity(MethodAnchor v, float3 w) { return v.kind == 1 ? max(0, dot(w, v.normal)) : 1; }
 float EnergySpecular(RayMaterial m, float cosine)
 {
@@ -70,7 +100,7 @@ float UtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k, floa
 bool UtdApex(uint edge, float3 from, float3 to, out float3 e)
 {
     float3 a, u, f, n; float extent, angle;
-    EdgeFrame(edge, 0, false, a, u, f, n, extent, angle);
+    EdgeFrame(edge, MethodState, false, a, u, f, n, extent, angle);
     float3 s = from - a, r = to - a;
     float zs = dot(s, u), zr = dot(r, u), rs = length(s - zs * u), rr = length(r - zr * u);
     e = a;
@@ -82,7 +112,7 @@ bool UtdApex(uint edge, float3 from, float3 to, out float3 e)
 bool UtdAngles(uint edge, float3 from, float3 e, float3 to, out float n, out float phiIn, out float phiOut, out float sinBeta)
 {
     float3 a, u, f, nn; float extent, angle;
-    EdgeFrame(edge, 0, false, a, u, f, nn, extent, angle);
+    EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
     float3 s = from - e, r = to - e;
     phiIn = TunedEdgeAngle(s, f, nn, angle); phiOut = TunedEdgeAngle(r, f, nn, angle);
     n = angle / RayPi;
@@ -121,8 +151,8 @@ void EnergyListener(MethodAnchor v, float I[8], float3 L, float scale, uint dept
 bool UtdApexPair(uint first, uint second, float3 from, float3 to, out float3 p1, out float3 p2)
 {
     float3 a1, u1, f1, n1, a2, u2, f2, n2; float e1, w1, e2, w2;
-    EdgeFrame(first, 0, false, a1, u1, f1, n1, e1, w1);
-    EdgeFrame(second, 0, false, a2, u2, f2, n2, e2, w2);
+    EdgeFrame(first, MethodState, false, a1, u1, f1, n1, e1, w1);
+    EdgeFrame(second, MethodState, false, a2, u2, f2, n2, e2, w2);
     p1 = a1; p2 = a2;
     if (first == second || abs(dot(u1, u2)) < .9999) return false;
     float3 s = from - a1, r = to - a1, g = a2 - a1;
@@ -153,8 +183,8 @@ void EnergyEdgeConnection(MethodAnchor v, float I[8], float3 L, uint depth, uint
     float3 from = v.position, unused, e, e2 = 0, first, hit;
     if (image)
     {
-        if ((States[Primitives[mirror].indices.x].flags.x & 3) != 3) return;
-        from = CompleteImage(mirror, 0, v.position, false, unused);
+        if ((States[MethodState + Primitives[mirror].indices.x].flags.x & 3) != 3) return;
+        from = CompleteImage(mirror, MethodState, v.position, false, unused);
     }
     float n, phiIn, phiOut, sinBeta, n2 = 1, phiIn2 = 0, phiOut2 = 0, sinBeta2 = 1, cosine = 0, leg = 1;
     if (pair)
@@ -166,12 +196,15 @@ void EnergyEdgeConnection(MethodAnchor v, float I[8], float3 L, uint depth, uint
         if (leg == 0) return;
     }
     else if (!UtdApex(edge, from, L, e) || !UtdAngles(edge, from, e, L, n, phiIn, phiOut, sinBeta)) return;
+    // Routes from the source are discrete arrivals when their family is enumerated.
+    if (v.kind == 0 && v.medium == AirMedium && MediumAt(MethodState, L, false) == AirMedium &&
+        EnergyEnumerated(image ? EnergyFamilyRD : pair ? EnergyFamilyDD : EnergyFamilyD)) return;
     float3 last = pair ? e2 : e;
     first = e;
-    if (image) { if (!CompleteMirror(mirror, 0, v.position, e, false, hit, cosine)) return; first = hit; }
+    if (image) { if (!CompleteMirror(mirror, MethodState, v.position, e, false, hit, cosine)) return; first = hit; }
     // Both straight legs (anchor -> first edge unless mirrored, last edge -> listener) at one call site.
     [loop] for (uint segment = image ? 1u : 0u; segment < 2; segment++)
-        if (!Visible(0, segment == 0 ? v.position : last, segment == 0 ? e : L, false)) return;
+        if (!Visible(MethodState, segment == 0 ? v.position : last, segment == 0 ? e : L, false)) return;
     float D = EnergyDirectivity(v, normalize(first - v.position));
     float m = length(e - from), d = pair ? length(e2 - e) : 0, l = length(L - last), total = m + d + l;
     if (D == 0 || m <= RayEpsilon || l <= RayEpsilon) return;
@@ -195,6 +228,33 @@ void EnergyEdgeConnection(MethodAnchor v, float I[8], float3 L, uint depth, uint
     MethodCaptureEvent(ray, slot, CaptureEdgeConnection, e, 0, magnitude, time, image ? 1 : pair ? 2 : 0);
 }
 
+// Track-length receiver sphere for one straight segment from p along d (span metres):
+// a ray of flux Phi crossing the sphere along a chord c scores Phi c 3 / (4 pi r^3),
+// whose expectation is the energy averaged over the sphere (free field: I / d^2;
+// LateEnergy.hlsl uses the same estimator). The chord counts only where the listener
+// sees it, so a sphere that straddles a wall does not hear the far side.
+void EnergySphere(float3 p, float3 d, float span, float flux[8], float tau, uint medium, float3 L, uint depth,
+                  uint ray, inout uint slot, uint key)
+{
+    float r = MethodDetectRadius;
+    float3 v = L - p;
+    float along = dot(v, d), closest = dot(v, v) - along * along;
+    if (closest >= r * r) return;
+    float halfChord = sqrt(r * r - closest), a = max(0, along - halfChord), b = min(span, along + halfChord);
+    if (b <= a) return;
+    float at = clamp(along, a, b);
+    if (!Visible(MethodState, L, p + d * at, false)) return;
+    MethodCount(CounterChains);
+    float time = tau + at * MethodSlowness(medium), magnitude = 0, scale = 3 * (b - a) / (4 * RayPi * r * r * r);
+    [unroll] for (uint k = 0; k < MethodBands; k++)
+    {
+        float share = flux[k] * exp(-2 * MethodLoss(medium, k) * at) * scale;
+        EnergyDeposit(-d, k, time, share, depth, key ^ k);
+        if (k == 2) magnitude = share;
+    }
+    MethodCaptureEvent(ray, slot, CaptureChain, p + d * at, 0, magnitude, time);
+}
+
 // One flat loop: each iteration makes the pending connections of the latest vertex,
 // then traces one segment (an edge ray or a direction from the anchor starts a new
 // chain), so every heavy helper has a single call site (small kernel and stack).
@@ -203,28 +263,29 @@ void TraceEnergy(uint index)
     if (index >= MethodRayCount) return;
     uint ray = MethodRayOffset + index, slot = 0;
     MethodCount(CounterRays);
-    float3 S = States[Sources[0]].position.xyz, L = States[Listeners[0]].position.xyz;
+    float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
     uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
     MethodAnchor v;
     v.position = S; v.normal = 0; v.previous = S; v.kind = 0; v.edge = 0; v.primitive = 0xffffffff; v.time = 0;
-    v.medium = MediumAt(0, S, false);
+    v.medium = MediumAt(MethodState, S, false);
+    // Discrete arrivals hold these path classes only when both ends are in air (EnergyArrivals).
+    bool air = v.medium == AirMedium && MediumAt(MethodState, L, false) == AirMedium;
     float I[8], cI[8], Phi0[8], C[8];
     [unroll] for (uint k = 0; k < MethodBands; k++) { I[k] = ReferenceDistance * ReferenceDistance; cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; }
     MethodCaptureEvent(ray, slot, CaptureSource, S, 1, 0, 0);
-    // Pending connections of vertex c; ray 0 carries the deterministic direct sound for every ray.
+    // Pending connections of vertex c; ray 0 carries the deterministic direct sound for
+    // every ray unless the direct sound is a discrete arrival.
     MethodAnchor c = v;
-    bool connectListener = ray == 0, connectEdge = true;
+    bool connectListener = ray == 0 && !EnergyEnumerated(EnergyFamilyDirect), connectEdge = true;
     float listenerScale = MethodTotalRays;
     uint depth = 0, connectDepth = 0, events = 0;
     bool edges = MethodEdgeCount > 0 && DiffractionFactor > 0, travelling = false, done = false;
     // Chain state. An edge ray's flux needs the distance to its first hit (UTD's
     // distance parameter), so it is completed there (fluxPending).
-    float3 p = S, d = 0, w0 = 0, Uc = 0, chainStart = S;
-    float3x3 U = MethodIdentity();
+    float3 p = S, d = 0;
     float Q = 1, tau = 0;
     uint hits = 0, reflections = 0, medium = v.medium, edge = 0;
-    uint2 transmitted = 0;
-    bool straight = true, viaEdge = false, fluxPending = false;
+    bool through = false, viaEdge = false, fluxPending = false;
     float edgePick = 1, edgeExtent = 1, edgeAngle = 1, edgeM = 1, edgeSinBeta = 1, edgePhiIn = 0, edgePhi = 0, edgeD = 1;
     [loop] for (;;)
     {
@@ -245,16 +306,16 @@ void TraceEnergy(uint index)
             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
             viaEdge = edges && RandomRay(rng) < MethodEdgeProbability;
             [unroll] for (uint k = 0; k < MethodBands; k++) C[k] = 1;
-            Uc = 0; U = MethodIdentity(); hits = 0; reflections = 0; transmitted = 0; straight = true; medium = v.medium;
+            hits = 0; reflections = 0; through = false; medium = v.medium;
             if (viaEdge)
             {
                 // Edge ray: point uniform on an edge, azimuth uniform on Keller's cone.
                 float3 a, u, f, nn; float extent, angle;
                 edge = MethodPickEdge(v.kind == 1 ? v.primitive : 0xffffffff, rng, edgePick);
-                EdgeFrame(edge, 0, false, a, u, f, nn, extent, angle);
+                EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
                 float3 e = a + RandomRay(rng) * extent * u, w = e - v.position;
                 float m = length(w);
-                if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle || !Visible(0, v.position, e, false))
+                if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle || !Visible(MethodState, v.position, e, false))
                 { MethodCaptureEvent(ray, slot, CaptureEnd, v.position, 0, 0, v.time); break; }
                 w /= m;
                 float cosBeta = dot(w, u);
@@ -266,20 +327,20 @@ void TraceEnergy(uint index)
                 d = normalize(u * cosBeta + edgeSinBeta * (f * cos(edgePhi) + nn * sin(edgePhi)));
                 edgeExtent = extent; edgeAngle = angle; edgeM = m;
                 tau = v.time + m * MethodSlowness(AirMedium);
-                p = e; chainStart = e; w0 = d; Q = 1; fluxPending = true;
+                p = e; Q = 1; fluxPending = true;
                 depth++;
                 MethodCount(CounterEdgeEvents);
                 MethodCaptureEvent(ray, slot, CaptureEdge, e, 0, 0, tau);
             }
             else
             {
-                w0 = v.kind == 1 ? MethodCosineDirection(v.normal, rng) : UnitDirection(rng, false);
+                float3 w0 = v.kind == 1 ? MethodCosineDirection(v.normal, rng) : UnitDirection(rng, false);
                 float pdf = v.kind == 1 ? max(1e-12, dot(w0, v.normal)) / RayPi : 1 / (4 * RayPi);
                 float D = EnergyDirectivity(v, w0);
                 if (D == 0) break;
                 [unroll] for (uint k = 0; k < MethodBands; k++) Phi0[k] = I[k] * D / pdf;
                 Q = edges ? 1 - MethodEdgeProbability : 1;
-                p = v.position; chainStart = p; d = w0; tau = v.time;
+                p = v.position; d = w0; tau = v.time;
             }
             travelling = true;
         }
@@ -287,13 +348,8 @@ void TraceEnergy(uint index)
         float limit = (MethodHorizon - tau) / MethodSlowness(medium);
         uint hit; float distance; float3 normal;
         if (limit <= 0) { MethodCount(CounterHorizon); break; }
-        if (!NearestHit(0, p, d, limit, false, hit, distance, normal))
-        {
-            MethodCount(CounterEscapes);
-            MethodCaptureEvent(ray, slot, CaptureEscape, p + d * min(limit, 50), 0, 0, tau);
-            break;
-        }
-        if (fluxPending)
+        bool found = NearestHit(MethodState, p, d, limit, false, hit, distance, normal);
+        if (fluxPending && found)
         {
             // UTD energy flux per unit edge length and azimuth, over the sampling densities.
             fluxPending = false;
@@ -305,6 +361,25 @@ void TraceEnergy(uint index)
                           edgeSinBeta * edgeSinBeta * I[k] * edgeD * opacity * opacity * DiffractionFactor * DiffractionFactor *
                           exp(-2 * MethodLoss(AirMedium, k) * edgeM) / (edgeM * edgeM) * edgeExtent * edgeAngle / (edgePick * MethodEdgeProbability);
             }
+        }
+        // Specular segments (after a reflection; a transmitted-only leg is the anchor's
+        // straight connection) reach the listener through the receiver sphere, except the
+        // path classes held by the discrete arrivals: pure reflections from the source up
+        // to the enumerated order, and one reflection after an edge ray from the source (DR).
+        bool held = air && v.kind == 0 && !through &&
+                    (viaEdge ? reflections == 1 && EnergyEnumerated(EnergyFamilyDR)
+                             : reflections <= MethodArrivalOrder && EnergyEnumerated(EnergyFamilySpecular));
+        if (reflections > 0 && !held)
+        {
+            float flux[8];
+            [unroll] for (uint k = 0; k < MethodBands; k++) flux[k] = Phi0[k] * C[k] / Q;
+            EnergySphere(p, d, found ? distance : limit, flux, tau, medium, L, depth, ray, slot, HashRay(rng ^ 0x5bd1e995u ^ events));
+        }
+        if (!found)
+        {
+            MethodCount(CounterEscapes);
+            MethodCaptureEvent(ray, slot, CaptureEscape, p + d * min(limit, 50), 0, 0, tau);
+            break;
         }
         p += d * distance; tau += distance * MethodSlowness(medium);
         [unroll] for (uint k = 0; k < MethodBands; k++) C[k] *= exp(-2 * MethodLoss(medium, k) * distance);
@@ -346,91 +421,25 @@ void TraceEnergy(uint index)
         bool transmit = u < mD + mT;
         if (transmit)
         {
-            uint next = MediumAt(0, p + d * (2 * RayEpsilon), false);
+            uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
             float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
             [unroll] for (uint k = 0; k < MethodBands; k++) C[k] *= eT[k];
             Q *= mT / total;
-            if (dot(bent, bent) > 0)
-            {
-                if (MethodIor(next, 3) != MethodIor(medium, 3)) straight = false;
-                d = normalize(bent);
-                medium = next;
-                if (hits < 64) { if (hits < 32) transmitted.x |= 1u << hits; else transmitted.y |= 1u << (hits - 32); }
-                else straight = false;
-            }
-            else { d = reflect(d, n); straight = false; }
+            if (dot(bent, bent) > 0) { d = normalize(bent); medium = next; through = true; }
+            else { d = reflect(d, n); reflections++; }
         }
         else
         {
             [unroll] for (uint k = 0; k < MethodBands; k++) C[k] *= eS[k];
             Q *= mS / total;
             d = reflect(d, n);
-            MethodUnfoldReflect(U, Uc, n, dot(n, p));
             reflections++;
         }
         hits++;
         float weight = 0;
         [unroll] for (uint k = 0; k < MethodBands; k++) weight = max(weight, C[k]);
         MethodCaptureEvent(ray, slot, transmit ? CaptureTransmission : CaptureSpecular, p, Phi0[2] * C[2] / Q, 0, tau);
-        if (reflections > 0 && straight)
-        {
-            float3 image = mul(U, L) + Uc, w = image - chainStart;
-            float span = length(w), along = dot(w, w0);
-            if (along > 0 && span > MethodDetectRadius && span * span - along * along < MethodDetectRadius * MethodDetectRadius)
-            {
-                MethodCount(CounterDetections);
-                // Exact path start and the factor that multiplies the chain's exact
-                // energy coefficients; after an edge ray the path passes Keller's
-                // stationary point and the detection probability is the edge-sample
-                // density times the (z, phi) area of a disc of radius r in the ray tube.
-                float factor[8]; float3 origin = 0; float m = 0;
-                bool valid = false;
-                w /= span;
-                if (!viaEdge)
-                {
-                    float Dw = EnergyDirectivity(v, w), P = MethodConeProbability(v.kind == 1 ? 1 : 0, w, span, v.normal);
-                    origin = v.kind == 1 ? v.position + v.normal * RayEpsilon : v.position;
-                    valid = Dw != 0 && P > 0;
-                    [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] = I[k] * Dw / (P * Q);
-                }
-                else
-                {
-                    float3 e; float nw, phiIn, phiOut, sinBeta;
-                    if (UtdApex(edge, v.position, image, e) && UtdAngles(edge, v.position, e, image, nw, phiIn, phiOut, sinBeta))
-                    {
-                        m = length(e - v.position);
-                        float l = length(image - e), Dw = EnergyDirectivity(v, (e - v.position) / max(m, 1e-12));
-                        float P = edgePick * MethodEdgeProbability / (edgeExtent * edgeAngle) * RayPi * MethodDetectRadius *
-                                  MethodDetectRadius * m / (l * sinBeta * sinBeta * (l + m));
-                        origin = e;
-                        valid = Dw != 0 && m > RayEpsilon && Visible(0, v.position, e, false);
-                        [unroll] for (uint k = 0; k < MethodBands; k++)
-                        {
-                            float opacity = MethodEdgeOpacity(edge, k);
-                            factor[k] = UtdEnergy(nw, phiIn, phiOut, sinBeta, MethodWavenumber(k), m * l / (m + l) * sinBeta * sinBeta) *
-                                        I[k] * Dw * opacity * opacity * DiffractionFactor * DiffractionFactor * exp(-2 * MethodLoss(AirMedium, k) * m) /
-                                        (m * l * (m + l) * P * Q);
-                        }
-                    }
-                    else [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] = 0;
-                }
-                float2 unusedPressure[8]; float exact[8]; float total0; float3 from;
-                if (valid && MethodRetraceChain(origin, image, L, hits, transmitted, unusedPressure, exact, total0, from))
-                {
-                    MethodCount(CounterChains);
-                    float r = max(MinimumDistance, total0), magnitude = 0;
-                    float time = v.time + (m + total0) * MethodSlowness(AirMedium);
-                    [unroll] for (uint k = 0; k < MethodBands; k++)
-                    {
-                        float share = factor[k] * exact[k] * exp(-2 * MethodLoss(AirMedium, k) * total0) / (viaEdge ? 1 : r * r);
-                        EnergyDeposit(from, k, time, share, depth, HashRay(rng ^ (k + 77)));
-                        if (k == 2) magnitude = share;
-                    }
-                    MethodCaptureEvent(ray, slot, CaptureChain, p, 0, magnitude, time);
-                }
-            }
-        }
-        float survive = min(1, weight / Q);
+        float survive = min(1, weight / (Q * MethodRouletteFloor));
         if (survive < 1)
         {
             if (RandomRay(rng) >= survive)
@@ -438,4 +447,234 @@ void TraceEnergy(uint index)
             Q *= survive;
         }
     }
+}
+
+// ---- discrete arrivals ----
+// Mirror image of x in a plane (its representative primitive, world pose of this solve).
+float3 EnergyPlaneImage(uint plane, float3 x)
+{
+    float3 normal;
+    return CompleteImage(MethodPlanePrimitive[plane], MethodState, x, false, normal);
+}
+// Exact specular leg from `origin` towards `target` (the end point unfolded through the
+// planes), reflecting at `count` (0..2) hits that must lie on planes.x then planes.y,
+// and reaching `end` unobstructed. Multiplies energy[] by the specular coefficients.
+bool EnergyRetrace(float3 origin, float3 target, float3 end, uint count, uint2 planes, inout float energy[8],
+                   out float span, out float3 departure, out float3 arrival)
+{
+    span = length(target - origin);
+    departure = 0; arrival = 0;
+    if (span <= 2 * RayEpsilon) return false;
+    float3 p = origin, d = (target - origin) / span;
+    departure = d;
+    float travelled = 0;
+    [loop] for (uint i = 0; i < count; i++)
+    {
+        uint hit; float distance; float3 normal;
+        if (!NearestHit(MethodState, p, d, span - travelled - RayEpsilon, false, hit, distance, normal)) return false;
+        if (MethodPrimitivePlane[hit] != (i == 0 ? planes.x : planes.y) ||
+            (States[MethodState + Primitives[hit].indices.x].flags.x & 3) != 3) return false;
+        travelled += distance;
+        p += d * distance;
+        float3 n = dot(d, normal) < 0 ? normal : -normal;
+        float cosine = -dot(d, n);
+        [unroll] for (uint k = 0; k < MethodBands; k++) energy[k] *= EnergySpecular(MethodSurface(hit, k), cosine);
+        d = reflect(d, n);
+    }
+    float remaining = span - travelled;
+    if (remaining <= RayEpsilon || length(p + d * remaining - end) > 1e-3 * max(1, span)) return false;
+    if (!Visible(MethodState, p, end, false)) return false;
+    arrival = d;
+    return true;
+}
+uint EnergyFamilyDepth(uint family, uint order) { return family == EnergyFamilyDirect ? 0 : family == EnergyFamilyD ? 1 : family == EnergyFamilySpecular ? order : 2; }
+// Deposit one arrival into the histogram (measurement output, or audio arrivals that do
+// not fit the path slots). Shares are multiplied by the ray count the readout divides by.
+float EnergyBand(EnergyArrival a, uint band) { float4 v = band < 4 ? a.low : a.high; return v[band & 3]; }
+void EnergyDepositArrival(EnergyArrival a, uint key)
+{
+    [unroll] for (uint k = 0; k < MethodBands; k++)
+        EnergyDeposit(a.direction.xyz, k, a.delay, EnergyBand(a, k) * MethodTotalRays, a.family >> 8, key ^ k);
+}
+// One thread per candidate route from the source: the direct sound, every plane
+// (order 1) and ordered plane pair (order 2), and the D, DD, RD, DR edge routes.
+// Candidates are exact paths evaluated with the walk's own kernels; valid ones are
+// appended to this solve's arrival list. Specular legs and straight legs share one
+// retrace call; the source is isotropic.
+void EnergyArrivals(uint index)
+{
+    uint ends[7] = {MethodFamilyEnds0.x, MethodFamilyEnds0.y, MethodFamilyEnds0.z, MethodFamilyEnds0.w,
+                    MethodFamilyEnds1.x, MethodFamilyEnds1.y, MethodFamilyEnds1.z};
+    if (index >= ends[6]) return;
+    uint route = 0;
+    [unroll] for (uint g = 0; g < 6; g++) route += index >= ends[g] ? 1 : 0;
+    uint local = index - (route == 0 ? 0 : ends[route - 1]);
+    float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
+    uint mediumS = MediumAt(MethodState, S, false);
+    float E[8], coefficient[8];
+    [unroll] for (uint k = 0; k < MethodBands; k++) { E[k] = ReferenceDistance * ReferenceDistance; coefficient[k] = 1; }
+    float time = 0, total = 0;
+    float3 departure = 0, arrival = 0;
+    uint identity = 0, family = EnergyFamilyDirect, order = 0;
+    bool valid = true;
+    if (route == 0)
+    {
+        valid = MethodConnect(S, L, mediumS, true, coefficient, time);
+        total = length(L - S);
+        departure = arrival = total > 0 ? (L - S) / total : float3(0, 0, 1);
+        float r = max(MinimumDistance, total);
+        [unroll] for (uint k = 0; k < MethodBands; k++) E[k] *= coefficient[k] / (r * r);
+        identity = 0x2545f491u;
+    }
+    else if (mediumS != AirMedium || MediumAt(MethodState, L, false) != AirMedium) valid = false;
+    else
+    {
+        // Up to two legs (origin, unfolded target, end, reflections, planes).
+        float3 fromA = S, targetA = L, endA = L, fromB = 0, targetB = 0, endB = 0;
+        uint countA = 0, countB = 0, legs = 1, edge = 0, edge2 = 0;
+        uint2 planesA = 0, planesB = 0;
+        float n = 1, phiIn = 0, phiOut = 0, sinBeta = 1, n2 = 1, phiIn2 = 0, phiOut2 = 0, sinBeta2 = 1, m = 0, gap = 0, l = 0, leg = 1;
+        if (route <= 2)
+        {
+            family = EnergyFamilySpecular; order = route;
+            uint p1 = route == 1 ? local : local / MethodPlaneCount, p2 = route == 1 ? 0 : local % MethodPlaneCount;
+            valid = route == 1 || p1 != p2;
+            targetA = route == 1 ? EnergyPlaneImage(p1, L) : EnergyPlaneImage(p1, EnergyPlaneImage(p2, L));
+            countA = route; planesA = uint2(p1, p2);
+            identity = HashRay(0x51ed27u * route + HashRay(p1 + 1) + (route == 2 ? HashRay(p2 + 1) : 0));
+        }
+        else
+        {
+            family = route == 3 ? EnergyFamilyD : route == 4 ? EnergyFamilyDD : route == 5 ? EnergyFamilyRD : EnergyFamilyDR;
+            uint plane = route >= 5 ? local / MethodEdgeCount : 0;
+            edge = route == 4 ? local / MethodEdgeCount : local % MethodEdgeCount;
+            edge2 = route == 4 ? local % MethodEdgeCount : edge;
+            float3 from = route == 5 ? EnergyPlaneImage(plane, S) : S, to = route == 6 ? EnergyPlaneImage(plane, L) : L, e = 0, e2 = 0;
+            if (route == 4)
+                valid = edge != edge2 && UtdApexPair(edge, edge2, from, to, e, e2) && UtdAngles(edge, from, e, e2, n, phiIn, phiOut, sinBeta) &&
+                        UtdAngles(edge2, e, e2, to, n2, phiIn2, phiOut2, sinBeta2);
+            else valid = UtdApex(edge, from, to, e) && UtdAngles(edge, from, e, to, n, phiIn, phiOut, sinBeta);
+            if (valid && route == 4) { leg = MethodEdgeLeg(edge, edge2, e, e2); valid = leg > 0; }
+            e2 = route == 4 ? e2 : e;
+            m = length(e - from); gap = length(e2 - e); l = length(to - e2);
+            valid = valid && m > RayEpsilon && l > RayEpsilon && (route != 4 || gap > RayEpsilon);
+            // Leg A reaches the first edge (via the plane for RD); leg B leaves the last edge (via the plane for DR).
+            targetA = route == 5 ? EnergyPlaneImage(plane, e) : e; endA = e; countA = route == 5 ? 1 : 0; planesA = uint2(plane, 0);
+            fromB = e2; targetB = to; endB = L; countB = route == 6 ? 1 : 0; planesB = uint2(plane, 0); legs = 2;
+            identity = HashRay(0x7f4a7c15u * route + HashRay(edge + 1) + 0x632be5abu * HashRay(route == 4 ? edge2 + 1 : plane + 1));
+        }
+        float spans[2] = {0, 0};
+        [loop] for (uint i = 0; i < legs && valid; i++)
+        {
+            float span; float3 out0, out1;
+            valid = EnergyRetrace(i == 0 ? fromA : fromB, i == 0 ? targetA : targetB, i == 0 ? endA : endB, i == 0 ? countA : countB,
+                                  i == 0 ? planesA : planesB, coefficient, span, out0, out1);
+            if (i == 0) departure = out0;
+            arrival = out1;
+            spans[i] = span;
+        }
+        if (valid && family == EnergyFamilySpecular)
+        {
+            total = spans[0];
+            float r = max(MinimumDistance, total);
+            [unroll] for (uint k = 0; k < MethodBands; k++) E[k] *= coefficient[k] * exp(-2 * MethodLoss(AirMedium, k) * total) / (r * r);
+        }
+        else if (valid)
+        {
+            // As EnergyEdgeConnection without the sampling densities.
+            total = m + gap + l;
+            float s2 = sinBeta * sinBeta;
+            [loop] for (uint k = 0; k < MethodBands; k++) // one UtdEnergy body per edge (compile size)
+            {
+                float opacity = MethodEdgeOpacity(edge, k);
+                float share = UtdEnergy(n, phiIn, phiOut, sinBeta, MethodWavenumber(k), m * (gap + l) / total * s2) *
+                              DiffractionFactor * DiffractionFactor * opacity * opacity;
+                if (family == EnergyFamilyDD)
+                {
+                    float opacity2 = MethodEdgeOpacity(edge2, k);
+                    share *= UtdEnergy(n2, phiIn2, phiOut2, sinBeta2, MethodWavenumber(k), (m + gap) * l / total * s2) * leg * leg *
+                             DiffractionFactor * DiffractionFactor * opacity2 * opacity2 / gap;
+                }
+                E[k] *= share * coefficient[k] * exp(-2 * MethodLoss(AirMedium, k) * total) / (m * l * total);
+            }
+        }
+        time = total * MethodSlowness(AirMedium);
+    }
+    if (!valid) return;
+    // Doppler: retarded emission for a moving source (image sources move with the
+    // mirrored velocity, which has the same component along the departure direction)
+    // and the frequency ratio (c - vL.u_arrival) / (c - vS.u_departure).
+    float c = SpeedOfSound;
+    float3 vS = Velocity(MethodState + MethodSourceObject), vL = Velocity(MethodState + MethodListenerObject);
+    float a = c * c - dot(vS, vS), b = total * dot(vS, departure);
+    float retarded = a > 0 ? (b + sqrt(max(0, b * b + a * total * total))) / a : total / c;
+    float3 emitted = normalize(total * departure + vS * retarded);
+    if (family == EnergyFamilyDirect) arrival = emitted;
+    float ratio = (c - dot(vL, arrival)) / (c - dot(vS, emitted));
+    EnergyArrival result;
+    result.direction = float4(-arrival, 1 - ratio);
+    result.low = float4(E[0], E[1], E[2], E[3]);
+    result.high = float4(E[4], E[5], E[6], E[7]);
+    result.delay = time + retarded - total / c;
+    result.identity = identity;
+    result.family = family | (EnergyFamilyDepth(family, order) << 8);
+    result.length = total;
+    if (!(result.delay >= 0 && result.delay <= MethodHorizon && ratio > 0) || !(dot(result.low + result.high, 1) > 0)) return;
+    uint at;
+    InterlockedAdd(MethodArrivalCounts[MethodCountIndex], 1u, at);
+    if (at < MethodArrivalCapacity) MethodArrivals[MethodArrivalBase + at] = result;
+    else { MethodCount(CounterArrivalOverflow); EnergyDepositArrival(result, HashRay(index ^ 0x3c6ef372u)); }
+}
+float EnergyKey(EnergyArrival a) { return dot(a.low, 1) + dot(a.high, 1); }
+// Deterministic order of the solve's arrivals (energy, then identity, then index): the
+// strongest MethodArrivalSlots become audio paths, the rest go to the histogram. With
+// MethodArrivalDeposit (measurement) every arrival is also deposited.
+void EnergySelect(uint index)
+{
+    uint count = min(MethodArrivalCounts[MethodCountIndex], MethodArrivalCapacity);
+    if (index >= count) return;
+    EnergyArrival a = MethodArrivals[MethodArrivalBase + index];
+    float key = EnergyKey(a);
+    uint rank = 0;
+    [loop] for (uint j = 0; j < count; j++)
+    {
+        EnergyArrival b = MethodArrivals[MethodArrivalBase + j];
+        float other = EnergyKey(b);
+        rank += other > key || (other == key && (b.identity < a.identity || (b.identity == a.identity && j < index))) ? 1 : 0;
+    }
+    if (rank < MethodArrivalSlots) MethodSelected[MethodSelectedBase + rank] = index;
+    if (rank >= MethodArrivalSlots || MethodArrivalDeposit != 0) EnergyDepositArrival(a, HashRay(index ^ 0x9e3779b9u));
+}
+// Band energies at frequency f: the comparison's power-complementary raised-cosine
+// bands (cos^2(pi/2 log2(f/fc)) between neighbouring centres), flat outside 125 Hz-16 kHz.
+float EnergyAt(EnergyArrival a, float f)
+{
+    float x = clamp(log2(max(f, 1) / 125.0), 0, 7);
+    uint b = min(6u, (uint)floor(x));
+    float t = x - b, w = cos(.5 * RayPi * t);
+    float lower = EnergyBand(a, b), upper = EnergyBand(a, b + 1);
+    return w * w * lower + (1 - w * w) * upper;
+}
+// Audio paths: one RayPath per selected arrival and FFT bin with pressure gain sqrt(E(f))
+// (no phase), the arrival's delay, direction, delay rate and identity.
+void EnergyExpand(uint index)
+{
+    if (index >= MethodArrivalSlots * MethodFrequencyBins) return;
+    uint slot = index / MethodFrequencyBins, bin = index % MethodFrequencyBins;
+    uint count = min(min(MethodArrivalCounts[MethodCountIndex], MethodArrivalCapacity), MethodArrivalSlots);
+    RayPath path = (RayPath)0;
+    if (slot < count)
+    {
+        EnergyArrival a = MethodArrivals[MethodArrivalBase + MethodSelected[MethodSelectedBase + slot]];
+        float e = EnergyAt(a, bin * MethodSampleRate / MethodFftSize);
+        if (e > 0)
+        {
+            path.direction = a.direction;
+            path.delaySeconds = a.delay;
+            path.pressureGain = sqrt(e);
+            path.frequencyBin = bin;
+            path.identity = a.identity;
+        }
+    }
+    RayPaths[MethodPathBase + index] = path;
 }

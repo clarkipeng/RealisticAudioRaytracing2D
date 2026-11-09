@@ -72,7 +72,7 @@ public static partial class TakeRender
                     gpuAudio=new GpuAudio(scene,rate,settings,signals,settings.maximumResponsesPerBatch,transported:true);
                 }
                 else mixer=new Mixer(scene,rate,settings,signals);
-                solver=new TransportSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate,gpuAudio==null);
+                solver=new TransportSolver(scene,geometry,settings,shader,settings.maximumResponsesPerBatch,rate,gpuAudio==null,methodAudio:true);
             }
             catch {gpuAudio?.Dispose();throw;}
         }

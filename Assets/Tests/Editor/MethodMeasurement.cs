@@ -142,7 +142,7 @@ public partial class TakeChecks
         public string sceneFile, output;
         public string[] methods;
         public int[] budgets, seeds;
-        public float maximumDelaySeconds = 2, detectionRadius = .25f, diffractionFactor = 1, edgeProbability = .5f;
+        public float maximumDelaySeconds = 2, detectionRadius = .25f, diffractionFactor = 1, edgeProbability = .5f, rouletteFloor = 1e-6f;
         public int receivers = -1, captureReceiver = -1, captureRays = 48, captureEvents = 192, hybridRouteFactor = 1;
     }
     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
@@ -150,7 +150,7 @@ public partial class TakeChecks
     {
         public string schema = "methods-raw-v1", sceneId, sceneSha256, method, backend, unityVersion, codeSha256;
         public int budget, seed, receivers, bins, primitives, edges, droppedEdges, lateRays, completeRouteSamples, methodRays;
-        public float detectionRadius, maximumDelaySeconds, workFraction, binSeconds;
+        public float detectionRadius, rouletteFloor, maximumDelaySeconds, workFraction, binSeconds;
         public float[] frequencies, solveSeconds;
         public double busySeconds, gpuSeconds, analysisSeconds, wallSeconds;
         public string[] counterNames;
@@ -196,7 +196,7 @@ public partial class TakeChecks
         settings.raysPerBin = 1; settings.reflectionCandidates = 1 << 20; settings.maxBounces = 4096;
         settings.lateRays = budget; settings.completeRouteSamples = job.hybridRouteFactor * budget;
         settings.methodRays = budget; settings.specularDetectionRadius = job.detectionRadius;
-        settings.methodEdgeProbability = job.edgeProbability;
+        settings.methodEdgeProbability = job.edgeProbability; settings.methodRouletteFloor = job.rouletteFloor;
         return settings;
     }
     static void MethodWrite(string path, float[] values)
@@ -265,7 +265,7 @@ public partial class TakeChecks
         var record = new MethodRunRecord {sceneId = spec.sceneId, sceneSha256 = spec.sceneSha256, method = name, budget = budget, seed = seed,
             backend = SystemInfo.graphicsDeviceName, unityVersion = Application.unityVersion, codeSha256 = code, receivers = receivers, bins = bins,
             primitives = baked.geometry.Length, binSeconds = MethodTransport.BinSeconds, maximumDelaySeconds = job.maximumDelaySeconds,
-            workFraction = (float)fraction, frequencies = frequencies, solveSeconds = new float[receivers], detectionRadius = job.detectionRadius,
+            workFraction = (float)fraction, frequencies = frequencies, solveSeconds = new float[receivers], detectionRadius = job.detectionRadius, rouletteFloor = job.rouletteFloor,
             lateRays = hybrid ? settings.lateRays : 0, completeRouteSamples = hybrid ? settings.completeRouteSamples : 0, methodRays = hybrid ? 0 : budget,
             counterNames = MethodTransport.CounterNames, counters = counters};
         double analysis = 0;

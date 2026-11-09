@@ -79,7 +79,9 @@ internal sealed class LateReverb
         if(late.Valid)for(int s=0;s<signals.Length;s++)
         {
             // Plane emission rows: legacy fixed sites (clip phase from the plane seed) or retained bursts.
-            var batch=late.Transport.Emissions;var range=batch.Ranges[late.Frame*batch.FrameStride+s];
+            var batch=late.Transport.Emissions;
+            if(batch==null){sites[s]=0;continue;} // point sources only (energy method)
+            var range=batch.Ranges[late.Frame*batch.FrameStride+s];
             sites[s]=range.mode==0?0:range.count;if(sites[s]==0)continue;
             if(amplitudes[s]==null || amplitudes[s].Length<sites[s]){amplitudes[s]=new float[sites[s]];phases[s]=new uint[sites[s]];births[s]=new long[sites[s]];}
             for(int n=0;n<sites[s];n++)

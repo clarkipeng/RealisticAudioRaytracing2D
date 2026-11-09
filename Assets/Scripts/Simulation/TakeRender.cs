@@ -71,14 +71,22 @@ public static partial class TakeRender
         // second-order images in the complete routes' RR family.
         internal int LateEarlyOrder => CompleteSamples>0 && maxBounces>1?2:1;
         public int seed;
-        [Tooltip("Hybrid renders audio. Pressure and Energy are single-loop offline measurement kernels (see MethodTransport).")]
+        [Tooltip("Hybrid and Energy render audio (Energy: exact discrete arrivals plus the energy walk as the late field). Pressure is a single-loop offline measurement kernel (see MethodTransport).")]
         public Method method;
         [Min(1),Tooltip("Pressure/Energy methods: rays per solve; every ray carries all eight octave bands.")]
         public int methodRays=4096;
-        [Min(1e-4f),Tooltip("Pressure/Energy methods: a specular chain is scored when the ray leaving its last non-specular vertex passes within this distance (m) of the listener image.")]
+        [Min(1e-4f),Tooltip("Pressure method: a specular chain is scored when the ray leaving its last non-specular vertex passes within this distance (m) of the listener image. Energy method: radius (m) of the receiver sphere that scores the walk's specular segments (the diffuse field).")]
         public float specularDetectionRadius=.25f;
         [Range(0,1),Tooltip("Pressure/Energy methods: probability that a path continues through an edge rather than along a sampled direction.")]
         public float methodEdgeProbability=.5f;
+        [Range(0,1),Tooltip("Energy method: Russian roulette starts only once a path's throughput (energy fraction over its sampling probability) falls below this floor, so the number of paths stays constant over the first 60 dB of decay. 1 terminates paths at the rate their energy decays, which starves the late tail.")]
+        public float methodRouletteFloor=1e-6f;
+        [Tooltip("Energy method: enumerate the direct sound, pure specular paths up to methodArrivalOrder and the D/DD/RD/DR edge routes from the source as exact discrete arrivals; the walk then holds everything else (the diffuse field). Off: the walk estimates every path.")]
+        public bool methodArrivals=true;
+        [Range(0,2),Tooltip("Energy method: highest specular order enumerated as discrete arrivals (bounded by the scene's plane count).")]
+        public int methodArrivalOrder=2;
+        [Min(1),Tooltip("Energy method audio: discrete arrivals per source/listener pair rendered as delayed paths (the strongest); the rest join the diffuse field.")]
+        public int methodArrivalSlots=64;
         [Min(1),Tooltip("Pressure/Energy methods: interaction cap per ray (a safety bound; the 2 s output horizon normally ends paths first).")]
         public int methodMaxEvents=1<<16;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
@@ -281,6 +289,11 @@ public static partial class TakeRender
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
             report.transportDescription="Synthesis="+settings.synthesis+". Phase-exact early sound: retarded direct arrivals with material transmission, first-order image sources (selection="+settings.reflectionSampling+", candidate budget floor="+settings.reflectionCandidates+"; First Images keep each candidate as a separate delayed arrival) and, with complete early-route samples="+settings.CompleteSamples+", the wave-tuned signed one/two-edge integral for D/DD/RD/DR/RR. Late field: incoherent energy from "+settings.lateRays+" rays per octave band (8 bands, 125 Hz-16 kHz) with deterministic absorption/air loss and transmission/diffuse/specular continuations chosen by energy fraction, detected by diffuse rain and a "+settings.lateReceiverRadius+" m receiver sphere into a head-frame six-direction energy histogram; paths held by the early part (direct/transmitted-only and unobstructed specular paths up to order "+settings.LateEarlyOrder+") are excluded and the late field has no diffraction. It is synthesized as seeded band-split noise shaped by the histogram envelope (Polack), with diffuse-field interaural coherence for binaural output, by partitioned convolution of each source's emitted signal. First mirrors use retarded image sources with locally constant rigid velocity; other geometry is frozen at solve time. Not a validated wave reference.";
+            if(settings.method==Method.Energy)
+            {
+                report.method=report.provenance.solverContract="energy-arrivals-diffuse-v1";
+                report.transportDescription="Synthesis="+settings.synthesis+". Energy method (MethodEnergy.hlsl): discrete arrivals enumerated exactly from the source (direct sound with transmission, pure specular paths up to order "+settings.methodArrivalOrder+", UTD edge routes D/DD/RD/DR), each with exact delay, band energies, direction and delay rate, rendered as delayed paths with gain sqrt(band energy) and no phase (the strongest "+settings.methodArrivalSlots+" per pair); everything else (scattered at least once, higher specular orders, edge rays) is a "+settings.methodRays+"-ray energy walk scored by a "+settings.specularDetectionRadius+" m receiver sphere into the head-frame late histogram, synthesized as the hybrid's late noise field. Russian roulette floor "+settings.methodRouletteFloor+". Not a validated wave reference.";
+            }
             if(settings.maxBounces==0)
                 report.transportDescription="Synthesis="+settings.synthesis+". Direct sound only: retarded direct arrivals, occlusion, material transmission/interior travel and air/material attenuation. No reflected, scattered or diffracted paths are allocated or traced. Existing source recordings may contain their own reverberation.";
         }
@@ -304,7 +317,7 @@ public static partial class TakeRender
         var batchStates=batchCapacity==1 ? state:new AcousticTake.State[checked(state.Length*batchCapacity)];
         var batchPaths=batchCapacity==1 ? response:new DirectPath[checked(response.Length*batchCapacity)];
         report.responseBatchCapacity=batchCapacity;
-        using (var solver=new TransportSolver(scene,take.Geometry,settings,shader,batchCapacity,metadata.sampleRate,!useGpuAudio))
+        using (var solver=new TransportSolver(scene,take.Geometry,settings,shader,batchCapacity,metadata.sampleRate,!useGpuAudio,methodAudio:true))
         {
             report.workingNumericBytes=report.preparedPcmBytes+(long)take.Geometry.Length*44+((long)state.Length+(headStates?.Length??0))*80+(long)response.Length*DirectPathStride+(long)block.Length*4+solver.GpuBufferBytes+solver.CpuBufferBytes+initialMixerBytes+
                 (batchCapacity==1?0:(long)batchStates.Length*80+(long)batchPaths.Length*DirectPathStride);
@@ -717,12 +730,15 @@ public static partial class TakeRender
         (state.flags&(AcousticTake.StateFlags.Active|role))==(AcousticTake.StateFlags.Active|role);
     public static double Elapsed(long start) => (double)(Stopwatch.GetTimestamp()-start)/Stopwatch.Frequency;
 
-    // Audio is rendered by the hybrid method only; Pressure and Energy are offline
-    // measurement kernels whose band responses are read from TransportSolver.Method.
+    // Audio is rendered by the hybrid or the energy method (discrete arrivals as delayed
+    // paths, the diffuse histogram as the late field); Pressure is an offline measurement
+    // kernel whose band responses are read from TransportSolver.Method.
     public static void RequireAudioMethod(Settings settings)
     {
-        if(settings.method!=Method.Hybrid)
-            throw new NotSupportedException($"Audio rendering uses the hybrid method; {settings.method} is an offline measurement kernel.");
+        if(settings.method!=Method.Hybrid && settings.method!=Method.Energy)
+            throw new NotSupportedException($"Audio rendering uses the hybrid or energy method; {settings.method} is an offline measurement kernel.");
+        if(settings.method==Method.Energy && settings.transport!=Transport.Raytraced)
+            throw new NotSupportedException("The energy method renders through raytraced transport.");
     }
     public static void Validate(Settings settings)
     {
@@ -735,7 +751,8 @@ public static partial class TakeRender
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.method!=Method.Hybrid && settings.method!=Method.Pressure && settings.method!=Method.Energy)throw new ArgumentException("Unknown acoustic method.");
-        if(settings.method!=Method.Hybrid && (settings.methodRays<1 || !PositiveFinite(settings.specularDetectionRadius) || !(settings.methodEdgeProbability>=0 && settings.methodEdgeProbability<1) || settings.methodMaxEvents<1))
+        if(settings.method!=Method.Hybrid && (settings.methodRays<1 || !PositiveFinite(settings.specularDetectionRadius) || !(settings.methodEdgeProbability>=0 && settings.methodEdgeProbability<1) || settings.methodMaxEvents<1 || !(settings.methodRouletteFloor>0 && settings.methodRouletteFloor<=1) ||
+            settings.methodArrivalOrder<0 || settings.methodArrivalOrder>2 || settings.methodArrivalSlots<1))
             throw new ArgumentException("Invalid single-loop method settings.");
         ValidateFamilyGains(settings);
         if(settings.transport==Transport.Raytraced)

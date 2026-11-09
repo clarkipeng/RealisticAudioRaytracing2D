@@ -124,9 +124,11 @@ def scene_spec(scene_dir, out):
 
 
 def make_jobs(name, scenes, methods, budgets, seeds, root=COMPARE, capture=-1, receivers=-1, materials=None, radius=.25, capture_scenes=None,
-              preset_scattering=False):
+              preset_scattering=False, roulette_floor=1e-6, suffix=None):
     """Write .context/methods-2026-11-06/jobs/NAME.json. `materials` optionally overrides
-    scattering (e.g. {"scattering": 0.3}) for the divergence study; such scenes get a suffix."""
+    scattering (e.g. {"scattering": 0.3}) for the divergence study; such scenes get a suffix.
+    `suffix` names a settings variant (e.g. a roulette floor) of an unchanged scene, so its raw
+    outputs sit beside the suite's and are not packed."""
     jobs = []
     for scene_id in scenes:
         scene_dir = Path(root) / scene_id
@@ -149,8 +151,13 @@ def make_jobs(name, scenes, methods, budgets, seeds, root=COMPARE, capture=-1, r
                 data[key] = [value] * len(data[key])
             spec = spec.with_name(data['sceneId'] + '.json')
             spec.write_text(json.dumps(data) + '\n')
+        if suffix:
+            data = json.loads(spec.read_text())
+            data['sceneId'] += '-' + suffix
+            spec = spec.with_name(data['sceneId'] + '.json')
+            spec.write_text(json.dumps(data) + '\n')
         jobs.append(dict(sceneFile=str(spec), output=str(RAW), methods=methods, budgets=budgets, seeds=seeds,
-                         maximumDelaySeconds=2.0, detectionRadius=radius, receivers=receivers,
+                         maximumDelaySeconds=2.0, detectionRadius=radius, rouletteFloor=roulette_floor, receivers=receivers,
                          captureReceiver=capture if capture_scenes is None or scene_id in capture_scenes else -1))
     path = WORK / 'jobs' / f'{name}.json'
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -237,7 +244,10 @@ def pack_one(folder, root=COMPARE):
                 code=dict(name={'hybrid': 'Transport.hlsl+LateEnergy.hlsl', 'pressure': 'MethodPressure.hlsl',
                                 'energy': 'MethodEnergy.hlsl'}[run['method']], sha256=run['codeSha256']),
                 wallSeconds=run['busySeconds'], gpuSeconds=run['gpuSeconds'] or None, validSeconds=run['maximumDelaySeconds'],
-                bandLimited=banded, wallModel='absorption', notes=run['notes'] + f"; specular detection radius {run['detectionRadius']} m" * (run['method'] != 'hybrid'))
+                bandLimited=banded, wallModel='absorption',
+                notes=run['notes'] + {'pressure': f"; specular detection radius {run['detectionRadius']} m",
+                                      'energy': f"; discrete arrivals plus walk with receiver sphere radius {run['detectionRadius']} m, "
+                                                f"roulette floor {run.get('rouletteFloor', 1)}"}.get(run['method'], ''))
     if meta['gpuSeconds'] is None:
         del meta['gpuSeconds']
     if complex_pressure is not None:
@@ -351,6 +361,8 @@ def main(argv=None):
     j.add_argument('--receivers', type=int, default=-1)
     j.add_argument('--scattering', type=float)
     j.add_argument('--radius', type=float, default=.25)
+    j.add_argument('--roulette-floor', type=float, default=1e-6)
+    j.add_argument('--suffix', help='scene-id suffix of a settings variant (not packed)')
     j.add_argument('--capture-scenes', nargs='*')
     j.add_argument('--preset-scattering', action='store_true', help="use each material's presetScattering (study scenes)")
     r = sub.add_parser('render')
@@ -369,7 +381,8 @@ def main(argv=None):
     elif args.command == 'jobs':
         make_jobs(args.name, args.scenes, args.methods, args.budgets, args.seeds, capture=args.capture, receivers=args.receivers,
                   materials=None if args.scattering is None else dict(scattering=args.scattering), radius=args.radius,
-                  capture_scenes=args.capture_scenes, preset_scattering=args.preset_scattering)
+                  capture_scenes=args.capture_scenes, preset_scattering=args.preset_scattering,
+                  roulette_floor=args.roulette_floor, suffix=args.suffix)
     elif args.command == 'render':
         render(args.name, args.work_fraction)
     elif args.command == 'pack':

@@ -57,13 +57,14 @@ internal sealed partial class GpuAudio
         foreach(int k in new[]{lateEnvelope,lateInput})
         {
             commands.SetComputeBufferParam(shader,k,"LateHistogram",valid?transport.LateBuffer:lateEmpty);
-            commands.SetComputeBufferParam(shader,k,"LateEmissionRanges",valid?transport.EmissionRanges:lateEmptyRows);
-            commands.SetComputeBufferParam(shader,k,"LateEmissionPoints",valid?transport.EmissionPoints:lateEmpty);
-            commands.SetComputeBufferParam(shader,k,"LateEmissionClocks",valid?transport.EmissionClocks:lateEmpty);
+            // A late field without emission rows (energy method: point sources) reads the empty rows.
+            commands.SetComputeBufferParam(shader,k,"LateEmissionRanges",valid?transport.EmissionRanges??lateEmptyRows:lateEmptyRows);
+            commands.SetComputeBufferParam(shader,k,"LateEmissionPoints",valid?transport.EmissionPoints??lateEmpty:lateEmpty);
+            commands.SetComputeBufferParam(shader,k,"LateEmissionClocks",valid?transport.EmissionClocks??lateEmpty:lateEmpty);
         }
         Set("LateValid",valid?1:0);Set("LateBank",lateBank);Set("LateBlend",lateBlend?1:0);Clock("LateSwap",sample);
         Set("LateHistogramOffset",valid?late.Frame*transport.LateUintsPerFrame:0);Set("LateRays",valid?transport.LateRays:1);
-        Set("LateEmissionRow",valid?late.Frame*transport.Emissions.FrameStride:0);
+        Set("LateEmissionRow",valid && transport.Emissions!=null?late.Frame*transport.Emissions.FrameStride:0);
         commands.BeginSample("Acoustics.GPU.LateKernels");
         commands.DispatchCompute(shader,lateEnvelope,(checked(pairs*channels*LateBasis.Bands*lateCount)+63)/64,1,1);
         commands.DispatchCompute(shader,lateBuild,(checked(pairs*channels*lateCount*(latePartition+1))+63)/64,1,1);

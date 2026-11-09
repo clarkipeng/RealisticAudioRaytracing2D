@@ -14,6 +14,10 @@ RWStructuredBuffer<float4> MethodCapture;      // two float4 per captured event
 uint MethodTotalRays, MethodRayOffset, MethodRayCount, MethodBins, MethodTrainBase, MethodMaxEvents;
 uint MethodCaptureRays, MethodCaptureEvents, MethodAnyTransmission, MethodEdgeCount, MethodOutputCount, MethodStatsCount, MethodClearOffset;
 float MethodBinSeconds, MethodHorizon, MethodDetectRadius, MethodTrainRate0, MethodLeadSeconds, MethodEdgeProbability;
+// One solve: state frame offset (frame * ObjectCount); histogram cell offset of its
+// (frame, pair) block; MethodHeadFrame bins arrival directions in the listener's head
+// frame (audio) instead of world axes (measurement). Zero by default.
+uint MethodState, MethodCellBase, MethodHeadFrame, MethodListenerObject;
 // Counters after the depth statistics.
 static const uint CounterRays = 0, CounterEvents = 1, CounterEscapes = 2, CounterRoulette = 3, CounterHorizon = 4,
                   CounterEventCap = 5, CounterNonFinite = 6, CounterDetections = 7, CounterChains = 8,
@@ -91,14 +95,20 @@ void MethodCaptureEvent(uint ray, inout uint slot, uint kind, float3 position, f
 }
 
 // ---- outputs ----
-// Energy histogram [direction(6)][band][bin], 32.32 fixed point; shares are summed
-// over rays and divided by MethodTotalRays on the CPU (as LateEnergy.hlsl).
+// Energy histogram [direction(6)][band][bin] at MethodCellBase, 32.32 fixed point; shares
+// are summed over rays and divided by MethodTotalRays (as LateEnergy.hlsl, whose layout
+// [frame][pair][direction][band][bin] the audio solves share).
 void MethodDepositEnergy(float3 arrivalFrom, uint band, float time, float share, uint key)
 {
     if (!(share > 0) || !isfinite(share) || time < 0) return;
     uint bin = (uint)floor(time / MethodBinSeconds);
     if (bin >= MethodBins) return;
-    uint cell = (LateDirection(arrivalFrom) * MethodBands + band) * MethodBins + bin;
+    if (MethodHeadFrame != 0)
+    {
+        float4 head = States[MethodState + MethodListenerObject].rotation;
+        arrivalFrom = Rotate(float4(-head.xyz, head.w), arrivalFrom);
+    }
+    uint cell = MethodCellBase + (LateDirection(arrivalFrom) * MethodBands + band) * MethodBins + bin;
     float whole = floor(share), part = (share - whole) * 4294967296.0 + (HashRay(key ^ HashRay(cell)) >> 8) * (1.0 / 16777216.0);
     if (part >= 4294967296.0) { whole += 1; part -= 4294967296.0; }
     uint low = (uint)part, high = (uint)min(whole, 4294967295.0), old;
@@ -142,7 +152,7 @@ bool MethodConnect(float3 a, float3 b, uint medium, bool energy, inout float fac
     float3 d = (b - a) / total;
     if (MethodAnyTransmission == 0 && medium == AirMedium)
     {
-        if (!Visible(0, a, b, false)) return false;
+        if (!Visible(MethodState, a, b, false)) return false;
         time = total / SpeedOfSound;
         [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] *= exp(-(energy ? 2 : 1) * MethodLoss(AirMedium, k) * total);
         return true;
@@ -152,7 +162,7 @@ bool MethodConnect(float3 a, float3 b, uint medium, bool energy, inout float fac
     [loop] for (uint crossing = 0; crossing < 64 && remaining > 2 * RayEpsilon; crossing++)
     {
         uint hit; float distance; float3 normal;
-        if (!NearestHit(0, p, d, remaining - RayEpsilon, false, hit, distance, normal)) break;
+        if (!NearestHit(MethodState, p, d, remaining - RayEpsilon, false, hit, distance, normal)) break;
         time += distance * MethodSlowness(medium);
         bool passes = false;
         [unroll] for (uint k = 0; k < MethodBands; k++)
@@ -165,7 +175,7 @@ bool MethodConnect(float3 a, float3 b, uint medium, bool energy, inout float fac
         if (!passes) return false;
         p += d * distance;
         remaining -= distance;
-        medium = MediumAt(0, p + d * (2 * RayEpsilon), false);
+        medium = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
     }
     time += remaining * MethodSlowness(medium);
     [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] *= exp(-(energy ? 2 : 1) * MethodLoss(medium, k) * remaining);
@@ -202,7 +212,7 @@ bool MethodRetraceChain(float3 anchor, float3 target, float3 listener, uint hits
     [loop] for (uint i = 0; i < hits; i++)
     {
         uint hit; float distance; float3 normal;
-        if (!NearestHit(0, p, d, lengthTotal - travelled - RayEpsilon, false, hit, distance, normal)) return false;
+        if (!NearestHit(MethodState, p, d, lengthTotal - travelled - RayEpsilon, false, hit, distance, normal)) return false;
         travelled += distance;
         p += d * distance;
         float3 n = dot(d, normal) < 0 ? normal : -normal;
@@ -233,7 +243,7 @@ bool MethodRetraceChain(float3 anchor, float3 target, float3 listener, uint hits
     if (remaining <= RayEpsilon) return false;
     float3 end = p + d * remaining;
     if (length(end - listener) > 1e-3 * max(1, lengthTotal)) return false;
-    if (!Visible(0, p, listener, false)) return false;
+    if (!Visible(MethodState, p, listener, false)) return false;
     arrivalFrom = -d;
     return true;
 }
@@ -307,14 +317,14 @@ float MethodEdgeLeg(uint first, uint second, float3 a, float3 b)
     if (first != 0xffffffff)
     {
         float3 o, u, f, n; float extent, angle;
-        EdgeFrame(first, 0, false, o, u, f, n, extent, angle);
+        EdgeFrame(first, MethodState, false, o, u, f, n, extent, angle);
         float3 normalA = n, normalB = sin(angle) * f - cos(angle) * n; // air-side face normals
         float span = length(b - a);
         if (abs(dot(normalA, b - a)) <= RayEpsilon * span) offset = 2 * RayEpsilon * normalA;
         else if (abs(dot(normalB, b - a)) <= RayEpsilon * span) offset = 2 * RayEpsilon * normalB;
         weight = EdgeConnectionWeight(first, second);
     }
-    return Visible(0, a + offset, b + offset, false) ? weight : 0;
+    return Visible(MethodState, a + offset, b + offset, false) ? weight : 0;
 }
 float MethodEdgeOpacity(uint edge, uint band)
 {

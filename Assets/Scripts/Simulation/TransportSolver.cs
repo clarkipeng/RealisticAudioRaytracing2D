@@ -55,15 +55,18 @@ public sealed class TransportSolver : IDisposable
     readonly MethodTransport method;
     // The Pressure/Energy measurement kernels of the last Solve (null for Hybrid).
     internal MethodTransport Method => method;
-    internal RayTransport.Path[] RayPaths => transport?.Paths;
-    internal ComputeBuffer RayBuffer => transport?.Buffer;
+    // Audio paths and late field of the hybrid (RayTransport) or of the energy method
+    // (MethodTransport in audio mode), in the same layouts.
+    internal RayTransport.Path[] RayPaths => transport?.Paths ?? (method != null && method.Audio ? method.Paths : null);
+    internal ComputeBuffer RayBuffer => transport?.Buffer ?? method?.PathBuffer;
     internal void PrepareEmissions(TakeRender.Signal[] signals,long first,int frames,Action<long,AcousticTake.State[]> evaluate)
     {
-        if(Emission.HasBursts(scene))transport.PrepareEmissions(signals,first,frames,evaluate);
+        if(Emission.HasBursts(scene))transport?.PrepareEmissions(signals,first,frames,evaluate);
     }
-    internal int RayPathsPerFrame => transport?.PathsPerFrame ?? 0;
+    internal int RayPathsPerFrame => transport?.PathsPerFrame ?? (method != null && method.Audio ? method.PathsPerFrame : 0);
     // The late energy histogram of one solved frame, for either audio backend.
-    internal RayTransport.LateFrame Late(int frame) => transport==null?default:new RayTransport.LateFrame(transport,frame);
+    internal RayTransport.LateFrame Late(int frame) =>
+        transport != null ? new RayTransport.LateFrame(transport, frame) : method != null && method.Audio ? new RayTransport.LateFrame(method, frame) : default;
     // Offline dataset diagnostic; see RayTransport.CompleteSampleFamilies.
     internal int[] CompleteSampleFamilies() =>
         transport?.CompleteSampleFamilies() ?? throw new InvalidOperationException("Requires GPU raytraced transport.");
@@ -108,9 +111,11 @@ public sealed class TransportSolver : IDisposable
     public double UploadSeconds { get; private set; }
     public double DispatchReadbackSeconds { get; private set; }
 
+    // methodAudio: an Energy-method solver renders audio (paths and late field for
+    // GpuAudio or the CPU mixer) instead of 1 ms measurement histograms.
     public TransportSolver(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
                            TakeRender.Settings settings, ComputeShader shader = null, int maximumFrames = 1,
-                           int sampleRate = 48000, bool readbackPaths = true)
+                           int sampleRate = 48000, bool readbackPaths = true, bool methodAudio = false)
     {
         TakeRender.Validate(settings);
         AudioSourcePlane.ValidateRender(scene,settings);
@@ -179,7 +184,7 @@ public sealed class TransportSolver : IDisposable
             if (methods)
             {
                 method = new MethodTransport(scene, geometry, settings, primitives, states, sources,
-                                             listeners, bvhNodes, bvhIndices);
+                                             listeners, bvhNodes, bvhIndices, methodAudio, sampleRate, maximumFrames, readbackPaths);
                 return;
             }
             this.shader.SetBuffer(kernel, "Primitives", primitives);
@@ -234,7 +239,8 @@ public sealed class TransportSolver : IDisposable
             {
                 // Diagnostic direct path on the CPU; the method traces its own direct sound.
                 TakeRender.SolveDirect(scene, geometry, state, settings, output, bvh);
-                method.Dispatch(bvh?.NodeCount ?? 0);
+                if (method.Audio) method.DispatchAudio(1, bvh?.NodeCount ?? 0, false);
+                else method.Dispatch(bvh?.NodeCount ?? 0);
                 DispatchReadbackSeconds += TakeRender.Elapsed(start);
                 CountSolve();
                 return;
@@ -344,7 +350,9 @@ public sealed class TransportSolver : IDisposable
             if (shader != null && !SystemInfo.supportsAsyncGPUReadback)
                 throw new NotSupportedException(
                     "Live GPU tracing requires asynchronous readback; select CPU on this device.");
-            if (!diagnostics && (transport == null || transport.Paths.Length != 0))
+            if (method != null && !method.Audio)
+                throw new InvalidOperationException("Method measurement solvers do not render audio.");
+            if (!diagnostics && ((transport == null && method == null) || (transport != null ? transport.Paths.Length : method.Paths.Length) != 0))
                 throw new InvalidOperationException("GPU-only submission requires GPU transport and audio.");
             readDirect = diagnostics;
             activeFrames = frames;
@@ -354,7 +362,24 @@ public sealed class TransportSolver : IDisposable
             pending = true;
             try
             {
-                if (shader == null)
+                if (method != null)
+                {
+                    // Diagnostic direct paths on the CPU (brute force, so the GPU frames' BVH
+                    // upload below is untouched); the method traces its own arrivals.
+                    if (readDirect)
+                        for (int f = 0; f < frames; f++)
+                        {
+                            Array.Copy(state, f * cpuState.Length, cpuState, 0, cpuState.Length);
+                            TakeRender.SolveDirect(scene, geometry, cpuState, settings, cpuPaths, null);
+                            Array.Copy(cpuPaths, 0, completedPaths, f * pairs, pairs);
+                        }
+                    Upload(state, frames);
+                    long start = Stopwatch.GetTimestamp();
+                    method.DispatchAudio(frames, bvh?.NodeCount ?? 0, true);
+                    DispatchReadbackSeconds += TakeRender.Elapsed(start);
+                    completed = true;
+                }
+                else if (shader == null)
                 {
                     for (int f = 0; f < frames; f++)
                     {
@@ -408,7 +433,7 @@ public sealed class TransportSolver : IDisposable
             else
                 request.Update();
         }
-        if (!completed || (transport != null && !transport.TryComplete(wait)))
+        if (!completed || (transport != null && !transport.TryComplete(wait)) || (method != null && !method.TryComplete(wait)))
             return false;
         pending = false;
         double elapsed = TakeRender.Elapsed(submitted);

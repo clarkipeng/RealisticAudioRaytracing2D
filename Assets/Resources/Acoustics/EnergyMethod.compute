@@ -1,8 +1,15 @@
-// The Energy single-loop measurement method (docs/benchmarks/methods-2026-11-06) in its
-// own compute shader: it compiles only when that method is used, never with the
-// renderer's Transport.compute or the other method.
+// The Energy single-loop method (docs/benchmarks/methods-2026-11-06,
+// docs/benchmarks/energy-audio-2026-11-09) in its own compute shader: it compiles only
+// when that method is used, never with the renderer's Transport.compute or the other
+// method. One solve: EnergyArrivals (exact discrete routes from the source), then
+// EnergySelect (deterministic order; audio slots or histogram), EnergyExpand (audio
+// paths) and TraceEnergy (the walk: the diffuse histogram).
 #pragma kernel TraceEnergy3D
 #pragma kernel TraceEnergy3DBvh USE_BVH
+#pragma kernel EnergyArrivals3D
+#pragma kernel EnergyArrivals3DBvh USE_BVH
+#pragma kernel EnergySelectArrivals
+#pragma kernel EnergyExpandArrivals
 #pragma kernel ClearMethod
 
 #include "../../Shaders/Geometry.hlsl"
@@ -12,4 +19,12 @@
 
 [numthreads(64,1,1)] void TraceEnergy3D(uint3 id:SV_DispatchThreadID) { TraceEnergy(id.x); }
 [numthreads(64,1,1)] void TraceEnergy3DBvh(uint3 id:SV_DispatchThreadID) { TraceEnergy(id.x); }
-[numthreads(64,1,1)] void ClearMethod(uint3 id:SV_DispatchThreadID) { ClearMethodBuffers(id.x); }
+[numthreads(64,1,1)] void EnergyArrivals3D(uint3 id:SV_DispatchThreadID) { EnergyArrivals(MethodRayOffset + id.x); }
+[numthreads(64,1,1)] void EnergyArrivals3DBvh(uint3 id:SV_DispatchThreadID) { EnergyArrivals(MethodRayOffset + id.x); }
+[numthreads(64,1,1)] void EnergySelectArrivals(uint3 id:SV_DispatchThreadID) { EnergySelect(id.x); }
+[numthreads(64,1,1)] void EnergyExpandArrivals(uint3 id:SV_DispatchThreadID) { EnergyExpand(id.x); }
+[numthreads(64,1,1)] void ClearMethod(uint3 id:SV_DispatchThreadID)
+{
+    ClearMethodBuffers(id.x);
+    if (id.x + MethodClearOffset < MethodCountCells) MethodArrivalCounts[id.x + MethodClearOffset] = 0;
+}
