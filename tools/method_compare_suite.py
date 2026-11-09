@@ -293,7 +293,7 @@ def fdtd_transfer_spectrum(pressure, q, dt, pad_seconds=.3):
     return H.T, f[1] - f[0]
 
 
-def run_band(scene, fc, work_fraction=hg.WORK_FRACTION, memory_gib=4.0, power=None):
+def run_band(scene, fc, work_fraction=hg.WORK_FRACTION, memory_gib=2.0, power=None):
     """Solve one band and store its band energy and raw receiver record."""
     folder = FDTD / scene['sceneId']
     folder.mkdir(parents=True, exist_ok=True)
@@ -337,7 +337,7 @@ def run_band(scene, fc, work_fraction=hg.WORK_FRACTION, memory_gib=4.0, power=No
     return info
 
 
-def run_gt(ids=None, work_fraction=hg.WORK_FRACTION, memory_gib=4.0, bands=None):
+def run_gt(ids=None, work_fraction=hg.WORK_FRACTION, memory_gib=2.0, bands=None):
     import dlss_jobs as dj
     power = dj.PowerCheck()
     order = sorted(plan(ids), key=lambda r: r['gcell'])          # cheapest first
@@ -501,7 +501,7 @@ def main(argv=None):
     g.add_argument('scenes', nargs='*')
     g.add_argument('--bands', type=float, nargs='*')
     g.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
-    g.add_argument('--memory-gib', type=float, default=4.0)
+    g.add_argument('--memory-gib', type=float, default=2.0)
     a_ = sub.add_parser('assemble', help='Write gt/ref/0 from finished band runs')
     a_.add_argument('scenes', nargs='*')
     sub.add_parser('selftest', help='Harness self-test: gt vs gt and a perturbed method, in a separate root')
