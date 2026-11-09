@@ -397,7 +397,8 @@ def assemble(ids=None):
         for fc in infos:
             b = int(np.flatnonzero(mc.BANDS == fc)[0])
             energy[:, b] = np.load(folder / f'{int(fc)}-energy.npy')
-        valid = min(i['validSeconds'] for i in infos.values())
+        # Runs can be longer than the format's 2 s window; only that window is stored.
+        valid = min(min(i['validSeconds'] for i in infos.values()), mc.TIME_BINS * mc.BIN_SECONDS)
         energy[:, :, int(round(valid / mc.BIN_SECONDS)):] = np.where(
             np.isnan(energy[:, :, int(round(valid / mc.BIN_SECONDS)):]), np.nan, 0)
         cplan = complex_plan(scene, infos)
