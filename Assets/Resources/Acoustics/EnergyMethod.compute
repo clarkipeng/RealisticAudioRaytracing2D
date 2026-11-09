@@ -1,0 +1,15 @@
+// The Energy single-loop measurement method (docs/benchmarks/methods-2026-11-06) in its
+// own compute shader: it compiles only when that method is used, never with the
+// renderer's Transport.compute or the other method.
+#pragma kernel TraceEnergy3D
+#pragma kernel TraceEnergy3DBvh USE_BVH
+#pragma kernel ClearMethod
+
+#include "../../Shaders/Geometry.hlsl"
+#include "../../Shaders/Transport.hlsl"
+#include "../../Shaders/MethodCommon.hlsl"
+#include "../../Shaders/MethodEnergy.hlsl"
+
+[numthreads(64,1,1)] void TraceEnergy3D(uint3 id:SV_DispatchThreadID) { TraceEnergy(id.x); }
+[numthreads(64,1,1)] void TraceEnergy3DBvh(uint3 id:SV_DispatchThreadID) { TraceEnergy(id.x); }
+[numthreads(64,1,1)] void ClearMethod(uint3 id:SV_DispatchThreadID) { ClearMethodBuffers(id.x); }

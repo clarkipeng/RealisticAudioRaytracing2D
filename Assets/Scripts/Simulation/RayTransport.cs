@@ -74,13 +74,13 @@ internal sealed class RayTransport : IDisposable
         public long Birth => (long)(((ulong)birthHigh<<32)|birthLow);
     }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    struct Material
+    internal struct Material
     {
         public Vector4 surface; // absorption, scattering, transmission, IOR
         public Vector4 medium;  // damping; reserved
     }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    struct Edge
+    internal struct Edge
     {
         public Vector4 a, b, face, normal; // face.w: exterior wedge angle; normal points into air.
         public uint owner, firstFace, secondFace, pad;
@@ -102,7 +102,7 @@ internal sealed class RayTransport : IDisposable
     internal FamilyGainTable FamilyGains => familyGains;
     readonly Layout layout;
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    struct Volume
+    internal struct Volume
     {
         public Vector4 minimum, maximum; // w: winding correction, enclosed volume/area (relative units)
         public uint start, count, owner, material;
@@ -418,7 +418,7 @@ internal sealed class RayTransport : IDisposable
     }
     // Closed, consistently wound meshes/loops have thickness. Open sheets only
     // apply their surface coefficients. This is derived once, not saved in takes.
-    static Volume[] Volumes(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry, Material[] materials,
+    internal static Volume[] Volumes(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry, Material[] materials,
                             int bins, bool planar)
     {
         var result = new List<Volume>();
@@ -512,7 +512,7 @@ internal sealed class RayTransport : IDisposable
         }
         return result.ToArray();
     }
-    static float Sample(AcousticTake.MaterialDefinition material, float[] values, float frequency,
+    internal static float Sample(AcousticTake.MaterialDefinition material, float[] values, float frequency,
                         float fallback, bool signed=false)
     {
         if (values == null || values.Length == 0)
@@ -533,7 +533,7 @@ internal sealed class RayTransport : IDisposable
         return Mathf.Lerp(values[lower], values[upper],
                           lower == upper ? 0 : Mathf.InverseLerp(knots[lower], knots[upper], frequency));
     }
-    static Edge[] Edges(AcousticTake.Primitive[] geometry, bool planar, Material[] materials, int bins,
+    internal static Edge[] Edges(AcousticTake.Primitive[] geometry, bool planar, Material[] materials, int bins,
                         Volume[] volumes)
     {
         var winding = new Dictionary<uint, float>();

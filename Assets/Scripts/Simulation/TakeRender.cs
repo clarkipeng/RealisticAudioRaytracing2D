@@ -16,6 +16,11 @@ public static partial class TakeRender
     public enum Synthesis { ImpulseResponse, Spectral }
     public enum AudioBackend { Gpu, CpuReference }
     public enum ReflectionSampling { FirstImages, PrimitiveBaseline }
+    // Acoustic method of the transport solver. Hybrid is the renderer (phase-exact early
+    // part + energy late field). Pressure and Energy are single-loop measurement kernels
+    // (MethodPressure.hlsl, MethodEnergy.hlsl) for offline comparison; they produce band
+    // responses (MethodTransport), not audio.
+    public enum Method { Hybrid, Pressure, Energy }
     [Serializable] public sealed class Settings : ISerializationCallbackReceiver
     {
         public int responseStepSamples = 512;
@@ -66,6 +71,16 @@ public static partial class TakeRender
         // second-order images in the complete routes' RR family.
         internal int LateEarlyOrder => CompleteSamples>0 && maxBounces>1?2:1;
         public int seed;
+        [Tooltip("Hybrid renders audio. Pressure and Energy are single-loop offline measurement kernels (see MethodTransport).")]
+        public Method method;
+        [Min(1),Tooltip("Pressure/Energy methods: rays per solve; every ray carries all eight octave bands.")]
+        public int methodRays=4096;
+        [Min(1e-4f),Tooltip("Pressure/Energy methods: a specular chain is scored when the ray leaving its last non-specular vertex passes within this distance (m) of the listener image.")]
+        public float specularDetectionRadius=.25f;
+        [Range(0,1),Tooltip("Pressure/Energy methods: probability that a path continues through an edge rather than along a sampled direction.")]
+        public float methodEdgeProbability=.5f;
+        [Min(1),Tooltip("Pressure/Energy methods: interaction cap per ray (a safety bound; the 2 s output horizon normally ends paths first).")]
+        public int methodMaxEvents=1<<16;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
         public int FrequencyBins => fftSize/2+1;
         public int RaysPerBin => raysPerPair>0 ? checked((raysPerPair-1)/FrequencyBins+1):raysPerBin;
@@ -702,6 +717,13 @@ public static partial class TakeRender
         (state.flags&(AcousticTake.StateFlags.Active|role))==(AcousticTake.StateFlags.Active|role);
     public static double Elapsed(long start) => (double)(Stopwatch.GetTimestamp()-start)/Stopwatch.Frequency;
 
+    // Audio is rendered by the hybrid method only; Pressure and Energy are offline
+    // measurement kernels whose band responses are read from TransportSolver.Method.
+    public static void RequireAudioMethod(Settings settings)
+    {
+        if(settings.method!=Method.Hybrid)
+            throw new NotSupportedException($"Audio rendering uses the hybrid method; {settings.method} is an offline measurement kernel.");
+    }
     public static void Validate(Settings settings)
     {
         if (settings == null || (settings.listenerOutput!=ListenerOutput.Mono && settings.listenerOutput!=ListenerOutput.Binaural) || settings.responseStepSamples<=0 || settings.tailSamples<0 || settings.transitionSamples<0 || settings.transitionSamples>settings.responseStepSamples ||
@@ -712,6 +734,9 @@ public static partial class TakeRender
         if(settings.audioBackend!=AudioBackend.Gpu && settings.audioBackend!=AudioBackend.CpuReference)throw new ArgumentException("Unknown audio backend.");
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
+        if(settings.method!=Method.Hybrid && settings.method!=Method.Pressure && settings.method!=Method.Energy)throw new ArgumentException("Unknown acoustic method.");
+        if(settings.method!=Method.Hybrid && (settings.methodRays<1 || !PositiveFinite(settings.specularDetectionRadius) || !(settings.methodEdgeProbability>=0 && settings.methodEdgeProbability<1) || settings.methodMaxEvents<1))
+            throw new ArgumentException("Invalid single-loop method settings.");
         ValidateFamilyGains(settings);
         if(settings.transport==Transport.Raytraced)
         {

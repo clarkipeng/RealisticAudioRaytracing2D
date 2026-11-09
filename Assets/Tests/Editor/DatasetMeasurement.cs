@@ -215,7 +215,8 @@ public partial class TakeChecks
         public readonly AcousticTake.Scene scene;
         public readonly AcousticTake.Primitive[] geometry;
         public readonly AcousticTake.State[] states;
-        public DatasetSolid(WaveScene config,string[] materials,string output)
+        // resolve: optional material per name (owned by the caller); default the Church presets.
+        public DatasetSolid(WaveScene config,string[] materials,string output,Func<string,AudioMaterial> resolve=null)
         {
             SolidPython();
             try
@@ -225,7 +226,8 @@ public partial class TakeChecks
                 AudioMaterial Material(string name)
                 {
                     if(assets.TryGetValue(name,out var asset))return asset;
-                    if(name=="rigid"){asset=RigidSolidMaterial("rigid");created.Add(asset);}
+                    if(resolve!=null)asset=resolve(name);
+                    else if(name=="rigid"){asset=RigidSolidMaterial("rigid");created.Add(asset);}
                     else asset=UnityEditor.AssetDatabase.LoadAssetAtPath<AudioMaterial>($"Assets/Materials/Church {name}.asset");
                     Assert.That(asset,Is.Not.Null,$"Unknown material preset {name}.");
                     return assets[name]=asset;

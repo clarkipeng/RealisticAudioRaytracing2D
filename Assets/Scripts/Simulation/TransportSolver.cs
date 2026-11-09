@@ -52,6 +52,9 @@ public sealed class TransportSolver : IDisposable
     readonly GpuState[] packed;
     readonly DirectBvh bvh;
     readonly RayTransport transport;
+    readonly MethodTransport method;
+    // The Pressure/Energy measurement kernels of the last Solve (null for Hybrid).
+    internal MethodTransport Method => method;
     internal RayTransport.Path[] RayPaths => transport?.Paths;
     internal ComputeBuffer RayBuffer => transport?.Buffer;
     internal void PrepareEmissions(TakeRender.Signal[] signals,long first,int frames,Action<long,AcousticTake.State[]> evaluate)
@@ -82,14 +85,14 @@ public sealed class TransportSolver : IDisposable
     public double MaximumCompletionSeconds { get; private set; }
     public long PairPrimitiveUpperBound { get; private set; }
     public int SolveCount { get; private set; }
-    public string Backend => shader == null ? "CPU" : "GPU-" + SystemInfo.graphicsDeviceType;
+    public string Backend => shader == null && method == null ? "CPU" : "GPU-" + SystemInfo.graphicsDeviceType;
     public long CpuBufferBytes =>
         (long)cpuState.Length * 80 +
         (long)(cpuPaths.Length + completedPaths.Length) * TakeRender.DirectPathStride +
         (packed == null ? 0 : (long)packed.Length * 80) + (bvh?.NumericBytes ?? 0) +
-        (transport?.CpuBytes ?? 0);
+        (transport?.CpuBytes ?? 0) + (method?.CpuBytes ?? 0);
     public long GpuBufferBytes =>
-        shader == null
+        shader == null && method == null
             ? 0
             : (long)Math.Max(1, geometry.Length) * 64 + (long)scene.objects.Length * 80 * maximumFrames +
                   (long)(scene.sources.Length + scene.listeners.Length) * 4 +
@@ -97,7 +100,7 @@ public sealed class TransportSolver : IDisposable
                   (bvh == null
                        ? 0
                        : (long)Math.Max(1, bvh.Nodes.Length) * 48 + (long)Math.Max(1, geometry.Length) * 4) +
-                  (transport?.GpuBytes ?? 0);
+                  (transport?.GpuBytes ?? 0) + (method?.GpuBytes ?? 0);
     public double BvhBuildSeconds => bvh?.BuildSeconds ?? 0;
     public double BvhUpdateSeconds => bvh?.UpdateSeconds ?? 0;
     public int BvhUpdates => bvh?.UpdateCount ?? 0;
@@ -137,13 +140,18 @@ public sealed class TransportSolver : IDisposable
             Marshal.SizeOf<DirectBvh.Node>() != 48 ||
             Marshal.SizeOf<TakeRender.DirectPath>() != TakeRender.DirectPathStride)
             throw new InvalidOperationException("Transport solver GPU ABI mismatch.");
-        this.shader = UnityEngine.Object.Instantiate(shader);
+        // Pressure/Energy solves run their own compute shader (MethodTransport) and their
+        // own direct sound; they never instantiate or compile the renderer's shader.
+        bool methods = settings.method != TakeRender.Method.Hybrid;
+        if (!methods)
+            this.shader = UnityEngine.Object.Instantiate(shader);
         try
         {
+            if (!methods)
             kernel = this.shader.FindKernel(
                 (scene.dimension == AcousticTake.Dimension.Planar2D ? "Direct2D" : "Direct3D") +
                 (bvh == null ? "" : "Bvh"));
-            if (!this.shader.IsSupported(kernel))
+            if (!methods && !this.shader.IsSupported(kernel))
                 throw new NotSupportedException(
                     "The selected direct compute kernel cannot run on this device.");
             var data = new GpuPrimitive[Math.Max(1, geometry.Length)];
@@ -163,6 +171,17 @@ public sealed class TransportSolver : IDisposable
             listeners = new ComputeBuffer(scene.listeners.Length, 4);
             listeners.SetData(scene.listeners);
             responses = new ComputeBuffer(checked(pairs * maximumFrames), TakeRender.DirectPathStride);
+            if (bvh != null)
+            {
+                bvhNodes = new ComputeBuffer(Math.Max(1, bvh.Nodes.Length), 48);
+                bvhIndices = new ComputeBuffer(Math.Max(1, geometry.Length), 4);
+            }
+            if (methods)
+            {
+                method = new MethodTransport(scene, geometry, settings, primitives, states, sources,
+                                             listeners, bvhNodes, bvhIndices);
+                return;
+            }
             this.shader.SetBuffer(kernel, "Primitives", primitives);
             this.shader.SetBuffer(kernel, "States", states);
             this.shader.SetBuffer(kernel, "Sources", sources);
@@ -170,8 +189,6 @@ public sealed class TransportSolver : IDisposable
             this.shader.SetBuffer(kernel, "Responses", responses);
             if (bvh != null)
             {
-                bvhNodes = new ComputeBuffer(Math.Max(1, bvh.Nodes.Length), 48);
-                bvhIndices = new ComputeBuffer(Math.Max(1, geometry.Length), 4);
                 this.shader.SetBuffer(kernel, "BvhNodes", bvhNodes);
                 this.shader.SetBuffer(kernel, "BvhIndices", bvhIndices);
             }
@@ -205,7 +222,7 @@ public sealed class TransportSolver : IDisposable
                 throw new ArgumentException("Direct solve shape mismatch.");
             activeFrames = 1;
             readDirect = true;
-            if (shader == null)
+            if (shader == null && method == null)
             {
                 SolveCpu(state, output);
                 CountSolve();
@@ -213,6 +230,15 @@ public sealed class TransportSolver : IDisposable
             }
             Upload(state, 1);
             long start = Stopwatch.GetTimestamp();
+            if (method != null)
+            {
+                // Diagnostic direct path on the CPU; the method traces its own direct sound.
+                TakeRender.SolveDirect(scene, geometry, state, settings, output, bvh);
+                method.Dispatch(bvh?.NodeCount ?? 0);
+                DispatchReadbackSeconds += TakeRender.Elapsed(start);
+                CountSolve();
+                return;
+            }
             shader.Dispatch(kernel, (pairs + 63) / 64, 1, 1);
             responses.GetData(output);
             transport?.Dispatch(1, false);
@@ -254,6 +280,20 @@ public sealed class TransportSolver : IDisposable
         }
         return segments;
     }
+    // Pressure/Energy methods: solve once more with the first `rays` rays recording
+    // up to `events` events each (two float4 per event, see MethodCommon.hlsl).
+    internal Vector4[] CaptureMethod(AcousticTake.State[] state, int rays, int events)
+    {
+        if (disposed || pending || method == null)
+            throw new InvalidOperationException("Method capture requires an idle Pressure/Energy solver.");
+        var data = new Vector4[checked(2 * rays * events)];
+        using var buffer = new ComputeBuffer(Math.Max(2, data.Length), 16);
+        buffer.SetData(data);
+        Upload(state, 1);
+        method.Dispatch(bvh?.NodeCount ?? 0, buffer, rays, events);
+        buffer.GetData(data);
+        return data;
+    }
     void CountSolve()
     {
         SolveCount += activeFrames;
@@ -276,7 +316,7 @@ public sealed class TransportSolver : IDisposable
                     bvhIndices.SetData(bvh.Indices);
                 if (bvh.NodeCount > 0)
                     bvhNodes.SetData(bvh.Nodes, 0, 0, bvh.UpdateCount == 1 ? bvh.NodeCount : bvh.TopNodeCount);
-                shader.SetInt("BvhNodeCount", bvh.NodeCount);
+                shader?.SetInt("BvhNodeCount", bvh.NodeCount);
             }
         }
         for (int i = 0; i < frames * scene.objects.Length; i++)
@@ -288,7 +328,7 @@ public sealed class TransportSolver : IDisposable
                                flags = (uint)state[i].flags };
         transport?.SetActivity(scene, state, frames);
         states.SetData(packed, 0, 0, frames * scene.objects.Length);
-        shader.SetInt("FrameCount", frames);
+        shader?.SetInt("FrameCount", frames);
         UploadSeconds += TakeRender.Elapsed(start);
     }
     public void BeginSolve(AcousticTake.State[] state, int frames = 1, bool diagnostics = true)
@@ -298,6 +338,7 @@ public sealed class TransportSolver : IDisposable
             if (disposed || pending)
                 throw new InvalidOperationException(
                     "Solver is disposed or already owns an in-flight response.");
+            TakeRender.RequireAudioMethod(settings);
             if (frames < 1 || frames > maximumFrames || state.Length < frames * scene.objects.Length)
                 throw new ArgumentException("Direct solve shape mismatch.");
             if (shader != null && !SystemInfo.supportsAsyncGPUReadback)
@@ -403,6 +444,7 @@ public sealed class TransportSolver : IDisposable
             request.WaitForCompletion();
         }
         transport?.Dispose();
+        method?.Dispose();
         disposed = true;
         pending = false;
         primitives?.Dispose();
