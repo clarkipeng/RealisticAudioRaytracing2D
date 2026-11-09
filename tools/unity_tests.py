@@ -24,9 +24,12 @@ import dlss_jobs as dj  # noqa: E402
 import heavy_guard as hg  # noqa: E402
 
 LOGS = ROOT / '.context/unity-tests'
-# Each batch is a fresh Unity process: memory accumulates over a long run, so the slow cases
-# (largest footprints) get their own process instead of running after hundreds of others.
-TIERS = {'quick': [('TakeChecks', '!Slow')], 'full': [('TakeChecks', '!Slow'), ('TakeChecks', 'Slow')]}
+# Each batch is a fresh Unity process.
+# Within one process each GPU case leaves 0.3-0.8 GiB behind (compiled kernels appear to stay
+# cached), so slow cases are split: renderer cases, then the method checks, each in a fresh process.
+# Method checks are selected by category: a name-pattern selection of them left the batch editor idle.
+TIERS = {'quick': [('TakeChecks', '!Slow')],
+         'full': [('TakeChecks', '!Slow'), (r'TakeChecks\.(?!Methods|EnergyMethod)', 'Slow'), ('TakeChecks', 'Methods')]}
 
 
 def clear_stale_lock():

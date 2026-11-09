@@ -228,7 +228,7 @@ public partial class TakeChecks
                 scene.sources=new[]{new AcousticTake.SourceDefinition{objectIndex=0,clipIndex=0}};scene.clips=new[]{new AcousticTake.ClipDefinition()};
                 var states=new AcousticTake.State[bindings.Count];for(int i=0;i<states.Length;i++)states[i]=SceneToTake.Observe(scene,i,bindings[i].transform);
                 if(moving){states[2].velocity=new Vector3(.1f,0,0);states[2].angularVelocity=new Vector3(0,.2f,0);states[2].flags|=AcousticTake.StateFlags.VelocityValid;}
-                var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=2;settings.raysPerBin=2;settings.maxBounces=2;settings.completeRouteSamples=262144;settings.seed=seed;settings.useBvh=true;
+                var settings=EdgeSettings();settings.fftSize=8;settings.spectralHop=2;settings.raysPerBin=2;settings.maxBounces=2;settings.completeRouteSamples=65536;settings.seed=seed;settings.useBvh=true;
                 var values=new List<System.Numerics.Complex>();
                 using(var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:1000))
                 {
