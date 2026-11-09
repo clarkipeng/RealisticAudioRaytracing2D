@@ -45,6 +45,15 @@ METHODS = {
     'energy': dict(COMMON, method=2, methodRays=2048, methodArrivalSlots=64, methodArrivalOrder=2, methodRouletteFloor=1e-6,
                    specularDetectionRadius=.5),
 }
+# Diagnostic variants of the energy render (the coordinator's "echo doesn't sound natural" check).
+# They need the uncommitted methodDiagnosticVariant knob (.context/energy-audio/diagnostic-variants.patch):
+# 1 = diffuse-only (only the direct sound is a discrete arrival), 2 = arrivals-only (no diffuse field).
+# The scattered-arrivals variant is the unchanged energy settings: arrivals already carry only the
+# specular share (1-a)(1-t)(1-s) and the walk holds the scattered share (see render_inspection.py).
+VARIANTS = {'energy-diffuse-only': dict(METHODS['energy'], methodDiagnosticVariant=1),
+            'energy-arrivals-only': dict(METHODS['energy'], methodDiagnosticVariant=2),
+            'energy-scattered-arrivals': dict(METHODS['energy'])}
+METHODS.update(VARIANTS)
 
 
 def launch(name, arguments, work_fraction=.5):
@@ -184,7 +193,7 @@ def page():
     scene_map(WORK / 'scene-map.png')
     tracks, reports = {}, {}
     rate = None
-    for name in ('energy', 'hybrid'):
+    for name in ('energy', 'hybrid', *VARIANTS):
         folder = WORK / name
         if not (folder / 'listener-0.wav').exists():
             continue
@@ -195,17 +204,24 @@ def page():
         reports[name] = report
     if not tracks:
         raise SystemExit('No renders yet.')
-    peak = max(np.abs(p).max() for p in tracks.values())
+    peak = max(np.abs(tracks[n]).max() for n in ('energy', 'hybrid') if n in tracks)  # variants share this gain
     gain = .5 / peak
     for name, pcm in tracks.items():
         write_wav16(WORK / f'{name}.wav', pcm * gain, rate)
-    level_figure(WORK / 'levels.png', tracks, rate)
+    level_figure(WORK / 'levels.png', {n: tracks[n] for n in ('energy', 'hybrid') if n in tracks}, rate)
     rows = []
     for name, r in reports.items():
+        if name in VARIANTS:
+            continue
         rms = 20 * math.log10(math.sqrt((tracks[name] ** 2).mean()) * gain)
         audio = r.get('gpuAudio') or {}
         rows.append(f"<tr><td>{name}</td><td>{r.get('wallSeconds', 0):.0f} s</td><td>{audio.get('peakGroups', 0)}</td><td>{rms:.1f} dBFS</td></tr>")
     players = '\n'.join(f'<h3>{name}</h3><audio controls preload="auto" src="{name}.wav" style="width:100%"></audio>' for name in ('energy', 'hybrid') if name in tracks)
+    variants = '\n'.join(f'<h4>{name}</h4><audio controls preload="auto" src="{name}.wav" style="width:100%"></audio>' for name in VARIANTS if name in tracks)
+    if variants:
+        players += ('<h3>Diagnostic variants of the energy render (same gain)</h3><p>diffuse-only: only the direct sound is discrete, everything else is the diffuse field; '
+                    'arrivals-only: direct sound and discrete arrivals, no diffuse field; scattered-arrivals: arrivals at their specular share (already the case), '
+                    'a fresh render of the energy settings. Findings: <code>.context/energy-audio/inspect/report.md</code>.</p>' + variants)
     html = f"""<!doctype html><meta charset="utf-8"><title>Energy vs hybrid: Church walk</title>
 <style>body{{font:15px/1.5 -apple-system,sans-serif;max-width:980px;margin:2em auto;padding:0 1em;color:#222}}img{{max-width:100%}}
 td,th{{padding:2px 10px;text-align:left}}.wrap{{display:flex;gap:24px;flex-wrap:wrap}}.wrap>div{{flex:1 1 420px}}</style>
