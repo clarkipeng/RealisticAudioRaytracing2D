@@ -36,7 +36,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // enumerated family (a larger family is left to the walk, which then holds it).
     public const int ArrivalCapacity = 4096, FamilyCandidateLimit = 1 << 18, ArrivalStride = 64;
     public static readonly string[] CounterNames = {"rays","events","escapes","roulette","horizon","eventCap","nonFinite",
-        "detections","sphereHits","overflow","edgeConnections","diffuse","edgeEvents","arrivalOverflow","unused14","unused15"};
+        "detections","sphereHits","overflow","edgeConnections","diffuse","edgeEvents","arrivalOverflow","branches","unused15"};
     public static readonly string[] FamilyNames = {"direct", "specular", "D", "DD", "RD", "DR"};
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     public struct Arrival
@@ -59,7 +59,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly RayTransport.Layout layout;
     readonly ComputeShader shader;
     readonly Action bind;
-    readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, outputCount, statsCount, frequencyBins, rate;
+    readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
+    // Late-field accumulation across solves (settings.lateAccumulationSeconds, audio only):
+    // every solve draws a new walk seed and the late histogram is the exponential moving
+    // average of the solves, so a static or slowly moving listener hears the average of many
+    // independent walks instead of one fixed realization. Unbiased (the weights sum to one).
+    readonly ComputeBuffer accumulator;
+    readonly bool accumulate;
+    long accumulatedSolves;
     readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, output, stats, emptyCapture;
     readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf;
     public readonly uint[] Output, Stats;
@@ -113,8 +120,10 @@ internal sealed class MethodTransport : IDisposable, ILateField
             arrivalKernel = shader.FindKernel("EnergyArrivals3D" + suffix);
             selectKernel = shader.FindKernel("EnergySelectArrivals"); expandKernel = shader.FindKernel("EnergyExpandArrivals");
             edgeWeightKernel = shader.FindKernel("EnergyEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("EnergyEdgeScanKernel");
+            accumulate = audio && settings.lateAccumulationSeconds > 0;
+            if (accumulate) accumulateKernel = shader.FindKernel("EnergyAccumulateLate");
         }
-        foreach (int kernel in new[] {traceKernel, clearKernel, arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel})
+        foreach (int kernel in new[] {traceKernel, clearKernel, arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel, accumulateKernel})
             if (kernel >= 0 && !shader.IsSupported(kernel)) throw new NotSupportedException("Method kernels are unavailable on this GPU.");
         frequencyBins = settings.FrequencyBins;
         ArrivalSlots = audio ? settings.methodArrivalSlots : 0;
@@ -218,6 +227,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                         : energy ? 2 * Directions * Bands * Bins : 2 * 2 * TrainBase * ((1 << Bands) - 1);
             statsCount = Bands * Depths * StatStride + Counters;
             output = new ComputeBuffer(outputCount, 4); stats = new ComputeBuffer(statsCount, 4);
+            accumulator = new ComputeBuffer(accumulate ? Math.Max(1, Pairs * Directions * Bands * Bins) : 1, 4);
             emptyCapture = new ComputeBuffer(2, 16);
             Output = new uint[audio ? 0 : outputCount]; Stats = new uint[statsCount];
             late = new uint[audio && readback ? outputCount : 0];
@@ -228,6 +238,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             bool anyTransmission = transmissive || volumeData.Length > 0;
             var kernels = new List<int> {traceKernel, clearKernel};
             if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
+            if (accumulate) kernels.Add(accumulateKernel);
             bind = () =>
             {
             foreach (int kernel in kernels)
@@ -238,6 +249,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetBuffer(kernel, "EdgeRanges", edgeRanges); shader.SetBuffer(kernel, "EdgeIndices", edgeIndices);
                 shader.SetBuffer(kernel, "Volumes", volumes); shader.SetBuffer(kernel, "MethodOutput", output);
                 shader.SetBuffer(kernel, "MethodStats", stats); shader.SetBuffer(kernel, "MethodCapture", emptyCapture);
+                shader.SetBuffer(kernel, "MethodAccumulator", accumulator);
                 if (bvhNodes != null) { shader.SetBuffer(kernel, "BvhNodes", bvhNodes); shader.SetBuffer(kernel, "BvhIndices", bvhIndices); }
                 if (energy)
                 {
@@ -255,7 +267,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.SetFloat("SpeedOfSound", settings.speedOfSound);
             shader.SetFloat("ReferenceDistance", settings.referenceDistance);
             shader.SetFloat("MinimumDistance", settings.minimumDistance);
-            shader.SetInt("RaySeed", settings.seed);
+            shader.SetInt("RaySeed", settings.seed + SeedOffset);
             shader.SetFloat("DiffractionFactor", settings.diffractionFactor);
             shader.SetInt("UseAirAbsorption", settings.airAbsorption ? 1 : 0);
             shader.SetInt("VolumeCount", volumeCount);
@@ -393,11 +405,23 @@ internal sealed class MethodTransport : IDisposable, ILateField
             for (int pair = 0; pair < Pairs; pair++)
             {
                 SetSolve(frame, pair);
+                if (accumulate) shader.SetInt("RaySeed", unchecked(settings.seed + SeedOffset + (int)(accumulatedSolves + frame)));
                 DispatchArrivals();
                 shader.SetInt("MethodRayOffset", 0);
                 shader.SetInt("MethodRayCount", Rays);
                 shader.Dispatch(traceKernel, (Rays + 63) / 64, 1, 1);
             }
+        if (accumulate)
+        {
+            // Moving average with time constant lateAccumulationSeconds over solves one response step apart.
+            int cells = Pairs * Directions * Bands * Bins;
+            shader.SetInt("MethodAccumulateCells", cells);
+            shader.SetInt("MethodAccumulateFrames", frames);
+            shader.SetInt("MethodAccumulateReset", accumulatedSolves == 0 ? 1 : 0);
+            shader.SetFloat("MethodAccumulateAlpha", (float)(1 - Math.Exp(-settings.responseStepSamples / (rate * (double)settings.lateAccumulationSeconds))));
+            shader.Dispatch(accumulateKernel, (cells + 63) / 64, 1, 1);
+            accumulatedSolves += frames;
+        }
         GpuSeconds += TakeRender.Elapsed(start);
         if (Paths.Length == 0) return;
         if (asynchronous)
@@ -458,6 +482,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
     public int LateUintsPerFrame => Audio ? 2 * Pairs * Directions * Bands * Bins : 0;
     public int LateBins => Bins;
     public int LateRays => Rays;
+    // Added to settings.seed at every dispatch (independent realizations of the walk, e.g. averaged by a measurement).
+    public int SeedOffset { get; set; }
     public Emission.Batch Emissions => null;
     public ComputeBuffer EmissionRanges => null;
     public ComputeBuffer EmissionPoints => null;
@@ -502,7 +528,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     {
         if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); pending = false; }
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
-        output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose();
+        output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
         arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose();
     }
 }

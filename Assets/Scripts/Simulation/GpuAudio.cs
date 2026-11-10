@@ -58,8 +58,8 @@ internal sealed partial class GpuAudio : IDisposable
             shader=UnityEngine.Object.Instantiate(asset);
             reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");match=Kernel("AudioMatch");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
-            lateEnvelope=Kernel("LateEnvelope");lateBuild=Kernel("LateBuild");lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
-            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateBuild,lateInput,lateSum,lateInverse,lateWrite};
+            lateEnvelope=Kernel("LateEnvelope");lateExtend=Kernel("LateExtend");lateBuild=Kernel("LateBuild");lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
+            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateExtend,lateBuild,lateInput,lateSum,lateInverse,lateWrite};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(slots*2+1);
             Buffer("AudioRanges",pairs,8).SetData(layout.Ranges);Buffer("AudioOwners",capacity,4).SetData(layout.Owners);

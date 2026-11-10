@@ -184,13 +184,15 @@ public partial class TakeChecks
     }
 
     [TestCase(TakeRender.Synthesis.Spectral,false,false),TestCase(TakeRender.Synthesis.ImpulseResponse,false,false)]
-    [TestCase(TakeRender.Synthesis.Spectral,true,false),TestCase(TakeRender.Synthesis.ImpulseResponse,true,true),Category("GPU"),Category("LateEnergy")]
-    public void LateAudioMatchesCpuReference(TakeRender.Synthesis method,bool ears,bool planar)
+    [TestCase(TakeRender.Synthesis.Spectral,true,false),TestCase(TakeRender.Synthesis.ImpulseResponse,true,true)]
+    [TestCase(TakeRender.Synthesis.Spectral,true,false,true),Category("GPU"),Category("LateEnergy")]
+    public void LateAudioMatchesCpuReference(TakeRender.Synthesis method,bool ears,bool planar,bool tail=false)
     {
         var dimension=planar?AcousticTake.Dimension.Planar2D:AcousticTake.Dimension.Spatial3D;
         LateRoom(dimension,new Vector3(5,4,3),LateMaterial(.2f,.5f,.05f),new Vector3(-1.2f,.4f,.2f),new Vector3(1.1f,-.5f,-.3f),out var scene,out var geometry,out var state);
         var settings=LateSettings(8000,.3f);settings.lateRays=1024;settings.synthesis=method;settings.transitionSamples=32;
         settings.listenerOutput=ears?TakeRender.ListenerOutput.Binaural:TakeRender.ListenerOutput.Mono;
+        if(tail)settings.lateTailSeconds=1.2f; // the continued envelope (LateTail / LateExtend) is heard after 0.3 s
         var clip=new float[331];for(int i=0;i<clip.Length;i++)clip[i]=.3f*Mathf.Sin(i*.21f)*(i%7==0?1:.4f);
         var signal=new TakeRender.Signal(clip);signal.SetActive(0,true);signal.Append(new AcousticTake.VoiceEvent{gain=1,loop=true});
         var signals=new[]{signal};var cpu=new TakeRender.Mixer(scene,8000,settings,signals);
@@ -198,7 +200,7 @@ public partial class TakeChecks
         using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);
         var direct=new TakeRender.DirectPath[1];int channels=settings.ChannelsPerListener,step=settings.responseStepSamples;
         var a=new float[step*channels];var b=new float[a.Length];double error=0,energy=0,peak=0;
-        for(int frame=0;frame<40;frame++)
+        for(int frame=0;frame<(tail?200:40);frame++)
         {
             long sample=frame*step;state[1].position+=new Vector3(.02f,.01f,0);state[1].rotation=Quaternion.Euler(0,frame*7,0);
             solver.Solve(state,direct);
@@ -209,6 +211,53 @@ public partial class TakeChecks
         }
         TestContext.WriteLine($"relative error {Math.Sqrt(error/energy):G3}, peak {peak:G3}");
         Assert.That(energy,Is.GreaterThan(1e-6));Assert.That(Math.Sqrt(error/energy),Is.LessThan(1e-3));
+    }
+
+    // The envelope continuation beyond the horizon follows the fitted exponential,
+    // joins it smoothly, fades out at the kernel's end, and leaves rising envelopes alone.
+    [Test,Category("LateEnergy")]
+    public void LateTailContinuesTheFittedDecay()
+    {
+        int simulated=40,total=200;double rate=Math.Pow(10,-6.0/50); // 60 dB per 50 bins: steep, so the window's curvature matters
+        var random=new System.Random(3);
+        var energy=new double[2][];
+        for(int c=0;c<2;c++){energy[c]=new double[total];for(int k=0;k<simulated;k++)energy[c][k]=(c+1)*Math.Pow(rate,k)*(1+.1*(random.NextDouble()-.5));}
+        double decay=LateTail.Extend(energy,simulated,total);
+        Assert.That(decay,Is.EqualTo(rate).Within(.01*rate),"Fitted decay per bin.");
+        for(int c=0;c<2;c++)
+        {
+            double want=(c+1)*Math.Pow(rate,simulated);
+            Assert.That(energy[c][simulated]/want,Is.EqualTo(1).Within(.1),"The continuation starts on the decay line.");
+            Assert.That(energy[c][150]/((c+1)*Math.Pow(rate,150)),Is.EqualTo(1).Within(.1),"and follows it.");
+            Assert.That(energy[c][total-1],Is.LessThan(.05*(c+1)*Math.Pow(rate,total-1)),"The kernel's end fades out.");
+            for(int k=simulated-5;k<simulated;k++)Assert.That(energy[c][k]/((c+1)*Math.Pow(rate,k)),Is.EqualTo(1).Within(.12),"Join bins stay on the line.");
+        }
+        var rising=new double[1][];rising[0]=new double[total];for(int k=0;k<simulated;k++)rising[0][k]=1+k;
+        Assert.That(LateTail.Extend(rising,simulated,total),Is.EqualTo(0));
+        for(int k=simulated;k<total;k++)Assert.That(rising[0][k],Is.EqualTo(0),"A field that does not decay is not continued.");
+    }
+
+    // Synthesis with the continuation: a room whose reverberation outlasts the horizon
+    // keeps decaying at the room's rate past it (no step, no cut) and fades out.
+    [Test,Category("GPU"),Category("LateEnergy")]
+    public void LateTailFadesTheReverberationOut()
+    {
+        var size=new Vector3(6,5,4);
+        LateRoom(AcousticTake.Dimension.Spatial3D,size,LateMaterial(.1f,.6f),new Vector3(-1.5f,.5f,.4f),new Vector3(1.4f,-.7f,-.3f),out var scene,out var geometry,out var state);
+        var settings=LateSettings(8000,.4f);settings.lateRays=4096;settings.audioBackend=TakeRender.AudioBackend.CpuReference;settings.lateTailSeconds=2.4f;
+        using var solver=new TransportSolver(scene,geometry,settings,RequireGpu(),sampleRate:8000);solver.Solve(state,new TakeRender.DirectPath[1]);
+        var impulse=new TakeRender.Signal(new[]{1f});impulse.SetActive(0,true);impulse.Append(new AcousticTake.VoiceEvent{gain=1});
+        var late=new LateReverb(scene,8000,settings,new[]{impulse});late.SetResponse(0,true,solver.Late(0),state);
+        int partition=settings.LatePartition,simulated=settings.LateBins(8000),total=settings.LateKernelBins(8000),latency=settings.DspLatencySamples;
+        var output=new float[(total+2)*partition+latency];late.Render(0,output.Length,output);
+        double Level(double from,double to){double e=0;int a=latency+(int)(from*8000),b=latency+(int)(to*8000);for(int n=a;n<b;n++)e+=output[n]*output[n];return 10*Math.Log10(e/(b-a)+1e-30);}
+        // Eyring decay of the room (dB per second): 60 / T.
+        double V=size.x*size.y*size.z,S=2*(size.x*size.y+size.y*size.z+size.x*size.z),eyring=60/(.161*V/(-S*Math.Log(1-.1)));
+        double after=(Level(.5,.9)-Level(1.3,1.7))/.8,step=Level(.4,.5)-Level(.3,.4)+after*.1;
+        TestContext.WriteLine($"decay after the horizon {after:F1} dB/s, Eyring {eyring:F1} dB/s, step at the horizon {step:F2} dB, end {Level(2.3,2.4)-Level(.3,.4):F0} dB");
+        Assert.That(after/eyring,Is.EqualTo(1).Within(.2),"The continuation decays at the room's rate.");
+        Assert.That(Math.Abs(step),Is.LessThan(1.5),"No step where the simulation ends.");
+        Assert.That(Level(2.3,2.4)-Level(.3,.4),Is.LessThan(-60),"The tail fades out.");
     }
 
     // Late audio must exist and stay finite when the scene has a late field, and

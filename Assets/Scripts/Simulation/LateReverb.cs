@@ -9,9 +9,11 @@ using UnityEngine;
 // summed with their amplitudes) by uniform partitioned overlap-save, delayed by
 // the declared DSP latency so a late arrival keeps the delay origin of the early
 // paths. A new response crossfades from the previous one over one response step.
+// Beyond the simulated histogram (maximumDelaySeconds) the kernel runs on to
+// lateTailSeconds with each band's envelope continued by LateTail.
 internal sealed class LateReverb
 {
-    readonly int partition,bins,count,channels,listeners,pairs,latency,step,rate;
+    readonly int partition,bins,count,simulated,channels,listeners,pairs,latency,step,rate;
     readonly AcousticTake.Scene scene;
     readonly TakeRender.Signal[] signals;
     // Allocated with the first late field, so renders without one never build the noise basis.
@@ -22,21 +24,24 @@ internal sealed class LateReverb
     readonly bool[] active;            // [bank][pair]
     readonly float[] blocks;           // [bank][listener*channels][partition]
     readonly Vector2[] work,sum;
-    readonly float[] dry,gains;
+    readonly float[] dry;
+    readonly double[][] envelope;      // [channel][partition] energy of one band, continued by LateTail
+    readonly float[] gains;            // [channel][partition][band]
     // Emission rows of plane sources at the latest response: amplitude, clip phase, birth.
     readonly float[][] amplitudes;readonly uint[][] phases;readonly long[][] births;readonly int[] sites;
     int bank,computedBlock=-1;
     long cursor,swap;
     bool initialized,blend;
-    internal long NumericBytes => ((kernels?.LongLength??0)+(inputs?.LongLength??0)+work.Length+sum.Length)*8+(blocks.Length+dry.Length+gains.Length)*4L+(basis?.NumericBytes??0);
+    internal long NumericBytes => ((kernels?.LongLength??0)+(inputs?.LongLength??0)+work.Length+sum.Length)*8+(blocks.Length+dry.Length+gains.Length)*4L+channels*(long)count*8+(basis?.NumericBytes??0);
 
     internal LateReverb(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals)
     {
-        this.scene=scene;this.signals=signals;partition=settings.LatePartition;count=settings.LateBins(rate);bins=partition+1;
+        this.scene=scene;this.signals=signals;partition=settings.LatePartition;count=settings.LateKernelBins(rate);simulated=settings.LateBins(rate);bins=partition+1;
         channels=settings.ChannelsPerListener;listeners=scene.listeners.Length;pairs=signals.Length*listeners;
         latency=settings.DspLatencySamples;step=settings.responseStepSamples;this.rate=rate;
         active=new bool[2*pairs];blocks=new float[2*listeners*channels*partition];
-        work=new Vector2[2*partition];sum=new Vector2[bins];dry=new float[2*partition];gains=new float[LateBasis.Bands];
+        work=new Vector2[2*partition];sum=new Vector2[bins];dry=new float[2*partition];gains=new float[channels*count*LateBasis.Bands];
+        envelope=new double[channels][];for(int c=0;c<channels;c++)envelope[c]=new double[count];
         amplitudes=new float[signals.Length][];phases=new uint[signals.Length][];births=new long[signals.Length][];sites=new int[signals.Length];
     }
     internal void SetResponse(long sample,bool cut,RayTransport.LateFrame late,AcousticTake.State[] states)
@@ -58,21 +63,28 @@ internal sealed class LateReverb
             active[bank*pairs+pair]=late.Valid && scene.sources[pair/listeners].mutedListenerPlusOne!=listener+1 &&
                 TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener);
             if(!active[bank*pairs+pair])continue;
+            for(int b=0;b<LateBasis.Bands;b++)
+            {
+                for(int c=0;c<channels;c++)for(int k=0;k<count;k++)
+                {
+                    double energy=0;
+                    if(k<simulated)for(int d=0;d<LateBasis.Directions;d++)energy+=basis.EarWeights[(d*2+c)*LateBasis.Bands+b]*late.Energy(pair,d,b,k);
+                    envelope[c][k]=Math.Max(0,energy)/partition;
+                }
+                LateTail.Extend(envelope,simulated,count);
+                for(int c=0;c<channels;c++)for(int k=0;k<count;k++)gains[(c*count+k)*LateBasis.Bands+b]=(float)Math.Sqrt(envelope[c][k]);
+            }
             for(int c=0;c<channels;c++)for(int k=0;k<count;k++)
             {
                 bool any=false;
-                for(int b=0;b<LateBasis.Bands;b++)
-                {
-                    double energy=0;
-                    for(int d=0;d<LateBasis.Directions;d++)energy+=basis.EarWeights[(d*2+c)*LateBasis.Bands+b]*late.Energy(pair,d,b,k);
-                    gains[b]=(float)Math.Sqrt(Math.Max(0,energy)/partition);any|=gains[b]>0;
-                }
+                for(int b=0;b<LateBasis.Bands;b++)any|=gains[(c*count+k)*LateBasis.Bands+b]>0;
                 if(!any)continue;
                 int kernel=at+((pair*channels+c)*count+k)*bins,noise=(offsets[pair]+k)%basis.Partitions;
                 for(int b=0;b<LateBasis.Bands;b++)
                 {
-                    if(gains[b]==0)continue;int source=((c*LateBasis.Bands+b)*basis.Partitions+noise)*bins;
-                    for(int i=0;i<bins;i++)kernels[kernel+i]+=basis.Spectra[source+i]*gains[b];
+                    float gain=gains[(c*count+k)*LateBasis.Bands+b];
+                    if(gain==0)continue;int source=((c*LateBasis.Bands+b)*basis.Partitions+noise)*bins;
+                    for(int i=0;i<bins;i++)kernels[kernel+i]+=basis.Spectra[source+i]*gain;
                 }
             }
         }

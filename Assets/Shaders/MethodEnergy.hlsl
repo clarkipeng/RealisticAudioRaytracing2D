@@ -11,7 +11,23 @@
 //     (1-a)(1-t)s with Lambert's law (ISO 17497-1 scattering coefficient); specular
 //     (1-a)(1-t)(1-s) (delta); impedance surfaces reflect |R(theta)|^2 specularly.
 //     The continuation is drawn with the band-mean energy fractions; each band's
-//     weight is multiplied by its own fraction / that probability;
+//     weight is multiplied by its own fraction / that probability. A small
+//     transmitted share into air (under half of the continuing energy, through an
+//     open sheet such as a wall face or a door leaf, or out of a closed solid) is
+//     split off instead of drawn: the ray continues with the
+//     reflected and scattered shares only, and the transmitted branch becomes a
+//     candidate of a one-slot weighted reservoir (probability of keeping it = its
+//     weight / the summed weight of all candidates so far; the kept branch carries
+//     that summed weight). When the ray ends, the kept branch is traced from its
+//     surface with Russian roulette on its energy relative to a source ray's
+//     (survival min(1, w / EnergyBranchFloor), at its start and after every event:
+//     between the two faces of a wall modelled as two sheets a branch would otherwise
+//     bounce for hundreds of reflections). Entering a closed solid stays a draw: the
+//     energy that gets back out of it (about t^2 / a) is negligible, and splitting
+//     there cost the Church's energy solve 47% more for no audible change. Drawing a transmission of t = 1e-4 sent one ray in
+//     10^4 through the wall with all its energy, which drew streaks of full-strength
+//     interior sound outside; a weak branch that survives carries EnergyBranchFloor
+//     of a source ray's energy, and more branches get through: same expectation;
 //   - edge: the uniform theory of diffraction (Kouyoumjian & Pathak 1974, rigid
 //     faces) used as an energy kernel, |D|^2 (Tsingos et al. 2001): the diffracted
 //     ray leaves on Keller's cone with energy flux per unit edge length and azimuth
@@ -56,7 +72,8 @@ struct EnergyArrival
 };
 static const uint EnergyFamilyDirect = 0, EnergyFamilySpecular = 1, EnergyFamilyD = 2, EnergyFamilyDD = 3, EnergyFamilyRD = 4,
                   EnergyFamilyDR = 5;
-static const uint CounterArrivalOverflow = 13;
+static const uint CounterArrivalOverflow = 13, CounterBranches = 14;
+static const float EnergyBranchFloor = .05; // transmitted branches below this share of a source ray's energy play roulette
 RWStructuredBuffer<EnergyArrival> MethodArrivals;
 RWStructuredBuffer<uint> MethodArrivalCounts, MethodSelected;
 StructuredBuffer<uint> MethodPrimitivePlane, MethodPlanePrimitive;
@@ -314,6 +331,37 @@ void EnergySphere(float3 p, float3 d, float span, float flux[8], float tau, uint
     MethodCaptureEvent(ray, slot, CaptureChain, p + d * at, 0, magnitude, time);
 }
 
+// Late-field accumulation across solves (audio, settings.lateAccumulationSeconds; see
+// MethodTransport): each late cell of the batch's frames becomes the exponential moving
+// average acc += alpha (e - acc) of the solves so far, in the histogram's 32.32 fixed point
+// (value = energy x rays). MethodAccumulator keeps the average between batches.
+RWStructuredBuffer<float> MethodAccumulator;
+uint MethodAccumulateCells, MethodAccumulateFrames, MethodAccumulateReset;
+float MethodAccumulateAlpha;
+void EnergyAccumulate(uint cell)
+{
+    if (cell >= MethodAccumulateCells) return;
+    float acc = MethodAccumulator[cell];
+    for (uint f = 0; f < MethodAccumulateFrames; f++)
+    {
+        uint at = 2 * (f * MethodAccumulateCells + cell);
+        float e = MethodOutput[at + 1] + MethodOutput[at] / 4294967296.0;
+        acc = MethodAccumulateReset != 0 && f == 0 ? e : acc + MethodAccumulateAlpha * (e - acc);
+        float whole = floor(acc);
+        MethodOutput[at + 1] = (uint)whole;
+        MethodOutput[at] = (uint)min(4294967040.0, (acc - whole) * 4294967296.0);
+    }
+    MethodAccumulator[cell] = acc;
+}
+
+// Whether an object is a closed solid (a volume with its own medium; Volumes are sorted by owner).
+bool EnergySolid(uint object)
+{
+    uint lo = 0, hi = VolumeCount;
+    while (lo < hi) { uint mid = lo + (hi - lo) / 2; if (Volumes[mid].ids.z < object) lo = mid + 1; else hi = mid; }
+    return lo < VolumeCount && Volumes[lo].ids.z == object;
+}
+
 // One flat loop: each iteration makes the pending connections of the latest vertex,
 // then traces one segment (an edge ray or a direction from the anchor starts a new
 // chain), so every heavy helper has a single call site (small kernel and stack).
@@ -344,7 +392,12 @@ void TraceEnergy(uint index)
     float3 p = S, d = 0;
     float Q = 1, tau = 0;
     uint hits = 0, reflections = 0, medium = v.medium, edge = 0;
-    bool through = false, viaEdge = false, fluxPending = false;
+    bool through = false, viaEdge = false, fluxPending = false, inBranch = false;
+    // Transmitted-branch reservoir (one slot): summed candidate weight, and the kept
+    // branch's surface point, direction, medium, time, path counters and band flux / weight.
+    float branchSum = 0, branchTau = 0; float3 branchP = 0, branchD = 0; float branchF[8];
+    uint branchMedium = 0, branchHits = 0, branchReflections = 0, branchDepth = 0;
+    [unroll] for (uint k = 0; k < MethodBands; k++) branchF[k] = 0;
     float edgePick = 1, edgeExtent = 1, edgeAngle = 1, edgeM = 1, edgeSinBeta = 1, edgePhiIn = 0, edgePhi = 0, edgeD = 1;
     [loop] for (;;)
     {
@@ -359,7 +412,19 @@ void TraceEnergy(uint index)
             EnergyEdgeConnection(c, cI, L, connectDepth, ray, slot, rng);
             continue;
         }
-        if (done) break;
+        if (done)
+        {
+            if (!(branchSum > 0)) break;
+            // Trace the kept transmitted branch from its surface, as a specular chain,
+            // after roulette on its share of a source ray's flux (4 pi r_ref^2).
+            float keep = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+            if (RandomRay(rng) >= keep) break;
+            [unroll] for (uint k = 0; k < MethodBands; k++) { Phi0[k] = branchF[k] * branchSum / keep; C[k] = 1; }
+            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1;
+            hits = branchHits; reflections = branchReflections; depth = branchDepth;
+            through = true; viaEdge = false; fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true;
+            MethodCount(CounterBranches);
+        }
         if (!travelling)
         {
             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
@@ -382,12 +447,12 @@ void TraceEnergy(uint index)
                 float m = length(w);
                 edgeExtent = (r * r + (z - z0) * (z - z0)) * span / r; // 1 / (density of the point on the edge)
                 if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle || !Visible(MethodState, v.position, e, false))
-                { MethodCaptureEvent(ray, slot, CaptureEnd, v.position, 0, 0, v.time); break; }
+                { MethodCaptureEvent(ray, slot, CaptureEnd, v.position, 0, 0, v.time); done = true; continue; }
                 w /= m;
                 float cosBeta = dot(w, u);
                 edgeSinBeta = sqrt(max(0, 1 - cosBeta * cosBeta));
                 edgeD = EnergyDirectivity(v, w);
-                if (edgeD == 0 || edgeSinBeta <= 1e-4) { MethodCaptureEvent(ray, slot, CaptureEnd, v.position, 0, 0, v.time); break; }
+                if (edgeD == 0 || edgeSinBeta <= 1e-4) { MethodCaptureEvent(ray, slot, CaptureEnd, v.position, 0, 0, v.time); done = true; continue; }
                 edgePhiIn = TunedEdgeAngle(v.position - e, f, nn, angle);
                 edgePhi = RandomRay(rng) * angle;
                 d = normalize(u * cosBeta + edgeSinBeta * (f * cos(edgePhi) + nn * sin(edgePhi)));
@@ -403,7 +468,7 @@ void TraceEnergy(uint index)
                 float3 w0 = v.kind == 1 ? MethodCosineDirection(v.normal, rng) : UnitDirection(rng, false);
                 float pdf = v.kind == 1 ? max(1e-12, dot(w0, v.normal)) / RayPi : 1 / (4 * RayPi);
                 float D = EnergyDirectivity(v, w0);
-                if (D == 0) break;
+                if (D == 0) { done = true; continue; }
                 [unroll] for (uint k = 0; k < MethodBands; k++) Phi0[k] = I[k] * D / pdf;
                 Q = edgeRays ? 1 - MethodEdgeProbability : 1;
                 p = v.position; d = w0; tau = v.time;
@@ -413,7 +478,7 @@ void TraceEnergy(uint index)
         if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
         float limit = (MethodHorizon - tau) / MethodSlowness(medium);
         uint hit; float distance; float3 normal;
-        if (limit <= 0) { MethodCount(CounterHorizon); break; }
+        if (limit <= 0) { MethodCount(CounterHorizon); done = true; continue; }
         bool found = NearestHit(MethodState, p, d, limit, false, hit, distance, normal);
         if (fluxPending && found)
         {
@@ -445,7 +510,7 @@ void TraceEnergy(uint index)
         {
             MethodCount(CounterEscapes);
             MethodCaptureEvent(ray, slot, CaptureEscape, p + d * min(limit, 50), 0, 0, tau);
-            break;
+            done = true; continue;
         }
         p += d * distance; tau += distance * MethodSlowness(medium);
         [unroll] for (uint k = 0; k < MethodBands; k++) C[k] *= exp(-2 * MethodLoss(medium, k) * distance);
@@ -473,6 +538,27 @@ void TraceEnergy(uint index)
         }
         float total = mT + mD + mS;
         if (!(total > 0)) { MethodCaptureEvent(ray, slot, CaptureEnd, p, 0, 0, tau); done = true; continue; }
+        bool split = mT > 0 && mT < .5 * total && (medium != AirMedium || !EnergySolid(Primitives[hit].indices.x));
+        if (split)
+        {
+            // Small transmitted share: a reservoir candidate (see the header), not a draw.
+            float branch[8], weight = 0;
+            [unroll] for (uint k = 0; k < MethodBands; k++) { branch[k] = Phi0[k] * C[k] * eT[k] / Q; weight = max(weight, branch[k]); }
+            if (weight > 0)
+            {
+                branchSum += weight;
+                if (RandomRay(rng) * branchSum < weight)
+                {
+                    uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
+                    float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
+                    bool refracted = dot(bent, bent) > 0;
+                    branchP = p; branchD = refracted ? normalize(bent) : reflect(d, n); branchMedium = refracted ? next : medium;
+                    branchTau = tau; branchHits = hits + 1; branchReflections = reflections + (refracted ? 0 : 1); branchDepth = depth;
+                    [unroll] for (uint k = 0; k < MethodBands; k++) branchF[k] = branch[k] / weight;
+                }
+            }
+            total = mD + mS;
+        }
         float u = RandomRay(rng) * total;
         if (u < mD)
         {
@@ -484,7 +570,7 @@ void TraceEnergy(uint index)
             if (v.time > MethodHorizon) { MethodCount(CounterHorizon); done = true; }
             continue;
         }
-        bool transmit = u < mD + mT;
+        bool transmit = !split && u < mD + mT;
         if (transmit)
         {
             uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
@@ -506,6 +592,14 @@ void TraceEnergy(uint index)
         [unroll] for (uint k = 0; k < MethodBands; k++) weight = max(weight, C[k]);
         MethodCaptureEvent(ray, slot, transmit ? CaptureTransmission : CaptureSpecular, p, Phi0[2] * C[2] / Q, 0, tau);
         float survive = min(1, weight / (Q * MethodRouletteFloor));
+        if (inBranch)
+        {
+            // A branch plays roulette on its share of a source ray's flux, so energy caught
+            // between the two faces of a wall stops being traced once it is weak.
+            float flux = 0;
+            [unroll] for (uint k = 0; k < MethodBands; k++) flux = max(flux, Phi0[k] * C[k]);
+            survive = min(survive, flux / (Q * 4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+        }
         if (survive < 1)
         {
             if (RandomRay(rng) >= survive)

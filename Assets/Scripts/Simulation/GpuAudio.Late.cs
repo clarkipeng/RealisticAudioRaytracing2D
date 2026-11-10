@@ -6,8 +6,8 @@ using UnityEngine;
 internal sealed partial class GpuAudio
 {
     const int LateTiles=16;
-    int lateEnvelope,lateBuild,lateInput,lateSum,lateInverse,lateWrite;
-    int latePartition,lateCount,lateBank,lateSupport,lateSources;
+    int lateEnvelope,lateExtend,lateBuild,lateInput,lateSum,lateInverse,lateWrite;
+    int latePartition,lateCount,lateSimulated,lateBank,lateSupport,lateSources;
     long lateSwap;
     bool lateBlend,lateInitialized,lateReady;
     int lateRate;
@@ -24,7 +24,7 @@ internal sealed partial class GpuAudio
         foreach(var name in new[]{"LateEarWeights","LateGains","LateBlocks"})Buffer(name,1,4);
         Buffer("LateOffsets",pairs,4).SetData(new uint[pairs]);Buffer("LateActive",2*pairs,4).SetData(new uint[2*pairs]);
         bool late=settings.transport==TakeRender.Transport.Raytraced && settings.maxBounces>0;
-        latePartition=settings.LatePartition;lateCount=late?settings.LateBins(rate):0;
+        latePartition=settings.LatePartition;lateCount=late?settings.LateKernelBins(rate):0;lateSimulated=late?settings.LateBins(rate):0;
         if(late)lateSupport=checked(lateCount*latePartition+settings.DspLatencySamples);
     }
     void EnsureLate()
@@ -42,7 +42,7 @@ internal sealed partial class GpuAudio
         Buffer("LateInputs",checked(lateSources*lateCount*bins),8).SetData(new Vector2[lateSources*lateCount*bins]);
         Buffer("LateSums",checked(2*lanes*LateTiles*bins),8);
         Buffer("LateBlocks",checked(2*lanes*latePartition),4).SetData(new float[2*lanes*latePartition]);
-        Set("LatePartition",latePartition);Set("LateCount",lateCount);Set("LateBasisCount",basis.Partitions);Set("LateBins",bins);
+        Set("LatePartition",latePartition);Set("LateCount",lateCount);Set("LateSimulated",lateSimulated);Set("LateBasisCount",basis.Partitions);Set("LateBins",bins);
         Set("LateTiles",LateTiles);Set("LateStep",settings.responseStepSamples);
         lateReady=true;
     }
@@ -67,6 +67,7 @@ internal sealed partial class GpuAudio
         Set("LateEmissionRow",valid && transport.Emissions!=null?late.Frame*transport.Emissions.FrameStride:0);
         commands.BeginSample("Acoustics.GPU.LateKernels");
         commands.DispatchCompute(shader,lateEnvelope,(checked(pairs*channels*LateBasis.Bands*lateCount)+63)/64,1,1);
+        if(lateCount>lateSimulated)commands.DispatchCompute(shader,lateExtend,(pairs*LateBasis.Bands+63)/64,1,1);
         commands.DispatchCompute(shader,lateBuild,(checked(pairs*channels*lateCount*(latePartition+1))+63)/64,1,1);
         commands.EndSample("Acoustics.GPU.LateKernels");
     }

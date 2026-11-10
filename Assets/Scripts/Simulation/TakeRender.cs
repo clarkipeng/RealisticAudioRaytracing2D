@@ -61,12 +61,18 @@ public static partial class TakeRender
         public int lateRays=512;
         [Tooltip("Receiver sphere radius (m) for late specular energy. Larger spheres lower variance and smear arrival times by up to 2r/c.")]
         public float lateReceiverRadius=.5f;
+        [Min(0),Tooltip("Late-field length (s). Beyond the simulated horizon (maximum delay) each band's envelope continues its fitted exponential decay (LateTail.cs) so a long reverberation fades out instead of stopping. Zero or less than the horizon: no continuation.")]
+        public float lateTailSeconds;
+        [Min(0),Tooltip("Energy method audio: time constant (s) of the late field's moving average over solves, each with a new walk seed. Averages out the walk's sampling noise for a static or slowly moving listener (it smooths over the distance moved in this time); zero keeps one fixed-seed walk per solve.")]
+        public float lateAccumulationSeconds;
         internal const int LateBands=8,LateDirections=6;
         // One late histogram bin per DSP partition. A partition never exceeds the
         // DSP latency (so its block convolution is causal) and divides the response
         // step (so late responses change on block boundaries).
         internal int LatePartition => Math.Min(Math.Min(fftSize,1024),responseStepSamples&-responseStepSamples);
         internal int LateBins(int rate) => maxBounces==0?0:checked((int)Math.Ceiling(maximumDelaySeconds*(double)rate/LatePartition));
+        // Synthesis kernel length: the simulated bins, continued to lateTailSeconds (LateTail).
+        internal int LateKernelBins(int rate) => Math.Max(LateBins(rate),maxBounces==0?0:checked((int)Math.Ceiling(lateTailSeconds*(double)rate/LatePartition)));
         // Specular order held by the phase-exact early part: first images, plus
         // second-order images in the complete routes' RR family.
         internal int LateEarlyOrder => CompleteSamples>0 && maxBounces>1?2:1;
@@ -581,7 +587,7 @@ public static partial class TakeRender
                 if(settings.maxBounces>0)
                 {
                     Emission.Configure(scene,signals);late=new LateReverb(scene,sampleRate,settings,signals);
-                    lateSupport=(long)settings.LateBins(sampleRate)*settings.LatePartition+settings.DspLatencySamples;
+                    lateSupport=(long)settings.LateKernelBins(sampleRate)*settings.LatePartition+settings.DspLatencySamples;
                 }
                 return;
             }
@@ -745,7 +751,8 @@ public static partial class TakeRender
         if (settings == null || (settings.listenerOutput!=ListenerOutput.Mono && settings.listenerOutput!=ListenerOutput.Binaural) || settings.responseStepSamples<=0 || settings.tailSamples<0 || settings.transitionSamples<0 || settings.transitionSamples>settings.responseStepSamples ||
             !PositiveFinite(settings.maximumDelaySeconds) || settings.maximumSignalEvents<2 || settings.maximumPendingObservations<1 || settings.maximumResponsesPerBatch<1 ||
             (settings.delayFilter!=DelayFilter.Linear && settings.delayFilter!=DelayFilter.WindowedSinc) || settings.sincRadius<2 || settings.sincRadius>int.MaxValue/2 ||
-            !PositiveFinite(settings.speedOfSound) || !PositiveFinite(settings.referenceDistance) || !PositiveFinite(settings.minimumDistance))
+            !PositiveFinite(settings.speedOfSound) || !PositiveFinite(settings.referenceDistance) || !PositiveFinite(settings.minimumDistance) ||
+            !(settings.lateTailSeconds>=0 && settings.lateTailSeconds<=600) || !(settings.lateAccumulationSeconds>=0 && settings.lateAccumulationSeconds<=600))
             throw new ArgumentException("Invalid render settings.");
         if(settings.audioBackend!=AudioBackend.Gpu && settings.audioBackend!=AudioBackend.CpuReference)throw new ArgumentException("Unknown audio backend.");
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");

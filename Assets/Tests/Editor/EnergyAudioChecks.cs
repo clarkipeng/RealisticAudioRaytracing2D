@@ -208,6 +208,33 @@ public partial class TakeChecks
         maximumDelaySeconds = horizon, airAbsorption = false, maxBounces = 64, speedOfSound = 343, minimumDistance = .1f, useBvh = true, seed = 5,
         method = TakeRender.Method.Energy, methodRays = 1024, diffractionFactor = 0};
 
+    // Late accumulation (lateAccumulationSeconds): a static listener's late field is the
+    // moving average of solves with new walk seeds. Its level is the seeds' mean (unbiased)
+    // and it lies much closer to that mean than one fixed-seed solve does.
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void EnergyLateAccumulationAveragesTheWalk()
+    {
+        const int rate = 8192, size = 256, solves = 40;
+        LateRoom(AcousticTake.Dimension.Spatial3D, new Vector3(6, 4, 5), LateMaterial(.25f, .4f), new Vector3(-1.2f, .3f, .5f), new Vector3(1.5f, -.4f, -.6f),
+                 out var scene, out var geometry, out var state);
+        var settings = EnergyAudioSettings(size, .4f); settings.methodRays = 128;
+        double Late(TransportSolver solver) { var e = LateEnergy(solver, 2); double sum = 0; for (int k = e.Length / 4; k < e.Length; k++) sum += e[k]; return sum; }
+        var single = new double[solves];
+        using (var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: rate, methodAudio: true))
+            for (int i = 0; i < solves; i++) { solver.Method.SeedOffset = i; solver.Solve(state, new TakeRender.DirectPath[1]); single[i] = Late(solver); }
+        double mean = 0, spread = 0; foreach (var v in single) mean += v / solves; foreach (var v in single) spread += (v - mean) * (v - mean) / (solves - 1); spread = Math.Sqrt(spread);
+        settings.lateAccumulationSeconds = 10f * size / rate; // alpha 0.1: about 19 solves' worth
+        double averaged;
+        using (var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: rate, methodAudio: true))
+        {
+            for (int i = 0; i < solves; i++) solver.Solve(state, new TakeRender.DirectPath[1]);
+            averaged = Late(solver);
+        }
+        TestContext.WriteLine($"single solves {mean:G4} +- {spread:G3}, accumulated {averaged:G4} ({(averaged - mean) / spread:F2} single-solve deviations)");
+        Check(spread > 0, "Seeds change the walk.");
+        Check(Math.Abs(averaged - mean) < .75 * spread + .01 * mean, "The accumulated late field is the seeds' mean, closer than one solve.");
+    }
+
     // CPU reference and GPU audio render the same energy-method response (arrival paths
     // and late field) of a scattering room with a walking, turning listener.
     [TestCase(TakeRender.ListenerOutput.Mono), TestCase(TakeRender.ListenerOutput.Binaural), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]

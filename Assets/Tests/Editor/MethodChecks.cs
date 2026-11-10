@@ -198,6 +198,35 @@ public partial class TakeChecks
         Assert.That(t60 / eyring, Is.EqualTo(1).Within(.15));
     }
 
+    // Leakage through thin walls (specular room, small transmission, listener outside):
+    // the energy walk splits the transmitted share off into one reservoir branch per ray
+    // (MethodEnergy.hlsl), so the field outside is a smooth estimate that scales with the
+    // transmission. Drawing the transmission instead sent about one ray in 10^4 through
+    // with its full energy: a handful of streaks, tens of dB apart between seeds.
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void EnergyMethodLeaksThroughWallsSmoothly()
+    {
+        var size = new Vector3(6, 5, 4);
+        double Leak(float transmission, int seed)
+        {
+            LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(.1f, 0, transmission), new Vector3(-1.5f, .5f, .4f), new Vector3(3.8f, -.3f, .2f),
+                     out var scene, out var geometry, out var state);
+            var settings = ControlSettings(TakeRender.Method.Energy, 1 << 16, .4f); settings.seed = seed; settings.specularDetectionRadius = .5f;
+            using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+            solver.Solve(state, new TakeRender.DirectPath[1]);
+            TestContext.WriteLine($"t {transmission}, seed {seed}: branches {solver.Method.Counter(14)}");
+            double direct = (new Vector3(3.8f, -.3f, .2f) - new Vector3(-1.5f, .5f, .4f)).magnitude / 343;
+            return Window(ControlEnergy(solver, 2), (int)Math.Ceiling(direct * 1000) + 5, int.MaxValue); // reflected leakage only
+        }
+        var low = new double[4]; for (int seed = 0; seed < low.Length; seed++) low[seed] = Leak(1e-4f, seed);
+        double mean = 0, spread = 0; foreach (var v in low) mean += v / low.Length; foreach (var v in low) spread += (v - mean) * (v - mean) / (low.Length - 1);
+        double variation = Math.Sqrt(spread) / mean, ratio = Leak(1e-3f, 0) / mean;
+        TestContext.WriteLine($"leakage {mean:G4}, seed-to-seed variation {variation:P1}, 10x transmission gives {ratio:F2}x");
+        Assert.That(mean, Is.GreaterThan(0));
+        Assert.That(variation, Is.LessThan(.25), "The leaked field is a smooth estimate (drawn transmissions: well over 50%).");
+        Assert.That(ratio, Is.EqualTo(10).Within(2.5), "Leaked energy scales with the transmission.");
+    }
+
     // Rigid half-plane, listener in the shadow: the pressure method's band response
     // matches the independent signed half-plane quadrature (TunedRoutesMatchIndependentHalfPlane),
     // and the energy method's UTD band energy matches the BTM band energy within 1.5 dB.

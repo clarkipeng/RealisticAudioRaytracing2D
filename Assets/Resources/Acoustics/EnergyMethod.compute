@@ -14,6 +14,7 @@
 #pragma kernel EnergyEdgeWeights3DBvh USE_BVH
 #pragma kernel EnergyEdgeScanKernel
 #pragma kernel ClearMethod
+#pragma kernel EnergyAccumulateLate
 
 #include "../../Shaders/Geometry.hlsl"
 #include "../../Shaders/Transport.hlsl"
@@ -29,6 +30,7 @@
 [numthreads(64,1,1)] void EnergyEdgeWeights3D(uint3 id:SV_DispatchThreadID) { EnergyEdgeWeights(id.x); }
 [numthreads(64,1,1)] void EnergyEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { EnergyEdgeWeights(id.x); }
 [numthreads(256,1,1)] void EnergyEdgeScanKernel(uint3 t:SV_GroupThreadID) { EnergyEdgeScan(t.x); }
+[numthreads(64,1,1)] void EnergyAccumulateLate(uint3 id:SV_DispatchThreadID) { EnergyAccumulate(id.x); }
 [numthreads(64,1,1)] void ClearMethod(uint3 id:SV_DispatchThreadID)
 {
     ClearMethodBuffers(id.x);

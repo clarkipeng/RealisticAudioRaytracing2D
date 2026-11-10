@@ -2291,6 +2291,13 @@ Specular segments reach the listener through a track-length receiver sphere of r
 The sphere's time smear (up to `2r/c`) applies only to the diffuse part; arrivals are exact.
 Its radius sets how many rays the diffuse field averages: crossings scale with `r² / V`, so large rooms need a larger sphere (the Church listening render uses 2 m; a 0.5 m sphere there is crossed about 35 times per solve and the tail breaks into frozen bursts).
 Edge rays (diffraction continued into the walk) leave the source only, importance-sampled per solve: edge `e` with probability proportional to `angle_e ∫ dz / m²` along it (times 1 if a quick visibility test sees it, else 0.1) and the point with density `∝ 1/m²`, so a ray's flux is bounded; scattering points diffract only through their D/RD/DD connections (10 November, docs/benchmarks/energy-audio-2026-11-09).
+A small transmitted share into air (under half of the continuing energy: through an open sheet such as a wall face or a door leaf, or out of a closed solid) is split off instead of drawn.
+The ray continues with the reflected and scattered shares, and the transmitted branch becomes a candidate of a one-slot weighted reservoir (kept with probability its weight over the summed weight of all candidates so far; the kept branch carries that sum).
+When the ray ends, the kept branch is traced from its surface with Russian roulette on its share of a source ray's flux (survival `min(1, w / 0.05)`, at its start and after every event).
+The roulette keeps the cost down: between the two faces of a wall modelled as two sheets a branch would otherwise bounce for hundreds of reflections.
+Entering a closed solid stays a draw: the energy that gets back out (about `t²/a`) is negligible, and splitting there made the Church's solve 47% slower.
+Drawing every transmission sent about one ray in 10⁴ through a wall with its full energy (`EnergyMethodLeaksThroughWallsSmoothly`: the split's seed-to-seed spread of the leaked field is 19%, 10 November).
+The streaks outside the Church's closed doors in the energy maps are not this: they stay with the split and move when the random sequence changes, so they are most likely rays slipping through narrow gaps in the geometry, each with its full energy (the door leaves stop about 4 cm short of the wall opening on each side, and the wall mesh has 1,119 open edges); sealing those is a scene fix.
 
 **Doppler.**
 Velocities come from the solve's states (`VelocityValid`).
@@ -2304,7 +2311,12 @@ Identities are stable across solves (a plane multiset, or the edge and plane ind
 Arrivals beyond the slots are deposited into the histogram, never dropped.
 The histogram has the hybrid late field's layout (frame, pair, head-frame direction, band, `LatePartition` bins; energy = sum / `methodRays`) and plays through the same late synthesis (`GpuAudio.Late`, `LateReverb`): fixed seeded noise, so movement changes envelopes, never the noise.
 The walk uses the same seed every solve, so its estimate changes smoothly with movement.
+With `lateAccumulationSeconds > 0` every solve draws a new walk seed and the late histogram is the exponential moving average of the solves (`α = 1 − exp(−step / τ)`, kernel `EnergyAccumulateLate`, unbiased because the weights sum to one).
+A static or slowly moving listener then hears the average of many independent walks (about `2/α`: 86 solves at τ = 1 s and 1,024-sample steps) instead of one fixed realization, whose position-dependent sampling noise made the late level patchy; the price is that the late field follows changes (movement, a door opening) with time constant τ (`EnergyLateAccumulationAveragesTheWalk`).
 `ILateField` lets the audio backends read the hybrid's or the energy method's late field; the energy method has no emission rows.
+With `lateTailSeconds` longer than the horizon (`maximumDelaySeconds`), the late synthesis kernel runs on to that length and each band's envelope continues its fitted exponential decay (`LateTail.cs`, mirrored by `GpuAudio.compute` `LateExtend`; either method's late field).
+The decay per partition is fitted over the last two windows (a quarter of the simulated partitions each) of both channels, each channel continues the exponential with its last window's mean, the last half window blends into it, and the last eighth of the continuation fades out, so a reverberation longer than the horizon decays to inaudibility instead of stopping (`LateTailContinuesTheFittedDecay`, `LateTailFadesTheReverberationOut`).
+This is the late synthesis's own diffuse-field assumption (Polack), applied past the simulated time; envelopes that do not decay over the fit are not continued.
 
 **Measurement output.**
 In the comparison format every arrival is also deposited into the 1 ms world-frame histogram, so `energy.f32` is arrivals plus diffuse; `MethodTransport.ReadArrivals` lists them.
