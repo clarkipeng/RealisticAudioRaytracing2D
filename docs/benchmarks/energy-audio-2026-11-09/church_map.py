@@ -4,8 +4,10 @@
     B=docs/benchmarks/energy-audio-2026-11-09
     $PY $B/church_map.py grid 1.0                  # receivers at ear height -> .context/energy-audio/maps/receivers.f32
     nice -n 19 $PY $B/church_map.py run 0 650     # guarded Unity: one solve per receiver at take frames 0 (doors closed), 650 (open)
-    nice -n 19 $PY $B/church_map.py run 0 --every 64   # cost probe on every 64th receiver
+    nice -n 19 $PY $B/church_map.py run 0 --every 64 --rays 2048,8192   # cost probe on every 64th receiver
+    (--out DIR writes the maps elsewhere; --seeds K averages K walk seeds per receiver)
     $PY $B/church_map.py page                      # PNGs and index.html in .context/energy-audio/maps/
+    $PY $B/church_map.py compare DIR_BEFORE DIR_AFTER NAME   # before/after maps (late field, outside), NAME.png/json
 
 Receivers: a square grid inside the enclosed air of the take (church_room.py voxels) and up to
 10 m in front of the doors, 1.65 m above the local floor, at least 0.4 m from any surface. Each
@@ -103,9 +105,10 @@ def grid(spacing=1.0):
     print(f'{len(p)} receivers at {spacing} m ({int((p[:, 3] > 0).sum())} outside)')
 
 
-def run(frames, every=1):
-    """Guarded Unity measurement; every > 1 measures every n-th receiver into maps/timing (cost probe)."""
-    out = OUT if every == 1 else OUT / 'timing'
+def run(frames, every=1, out=None, rays=None, seeds=1):
+    """Guarded Unity measurement; every > 1 measures every n-th receiver into maps/timing (cost probe).
+    rays: optional list of ray counts (one map each); seeds: walk seeds averaged per receiver."""
+    out = (ROOT / out).resolve() if out else OUT if every == 1 else OUT / 'timing'
     out.mkdir(parents=True, exist_ok=True)
     receivers = OUT / 'receivers.f32'
     if every > 1:
@@ -116,8 +119,12 @@ def run(frames, every=1):
     path.write_text(json.dumps(job, indent=1) + '\n')
     sys.path.insert(0, str(ROOT / 'tools'))
     import method_runs as mr
-    mr.tests('TakeChecks.MeasureEnergyMap', dict(ACOUSTIC_ENERGY_MAP=str(path), ACOUSTIC_ENERGY_MAP_RECEIVERS=str(receivers),
-                                                ACOUSTIC_ENERGY_MAP_FRAMES=','.join(map(str, frames))))
+    env = dict(ACOUSTIC_ENERGY_MAP=str(path), ACOUSTIC_ENERGY_MAP_RECEIVERS=str(receivers), ACOUSTIC_ENERGY_MAP_FRAMES=','.join(map(str, frames)))
+    if rays:
+        env['ACOUSTIC_ENERGY_MAP_RAYS'] = ','.join(map(str, rays))
+    if seeds > 1:
+        env['ACOUSTIC_ENERGY_MAP_SEEDS'] = str(seeds)
+    mr.tests('TakeChecks.MeasureEnergyMap', env)
 
 
 def theory(distance, alpha_mean, room, horizon=2.0):
@@ -249,6 +256,68 @@ for (const img of document.querySelectorAll('img[data-frame]')) {
     print(OUT / 'index.html')
 
 
+def patchiness(xyz, db, spacing, inside):
+    """Neighbour-to-neighbour differences (dB) of a quantity between grid receivers `spacing` apart, inside only."""
+    key = {(round(float(x) / spacing), round(float(z) / spacing)): i for i, (x, _, z) in enumerate(xyz) if inside[i]}
+    d = [abs(db[i] - db[key[(a + 1, b)]]) for (a, b), i in key.items() if (a + 1, b) in key] + \
+        [abs(db[i] - db[key[(a, b + 1)]]) for (a, b), i in key.items() if (a, b + 1) in key]
+    return np.array(d)
+
+
+def compare(before, after, name='compare'):
+    """Before/after maps (same frame): late field at 1 kHz and broadband, total outside, and the late
+    field's neighbour-to-neighbour differences. `before`/`after`: directories holding receivers.f32
+    (or the grid's) and one map-*.f32 each."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    sets = []
+    for directory in (Path(before), Path(after)):
+        directory = directory if directory.is_absolute() else ROOT / directory
+        receivers = directory / 'receivers.f32' if (directory / 'receivers.f32').exists() else OUT / 'receivers.f32'
+        xyz = np.fromfile(receivers, '<f4').reshape(-1, 3)
+        path = sorted(directory.glob('map-*.f32'))[0]
+        v = np.fromfile(path, '<f4').reshape(-1, 4, 8).astype(float)
+        meta = json.loads(path.with_suffix('.json').read_text())
+        sets.append((directory.name, xyz, v, meta))
+    h = json.loads((OUT / 'grid.json').read_text())['spacing']
+    _, tri, owner, _ = __import__('church_room').world_triangles(Path(listen.TAKE))
+    names = [o['name'] for o in json.loads((listen.TAKE / 'take.json').read_text())['scene']['objects']]
+    walls = cut_segments(tri, owner, names, 2.65)
+    outside_all = np.load(OUT / 'receivers-outside.npy') > 0
+    grid = np.fromfile(OUT / 'receivers.f32', '<f4').reshape(-1, 3)
+    lookup = {(round(float(x), 2), round(float(z), 2)): o for (x, _, z), o in zip(grid, outside_all)}
+    rows, summary = [('late, 1 kHz', 2, 3), ('late, 125 Hz-4 kHz', 2, None), ('total, 1 kHz', 3, 3)], {}
+    fig, axes = plt.subplots(len(rows), 2, figsize=(11, 6.2 * len(rows)))
+    for col, (label, xyz, v, meta) in enumerate(sets):
+        outside = np.array([lookup.get((round(float(x), 2), round(float(z), 2)), False) for x, _, z in xyz])
+        for row, (title, q, band) in enumerate(rows):
+            data = v[:, q, :6].mean(1) if band is None else v[:, q, band]
+            db = 10 * np.log10(np.maximum(data, 1e-12))
+            ax = axes[row, col]
+            lo, hi = ((-90, -20) if outside.mean() > .5 else (-60, -5) if q == 3 else (-20, -5))   # outside-only sets: their own scale
+            sc = ax.scatter(xyz[:, 0], xyz[:, 2], c=db, s=(72 * h / 2) ** 2 / 9, marker='s', cmap='magma', vmin=lo, vmax=hi)
+            if outside.mean() > .5:
+                ax.set_ylim(-52, -28)
+            for seg in walls:
+                ax.plot(seg[:, 0], seg[:, 1], color='#4FC3F7', lw=.4)
+            d = patchiness(xyz, db, h * (2 if len(xyz) < len(grid) // 2 else 1), ~outside)
+            if q == 2 and len(d):
+                summary[(label, title)] = dict(median=float(np.median(d)), p90=float(np.percentile(d, 90)), n=int(len(d)),
+                                               inside=float(np.std(db[~outside])))
+            if q == 2 and len(d):
+                note = f'\nneighbour differences median {np.median(d):.1f} dB, 90th pct {np.percentile(d, 90):.1f} dB, max {d.max():.1f} dB'
+            elif q != 2 and outside.any():
+                note = f'\noutside: median {np.median(db[outside]):.0f} dB, max {db[outside].max():.0f} dB'
+            else:
+                note = ''
+            ax.set_title(f'{label}: {title}' + note, fontsize=9)
+            ax.set_aspect('equal'); fig.colorbar(sc, ax=ax, shrink=.7, label='dB re free field at 1 m')
+    fig.tight_layout(); fig.savefig(OUT / f'{name}.png', dpi=85); plt.close(fig)
+    (OUT / f'{name}.json').write_text(json.dumps({f'{k[0]} | {k[1]}': v for k, v in summary.items()}, indent=1) + '\n')
+    print(json.dumps({f'{k[0]} | {k[1]}': v for k, v in summary.items()}, indent=1))
+
+
 def cut_segments(world, owner, names, height):
     keep = np.array([names[o] not in ('Meadow', 'CopperRoof', 'StoneRoof') for o in owner])
     w = world[keep]
@@ -266,9 +335,14 @@ if __name__ == '__main__':
     if cmd == 'grid':
         grid(float(args[0]) if args else 1.0)
     elif cmd == 'run':
-        every = int(args.pop(args.index('--every') + 1)) if '--every' in args else 1
-        run([int(f) for f in args if f != '--every'] or [0], every)
+        def option(flag, default, kind=str):
+            return kind(args.pop(args.index(flag) + 1)) if flag in args else default
+        every, out, seeds = option('--every', 1, int), option('--out', None), option('--seeds', 1, int)
+        rays = option('--rays', None, lambda v: [int(x) for x in v.split(',')])
+        run([int(f) for f in args if not f.startswith('--')] or [0], every, out, rays, seeds)
     elif cmd == 'page':
         page()
+    elif cmd == 'compare':
+        compare(*args)
     else:
         raise SystemExit(__doc__)

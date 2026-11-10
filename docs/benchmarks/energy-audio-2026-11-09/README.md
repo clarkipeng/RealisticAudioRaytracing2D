@@ -344,3 +344,33 @@ The energy tail is now smoother than the hybrid's.
 Cost: the energy render took 2,165 s of wall time for 21 s of audio (50% pacing; 199 s on 9 November) and peaked at 2.50 GiB; the hybrid 241 s at 3.79 GiB (its filter storage, above the 3.5 GiB target, below the 4 GiB guard).
 The energy slowdown was not profiled: the re-captured scene has 36% more triangles, every edge ray from the source is now a useful (long-lived) ray instead of mostly an immediate rejection, and each solve evaluates its 14,171 edges' sampling weights with two visibility rays each; the suite's measurement solves became only 16% slower.
 Within the 2 s horizon the rendered decay of this reverberant model cannot be fitted reliably (a 2 s window truncates a 10 s decay), so the model's reverberation is reported above from the closed-volume estimate, not measured from the render.
+
+## Part F: energy maps, three rendering fixes and a realism reference (10 November)
+
+### Maps
+
+`church_map.py` measures the energy method on a grid of receivers 1.65 m above the floor (one measurement solve each, `TakeChecks.MeasureEnergyMap`) and draws total, direct, early (to 80 ms after the direct sound) and late energy over the floor plan, with the nave centreline against direct 1/r² plus the diffuse level.
+Doors closed, 2 m grid, 375 receivers, 20 minutes: the direct sound is exactly 1/r² where the organ is visible, and the late level matches the model's own diffuse estimate within 1 dB in every band.
+That level is 2–4 dB above a real church of this size (mean absorption 0.12).
+
+### Fixes
+
+1. **Late field cut at 2 s** (`lateTailSeconds`, `LateTail.cs`, `GpuAudio.compute` `LateExtend`): the synthesis kernel runs on past the simulated horizon, with each band's envelope continuing its fitted exponential decay, a smooth join and a fade at the kernel's end.
+   The Church settings continue to 16 s.
+   In the static renders the 2 s cliff is gone and mid and high bands decay cleanly to more than 60 dB down.
+   At 125–250 Hz the fitted decay is noisy from solve to solve, so the far render has a burst 60 dB down at about 12 s (a decay-rate error of a few dB per second becomes tens of dB that far out); a steadier decay estimate (from all rays, not only those near the listener) is the next step.
+2. **Transmission streaks** (`MethodEnergy.hlsl`): small transmissions into air are split off into one reservoir branch per ray instead of drawn (seed-to-seed spread of a leaked field 19%, `EnergyMethodLeaksThroughWallsSmoothly`); entering a closed solid stays a draw, because splitting there cost 47% more.
+   The streak outside the closed doors moved rather than vanished, so it comes from geometry: rays most likely slip through gaps around the door leaves (about 4 cm short of the opening on each side) or the wall mesh's 1,119 open edges.
+3. **Patchy late field** (`lateAccumulationSeconds`, `EnergyAccumulateLate`): every solve draws a new walk seed and the late histogram is their moving average (1 s in the Church walk, about 86 solves).
+   More rays were not cheap: 8,192 rays cost 4.8 times 2,048.
+   Averaging only 4 seeds on a 4 m grid already halves the neighbour-to-neighbour differences of the broadband late level (median 0.8 to 0.4 dB, worst 3.4 to 2.2 dB) with the mean unchanged within 0.2 dB.
+
+### Realism reference
+
+`realism.py` renders the Church's binaural impulse response for a static listener 10.3 m and 48 m from the organ (`StaticImpulseTake`), convolves anechoic speech and trumpet with it and with measured responses of York Minster (23.7 m) and St Paul's Cathedral (9.5 m and 31.6 m), all from the OpenAIR library (www.openairlib.net, Audiolab, University of York; CC BY 4.0), and compares decay curves, early reflections and spectra.
+The script reproduces the published T30 of both cathedrals within 0.2 s.
+At 1 kHz the Church decays like the cathedrals (T30 9.0 s against 9.1 and 7.6 s), but it has a fifth of their volume, so its reverberant level is about 7 dB higher at the same distance (C80 −3.7 dB at 10 m against +0.7 dB at 9.5 m).
+Its high frequencies ring on too long: T30 at 8 kHz is 5.4 s near and 3.8 s far, against 1.4–2.3 s measured and 2.4 s from the model's own estimate with air absorption.
+The binaural ear adds about 4 dB at 2–3 kHz that the microphone responses lack.
+Downloads, clips and the page stay in `.context/energy-audio/realism/`.
+

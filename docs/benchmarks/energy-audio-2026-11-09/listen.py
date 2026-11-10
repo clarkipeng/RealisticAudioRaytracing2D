@@ -51,8 +51,12 @@ METHODS = {
     # The diffuse field's receiver sphere is 2 m: in this 31,000 m^3 church a 0.5 m sphere is crossed
     # about 35 times per solve over 2 s by 2,048 rays, too few for a smooth 23 ms envelope; 2 m gives
     # 16x the crossings (time smear <= 12 ms, below the late field's 23 ms bins).
+    # The late field continues its fitted decay to 16 s (LateTail: the model's reverberation is
+    # 9-13 s, so a 2 s horizon cut it off while still audible), and is the moving average of
+    # solves with new walk seeds over 1 s (smooths the walk's sampling noise over about 1.4 m
+    # of walking).
     'energy': dict(COMMON, method=2, methodRays=2048, methodArrivalSlots=64, methodArrivalOrder=2, methodRouletteFloor=1e-6,
-                   specularDetectionRadius=2.0),
+                   specularDetectionRadius=2.0, lateTailSeconds=16.0, lateAccumulationSeconds=1.0, tailSamples=int(17.5 * 44100)),
 }
 # Diagnostic variants of the energy render (the coordinator's "echo doesn't sound natural" check).
 # They need the uncommitted methodDiagnosticVariant knob (.context/energy-audio/diagnostic-variants.patch):
