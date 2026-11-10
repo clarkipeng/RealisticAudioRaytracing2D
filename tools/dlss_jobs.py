@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import signal
@@ -47,21 +48,28 @@ def sha256(path):
     return h.hexdigest()
 
 
+MIN_BATTERY_PERCENT = 40   # on battery, heavy work runs only above this charge
+
+
 def on_mains():
+    """True when heavy work may run: on AC power, or on battery above MIN_BATTERY_PERCENT."""
     out = subprocess.run(['pmset', '-g', 'batt'], capture_output=True, text=True).stdout
-    return 'AC Power' in out
+    if 'AC Power' in out:
+        return True
+    charge = re.search(r'(\d+)%', out)
+    return charge is not None and int(charge.group(1)) >= MIN_BATTERY_PERCENT
 
 
 def wait_for_mains(log=print):
-    """Block while on battery: heavy work only on AC power (FDTD study hook)."""
+    """Block while the battery is low (below MIN_BATTERY_PERCENT and not on AC)."""
     told = False
     while not on_mains():
         if not told:
-            log(f'paused on battery power at {time.strftime("%H:%M:%S")}')
+            log(f'paused: battery below {MIN_BATTERY_PERCENT}% at {time.strftime("%H:%M:%S")}; plug in to continue')
             told = True
         time.sleep(60)
     if told:
-        log(f'resumed on AC power at {time.strftime("%H:%M:%S")}')
+        log(f'resumed at {time.strftime("%H:%M:%S")}')
 
 
 class PowerCheck:
@@ -149,13 +157,13 @@ class Worker:
                         jobs.signal(signal.SIGSTOP)
                         awake.terminate()   # Let the Mac sleep while the worker waits for AC power.
                         suspended, paused_at = True, time.monotonic()
-                        self.log(f'suspended worker on battery at {time.strftime("%H:%M:%S")}')
+                        self.log(f'suspended worker: battery below {MIN_BATTERY_PERCENT}% at {time.strftime("%H:%M:%S")}')
                     elif mains and suspended:
                         jobs.signal(signal.SIGCONT)
                         awake = subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
                         suspended = False
                         self.paused_seconds += time.monotonic() - paused_at
-                        self.log(f'resumed worker on AC power at {time.strftime("%H:%M:%S")}')
+                        self.log(f'resumed worker at {time.strftime("%H:%M:%S")}')
                 time.sleep(hg.ProcessTree.POLL_SECONDS)
         finally:
             jobs.kill(grace=30)   # every spawned process, incl. own-group/reparented helpers
