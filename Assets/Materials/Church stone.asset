@@ -14,13 +14,32 @@ MonoBehaviour:
   m_EditorClassIdentifier: Acoustics::AudioMaterial
   energyCurve:
   - frequencyHz: 125
-    absorption: 0.025
-    scattering: 0.12
+    absorption: 0.02
+    scattering: 0.1
+  - frequencyHz: 250
+    absorption: 0.02
+    scattering: 0.15
+  - frequencyHz: 500
+    absorption: 0.03
+    scattering: 0.25
+  - frequencyHz: 1000
+    absorption: 0.04
+    scattering: 0.35
+  - frequencyHz: 2000
+    absorption: 0.05
+    scattering: 0.45
+  - frequencyHz: 4000
+    absorption: 0.05
+    scattering: 0.5
   - frequencyHz: 8000
-    absorption: 0.055
-    scattering: 0.12
+    absorption: 0.05
+    scattering: 0.5
+  admittanceCurve: []
   roughness: 0.12
   density: 2400
+  modalYoungModulus: 2.5e+10
+  modalPoissonRatio: 0.2
+  modalLossFactor: 0.01
   porosity: 0
   rigidity: 0.9
   overrideTrans: 0

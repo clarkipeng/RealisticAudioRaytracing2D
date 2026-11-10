@@ -162,10 +162,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &6374240
 BoxCollider:
@@ -356,7 +356,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 0}
@@ -375,7 +375,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -534,7 +534,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 8300000, guid: 68ad085928904a078e7dfc926bf37f58, type: 3}
@@ -707,7 +707,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -844,10 +844,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &170326687
 BoxCollider:
@@ -913,10 +913,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &173769597
 BoxCollider:
@@ -1172,10 +1172,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &182784745
 BoxCollider:
@@ -1457,7 +1457,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d721cde51bca4b35abb5ebce8eb03843, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::BellPresentation
   sequence: {fileID: 2040307691}
   body: {fileID: 509109819}
@@ -1513,10 +1513,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &239393190
 BoxCollider:
@@ -1549,7 +1549,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -9169693097252130560, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -8679921383154817045, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1593,19 +1593,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -5951474902830249077, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -5951474902830249077, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[1]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -5951474902830249077, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -5951474902830249077, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[3]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 245ea8f5d076140fe89e9055a2862658, type: 2}
     - target: {fileID: -5852255075277058821, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: m_Enabled
@@ -1613,63 +1613,63 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -5852255075277058821, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 245ea8f5d076140fe89e9055a2862658, type: 2}
     - target: {fileID: -5852255075277058821, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[1]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -4886136397907652651, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -4703931079022847995, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -4351856715537960843, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -4186034244538136943, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -4095567839011794224, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 245ea8f5d076140fe89e9055a2862658, type: 2}
     - target: {fileID: -4095567839011794224, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[1]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -3884641393819850637, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -2782434781044353814, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -2782434781044353814, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[1]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -394683702110191107, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -394683702110191107, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[1]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48f28985bbdeb42ed991cd089156fbce, type: 2}
     - target: {fileID: -269445471253686334, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: -162742485474904936, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 48c73bbeb64014b6ab2f4cef80e6d528, type: 2}
     - target: {fileID: 919132149155446097, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: m_Name
@@ -1677,11 +1677,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3713471160790072868, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 245ea8f5d076140fe89e9055a2862658, type: 2}
     - target: {fileID: 6745993634312832048, guid: 2bd2e579be6b54ab1851a34a4589a6ff, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 66e05dada921e4f54bd42acc94a4a59f, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1853,7 +1853,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8bc84f613ce244b883f940e91bc5642f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::SlidingDoor
   id: FrontDoorLeft
   openOffset: {x: -2, y: 0, z: 0}
@@ -1870,7 +1870,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -1907,10 +1907,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
+  material: {fileID: 11400000, guid: 2c57dec05e5b34aafb8c8bcf52a0a25b, type: 2}
   submeshMaterials: []
 --- !u!64 &249064761
 MeshCollider:
@@ -2067,7 +2067,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -2103,7 +2103,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -2173,7 +2173,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -2209,10 +2209,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
+  material: {fileID: 11400000, guid: 1fafee7852f064a7fb06e7a911eeceee, type: 2}
   submeshMaterials: []
 --- !u!64 &322403870
 MeshCollider:
@@ -2336,7 +2336,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -2406,10 +2406,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &374884892
 BoxCollider:
@@ -2689,10 +2689,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &422945452
 BoxCollider:
@@ -3191,7 +3191,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -3562,7 +3562,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -3728,7 +3728,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ce26cb95f3134896ae9d907ab4c1dbd1, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::BirdPresentation
   sequence: {fileID: 2040307691}
   target: bird
@@ -4060,7 +4060,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 8300000, guid: 606e852faa8b47f48e9f8e9996e11511, type: 3}
@@ -4458,7 +4458,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 0}
@@ -4578,10 +4578,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &753499898
 BoxCollider:
@@ -4791,7 +4791,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -4895,10 +4895,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &766292408
 BoxCollider:
@@ -5643,7 +5643,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -5805,7 +5805,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 8300000, guid: 4028c368f8bf142e7ad2754adad07025, type: 3}
@@ -5824,7 +5824,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9ea92477bc2b4fca8ac8454e9276e84b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AudioSourcePlane
   size: {x: 58, y: 86}
   mask: {fileID: 0}
@@ -5916,7 +5916,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3802384937062502837, guid: 541e07faacf6947fcb162196fecb1346, type: 3}
       propertyPath: clip
-      value:
+      value: 
       objectReference: {fileID: 8300000, guid: cbfcda751c4c040909b864efb08e7474, type: 3}
     - target: {fileID: 3802384937062502837, guid: 541e07faacf6947fcb162196fecb1346, type: 3}
       propertyPath: gain
@@ -5981,7 +5981,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
 --- !u!1 &1002297435
 GameObject:
@@ -6190,7 +6190,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 0}
@@ -6673,10 +6673,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1084418055
 BoxCollider:
@@ -6958,7 +6958,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c6a028ccc88aa43b2a12d60ce01ba67e, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::ChurchPresentationGrade
   shader: {fileID: 4800000, guid: b0d4d2bf163824a82919f107d56c372a, type: 3}
   contrast: 1.08
@@ -6975,7 +6975,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f0329af47863747ffa6a450532ff5b0f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::ChurchAvatarPresenter
   animator: {fileID: 1793212907}
   renderers:
@@ -6990,7 +6990,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b17bde5e7a3f4bac8620ff924252e304, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AudioSourceOverlay
   manager: {fileID: 1893978481}
   visible: 1
@@ -7071,10 +7071,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1163766948
 BoxCollider:
@@ -7140,10 +7140,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1205103284
 BoxCollider:
@@ -7209,10 +7209,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1208748092
 BoxCollider:
@@ -7666,10 +7666,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1249466482
 BoxCollider:
@@ -7825,7 +7825,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 0}
@@ -7877,7 +7877,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -8126,7 +8126,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1893978481}
   clip: {fileID: 8300000, guid: 1b85096b53274810a067c2788d4e7236, type: 3}
@@ -8145,7 +8145,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9ea92477bc2b4fca8ac8454e9276e84b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AudioSourcePlane
   size: {x: 80, y: 70}
   mask: {fileID: 2800000, guid: e60efef16b3054e489f0b18c44d28a41, type: 2}
@@ -8346,7 +8346,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -8416,7 +8416,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -8582,7 +8582,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -8651,10 +8651,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1336129655
 BoxCollider:
@@ -8810,10 +8810,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1354400240
 BoxCollider:
@@ -8879,10 +8879,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1365545043
 BoxCollider:
@@ -9136,7 +9136,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -9995,10 +9995,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1521465393
 BoxCollider:
@@ -10064,7 +10064,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -10194,7 +10194,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3802384937062502837, guid: 541e07faacf6947fcb162196fecb1346, type: 3}
       propertyPath: clip
-      value:
+      value: 
       objectReference: {fileID: 8300000, guid: bea52c6c352a6464c9af1b06e9ba7215, type: 3}
     - target: {fileID: 3802384937062502837, guid: 541e07faacf6947fcb162196fecb1346, type: 3}
       propertyPath: gain
@@ -10259,7 +10259,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
 --- !u!1 &1562684419
 GameObject:
@@ -10525,7 +10525,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -3566646993425836336, guid: d448f4f8efcc04525aa6a6c8d7469f75, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 3b71e9969919e44f6bfbd7f5322721c3, type: 2}
     - target: {fileID: 919132149155446097, guid: d448f4f8efcc04525aa6a6c8d7469f75, type: 3}
       propertyPath: m_Name
@@ -10533,11 +10533,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3552813307846487698, guid: d448f4f8efcc04525aa6a6c8d7469f75, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 180cfa3e00cd74516b1013f0ee7c66fa, type: 2}
     - target: {fileID: 3552813307846487698, guid: d448f4f8efcc04525aa6a6c8d7469f75, type: 3}
       propertyPath: 'm_Materials.Array.data[5]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: f7103255eeb854ffead7dc982755dfc8, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -10615,7 +10615,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -11019,10 +11019,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1654447324
 BoxCollider:
@@ -11088,10 +11088,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1660072151
 BoxCollider:
@@ -11507,10 +11507,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
+  material: {fileID: 11400000, guid: 3edcc36fb829d4a5386cbbb5de9895f0, type: 2}
   submeshMaterials: []
 --- !u!23 &1689766347
 MeshRenderer:
@@ -11723,10 +11723,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1701859394
 BoxCollider:
@@ -12094,10 +12094,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1767017761
 BoxCollider:
@@ -12163,7 +12163,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -12255,7 +12255,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2049929814205202405, guid: b376443fa58924275960e34f63bd7d67, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: e49da4dbdd10345619758fdebb3d352f, type: 2}
     - target: {fileID: 919132149155446097, guid: b376443fa58924275960e34f63bd7d67, type: 3}
       propertyPath: m_Name
@@ -12301,7 +12301,7 @@ Animator:
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_AnimatePhysics: 0
-  m_WarningMessage:
+  m_WarningMessage: 
   m_HasTransformHierarchy: 1
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
@@ -12496,7 +12496,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -12566,7 +12566,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -12635,10 +12635,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &1836907627
 BoxCollider:
@@ -12982,7 +12982,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -13224,10 +13224,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 34a19a2aeb3ce431491c9ef2f33979c8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::MicrophoneInput
   source: {fileID: 1025448756}
-  device:
+  device: 
   monitorSelf: 0
 --- !u!114 &1893978477
 MonoBehaviour:
@@ -13239,7 +13239,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c9e9d8c272d4472f90178a67fcf6128, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::MultiplayerSession
   session: {fileID: 1893978479}
   microphone: {fileID: 1893978476}
@@ -13268,7 +13268,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8d4f7df1ef1c4a348a1c6747e02f0c40, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytraceControlPanel
   rayTraceManager: {fileID: 1893978481}
   session: {fileID: 1893978479}
@@ -13286,7 +13286,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1c871ed719fb48a380f74d94e904c36d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::SceneSession
   manager: {fileID: 1893978481}
   player: {fileID: 1132085636}
@@ -13307,7 +13307,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a2b430a59924455e84d12c6a2e3434d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AudioManager
   paused: 0
   muteOutput: 0
@@ -13321,7 +13321,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2913e124272014f598570cc1c30f24bc, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RayTraceManager
   audioManager: {fileID: 1893978480}
   sampleRate: 44100
@@ -13346,8 +13346,23 @@ MonoBehaviour:
     synthesis: 1
     audioBackend: 0
     raysPerBin: 2
+    reflectionSampling: 0
+    reflectionCandidates: 128
+    completeRouteSamples: 0
+    familyGains: 0
     maxBounces: 32
+    lateRays: 512
+    lateReceiverRadius: 0.5
     seed: 0
+    method: 0
+    methodRays: 4096
+    specularDetectionRadius: 0.25
+    methodEdgeProbability: 0.5
+    methodRouletteFloor: 0.000001
+    methodArrivals: 1
+    methodArrivalOrder: 2
+    methodArrivalSlots: 64
+    methodMaxEvents: 65536
     raysPerPair: 0
     diffractionFactor: 0
     airAbsorption: 1
@@ -13357,7 +13372,7 @@ MonoBehaviour:
   monitorLeadSamples: 16384
   monitorCapacitySamples: 96000
   liveDiagnostics:
-    backend:
+    backend: 
     scope: producer/callback counters; final report includes output drain
     sampleRate: 0
     responseCount: 0
@@ -13630,14 +13645,14 @@ MonoBehaviour:
   takeListeners:
   - {fileID: 1132085635}
   replayMotionWriters: []
-  takePath:
+  takePath: 
   replaySeconds: 0
   SessionInfo:
-    scene:
-    sessionId:
-    clientId:
-    mode:
-    build:
+    scene: 
+    sessionId: 
+    clientId: 
+    mode: 
+    build: 
     slots: 0
     localSlot: 0
     serverTimeOrigin: 0
@@ -13666,7 +13681,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b89ff0e554bae463197f9b2520c27a36, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::ChurchVisualPreset
   activePreset: 0
   bindings:
@@ -14493,7 +14508,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -14530,7 +14545,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -14567,7 +14582,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 319d767025b35477d9d22340dc18a22f, type: 2}
@@ -14701,7 +14716,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8bc84f613ce244b883f940e91bc5642f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::SlidingDoor
   id: FrontDoorRight
   openOffset: {x: 2, y: 0, z: 0}
@@ -14718,7 +14733,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
@@ -14858,7 +14873,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 08b1024752c1f4ddca3516a7c88e4a7f, type: 2}
@@ -14997,7 +15012,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 388847476dac4ae6b6cb5e15d21de083, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::SceneSequenceActor
   id: church-sequence
   sequence: {fileID: 11400000, guid: cd0ca473ef03b47f8b43a06280fb21a5, type: 2}
@@ -15022,7 +15037,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cebc6c2fa0cb452aa31409e1d476db91, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::EnvironmentPresentation
   sequence: {fileID: 2040307691}
   sun: {fileID: 1643691595}
@@ -15334,7 +15349,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
   material: {fileID: 11400000, guid: 68cef48b7b3d340ae962c555a3470df0, type: 2}
@@ -15551,10 +15566,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
   submeshMaterials: []
 --- !u!65 &2108006175
 BoxCollider:
