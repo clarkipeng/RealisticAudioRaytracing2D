@@ -2289,6 +2289,8 @@ A family whose candidate count exceeds 2^18 (order 2 above 512 planes; DD above 
 Russian roulette survives with `min(1, throughput / (probability · methodRouletteFloor))`, floor 1e-6: paths above −60 dB always continue, so the path count stays constant over the decay instead of falling with the energy (at the energy rate, 2,048 rays left a handful of paths 0.3 s into a wood room).
 Specular segments reach the listener through a track-length receiver sphere of radius `specularDetectionRadius` (score `Φ · chord · 3 / (4π r³)` for a ray of flux `Φ`, listener-visible chords only), as the hybrid's late field; the exact-retrace detection it replaces divided by the full cone probability and was biased low wherever the cone straddled a visibility boundary.
 The sphere's time smear (up to `2r/c`) applies only to the diffuse part; arrivals are exact.
+Its radius sets how many rays the diffuse field averages: crossings scale with `r² / V`, so large rooms need a larger sphere (the Church listening render uses 2 m; a 0.5 m sphere there is crossed about 35 times per solve and the tail breaks into frozen bursts).
+Edge rays (diffraction continued into the walk) leave the source only, importance-sampled per solve: edge `e` with probability proportional to `angle_e ∫ dz / m²` along it (times 1 if a quick visibility test sees it, else 0.1) and the point with density `∝ 1/m²`, so a ray's flux is bounded; scattering points diffract only through their D/RD/DD connections (10 November, docs/benchmarks/energy-audio-2026-11-09).
 
 **Doppler.**
 Velocities come from the solve's states (`VelocityValid`).

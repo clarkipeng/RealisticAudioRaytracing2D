@@ -217,3 +217,130 @@ $PY tools/method_runs.py jobs goalA-rr6 --scenes shoebox-0020-presets shoebox-00
 $PY $B/lattice.py shoebox-0020-presets 1.5 && $PY $B/figures.py       # wall law and figures
 nice -n 19 $PY $B/listen.py render energy && nice -n 19 $PY $B/listen.py render hybrid && $PY $B/listen.py page
 ```
+
+## Part D: the reverb-tail bursts
+
+The user heard the energy render's echo as unnatural.
+The [render inspection](render_inspection.py) traced it to the diffuse field: while the listener stood still, a median 43% of a solve's tail energy sat in a single 23 ms slice, and the deconvolved audio had bursts 7–11 dB louder than the direct sound 0.2, 0.29 and 0.43 s after it, frozen in place because every solve uses the same seed.
+
+**Cause.**
+An edge ray picked its edge uniformly from all edges (10,249 in the Church) and its point uniformly along the edge, so its flux carried the edge count times `1/m²`, `m` the distance from the anchor to the edge point.
+The few rays that drew an edge close to the source carried enormous weights; their sphere hits were the bursts (with edge rays switched off the largest slice fell from 43% to 13%; with another seed the bursts moved).
+
+**Fix (unbiased, no clipping).**
+Edge rays now leave the source only, with the edge and the point importance-sampled per solve (`EnergyEdgeWeights`, `EnergyEdgeScan`):
+- edge `e` is drawn with probability proportional to `angle_e · ∫ dz / m²` over the edge, which is `angle_e (atan((L − z0)/r) − atan(−z0/r)) / r` for a source at distance `r` from the edge line, times one if a cheap visibility test sees the edge and 0.1 otherwise (so partly visible edges stay reachable);
+- the point is drawn with density proportional to `1/m²` (a Cauchy law about the foot of the perpendicular), which cancels the `1/m²` of the flux exactly.
+A ray's flux is then `|D|² sin²β I` times the total weight over the visibility factor: bounded, where it used to scale with the edge count and diverge near an edge.
+Edge rays no longer start at scattering points (their uniform edge choice had the same divergence); a scattering point's diffraction is its D/RD/DD connections to the listener, and scatter → edge → reflection chains are omitted.
+The walk keeps one fixed seed: with bounded weights a fixed seed gives a stable tail that changes smoothly with movement, while a new seed per solve would add frame-to-frame flicker of the size of the seed-to-seed spread (measured below).
+
+**Results.**
+Whole walk inside the Church (0–10 s, 431 solves), 1 kHz band, first 2 s of the diffuse field in 23 ms slices (`render_inspection.py tail_acceptance`):
+
+| Walk | Largest slice share of the tail energy (median / 90th percentile) |
+|---|---:|
+| 9 November (uniform edge rays) | 43% / 52% |
+| importance-sampled edge rays, 0.5 m receiver sphere, seed 0 | 21% / 22% |
+| the same, seed 1 | 19% / 26% |
+| re-captured Church (new materials), 0.5 m sphere, 40 solves | 17% / 26% |
+| the same with a 2 m receiver sphere (the listening render) | 9% / 13% |
+| the same with 0.5 m and 8,192 rays (4x the cost) | 9% / 14% |
+
+A smooth decay at this church's reverberation time puts about 8% in its largest slice.
+The edge fix halved the share; what remained was not diffraction (switching diffraction off left 21%) nor the listener-near diffuse connections (a 1 m minimum distance changed nothing), but sparse receiver-sphere hits: in a 31,000 m³ room 2,048 rays cross a 0.5 m sphere only about 35 times over 2 s, so specularly reflected late energy arrives in a few frozen hits.
+The sphere radius sets how many rays the diffuse field averages; the listening render uses 2 m (16 times the crossings), which smears arrival times by at most 12 ms, below the late field's 23 ms slices, and averages the diffuse field over a region the six-direction late synthesis cannot resolve anyway.
+Large rooms need a larger diffuse receiver than small ones; it is a setting (`specularDetectionRadius`), and the comparison suite keeps 0.25 m.
+Seed: the walk keeps one fixed seed per render; seed 0 against seed 1 differs by a median 2.4 dB per slice (90th percentile 16 dB at 0.5 m), which is the frame-to-frame flicker a new seed per solve would add.
+The deconvolved Church render (below) is the check that no burst is louder than the direct sound.
+
+**Suite re-score (no regression).**
+The 11-scene ground-truth comparison at 2,048 rays, energy method 6 November → 9 November (arrivals, roulette floor, sphere) → now (edge fix), with the hybrid:
+
+| Scenes | Metric | 6 Nov | 9 Nov | now | hybrid |
+|---|---|---:|---:|---:|---:|
+| closed | level dB RMS | 1.99 | 2.01 | 1.99 | 3.89 |
+| closed | EDT % | 31.6 | 19.6 | 18.4 | 31.1 |
+| closed | T20 % | 38.1 | 22.5 | 17.5 | 13.1 |
+| closed | T30 % | 42.4 | 26.4 | 23.9 | 27.6 |
+| closed | ETC dB | 19.2 | 5.65 | 5.47 | 5.76 |
+| open | level dB RMS | 4.38 | 3.23 | 3.23 | 6.02 |
+| open | T30 % | 90.4 | 142.0 | 83.9 | 72.7 |
+| open | EDT % | 248 | 204 | 298 | 425 |
+| open | ETC dB | 17.8 | 16.6 | 16.5 | 14.9 |
+| all | level dB RMS, 256 rays | 4.92 | 3.08 | 3.05 | 9.56 |
+| all | level dB RMS, 2,048 rays | 4.04 | 3.04 | 3.04 | 5.68 |
+
+Every closed-room metric improved or held; open levels held.
+The open EDT average rose only through `canopy-bem` (418% → 687%), a rigid open fixture with almost no decay to fit, where EDT is noise for every method; `doorway-0008` improved (EDT 312% → 231%, T30 411% → 162%).
+The method checks pass (21 passed, 1 known skip), and the measurement solve costs 80 ms per solve on average (69 ms before; the per-solve edge distribution).
+
+## Part E: realistic Church acoustics
+
+### Materials
+
+Absorption coefficients are published octave-band values: M. Vorländer, *Auralization* (Springer 2008), annex tables, as transcribed in the [pyroomacoustics material database](https://pyroomacoustics.readthedocs.io/en/latest/pyroomacoustics.materials.database.html) (keywords in brackets; its [`parameters.py`](https://github.com/LCAV/pyroomacoustics/blob/master/pyroomacoustics/parameters.py) names that annex as the source), and the classic smooth-plaster and occupied-pew rows as reproduced by [sengpielaudio](https://sengpielaudio.com/calculator-RT60Coeff.htm) (their 8 kHz value repeats 4 kHz).
+Scattering coefficients (ISO 17497-1 sense) for the pews are the same appendix's seating-row values; the others are engineering estimates in the ODEON manner (Christensen & Rindel, Forum Acusticum 2005: a mid-frequency value set by the surface's relief depth, rising with frequency), with large smooth surfaces near 0.05–0.1 and ornamented masonry rising to 0.5 above 2 kHz.
+They are estimates, not measurements of this building.
+
+| Material (objects) | Source | α 125 | 250 | 500 | 1k | 2k | 4k | 8k | s 125 | 250 | 500 | 1k | 2k | 4k | 8k |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Church stone (StoneBrickWalls, StoneBeams, SideStairs, FrontDoorFrame, Altar body) | Limestone walls [limestone_wall]; scattering estimated for ornamented masonry (pilasters, reveals, joints) | 0.02 | 0.02 | 0.03 | 0.04 | 0.05 | 0.05 | 0.05 | 0.1 | 0.15 | 0.25 | 0.35 | 0.45 | 0.5 | 0.5 |
+| Church plaster vault (StoneRoof) | Plaster, smooth on tile/brick (classic table); smooth vault scattering (estimate) | 0.013 | 0.015 | 0.02 | 0.03 | 0.04 | 0.05 | 0.05 | 0.05 | 0.05 | 0.07 | 0.1 | 0.12 | 0.15 | 0.15 |
+| Church floor (Stone floor and courtyard) | Marble floor [marble_floor]; smooth paving (estimate) | 0.01 | 0.01 | 0.01 | 0.02 | 0.02 | 0.02 | 0.02 | 0.05 | 0.05 | 0.07 | 0.1 | 0.12 | 0.15 | 0.15 |
+| Church wood (FrontDoorLeft, FrontDoorRight, SideDoor, Organ case, Organ tower) | Solid wooden door [wooden_door] (doors, organ case); panelled wood scattering (estimate) | 0.14 | 0.1 | 0.06 | 0.08 | 0.1 | 0.1 | 0.1 | 0.05 | 0.07 | 0.1 | 0.15 | 0.2 | 0.25 | 0.25 |
+| Church pews (Seat, Back) | 16 mm wood on studs [wood_16mm]; seating-row scattering [theatre_audience] | 0.18 | 0.12 | 0.1 | 0.09 | 0.08 | 0.07 | 0.07 | 0.3 | 0.5 | 0.6 | 0.6 | 0.7 | 0.7 | 0.7 |
+| Church pews occupied (not assigned) | Occupied wooden pews (classic table; 8 kHz = 4 kHz); not assigned (optional) | 0.57 | 0.61 | 0.75 | 0.86 | 0.91 | 0.86 | 0.86 | 0.3 | 0.5 | 0.6 | 0.6 | 0.7 | 0.7 | 0.7 |
+| Church glass (Windows) | Single pane of glass, 3 mm [glass_3mm] (leaded windows); smooth (estimate) | 0.08 | 0.04 | 0.03 | 0.03 | 0.02 | 0.02 | 0.02 | 0.05 | 0.05 | 0.05 | 0.05 | 0.07 | 0.1 | 0.1 |
+| Church copper roof (CopperRoof) | Interior side of the copper roof: 12 mm wooden lining on frame [wooden_lining]; rafters and trusses (estimate) | 0.27 | 0.23 | 0.22 | 0.15 | 0.1 | 0.07 | 0.06 | 0.1 | 0.15 | 0.2 | 0.3 | 0.4 | 0.4 | 0.4 |
+
+The optional `Church pews occupied` material (occupied wooden pews) exists but is not assigned.
+
+### Interior proxies
+
+The current Church scene already carries the interior the request asked for: all 12 visual pews have acoustic seat and back boxes (wooden pews, 4 × 0.65 m seats, 0.8 m backs, in two blocks either side of the centre aisle), and the nave arcades (the columns and arches) are a stone mesh collider of 2,260 triangles.
+`church.py plan` checks this against the visual model (`inventory.json`) and adds proxies only where the acoustic model lacks them, so none were added; an earlier draft added ten 0.62 m pier boxes inside the existing arcade columns, which were removed again.
+The October take predates the arcades, the reading chapel, the baptistery and the chapel portals: the re-captured walk has 17,321 acoustic triangles against 12,761.
+The walk route (centre aisle, doors, courtyard) is unchanged; the re-capture starts at the first player spawn, inside the nave, as the October probe did (the scene's authored player now stands outside for the weather walk), and ends at the same point (12.00, 1.08, −46.27).
+The model still has openings to the outside about 2 m wide (transept gables 17–21 m up, chancel and transept walls 8–14 m up, the belfry about 32 m up) with no glass in the visual model either; they were left open.
+
+![Openings](church-openings.png)
+
+### Volume, surfaces and predicted reverberation
+
+`church_room.py` voxelises the take at its first pose (doors closed), seals gaps narrower than about 2 m, and takes the enclosed air around the nave as the interior; every triangle touching it counts as interior surface.
+Both counts are approximate (the seal removes thin features such as the pews from the area count).
+
+| | October take, old materials | Re-captured, new materials |
+|---|---:|---:|
+| Interior volume | 31,500 m³ | 31,300 m³ |
+| Interior surface | 9,600 m² | 10,100 m² |
+| Mean absorption 125 / 500 / 2,000 Hz | 0.025 / 0.026 / 0.032 | 0.039 / 0.037 / 0.046 |
+| Eyring T (air 20 °C, 50–70% RH), 125 / 250 / 500 / 1k / 2k / 4k / 8k Hz | 18.5 / 16.6 / 14.4 / 12.0 / 9.3 / 5.5 / 2.2 s | 12.2 / 13.3 / 11.0 / 9.0 / 7.4 / 5.2 / 2.4 s |
+
+For comparison, the Basilica of Saint Mary Major in Rome (38,000 m³, 12,000 m², unoccupied) measures T30 = 4.3 s at 500–1,000 Hz, about 4.7 s below 500 Hz and 1.7 s at 8 kHz; St John Lateran (120,000 m³) 5.9 s and St Peter's (500,000 m³) 9.9 s ([Martellotta 2016, J. Sound Vib. 382](https://iris.poliba.it/bitstream/11589/79381/4/JSV_2016_postprint.pdf), Table 1).
+A closed volume of this size with these surfaces would therefore ring two to three times longer than a real church of the same size: the real one implies a mean absorption near 0.12 (`0.161 V / (T S)`), the model has 0.04.
+The tabulated coefficients are right for bare stone, plaster, glass and wood; what the model lacks is the absorbing content of a real church (many more pews, kneelers, wall hangings, side chapels and furnishings, the organ, people).
+The rendered model decays faster than this closed-volume estimate because of its openings: the walk's own decay at the listener was T20 ≈ 5.6 s at 125–500 Hz before the change (openings act as perfect absorbers).
+The optional `Church pews occupied` material (occupied wooden pews) is provided but not assigned.
+
+### Re-render
+
+The Church speech walk was re-captured from the updated scene (same scripted walk, same organ source and speech, `church.py capture`) and rendered with the energy method (edge fix, 2 m diffuse receiver) and the hybrid (Church preset transport), with the settings of the 9 November renders otherwise.
+Page: `.context/energy-audio/listen/index.html`; it now plays `energy.wav` and `hybrid.wav` (new) and `energy-before.wav` and `hybrid-before.wav` (9 November) at one shared gain, and the live view's `energy.wav`/`hybrid.wav` point at the new renders.
+
+Bursts, from each render's response while the listener stands (0–5 s, deconvolved from the mono sum and the source speech, 10 ms slices 100–700 ms after the direct sound, each against the median of its ±50 ms neighbourhood):
+
+| Render | Loudest slice over its neighbourhood | Slices more than 6 dB above it |
+|---|---:|---:|
+| energy, 9 November | +18.9 dB | 11 |
+| energy, now | +6.3 dB | 2 |
+| hybrid, 9 November | +10.0 dB | 3 |
+| hybrid, now | +13.6 dB | 3 |
+
+The energy tail is now smoother than the hybrid's.
+"No slice louder than the direct sound" is the wrong yardstick here: 48 m from the organ, far beyond the critical distance (about 4.5 m), a smooth reverberant tail itself carries more energy per 10 ms than the direct sound (the new energy render's tail sits a median 2.7 dB above it); the neighbourhood measure above is what separates bursts from reverberation.
+
+Cost: the energy render took 2,165 s of wall time for 21 s of audio (50% pacing; 199 s on 9 November) and peaked at 2.50 GiB; the hybrid 241 s at 3.79 GiB (its filter storage, above the 3.5 GiB target, below the 4 GiB guard).
+The energy slowdown was not profiled: the re-captured scene has 36% more triangles, every edge ray from the source is now a useful (long-lived) ray instead of mostly an immediate rejection, and each solve evaluates its 14,171 edges' sampling weights with two visibility rays each; the suite's measurement solves became only 16% slower.
+Within the 2 s horizon the rendered decay of this reverberant model cannot be fitted reliably (a 2 s window truncates a 10 s decay), so the model's reverberation is reported above from the closed-volume estimate, not measured from the render.

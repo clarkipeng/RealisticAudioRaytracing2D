@@ -28,7 +28,13 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'tools'))
 import dlss_jobs as dj  # noqa: E402
 
-TAKE = ROOT / '.context/church-motion/speech-full/take'
+# The speech walk re-captured with the published materials and interior proxies (church.py capture);
+# the 15 October capture before it.
+TAKE_BEFORE = ROOT / '.context/church-motion/speech-full/take'
+TAKE = ROOT / '.context/energy-audio/church/speech-walk/take'
+if not (TAKE / 'take.json').exists():
+    TAKE = TAKE_BEFORE
+BEFORE = ROOT / '.context/energy-audio/listen/before-2026-11-09'   # the 9 November renders (old materials, old edge sampling)
 WORK = ROOT / '.context/energy-audio/listen'
 LOGS = ROOT / '.context/energy-audio/logs'
 # Shared by both renders: the Church walk's spectral DSP, binaural, 2 s horizon, air absorption.
@@ -42,8 +48,11 @@ METHODS = {
     'hybrid': dict(COMMON, method=0, raysPerBin=2, reflectionCandidates=128, completeRouteSamples=0, diffractionFactor=0.0,
                    lateRays=512, lateReceiverRadius=.5),
     # Energy method: exact discrete arrivals + the energy walk as the late field.
+    # The diffuse field's receiver sphere is 2 m: in this 31,000 m^3 church a 0.5 m sphere is crossed
+    # about 35 times per solve over 2 s by 2,048 rays, too few for a smooth 23 ms envelope; 2 m gives
+    # 16x the crossings (time smear <= 12 ms, below the late field's 23 ms bins).
     'energy': dict(COMMON, method=2, methodRays=2048, methodArrivalSlots=64, methodArrivalOrder=2, methodRouletteFloor=1e-6,
-                   specularDetectionRadius=.5),
+                   specularDetectionRadius=2.0),
 }
 # Diagnostic variants of the energy render (the coordinator's "echo doesn't sound natural" check).
 # They need the uncommitted methodDiagnosticVariant knob (.context/energy-audio/diagnostic-variants.patch):
@@ -174,14 +183,14 @@ def level_figure(path, tracks, rate):
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    colors = dict(hybrid='#0072B2', energy='#009E73')
+    colors = {'hybrid': '#0072B2', 'energy': '#009E73', 'energy-before': '#999999'}
     fig, ax = plt.subplots(figsize=(10, 3.2))
     block = rate // 20
     for name, pcm in tracks.items():
         mono = (pcm ** 2).mean(1)
         n = len(mono) // block
         level = 10 * np.log10(np.maximum(mono[:n * block].reshape(n, block).mean(1), 1e-12))
-        ax.plot(np.arange(n) * block / rate, level, color=colors[name], lw=1, label=name)
+        ax.plot(np.arange(n) * block / rate, level, color=colors.get(name, '#999999'), lw=.8 if name.endswith('before') else 1, label=name)
     for t, label in [(3, 'head turns'), (5, 'walk to organ'), (7, 'walk back'), (10, 'doors open'), (11.6, 'outside'), (18, 'speech ends')]:
         ax.axvline(t, color='#999999', lw=.6); ax.text(t + .1, ax.get_ylim()[1] - 6, label, fontsize=7, color='#666666')
     ax.set_xlabel('time (s)'); ax.set_ylabel('level, 50 ms (dB)'); ax.grid(alpha=.3); ax.legend(fontsize=8)
@@ -193,8 +202,8 @@ def page():
     scene_map(WORK / 'scene-map.png')
     tracks, reports = {}, {}
     rate = None
-    for name in ('energy', 'hybrid', *VARIANTS):
-        folder = WORK / name
+    for name in ('energy', 'hybrid', 'energy-before', 'hybrid-before', *VARIANTS):
+        folder = BEFORE / name.replace('-before', '') if name.endswith('-before') else WORK / name
         if not (folder / 'listener-0.wav').exists():
             continue
         pcm, rate = read_wav(folder / 'listener-0.wav')
@@ -204,19 +213,21 @@ def page():
         reports[name] = report
     if not tracks:
         raise SystemExit('No renders yet.')
-    peak = max(np.abs(tracks[n]).max() for n in ('energy', 'hybrid') if n in tracks)  # variants share this gain
+    peak = max(np.abs(tracks[n]).max() for n in ('energy', 'hybrid', 'energy-before', 'hybrid-before') if n in tracks)  # all tracks share this gain
     gain = .5 / peak
     for name, pcm in tracks.items():
         write_wav16(WORK / f'{name}.wav', pcm * gain, rate)
-    level_figure(WORK / 'levels.png', {n: tracks[n] for n in ('energy', 'hybrid') if n in tracks}, rate)
+    level_figure(WORK / 'levels.png', {n: tracks[n] for n in ('energy-before', 'energy', 'hybrid') if n in tracks}, rate)
     rows = []
     for name, r in reports.items():
-        if name in VARIANTS:
+        if name in VARIANTS or name.endswith('-before'):
             continue
         rms = 20 * math.log10(math.sqrt((tracks[name] ** 2).mean()) * gain)
         audio = r.get('gpuAudio') or {}
         rows.append(f"<tr><td>{name}</td><td>{r.get('wallSeconds', 0):.0f} s</td><td>{audio.get('peakGroups', 0)}</td><td>{rms:.1f} dBFS</td></tr>")
     players = '\n'.join(f'<h3>{name}</h3><audio controls preload="auto" src="{name}.wav" style="width:100%"></audio>' for name in ('energy', 'hybrid') if name in tracks)
+    players += '<h3>Before (9 November: old materials, old edge sampling)</h3>' + '\n'.join(
+        f'<h4>{name}</h4><audio controls preload="auto" src="{name}.wav" style="width:100%"></audio>' for name in ('energy-before', 'hybrid-before') if name in tracks)
     variants = '\n'.join(f'<h4>{name}</h4><audio controls preload="auto" src="{name}.wav" style="width:100%"></audio>' for name in VARIANTS if name in tracks)
     if variants:
         players += ('<h3>Diagnostic variants of the energy render (same gain)</h3><p>diffuse-only: only the direct sound is discrete, everything else is the diffuse field; '
