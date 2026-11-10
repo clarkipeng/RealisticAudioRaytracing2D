@@ -48,7 +48,8 @@ def sha256(path):
     return h.hexdigest()
 
 
-MIN_BATTERY_PERCENT = 40   # on battery, heavy work runs only above this charge
+# On battery, heavy work runs only above this charge; HEAVY_MIN_BATTERY overrides it for one run.
+MIN_BATTERY_PERCENT = int(os.environ.get('HEAVY_MIN_BATTERY', 40))
 
 
 def on_mains():
