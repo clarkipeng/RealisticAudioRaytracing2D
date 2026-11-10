@@ -59,9 +59,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly RayTransport.Layout layout;
     readonly ComputeShader shader;
     readonly Action bind;
-    readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, outputCount, statsCount, frequencyBins, rate;
+    readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, outputCount, statsCount, frequencyBins, rate;
     readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, output, stats, emptyCapture;
-    readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths;
+    readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf;
     public readonly uint[] Output, Stats;
     // CPU copies for the CPU reference audio (readback only when requested).
     public readonly RayTransport.Path[] Paths;
@@ -112,8 +112,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
         {
             arrivalKernel = shader.FindKernel("EnergyArrivals3D" + suffix);
             selectKernel = shader.FindKernel("EnergySelectArrivals"); expandKernel = shader.FindKernel("EnergyExpandArrivals");
+            edgeWeightKernel = shader.FindKernel("EnergyEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("EnergyEdgeScanKernel");
         }
-        foreach (int kernel in new[] {traceKernel, clearKernel, arrivalKernel, selectKernel, expandKernel})
+        foreach (int kernel in new[] {traceKernel, clearKernel, arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel})
             if (kernel >= 0 && !shader.IsSupported(kernel)) throw new NotSupportedException("Method kernels are unavailable on this GPU.");
         frequencyBins = settings.FrequencyBins;
         ArrivalSlots = audio ? settings.methodArrivalSlots : 0;
@@ -210,6 +211,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             arrivalCounts = new ComputeBuffer(Math.Max(1, solves), 4);
             selected = new ComputeBuffer(Math.Max(1, checked(solves * Math.Max(1, ArrivalSlots))), 4);
             paths = new ComputeBuffer(audio ? Math.Max(1, checked(Frames * PathsPerFrame)) : 1, RayTransport.PathStride);
+            edgeCdf = new ComputeBuffer(Math.Max(1, EdgeCount), 4); edgeCdf.SetData(new float[Math.Max(1, EdgeCount)]);
             Paths = new RayTransport.Path[audio && readback ? checked(Frames * PathsPerFrame) : 0];
             // Both outputs are (low, high) 32.32 fixed-point pairs.
             outputCount = audio ? checked(2 * Frames * Pairs * Directions * Bands * Math.Max(1, Bins))
@@ -225,7 +227,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             int volumeCount = volumeData.Length, keptCount = kept.Count;
             bool anyTransmission = transmissive || volumeData.Length > 0;
             var kernels = new List<int> {traceKernel, clearKernel};
-            if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel});
+            if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
             bind = () =>
             {
             foreach (int kernel in kernels)
@@ -242,6 +244,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                     shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
                     shader.SetBuffer(kernel, "MethodSelected", selected); shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes);
                     shader.SetBuffer(kernel, "MethodPlanePrimitive", planePrimitives); shader.SetBuffer(kernel, "RayPaths", paths);
+                    shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf);
                 }
             }
             shader.SetInt("PrimitiveCount", geometry.Length);
@@ -332,6 +335,12 @@ internal sealed class MethodTransport : IDisposable, ILateField
         }
         shader.Dispatch(selectKernel, (ArrivalCapacity + 63) / 64, 1, 1);
         if (Audio && ArrivalSlots > 0) shader.Dispatch(expandKernel, (ArrivalSlots * frequencyBins + 63) / 64, 1, 1);
+        // The source's edge-ray distribution for this solve (read by the walk that follows).
+        if (EdgeCount > 0 && settings.diffractionFactor > 0)
+        {
+            shader.Dispatch(edgeWeightKernel, (EdgeCount + 63) / 64, 1, 1);
+            shader.Dispatch(edgeScanKernel, 1, 1, 1);
+        }
     }
 
     // Measurement: trace every ray of one solve and read the outputs back. With a capture
@@ -494,6 +503,6 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); pending = false; }
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose();
-        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose();
+        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose();
     }
 }

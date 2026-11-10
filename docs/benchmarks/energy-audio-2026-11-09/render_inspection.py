@@ -392,3 +392,37 @@ def diffuse_smoothness(meta, solves, a, late):
 
 if __name__ == '__main__':
     main()
+
+
+def tail_acceptance(names=('timeline', 'exp-fix-base', 'exp-fix-seed-1', 'exp-new-take'), band=3, seconds=10.0):
+    """Tail smoothness per export (whole walk inside the Church, 0-10 s): largest 23 ms slice share of
+    the diffuse energy, the loudest diffuse slice relative to the direct sound's energy, and (for two
+    seeds of one scene) the slice-by-slice level difference a per-solve seed would add as flicker."""
+    rows, envelopes = [], {}
+    for name in names:
+        folder = OUT / name if name != 'timeline' else TIMELINE
+        if not (folder / 'meta.json').exists():
+            continue
+        m = json.loads((folder / 'meta.json').read_text())
+        l = np.fromfile(folder / 'late.f32', '<f4').reshape(m['solves'], 8, m['lateBins']).astype(float)
+        a = np.genfromtxt(folder / 'arrivals.csv', delimiter=',', names=True)
+        s = np.genfromtxt(folder / 'solves.csv', delimiter=',', names=True)
+        t = s['sample'] / m['sampleRate']
+        dd = [(k, t0) for k, t0 in direct_delays(a) if t[k] < seconds]
+        largest, _, aligned = spikiness(l, dd, m['lateBinSeconds'], band)
+        direct = {int(k): e for k, e in zip(a['solve'][a['family'] == 0], a[f'e{band}'][a['family'] == 0])}
+        ratio = [aligned[i].max() / direct[k] for i, (k, _) in enumerate(dd) if direct.get(k, 0) > 0]
+        envelopes[name] = aligned
+        rows.append((name, np.median(largest), np.percentile(largest, 90), 10 * np.log10(np.median(ratio)), 10 * np.log10(np.max(ratio)), len(dd)))
+    lines = ['| export | largest slice share (median) | (90th pct) | loudest diffuse slice re direct, median | max | solves |', '|---|---:|---:|---:|---:|---:|']
+    for r in rows:
+        lines.append(f'| {r[0]} | {100 * r[1]:.0f}% | {100 * r[2]:.0f}% | {r[3]:+.1f} dB | {r[4]:+.1f} dB | {r[5]} |')
+    if 'exp-fix-base' in envelopes and 'exp-fix-seed-1' in envelopes:
+        x, y = envelopes['exp-fix-base'], envelopes['exp-fix-seed-1']
+        n = min(len(x), len(y)); x, y = x[:n], y[:n]
+        live = (x > x.max(1, keepdims=True) * 1e-3) & (y > y.max(1, keepdims=True) * 1e-3)
+        diff = np.abs(10 * np.log10(np.maximum(x, 1e-30) / np.maximum(y, 1e-30)))[live]
+        lines.append('')
+        lines.append(f'Seed 0 against seed 1 (same solves), slices within 30 dB of the maximum: median level difference {np.median(diff):.1f} dB, 90th percentile {np.percentile(diff, 90):.1f} dB; '
+                     'a new seed per solve would make the tail flicker by about this much from one 23 ms step to the next.')
+    return lines

@@ -10,6 +10,9 @@
 #pragma kernel EnergyArrivals3DBvh USE_BVH
 #pragma kernel EnergySelectArrivals
 #pragma kernel EnergyExpandArrivals
+#pragma kernel EnergyEdgeWeights3D
+#pragma kernel EnergyEdgeWeights3DBvh USE_BVH
+#pragma kernel EnergyEdgeScanKernel
 #pragma kernel ClearMethod
 
 #include "../../Shaders/Geometry.hlsl"
@@ -23,6 +26,9 @@
 [numthreads(64,1,1)] void EnergyArrivals3DBvh(uint3 id:SV_DispatchThreadID) { EnergyArrivals(MethodRayOffset + id.x); }
 [numthreads(64,1,1)] void EnergySelectArrivals(uint3 id:SV_DispatchThreadID) { EnergySelect(id.x); }
 [numthreads(64,1,1)] void EnergyExpandArrivals(uint3 id:SV_DispatchThreadID) { EnergyExpand(id.x); }
+[numthreads(64,1,1)] void EnergyEdgeWeights3D(uint3 id:SV_DispatchThreadID) { EnergyEdgeWeights(id.x); }
+[numthreads(64,1,1)] void EnergyEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { EnergyEdgeWeights(id.x); }
+[numthreads(256,1,1)] void EnergyEdgeScanKernel(uint3 t:SV_GroupThreadID) { EnergyEdgeScan(t.x); }
 [numthreads(64,1,1)] void ClearMethod(uint3 id:SV_DispatchThreadID)
 {
     ClearMethodBuffers(id.x);

@@ -66,6 +66,65 @@ uint MethodPathBase, MethodFrequencyBins, MethodFftSize, MethodCountCells;
 uint4 MethodFamilyEnds0, MethodFamilyEnds1; // cumulative candidates: direct, order 1, order 2, D, DD, RD, DR
 float MethodSampleRate;
 bool EnergyEnumerated(uint family) { return ((MethodArrivalFamilies >> family) & 1) != 0; }
+// Edge rays leave the source only, importance-sampled per solve (EnergyEdgeWeights/EnergyEdgeScan):
+// edge e is chosen with probability proportional to angle_e * integral of 1/m^2 along it,
+// angle_e * (atan((L - z0)/r) - atan(-z0/r)) / r for a source at distance r from the edge line
+// (foot of the perpendicular at z0), times 1 if a quick visibility test sees it, else
+// MethodEdgeHidden; the point on the edge is drawn with density proportional to 1/m^2 (a
+// Cauchy law about z0). The ray's flux is then |D|^2 sin^2(beta) I times the total weight over
+// the visibility factor: bounded, where uniform edge and point choices multiplied it by the
+// edge count and 1/m^2 (the Church's reverb-tail bursts, docs/benchmarks/energy-audio-2026-11-09).
+RWStructuredBuffer<float> MethodEdgeCdf;   // per edge, then its running sum (EnergyEdgeScan)
+static const float MethodEdgeHidden = .1;
+float EnergyEdgeSpan(float3 a, float3 u, float extent, float3 x, out float z0, out float r)
+{
+    float3 s = x - a;
+    z0 = dot(s, u);
+    r = max(1e-4, length(s - z0 * u));
+    return atan((extent - z0) / r) - atan(-z0 / r);
+}
+void EnergyEdgeWeights(uint edge)
+{
+    if (edge >= MethodEdgeCount) return;
+    float3 S = States[MethodState + MethodSourceObject].position.xyz, a, u, f, nn;
+    float extent, angle, z0, r;
+    EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
+    float weight = 0;
+    if (TunedEdgeAngle(S - (a + .5 * extent * u), f, nn, angle) <= angle)
+    {
+        weight = angle * EnergyEdgeSpan(a, u, extent, S, z0, r) / r;
+        float3 near = a + clamp(z0, 0, extent) * u;
+        bool seen = false;
+        [loop] for (uint i = 0; i < 2 && !seen; i++) seen = Visible(MethodState, S, i == 0 ? near : a + .5 * extent * u, false);
+        weight *= seen ? 1 : MethodEdgeHidden;
+    }
+    MethodEdgeCdf[edge] = weight;
+}
+groupshared float EnergyScanParts[256];
+void EnergyEdgeScan(uint thread)
+{
+    uint n = MethodEdgeCount, per = (n + 255) / 256, first = thread * per, last = min(n, first + per);
+    float sum = 0;
+    [loop] for (uint i = first; i < last; i++) sum += MethodEdgeCdf[i];
+    EnergyScanParts[thread] = sum;
+    GroupMemoryBarrierWithGroupSync();
+    if (thread == 0)
+    {
+        float run = 0;
+        [loop] for (uint j = 0; j < 256; j++) { float v = EnergyScanParts[j]; EnergyScanParts[j] = run; run += v; }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    float run = EnergyScanParts[thread];
+    [loop] for (uint k = first; k < last; k++) { run += MethodEdgeCdf[k]; MethodEdgeCdf[k] = run; }
+}
+uint EnergySampleEdge(float u, out float probability)
+{
+    float total = MethodEdgeCdf[MethodEdgeCount - 1], target = u * total;
+    uint lo = 0, hi = MethodEdgeCount - 1;
+    [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (MethodEdgeCdf[mid] > target) hi = mid; else lo = mid + 1; }
+    probability = (MethodEdgeCdf[lo] - (lo > 0 ? MethodEdgeCdf[lo - 1] : 0)) / total;
+    return lo;
+}
 float EnergyDirectivity(MethodAnchor v, float3 w) { return v.kind == 1 ? max(0, dot(w, v.normal)) : 1; }
 float EnergySpecular(RayMaterial m, float cosine)
 {
@@ -304,17 +363,24 @@ void TraceEnergy(uint index)
         if (!travelling)
         {
             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
-            viaEdge = edges && RandomRay(rng) < MethodEdgeProbability;
+            // Edge rays from the source only (see EnergyEdgeWeights); a scattering point's
+            // diffraction is its D/RD/DD connections.
+            bool edgeRays = edges && v.kind == 0 && MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0; // (no short-circuit in HLSL)
+            viaEdge = edgeRays && RandomRay(rng) < MethodEdgeProbability;
             [unroll] for (uint k = 0; k < MethodBands; k++) C[k] = 1;
             hits = 0; reflections = 0; through = false; medium = v.medium;
             if (viaEdge)
             {
-                // Edge ray: point uniform on an edge, azimuth uniform on Keller's cone.
-                float3 a, u, f, nn; float extent, angle;
-                edge = MethodPickEdge(v.kind == 1 ? v.primitive : 0xffffffff, rng, edgePick);
+                // Edge ray: edge and point importance-sampled by 1/m^2 (EnergyEdgeWeights),
+                // azimuth uniform on Keller's cone.
+                float3 a, u, f, nn; float extent, angle, z0, r;
+                edge = EnergySampleEdge(RandomRay(rng), edgePick);
                 EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
-                float3 e = a + RandomRay(rng) * extent * u, w = e - v.position;
+                float span = EnergyEdgeSpan(a, u, extent, v.position, z0, r);
+                float z = clamp(z0 + r * tan(atan(-z0 / r) + RandomRay(rng) * span), 0, extent);
+                float3 e = a + z * u, w = e - v.position;
                 float m = length(w);
+                edgeExtent = (r * r + (z - z0) * (z - z0)) * span / r; // 1 / (density of the point on the edge)
                 if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle || !Visible(MethodState, v.position, e, false))
                 { MethodCaptureEvent(ray, slot, CaptureEnd, v.position, 0, 0, v.time); break; }
                 w /= m;
@@ -325,7 +391,7 @@ void TraceEnergy(uint index)
                 edgePhiIn = TunedEdgeAngle(v.position - e, f, nn, angle);
                 edgePhi = RandomRay(rng) * angle;
                 d = normalize(u * cosBeta + edgeSinBeta * (f * cos(edgePhi) + nn * sin(edgePhi)));
-                edgeExtent = extent; edgeAngle = angle; edgeM = m;
+                edgeAngle = angle; edgeM = m;
                 tau = v.time + m * MethodSlowness(AirMedium);
                 p = e; Q = 1; fluxPending = true;
                 depth++;
@@ -339,7 +405,7 @@ void TraceEnergy(uint index)
                 float D = EnergyDirectivity(v, w0);
                 if (D == 0) break;
                 [unroll] for (uint k = 0; k < MethodBands; k++) Phi0[k] = I[k] * D / pdf;
-                Q = edges ? 1 - MethodEdgeProbability : 1;
+                Q = edgeRays ? 1 - MethodEdgeProbability : 1;
                 p = v.position; d = w0; tau = v.time;
             }
             travelling = true;
