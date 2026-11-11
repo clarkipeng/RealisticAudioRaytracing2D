@@ -2,8 +2,8 @@ using System;
 using UnityEngine;
 
 // CPU reference of the late-field synthesis; GpuAudio.Late mirrors it.
-// Each pair's late impulse response is LateBasis noise whose partition-k band
-// gains are sqrt(E / P), E being the ear's histogram energy of that band and
+// Each pair's late impulse response is LateBasis noise shaped by the smooth envelope
+// of its partition-k band gains sqrt(E / P), E being the ear's histogram energy of that band and
 // partition (direction bins weighted by the HRTF band energy). It convolves the
 // source's emitted signal (a point source's signal, or a plane's emission sites
 // summed with their amplitudes) by uniform partitioned overlap-save, delayed by
@@ -81,12 +81,11 @@ internal sealed class LateReverb
                 bool any=false;
                 for(int b=0;b<LateBasis.Bands;b++)any|=gains[(c*count+k)*LateBasis.Bands+b]>0;
                 if(!any)continue;
-                int kernel=at+((pair*channels+c)*count+k)*bins,noise=(offsets[pair]+k)%basis.Partitions;
-                for(int b=0;b<LateBasis.Bands;b++)
+                int kernel=at+((pair*channels+c)*count+k)*bins,noise=(offsets[pair]+k)%basis.Partitions,source=(c*basis.Partitions+noise)*bins;
+                for(int i=0;i<bins;i++)
                 {
-                    float gain=gains[(c*count+k)*LateBasis.Bands+b];
-                    if(gain==0)continue;int source=((c*LateBasis.Bands+b)*basis.Partitions+noise)*bins;
-                    for(int i=0;i<bins;i++)kernels[kernel+i]+=basis.Spectra[source+i]*gain;
+                    float envelope=0;for(int b=0;b<LateBasis.Bands;b++)envelope+=basis.EnvelopeWeights[i*LateBasis.Bands+b]*gains[(c*count+k)*LateBasis.Bands+b];
+                    if(envelope>0)kernels[kernel+i]=basis.Spectra[source+i]*envelope;
                 }
             }
         }

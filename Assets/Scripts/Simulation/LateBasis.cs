@@ -3,20 +3,25 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // Fixed noise for late-field synthesis (Polack 1993), shared by the CPU and GPU
-// audio backends. Each output channel owns one long seeded white noise; its
-// spectrum is split into eight octave bands whose responses sum to one (linear
-// interpolation in log frequency between band centres), so the late impulse
-// response of a partition is sum_b gain_b * band_b. Binaural channels mix two
-// independent noises to the dataset HRTF's diffuse-field interaural coherence
-// (Borss & Martin 2009). Every band is cut into partitions and stored as the
-// spectra of its zero-padded partitions, ready for uniform partitioned
-// convolution. The noise never changes, so envelope updates never re-randomise
-// the tail.
+// audio backends. Each output channel owns one long seeded white noise, cut into
+// partitions and stored as the spectra of its zero-padded partitions, ready for
+// uniform partitioned convolution. Binaural channels mix two independent noises to
+// the dataset HRTF's diffuse-field interaural coherence (Borss & Martin 2009). The
+// noise never changes, so envelope updates never re-randomise the tail.
+// Spectral shaping: the transport delivers eight octave-band energies per partition;
+// the late kernel of a partition is the noise spectrum times a smooth amplitude
+// envelope A(f) = sum_b sqrt(E_b / P) w_b(f), with w_b the Catmull-Rom (cubic Hermite)
+// interpolation weights in log2 frequency through the band centres (EnvelopeWeight;
+// constant below 125 Hz and above 16 kHz, negative overshoot clamped to zero). The
+// earlier synthesis summed eight octave-filtered noises, i.e. interpolated the amplitude
+// linearly between centres, which put a kink at every octave; the cubic envelope is
+// smooth across frequency with the same band values, and the basis is eight times smaller.
 internal sealed class LateBasis
 {
     internal const int Bands=TakeRender.Settings.LateBands,Directions=TakeRender.Settings.LateDirections;
     internal readonly int Partition,Partitions,Channels,Bins;
-    internal readonly Vector2[] Spectra;   // [channel][band][partition][bin], bins = Partition + 1
+    internal readonly Vector2[] Spectra;   // [channel][partition][bin], bins = Partition + 1
+    internal readonly float[] EnvelopeWeights; // [bin][band]: EnvelopeWeight at each partition-FFT bin
     internal readonly float[] EarWeights;  // [direction][channel][band]: band energy of each head-frame direction
     internal long NumericBytes => Spectra.LongLength*8+EarWeights.Length*4L;
     static readonly Dictionary<(int,int,int,int),LateBasis> cache=new Dictionary<(int,int,int,int),LateBasis>();
@@ -32,6 +37,18 @@ internal sealed class LateBasis
         }
     }
     internal static float BandCentre(int band) => 125f*(1<<band);
+    // Catmull-Rom weight of band b's amplitude at frequency hz (weights sum to one).
+    internal static float EnvelopeWeight(int band,double hz)
+    {
+        double x=hz<=125?0:Math.Min(Bands-1,Math.Log(hz/125,2));
+        int i=Math.Min(Bands-2,(int)Math.Floor(x));double t=x-i;
+        double t2=t*t,t3=t2*t;
+        double w0=.5*(-t+2*t2-t3),w1=.5*(2-5*t2+3*t3),w2=.5*(t+4*t2-3*t3),w3=.5*(-t2+t3);
+        double w=0;
+        void Add(int index,double value){if(Math.Max(0,Math.Min(Bands-1,index))==band)w+=value;}
+        Add(i-1,w0);Add(i,w1);Add(i+1,w2);Add(i+2,w3);
+        return (float)w;
+    }
     // Band responses sum to one at every frequency.
     internal static float BandWeight(int band,double hz)
     {
@@ -50,17 +67,19 @@ internal sealed class LateBasis
         var hrtf=channels==2?Hrtf.Load(rate):null;
         EarWeights=Weights(hrtf,rate);
         var coherence=Coherence(hrtf,rate,length);
-        Spectra=new Vector2[checked(channels*Bands*Partitions*Bins)];
+        Spectra=new Vector2[checked(channels*Partitions*Bins)];
+        EnvelopeWeights=new float[Bins*Bands];
+        for(int k=0;k<Bins;k++)for(int b=0;b<Bands;b++)EnvelopeWeights[k*Bands+b]=EnvelopeWeight(b,(double)k*rate/(2*partition));
         var noise=new double[2][];
         for(int n=0;n<(channels==2?2:1);n++)noise[n]=WhiteSpectrum(length,0x5e1f00d+(uint)n*0x9e3779b9u);
         var re=new double[length];var im=new double[length];var segment=new Vector2[2*partition];
-        for(int c=0;c<channels;c++)for(int b=0;b<Bands;b++)
+        for(int c=0;c<channels;c++)
         {
-            // Hermitian spectrum of this channel's band, then one inverse transform.
+            // Hermitian spectrum of this channel's noise, then one inverse transform.
             Array.Clear(re,0,length);Array.Clear(im,0,length);
             for(int k=0;k<=length/2;k++)
             {
-                float weight=BandWeight(b,(double)k*rate/length);if(weight==0)continue;
+                const float weight=1;
                 double xr=noise[0][2*k],xi=noise[0][2*k+1];
                 if(channels==2)
                 {
@@ -76,7 +95,7 @@ internal sealed class LateBasis
                 Array.Clear(segment,0,segment.Length);
                 for(int n=0;n<partition;n++)segment[n].x=(float)re[p*partition+n];
                 ImpulseResponseAudio.Fft(segment,false);
-                Array.Copy(segment,0,Spectra,((c*Bands+b)*Partitions+p)*Bins,Bins);
+                Array.Copy(segment,0,Spectra,(c*Partitions+p)*Bins,Bins);
             }
         }
     }

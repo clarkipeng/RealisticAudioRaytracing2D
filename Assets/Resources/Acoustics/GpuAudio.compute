@@ -571,7 +571,7 @@ StructuredBuffer<uint> LateHistogram;
 StructuredBuffer<uint4> LateEmissionRanges,LateEmissionClocks;
 StructuredBuffer<float4> LateEmissionPoints;
 StructuredBuffer<float2> LateBasisSpectra;
-StructuredBuffer<float> LateEarWeights;
+StructuredBuffer<float> LateEarWeights,LateEnvelopeWeights;
 StructuredBuffer<uint> LateOffsets;
 RWStructuredBuffer<float> LateGains,LateBlocks;
 RWStructuredBuffer<float2> LateKernels,LateInputs,LateSums;
@@ -644,13 +644,10 @@ void LateBuild(uint3 id:SV_DispatchThreadID)
 {
     uint count=AudioPairs*AudioChannels*LateCount*LateBins;if(id.x>=count)return;
     uint bin=id.x%LateBins,k=(id.x/LateBins)%LateCount,c=(id.x/(LateBins*LateCount))%AudioChannels,pair=id.x/(LateBins*LateCount*AudioChannels);
-    uint noise=(LateOffsets[pair]+k)%LateBasisCount;float2 value=0;
-    for(uint b=0;b<LATE_BANDS;b++)
-    {
-        float gain=LateGains[((pair*AudioChannels+c)*LATE_BANDS+b)*LateCount+k];
-        if(gain!=0)value+=LateBasisSpectra[((c*LATE_BANDS+b)*LateBasisCount+noise)*LateBins+bin]*gain;
-    }
-    LateKernels[LateBank*count+id.x]=value;
+    uint noise=(LateOffsets[pair]+k)%LateBasisCount;float envelope=0;
+    // Smooth envelope across frequency (LateBasis.EnvelopeWeight) times the channel's noise.
+    for(uint b=0;b<LATE_BANDS;b++)envelope+=LateEnvelopeWeights[bin*LATE_BANDS+b]*LateGains[((pair*AudioChannels+c)*LATE_BANDS+b)*LateCount+k];
+    LateKernels[LateBank*count+id.x]=envelope>0?LateBasisSpectra[(c*LateBasisCount+noise)*LateBins+bin]*envelope:float2(0,0);
 }
 float LateDry(uint source,int at)
 {

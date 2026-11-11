@@ -52,6 +52,8 @@ public sealed class Hrtf
                 }
             }
         }
+        DiffuseFieldEqualize(filters,directions,Taps,rate);
+        Hash+=":diffuse-field-v1";
         // Use the measured elevation rings and their individual azimuth grids.
         // Circular interpolation also covers the rear seam; no angular snapping.
         var groups=new SortedDictionary<float,List<int>>();
@@ -72,6 +74,72 @@ public sealed class Hrtf
         }
     }
     static float Azimuth(Vector3 direction)=>Mathf.Atan2(direction.x,direction.z);
+    // Diffuse-field equalisation (standard practice for binaural rendering over headphones,
+    // e.g. Larcher, Jot & Vandernoot, AES 104th Convention 1998; the MIT KEMAR set is
+    // distributed with a "diffuse" variant equalised the same way): every HRIR is divided by
+    // the diffuse-field average of the set, the solid-angle-weighted mean power over all
+    // directions and both ears, smoothed in third octaves. The KEMAR's ear-canal and concha
+    // resonances (about +4 dB at 2-3 kHz in a diffuse field) then no longer colour every
+    // sound, while the interaural and directional differences, which the same filter
+    // multiplies for every direction and ear, are unchanged. The correction is minimum phase
+    // (no added delay), 0 dB below 150 Hz and at 200-400 Hz (the renderer's level reference),
+    // and limited to +/-12 dB.
+    static void DiffuseFieldEqualize(float[] filters,Vector3[] directions,int taps,int rate)
+    {
+        int n=1024;while(n<8*taps)n*=2;
+        int count=directions.Length;var power=new double[n/2+1];double total=0;var data=new Vector2[n];
+        // Equal-area weights: the measured rings are evenly spaced in elevation, so a direction's
+        // solid angle is about cos(elevation) / (directions in its ring).
+        var ring=new Dictionary<int,int>();
+        foreach(var d in directions){int key=Mathf.RoundToInt(Mathf.Asin(Mathf.Clamp(d.y,-1,1))*Mathf.Rad2Deg);ring[key]=ring.TryGetValue(key,out int c)?c+1:1;}
+        for(int i=0;i<count;i++)
+        {
+            float elevation=Mathf.Asin(Mathf.Clamp(directions[i].y,-1,1));
+            double weight=Math.Max(.05,Math.Cos(elevation))/ring[Mathf.RoundToInt(elevation*Mathf.Rad2Deg)];
+            for(int ear=0;ear<2;ear++)
+            {
+                Array.Clear(data,0,n);for(int t=0;t<taps;t++)data[t].x=filters[(i*2+ear)*taps+t];
+                ImpulseResponseAudio.Fft(data,false);
+                for(int k=0;k<=n/2;k++)power[k]+=weight*(data[k].x*(double)data[k].x+data[k].y*(double)data[k].y);
+            }
+            total+=2*weight;
+        }
+        for(int k=0;k<=n/2;k++)power[k]/=total;
+        double Hz(int k)=>(double)k*rate/n;
+        var smooth=new double[n/2+1];
+        for(int k=1;k<=n/2;k++)
+        {
+            double f=Hz(k),lo=f/Math.Pow(2,1/6.0),hi=f*Math.Pow(2,1/6.0),sum=0;int m=0;
+            for(int j=Math.Max(1,(int)Math.Ceiling(lo*n/rate));j<=Math.Min(n/2,(int)Math.Floor(hi*n/rate));j++){sum+=power[j];m++;}
+            smooth[k]=m>0?sum/m:power[k];
+        }
+        smooth[0]=smooth[1];
+        double reference=0;int r=0;for(int k=1;k<=n/2;k++)if(Hz(k)>=200 && Hz(k)<=400){reference+=smooth[k];r++;}
+        reference=r>0?reference/r:smooth[1];
+        var log=new Vector2[n];
+        for(int k=0;k<=n/2;k++)
+        {
+            double f=Math.Min(Hz(k),18000),gain=Math.Sqrt(reference/Math.Max(1e-30,smooth[Math.Min(n/2,(int)Math.Round(f*n/rate))]));
+            gain=Math.Min(4,Math.Max(.25,gain));
+            double blend=f<=150?0:f>=300?1:Math.Log(f/150)/Math.Log(2);    // 0 dB below 150 Hz
+            double value=blend*Math.Log(gain);
+            log[k]=new Vector2((float)value,0);if(k>0 && k<n/2)log[n-k]=log[k];
+        }
+        // Minimum phase from the real cepstrum (fold the anti-causal part onto the causal one).
+        ImpulseResponseAudio.Fft(log,true);
+        for(int k=1;k<n/2;k++){log[k]*=2;log[n-k]=Vector2.zero;}
+        ImpulseResponseAudio.Fft(log,false);
+        var eq=new Vector2[n];
+        for(int k=0;k<n;k++){double m=Math.Exp(log[k].x);eq[k]=new Vector2((float)(m*Math.Cos(log[k].y)),(float)(m*Math.Sin(log[k].y)));}
+        for(int i=0;i<count;i++)for(int ear=0;ear<2;ear++)
+        {
+            Array.Clear(data,0,n);for(int t=0;t<taps;t++)data[t].x=filters[(i*2+ear)*taps+t];
+            ImpulseResponseAudio.Fft(data,false);
+            for(int k=0;k<n;k++){var a=data[k];var b=eq[k];data[k]=new Vector2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
+            ImpulseResponseAudio.Fft(data,true);
+            for(int t=0;t<taps;t++)filters[(i*2+ear)*taps+t]=data[t].x;
+        }
+    }
     public Blend Interpolate(Vector3 direction)
     {
         direction=direction.sqrMagnitude<1e-12f?Vector3.forward:direction.normalized;

@@ -165,7 +165,7 @@ public partial class TakeChecks
         int partition=settings.LatePartition,bins=solver.Late(0).Transport.LateBins,latency=settings.DspLatencySamples;
         var output=new float[(bins+2)*partition+latency];late.Render(0,output.Length,output);
         // Expected energy of a partition: the noise is white with unit variance and its
-        // spectrum is sum_b sqrt(E_b) H_b(f), so E = mean over f of that sum squared.
+        // spectrum is shaped by A(f) = sum_b sqrt(E_b) w_b(f), so E = mean over f of A^2.
         var band=new double[TakeRender.Settings.LateBands];double worst=0;
         for(int group=2;group+8<=bins;group+=8)
         {
@@ -173,7 +173,7 @@ public partial class TakeChecks
             for(int k=group;k<group+8;k++)
             {
                 for(int b=0;b<band.Length;b++){band[b]=0;for(int d=0;d<TakeRender.Settings.LateDirections;d++)band[b]+=solver.Late(0).Energy(0,d,b,k);}
-                double mean=0;for(int f=0;f<=4000;f++){double a=0;for(int b=0;b<band.Length;b++)a+=Math.Sqrt(band[b])*LateBasis.BandWeight(b,f);mean+=a*a;}
+                double mean=0;for(int f=0;f<=4000;f++){double a=0;for(int b=0;b<band.Length;b++)a+=Math.Sqrt(band[b])*LateBasis.EnvelopeWeight(b,f);a=Math.Max(0,a);mean+=a*a;}
                 want+=mean/4001;
                 for(int n=0;n<partition;n++){double v=output[latency+k*partition+n];have+=v*v;}
             }
@@ -211,6 +211,23 @@ public partial class TakeChecks
         }
         TestContext.WriteLine($"relative error {Math.Sqrt(error/energy):G3}, peak {peak:G3}");
         Assert.That(energy,Is.GreaterThan(1e-6));Assert.That(Math.Sqrt(error/energy),Is.LessThan(1e-3));
+    }
+
+    // Late spectral envelope: the interpolation weights sum to one, pass through each band
+    // centre and are smooth across a centre (no octave kinks).
+    [Test,Category("LateEnergy")]
+    public void LateEnvelopeInterpolatesTheBandsSmoothly()
+    {
+        for(double hz=50;hz<20000;hz*=1.05)
+        {
+            double sum=0;for(int b=0;b<LateBasis.Bands;b++)sum+=LateBasis.EnvelopeWeight(b,hz);
+            Assert.That(sum,Is.EqualTo(1).Within(1e-5));
+        }
+        for(int b=0;b<LateBasis.Bands;b++)Assert.That(LateBasis.EnvelopeWeight(b,LateBasis.BandCentre(b)),Is.EqualTo(1).Within(1e-5));
+        // A tilted spectrum: the envelope's slope in log frequency is continuous at the 1 kHz centre.
+        double Envelope(double hz){double a=0;for(int b=0;b<LateBasis.Bands;b++)a+=LateBasis.EnvelopeWeight(b,hz)*Math.Pow(.7,b*b*.3);return a;}
+        double below=(Envelope(1000)-Envelope(1000/1.01))/Math.Log(1.01),above=(Envelope(1000*1.01)-Envelope(1000))/Math.Log(1.01);
+        Assert.That(Math.Abs(above-below),Is.LessThan(.02*Math.Abs(below)+1e-4),"No kink at the band centre.");
     }
 
     // The envelope continuation beyond the horizon follows the fitted exponential,

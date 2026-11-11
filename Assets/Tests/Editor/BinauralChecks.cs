@@ -48,6 +48,35 @@ public partial class TakeChecks
         Near(error,0,"HRIR composes with declared fractional-delay FIR latency",1e-6f);
     }
 
+    // Diffuse-field equalised HRTF: the solid-angle-weighted mean power over all directions
+    // and both ears is flat (third octaves 300 Hz - 12 kHz within 2 dB of the 200-400 Hz
+    // level), so the ears do not colour a diffuse field; interaural differences are kept.
+    [Test]
+    public void HrtfIsDiffuseFieldEqualised()
+    {
+        var hrtf=Hrtf.Load(44100);int n=1024,bins=n/2+1;var spectra=Hrtf.Spectra(hrtf,n);
+        var rings=new Dictionary<int,int>();
+        for(int i=0;i<hrtf.DirectionCount;i++){int key=Mathf.RoundToInt(Mathf.Asin(Mathf.Clamp(hrtf.Direction(i).y,-1,1))*Mathf.Rad2Deg);rings[key]=rings.TryGetValue(key,out int c)?c+1:1;}
+        var power=new double[bins];double total=0;
+        for(int i=0;i<hrtf.DirectionCount;i++)
+        {
+            float elevation=Mathf.Asin(Mathf.Clamp(hrtf.Direction(i).y,-1,1));double w=Math.Max(.05,Math.Cos(elevation))/rings[Mathf.RoundToInt(elevation*Mathf.Rad2Deg)];
+            for(int ear=0;ear<2;ear++)for(int k=0;k<bins;k++){var h=spectra[(i*2+ear)*bins+k];power[k]+=w*(h.x*h.x+h.y*h.y);}
+            total+=2*w;
+        }
+        double Band(double f){double s=0;int m=0;for(int k=1;k<bins;k++){double hz=k*44100.0/n;if(hz>=f/Math.Pow(2,1/6.0)&&hz<f*Math.Pow(2,1/6.0)){s+=power[k]/total;m++;}}return s/m;}
+        double reference=0;int r=0;for(int k=1;k<bins;k++){double hz=k*44100.0/n;if(hz>=200&&hz<=400){reference+=power[k]/total;r++;}}reference/=r;
+        double worst=0;
+        foreach(double f in new[]{315.0,500,800,1250,2000,2500,3150,4000,5000,6300,8000,10000,12500})worst=Math.Max(worst,Math.Abs(10*Math.Log10(Band(f)/reference)));
+        TestContext.WriteLine($"largest third-octave deviation of the diffuse-field average: {worst:F2} dB");
+        Assert.That(worst,Is.LessThan(2),"The diffuse-field average is flat after equalisation.");
+        // Interaural level difference for a source on the right stays large (localisation kept).
+        var right=hrtf.Nearest(Vector3.right);double left=0,rightEar=0;
+        for(int k=1;k<bins;k++){double hz=k*44100.0/n;if(hz<2000||hz>6000)continue;var l=spectra[(right*2)*bins+k];var q=spectra[(right*2+1)*bins+k];left+=l.x*l.x+l.y*l.y;rightEar+=q.x*q.x+q.y*q.y;}
+        double ild=10*Math.Log10(rightEar/left);TestContext.WriteLine($"interaural level difference at 90 degrees, 2-6 kHz: {ild:F1} dB");
+        Assert.That(ild,Is.GreaterThan(6),"A source on the right is much louder in the right ear at 2-6 kHz.");
+    }
+
     [Test, Category("Core")]
     public void StereoQueuePreservesListenerChannels()
     {

@@ -21,7 +21,7 @@ internal sealed partial class GpuAudio
         lateEmpty=Buffer("LateHistogram",1,4);Buffer("LateEmissionClocks",1,16);Buffer("LateEmissionPoints",1,16);
         lateEmptyRows=Buffer("LateEmissionRanges",Math.Max(1,signals.Length),16);lateEmptyRows.SetData(new uint[Math.Max(1,signals.Length)*4]);
         foreach(var name in new[]{"LateBasisSpectra","LateKernels","LateInputs","LateSums"})Buffer(name,1,8);
-        foreach(var name in new[]{"LateEarWeights","LateGains","LateBlocks"})Buffer(name,1,4);
+        foreach(var name in new[]{"LateEarWeights","LateEnvelopeWeights","LateGains","LateBlocks"})Buffer(name,1,4);
         Buffer("LateOffsets",pairs,4).SetData(new uint[pairs]);Buffer("LateActive",2*pairs,4).SetData(new uint[2*pairs]);
         bool late=settings.transport==TakeRender.Transport.Raytraced && settings.maxBounces>0;
         latePartition=settings.LatePartition;lateCount=late?settings.LateKernelBins(rate):0;lateSimulated=late?settings.LateBins(rate):0;
@@ -34,6 +34,7 @@ internal sealed partial class GpuAudio
         var basis=LateBasis.Get(lateRate,latePartition,lateCount,channels);
         Buffer("LateBasisSpectra",basis.Spectra.Length,8).SetData(basis.Spectra);
         Buffer("LateEarWeights",basis.EarWeights.Length,4).SetData(basis.EarWeights);
+        Buffer("LateEnvelopeWeights",basis.EnvelopeWeights.Length,4).SetData(basis.EnvelopeWeights);
         var offsets=new uint[pairs];
         for(int p=0;p<pairs;p++)offsets[p]=AudioSourcePlane.Hash((uint)p*0x9e3779b9u+0x7f4a7c15u)%(uint)basis.Partitions;
         Buffer("LateOffsets",pairs,4).SetData(offsets);
