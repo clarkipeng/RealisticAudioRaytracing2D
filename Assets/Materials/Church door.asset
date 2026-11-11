@@ -1,0 +1,91 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
+  m_Name: Church door
+  m_EditorClassIdentifier: Acoustics::AudioMaterial
+  energyCurve:
+  - frequencyHz: 125
+    absorption: 0.14
+    scattering: 0.05
+  - frequencyHz: 250
+    absorption: 0.1
+    scattering: 0.07
+  - frequencyHz: 500
+    absorption: 0.06
+    scattering: 0.1
+  - frequencyHz: 1000
+    absorption: 0.08
+    scattering: 0.15
+  - frequencyHz: 2000
+    absorption: 0.1
+    scattering: 0.2
+  - frequencyHz: 4000
+    absorption: 0.1
+    scattering: 0.25
+  - frequencyHz: 8000
+    absorption: 0.1
+    scattering: 0.25
+  admittanceCurve: []
+  roughness: 0.5
+  density: 2400
+  modalYoungModulus: 2.5e+10
+  modalPoissonRatio: 0.2
+  modalLossFactor: 0.01
+  porosity: 0.1
+  rigidity: 0.9
+  overrideTrans: 0
+  overrideBands: 1
+  absorptionBands:
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  scatteringBands:
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  transmissionBands:
+  - 0.03286493
+  - 0.039072644
+  - 0.036219534
+  - 0.02901686
+  - 0.028640728
+  - 0.02851311
+  - 0.028497158
+  - 0.028497158
+  iorBands:
+  - 0.06353909
+  - 0.063618414
+  - 0.06377706
+  - 0.06409436
+  - 0.06472896
+  - 0.06599815
+  - 0.06853654
+  - 0.07361332
+  dampingBands:
+  - 0.055000007
+  - 0.06403708
+  - 0.0780366
+  - 0.09482369
+  - 0.11372307
+  - 0.1343665
+  - 0.1565154
+  - 0.18000002

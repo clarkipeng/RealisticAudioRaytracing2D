@@ -374,3 +374,60 @@ Its high frequencies ring on too long: T30 at 8 kHz is 5.4 s near and 3.8 s far,
 The binaural ear adds about 4 dB at 2–3 kHz that the microphone responses lack.
 Downloads, clips and the page stay in `.context/energy-audio/realism/`.
 
+
+## Part G: transmission, air absorption and a steadier tail (10 November, evening)
+
+### Transmission from published data
+
+`church_transmission.py` computes each assembly's sound reduction per octave band with Sharp's prediction (mass law, coincidence, loss factor; Sharp 1978, as in Bies & Hansen, *Engineering Noise Control*), capped at 65 dB for masonry, and doors as composites with their gaps (`τ = (S_leaf τ_leaf + S_gap) / S_total`, gaps fully open).
+
+| Assembly (model) | 125 | 250 | 500 | 1k | 2k | 4k | 8k Hz |
+|---|---|---|---|---|---|---|---|
+| Leaded glass, 3 mm panes | 12.4 | 18.5 | 24.5 | 30.5 | 36.5 | 25.4 | 34.4 |
+| Oak door leaf, 50 mm | 25.8 | 20.2 | 20.8 | 29.8 | 38.8 | 47.8 | 56.9 |
+| Front doors with 4 cm side gaps (2.5% of the opening) | 15.6 | 14.6 | 14.8 | 15.8 | 16.0 | 16.0 | 16.0 |
+| Copper on 25 mm boarding | 20.0 | 26.0 | 25.3 | 23.4 | 32.4 | 41.4 | 50.5 |
+| Limestone wall, 0.38 m (thinnest) | 38.9 | 47.9 | 56.9 | 65 | 65 | 65 | 65 |
+| Masonry vault, 0.25 m | 31.5 | 40.6 | 49.6 | 58.6 | 65 | 65 | 65 |
+
+The door gaps are not holes in the acoustic geometry: rays through them hit the stone faces of the door frame.
+So the leak is carried by the door leaves' transmission (a new material, `Church door`), with no double counting.
+The windows' acoustic index is now 1, which makes them partitions instead of a refracting glass medium.
+Absorption and scattering are unchanged.
+
+### Partitions
+
+The scene models walls, door leaves, window panes and the roof with two faces.
+Applied at each face, a material's transmission was squared, and closed glass slabs with the default index transmitted almost nothing (critical angle 3.6°).
+Both methods now apply an assembly's transmission once per crossing and continue straight out of its far face (`PartitionExit`, within 3 m; refracting media are unchanged).
+
+### Air absorption
+
+`AirCoefficient` held ISO 9613-1 values per foot as if they were per metre, 3.28 times too small.
+That is why 4–8 kHz rang on: at 8 kHz the late decay was limited to the wrong table's 11 dB/s.
+With the correct values the Church's 8 kHz T30 is 2.6 s near the organ (was 5.4 s; cathedrals 1.4–2.3 s; the model's estimate 1.4 s), and 4 kHz is 5.8 s (was 7.6 s).
+
+### Tail continuation from the room energy
+
+The energy method now records the energy of every ray still in the source's space at each partition start, and the continuation past the horizon fits its decay on that instead of on the few rays near the listener.
+The decay curves are now smooth to −60 dB in every band (no bursts or plateaus).
+They also show the model's slow late decay below 2 kHz: after the first 10–15 dB, T30 is 16 s at 1 kHz and 25–27 s at 125–250 Hz.
+That decay most likely comes from sound bouncing between the marble floor and the plaster vault (1–5% absorption, 5–15% scattering, 25 m apart); it is a material question, and this batch kept absorption and scattering unchanged.
+
+### Doors-closed map
+
+Just outside the closed front doors (within 4 m) the level is now 20–22 dB below the back of the nave in every band, against 29–34 dB before (`church_map.py leak`, total energy, medians):
+
+| Band (Hz) | 125 | 250 | 500 | 1k | 2k | 4k | 8k |
+|---|---|---|---|---|---|---|---|
+| Inside minus just outside, before (dB) | 28.8 | 30.1 | 30.5 | 31.3 | 32.3 | 33.3 | 33.5 |
+| Inside minus just outside, now (dB) | 20.1 | 19.7 | 21.4 | 21.3 | 22.4 | 22.4 | 21.5 |
+
+The late level outside rose from a median of −68 dB to −50 dB at 1 kHz.
+The leak comes straight out of the doors and builds up in the enclosed porch side room east of them.
+
+### Cost
+
+Doors-closed map: 375 receivers in 21 minutes (1.65 s GPU per solve, +18% for the room energy and partition crossings).
+Walk renders: hybrid 246 s (peak 3.71 GiB); energy 7,369 s (peak 2.97 GiB), twice the previous render because the 17.5 s tail is rendered at the walk's update rate and the machine was swapping (694 s paused for memory pressure).
+Full tier: 319 + 21 + 25 checks passed (peaks 3.03, 3.31 and 3.08 GiB).

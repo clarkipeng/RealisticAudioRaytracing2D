@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(ROOT / 'tools'))
 import listen  # noqa: E402
+import church_transmission as ct  # noqa: E402
 import dlss_jobs as dj  # noqa: E402
 
 WORK = ROOT / '.context/energy-audio/church'
@@ -45,7 +46,10 @@ MATERIALS = {
                          note='Marble floor [marble_floor]; smooth paving (estimate)'),
     'Church wood': dict(absorption=[.14, .10, .06, .08, .10, .10, .10],            # [wooden_door]
                         scattering=[.05, .07, .10, .15, .20, .25, .25],
-                        note='Solid wooden door [wooden_door] (doors, organ case); panelled wood scattering (estimate)'),
+                        note='Solid wooden door [wooden_door] (organ case and tower); panelled wood scattering (estimate)'),
+    'Church door': dict(absorption=[.14, .10, .06, .08, .10, .10, .10],            # [wooden_door]
+                        scattering=[.05, .07, .10, .15, .20, .25, .25],
+                        note='Solid wooden door [wooden_door]; transmission of the leaf with its 4 cm side gaps (church_transmission.py)'),
     'Church pews': dict(absorption=[.18, .12, .10, .09, .08, .07, .07],            # [wood_16mm]
                         scattering=[.30, .50, .60, .60, .70, .70, .70],            # [theatre_audience] (seating rows)
                         note='16 mm wood on studs [wood_16mm]; seating-row scattering [theatre_audience]'),
@@ -63,7 +67,7 @@ ASSIGNMENTS = {
     'StoneBrickWalls': 'Church stone', 'StoneBeams': 'Church stone', 'SideStairs': 'Church stone', 'FrontDoorFrame': 'Church stone',
     'Altar body': 'Church stone', 'StoneRoof': 'Church plaster vault', 'CopperRoof': 'Church copper roof',
     'Stone floor and courtyard': 'Church floor', 'Windows': 'Church glass',
-    'FrontDoorLeft': 'Church wood', 'FrontDoorRight': 'Church wood', 'SideDoor': 'Church wood', 'Organ case': 'Church wood', 'Organ tower': 'Church wood',
+    'FrontDoorLeft': 'Church door', 'FrontDoorRight': 'Church door', 'SideDoor': 'Church door', 'Organ case': 'Church wood', 'Organ tower': 'Church wood',
     'Seat': 'Church pews', 'Back': 'Church pews',
 }
 # The walk: the centre aisle (x = 0) from the doors to z = -18, and outside to x = 12, z = -46.
@@ -145,7 +149,16 @@ def plan():
     for p in proxies:
         if any(inside(p, r) for r in ROUTE):
             raise SystemExit(f"proxy {p['name']} blocks the walk route")
-    data = dict(materials=[dict(name=n, frequencies=FREQUENCIES, absorption=m['absorption'], scattering=m['scattering']) for n, m in MATERIALS.items()],
+    # Transmission per octave band 125 Hz - 16 kHz (16 kHz = 8 kHz) from the assemblies' sound
+    # reduction (church_transmission.py); occupied pews are unassigned and keep the pews' value.
+    def transmission(name, absorption):
+        t = ct.transmission(name if name in ct.ASSEMBLY else 'Church pews', absorption)
+        return t + [t[-1]]
+    # The windows are thin closed slabs: acoustic index 1 makes them partitions (their transmission is
+    # the pane's sound reduction, applied once) instead of a refracting glass medium.
+    data = dict(materials=[dict(name=n, frequencies=FREQUENCIES, absorption=m['absorption'], scattering=m['scattering'],
+                                transmission=transmission(n, m['absorption']), **({'ior': [1.0] * 8} if n == 'Church glass' else {}))
+                           for n, m in MATERIALS.items()],
                 assignments=[dict(objectName=o, material=m) for o, m in ASSIGNMENTS.items()],
                 proxies=[dict(name=p['name'], material=p['material'], yaw=p['yaw'], center=p['center'], size=p['size']) for p in proxies])
     (WORK / 'plan.json').write_text(json.dumps(data, indent=1) + '\n')

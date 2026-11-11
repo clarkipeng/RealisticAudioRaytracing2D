@@ -8,6 +8,7 @@
     (--out DIR writes the maps elsewhere; --seeds K averages K walk seeds per receiver)
     $PY $B/church_map.py page                      # PNGs and index.html in .context/energy-audio/maps/
     $PY $B/church_map.py compare DIR_BEFORE DIR_AFTER NAME   # before/after maps (late field, outside), NAME.png/json
+    $PY $B/church_map.py leak DIR...                          # inside vs just outside the doors per band -> leak.json
 
 Receivers: a square grid inside the enclosed air of the take (church_room.py voxels) and up to
 10 m in front of the doors, 1.65 m above the local floor, at least 0.4 m from any surface. Each
@@ -318,6 +319,32 @@ def compare(before, after, name='compare'):
     print(json.dumps({f'{k[0]} | {k[1]}': v for k, v in summary.items()}, indent=1))
 
 
+def leak(*directories):
+    """Inside against just outside the closed front doors, per band: total energy (dB re free field
+    at 1 m), median over interior receivers within 8 m of the doors and over receivers outside
+    within 4 m of them, and the spread of the late field outside (streaks show as a high maximum)."""
+    xyz = np.fromfile(OUT / 'receivers.f32', '<f4').reshape(-1, 3)
+    outside = np.load(OUT / 'receivers-outside.npy') > 0
+    near_in = ~outside & (xyz[:, 2] < -26) & (np.abs(xyz[:, 0]) < 8)
+    near_out = outside & (xyz[:, 2] > -39.5) & (np.abs(xyz[:, 0]) < 6)
+    result = {}
+    for directory in directories:
+        directory = Path(directory) if Path(directory).is_absolute() else ROOT / directory
+        v = np.fromfile(sorted(directory.glob('map-*.f32'))[0], '<f4').reshape(-1, 4, 8).astype(float)
+        db = 10 * np.log10(np.maximum(v, 1e-12))
+        rows = {}
+        for b, f in enumerate(BANDS[:7]):
+            inside, out = np.median(db[near_in, 3, b]), np.median(db[near_out, 3, b])
+            rows[f] = dict(inside=round(float(inside), 1), outside=round(float(out), 1), difference=round(float(inside - out), 1),
+                           lateOutsideMedian=round(float(np.median(db[outside, 2, b])), 1), lateOutsideMax=round(float(db[outside, 2, b].max()), 1))
+        result[directory.name] = rows
+        print(directory.name)
+        print('   band   inside  outside  difference  late outside median / max')
+        for f, r in rows.items():
+            print(f"{f:7d} {r['inside']:8.1f} {r['outside']:8.1f} {r['difference']:10.1f}   {r['lateOutsideMedian']:7.1f} / {r['lateOutsideMax']:.1f}")
+    (OUT / 'leak.json').write_text(json.dumps(result, indent=1) + '\n')
+
+
 def cut_segments(world, owner, names, height):
     keep = np.array([names[o] not in ('Meadow', 'CopperRoof', 'StoneRoof') for o in owner])
     w = world[keep]
@@ -344,5 +371,7 @@ if __name__ == '__main__':
         page()
     elif cmd == 'compare':
         compare(*args)
+    elif cmd == 'leak':
+        leak(*args)
     else:
         raise SystemExit(__doc__)

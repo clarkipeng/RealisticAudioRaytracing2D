@@ -17,9 +17,10 @@ import numpy as np
 from scipy import ndimage
 
 BANDS = [125, 250, 500, 1000, 2000, 4000, 8000]
-# Air: energy attenuation m (1/m), 20 C and 50-70% relative humidity, from the annex of Vorlaender,
-# Auralization (Springer 2008), as tabulated in pyroomacoustics/parameters.py.
-AIR_M = [x * 1e-3 for x in [0.1, 0.3, 0.6, 1.0, 1.7, 4.1, 13.5]]
+# Air: energy attenuation m (1/m) = alpha / 4.343 from ISO 9613-1 at 20 C, 50% relative humidity
+# (alpha in dB/m: 0.00044 ... 0.105 at 125 Hz ... 8 kHz), the values the renderer now uses
+# (Transport.hlsl AirCoefficient). Until 10 November this was Vorlaender's 50-70% table, lower at 4-8 kHz.
+AIR_M = [a / 4.343 for a in [0.00044, 0.00131, 0.00273, 0.00466, 0.00989, 0.02967, 0.10529]]
 
 
 def rotate(q, v):

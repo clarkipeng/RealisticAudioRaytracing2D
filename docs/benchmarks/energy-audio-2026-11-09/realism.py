@@ -52,7 +52,8 @@ def ours():
     """Rendered Church IRs: name -> (title, render directory, distance)."""
     d = {f'church-{k}': (f'Church (energy method), {name}', OUT / 'renders' / k, float(np.linalg.norm(np.array(POINTS[k]) - ORGAN)))
          for k, name in (('near', 'crossing'), ('far', 'nave by the doors'))}
-    d['church-near-before'] = ('Church (energy method), crossing, before the fixes (late field cut at 2 s)', OUT / 'renders' / 'near-before',
+    # The previous render of the same point (before the transmission, air-absorption and tail fixes of 10 November).
+    d['church-near-before'] = ('Church (energy method), crossing, before (old air table and tail fit)', OUT / 'renders-before-transmission' / 'near',
                                d['church-near'][2])
     return d
 
@@ -345,7 +346,7 @@ def page():
              'stpauls-32m': "measured: St Paul's Cathedral, source under the dome, receiver in the nave, 31.6 m (mono)",
              'church-near': 'our Church, energy method, binaural, listener in the crossing 10.3 m from the organ (doors closed)',
              'church-far': 'our Church, energy method, binaural, listener in the nave by the doors, 48 m from the organ (walk start)',
-             'church-near-before': 'our Church as rendered before these fixes: the same as "near" but the late field stops at 2 s'}
+             'church-near-before': 'our Church as rendered before the 10 November material and absorption fixes (same point as "near")'}
     html = ['<!doctype html><meta charset="utf-8"><title>Church realism reference</title>',
             '<style>body{font:14px/1.45 -apple-system,sans-serif;margin:1.5em;max-width:1300px;color:#222}td,th{padding:.2em .5em;border-bottom:1px solid #ddd;font-size:12px}'
             'img{max-width:100%}audio{width:260px}</style>',

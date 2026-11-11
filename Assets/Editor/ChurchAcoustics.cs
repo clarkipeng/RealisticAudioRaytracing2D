@@ -18,7 +18,9 @@ public static class ChurchAcoustics
 
     [Serializable] public sealed class Box { public string path, name, material, kind; public Vector3 center, size; public int triangles; }
     [Serializable] public sealed class Inventory { public List<Box> acoustic = new(), visual = new(); }
-    [Serializable] public sealed class MaterialPlan { public string name; public float[] absorption, scattering; public float[] frequencies; }
+    // transmission: optional, eight octave bands 125 Hz - 16 kHz (the assembly's, docs/benchmarks/energy-audio-2026-11-09/church_transmission.py).
+    // ior: optional, eight bands; 1 makes a closed object a partition (no refraction, Transport.hlsl PartitionExit).
+    [Serializable] public sealed class MaterialPlan { public string name; public float[] absorption, scattering, transmission, ior; public float[] frequencies; }
     [Serializable] public sealed class Assignment { public string objectName, material; }
     [Serializable] public sealed class Proxy { public string name, material; public Vector3 center, size; public float yaw; }
     [Serializable] public sealed class Plan { public MaterialPlan[] materials; public Assignment[] assignments; public Proxy[] proxies; }
@@ -86,6 +88,18 @@ public static class ChurchAcoustics
             if (material == null) { material = ScriptableObject.CreateInstance<AudioMaterial>(); AssetDatabase.CreateAsset(material, asset); }
             if (m.frequencies.Length != m.absorption.Length || m.frequencies.Length != m.scattering.Length) throw new ArgumentException("Band mismatch in " + m.name);
             material.energyCurve = m.frequencies.Select((f, i) => new AudioMaterial.EnergyKnot {frequencyHz = f, absorption = m.absorption[i], scattering = m.scattering[i]}).ToArray();
+            if (m.transmission != null && m.transmission.Length > 0)
+            {
+                if (m.transmission.Length != 8) throw new ArgumentException("Transmission needs eight octave bands in " + m.name);
+                // Band overrides carry the transmission; keep the derived index and damping as they were.
+                material.overrideBands = false;
+                var derived = material.GetShaderData();
+                material.iorBands = new[] {derived.iorLow.x, derived.iorLow.y, derived.iorLow.z, derived.iorLow.w, derived.iorHigh.x, derived.iorHigh.y, derived.iorHigh.z, derived.iorHigh.w};
+                material.dampingBands = new[] {derived.dampingLow.x, derived.dampingLow.y, derived.dampingLow.z, derived.dampingLow.w, derived.dampingHigh.x, derived.dampingHigh.y, derived.dampingHigh.z, derived.dampingHigh.w};
+                material.transmissionBands = (float[])m.transmission.Clone();
+                if (m.ior != null && m.ior.Length == 8) material.iorBands = (float[])m.ior.Clone();
+                material.overrideBands = true;
+            }
             EditorUtility.SetDirty(material);
             materials[m.name] = material;
         }

@@ -1873,7 +1873,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: b30975c27cd71459089424418a84e37f, type: 2}
   submeshMaterials: []
 --- !u!64 &249064759
 MeshCollider:
@@ -4794,7 +4794,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: b30975c27cd71459089424418a84e37f, type: 2}
   submeshMaterials: []
 --- !u!64 &763112675
 MeshCollider:
@@ -13353,6 +13353,8 @@ MonoBehaviour:
     maxBounces: 32
     lateRays: 512
     lateReceiverRadius: 0.5
+    lateTailSeconds: 0
+    lateAccumulationSeconds: 0
     seed: 0
     method: 0
     methodRays: 4096
@@ -14736,7 +14738,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Acoustics::AcousticSurface
   geometrySource: 2
-  material: {fileID: 11400000, guid: b8fdc963eef624d8c8e8dd32b63eb22d, type: 2}
+  material: {fileID: 11400000, guid: b30975c27cd71459089424418a84e37f, type: 2}
   submeshMaterials: []
 --- !u!64 &1960263842
 MeshCollider:
