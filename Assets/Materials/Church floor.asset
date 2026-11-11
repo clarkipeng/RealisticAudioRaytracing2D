@@ -15,25 +15,25 @@ MonoBehaviour:
   energyCurve:
   - frequencyHz: 125
     absorption: 0.01
-    scattering: 0.05
+    scattering: 0.12
   - frequencyHz: 250
     absorption: 0.01
-    scattering: 0.05
+    scattering: 0.13
   - frequencyHz: 500
     absorption: 0.01
-    scattering: 0.07
+    scattering: 0.14
   - frequencyHz: 1000
-    absorption: 0.02
-    scattering: 0.1
+    absorption: 0.01
+    scattering: 0.15
   - frequencyHz: 2000
     absorption: 0.02
-    scattering: 0.12
+    scattering: 0.16
   - frequencyHz: 4000
     absorption: 0.02
-    scattering: 0.15
+    scattering: 0.17
   - frequencyHz: 8000
     absorption: 0.02
-    scattering: 0.15
+    scattering: 0.17
   admittanceCurve: []
   roughness: 0.5
   density: 2400
@@ -66,7 +66,7 @@ MonoBehaviour:
   - 0.00013096821
   - 0.000016371027
   - 0.0000020463783
-  - 0.0000003226814
+  - 0.00000031942199
   - 0.0000003226814
   - 0.0000003226814
   - 0.0000003226814

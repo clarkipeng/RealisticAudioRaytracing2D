@@ -431,3 +431,43 @@ The leak comes straight out of the doors and builds up in the enclosed porch sid
 Doors-closed map: 375 receivers in 21 minutes (1.65 s GPU per solve, +18% for the room energy and partition crossings).
 Walk renders: hybrid 246 s (peak 3.71 GiB); energy 7,369 s (peak 2.97 GiB), twice the previous render because the 17.5 s tail is rendered at the walk's update rate and the machine was swapping (694 s paused for memory pressure).
 Full tier: 319 + 21 + 25 checks passed (peaks 3.03, 3.31 and 3.08 GiB).
+
+## Part H: published church materials, nearby second-order reflections, ear equalisation, baselines (11 November)
+
+### Baselines and scoreboard
+
+`scoreboard.py` (one command) rebuilds the baselines, scores them, and writes `scoreboard.md` and `scoreboard.json` beside this file.
+On the wave-ground-truth suite, `baseline-static-ir` (`tools/baseline_static_ir.py`) is a game convolution reverb: the ground truth of one central in-view receiver used at every receiver, with only the direct sound moved to each receiver's distance (no occlusion).
+In the Church, the baseline is a measured cathedral response (St Paul's or York Minster, OpenAIR, CC BY 4.0) used as a static reverb, with the direct sound at the listener's distance, for a still listener and for the walk.
+The blind A/B page is `.context/energy-audio/realism/ab.html`.
+
+On the suite the energy method beats the baseline in level everywhere (3.0 against 8.9 dB RMS overall, 4.2 against 13.4 dB in shadow) and in EDT overall, in shadow and in open scenes.
+It loses on T30, clarity and ETC distance: the baseline carries the true reverberation, which in closed rooms hardly depends on position.
+In the open scenes the energy method writes no energy after about 100 ms at most receivers, where the ground truth keeps about 1% (canopy), so the clarity error is unbounded there.
+
+### Materials
+
+Stone, vault, floor, pews, windows, doors and organ now take their absorption and scattering from the calibrated basilica model of Planells et al. (ICA 2016, Table 2).
+The window values are the classic ordinary-window-glass table; the copper roof keeps Vorländer's wooden lining.
+The pew blocks' floor (2 × 83 m²) is covered by thin slabs with the pews' material (a pew block absorbs per floor area, Martellotta & Cirillo 2009).
+Nothing was adjusted to reach a target.
+Predicted reverberation (Eyring with air): 7.7, 8.0, 7.7, 7.3, 6.1, 4.2 and 1.5 s from 125 Hz to 8 kHz (was 12.2–13.3 s at 125–250 Hz).
+
+### Early reflections, ears, late envelope
+
+- **Nearby second-order reflections:** the energy method enumerates the second-order reflections of the 96 planes most important to the source and listener in each solve (`methodNearPlanes`), and the walk leaves exactly those paths out.
+- **Diffuse-field equalised ears:** the KEMAR set is diffuse-field equalised when loaded, which removes about +10 dB at 2–2.5 kHz and +5 to +7 dB at 4–12 kHz that the raw set added to a diffuse field.
+- **Smooth late envelope:** the late field's spectral envelope is a smooth cubic interpolation of the eight band amplitudes, with no kink at each octave.
+- **Tail continuation:** it now fits the decay of the field within 8 m of the listener. The first version counted every ray in the building, and energy in coupled chambers and outside continued the tail at 17–28 s while the simulation decayed at 6 s.
+
+### Result against the measured cathedrals (T30 / EDT / C80, energy method)
+
+| Response | 125 Hz | 250 Hz | 500 Hz | 1 kHz | 2 kHz | 4 kHz |
+|---|---|---|---|---|---|---|
+| St Paul's, 9.5 m | 9.0 / 6.9 / −4.7 | 10.4 / 8.5 / −7.2 | 10.7 / 6.9 / −1.8 | 9.1 / 5.5 / +0.7 | 7.0 / 3.5 / +6.1 | 3.9 / 1.7 / +9.1 |
+| Church, 10.3 m, before | 27.1 / 19.8 / −1.0 | 24.9 / 22.7 / −6.6 | 20.2 / 8.4 / −4.3 | 15.7 / 7.5 / −3.1 | 10.1 / 5.3 / +0.3 | 5.8 / 2.1 / +1.8 |
+| Church, 10.3 m, now | 6.8 / 5.1 / −0.1 | 6.5 / 6.4 / −3.3 | 6.2 / 5.2 / −2.2 | 5.7 / 4.8 / −1.7 | 5.0 / 4.2 / −0.1 | 3.7 / 2.8 / +2.2 |
+| St Paul's, 31.6 m | 9.5 / 8.7 / −3.7 | 10.8 / 9.6 / −7.2 | 10.7 / 9.9 / −6.4 | 9.1 / 8.8 / −5.9 | 6.9 / 6.0 / +1.6 | 4.1 / 3.5 / +3.6 |
+| Church, 48 m, now | 5.0 / 7.9 / −1.9 | 4.9 / 8.1 / −6.0 | 5.0 / 7.5 / −9.1 | 5.1 / 6.9 / −6.8 | 4.9 / 6.1 / −5.9 | 4.0 / 4.4 / −4.3 |
+
+Cost: realism renders 2–17 min each (one took 17 min while the machine swapped), hybrid walk 428 s (peak 3.84 GiB), energy walk 4,082 s (peak 2.70 GiB, 6 s tail), full tier 321 + 22 + 26 checks passed.

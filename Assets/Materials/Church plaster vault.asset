@@ -14,26 +14,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: Acoustics::AudioMaterial
   energyCurve:
   - frequencyHz: 125
-    absorption: 0.013
-    scattering: 0.05
+    absorption: 0.038
+    scattering: 0.2
   - frequencyHz: 250
-    absorption: 0.015
-    scattering: 0.05
+    absorption: 0.038
+    scattering: 0.24
   - frequencyHz: 500
-    absorption: 0.02
-    scattering: 0.07
-  - frequencyHz: 1000
-    absorption: 0.03
-    scattering: 0.1
-  - frequencyHz: 2000
     absorption: 0.04
-    scattering: 0.12
+    scattering: 0.28
+  - frequencyHz: 1000
+    absorption: 0.048
+    scattering: 0.32
+  - frequencyHz: 2000
+    absorption: 0.05
+    scattering: 0.36
   - frequencyHz: 4000
-    absorption: 0.05
-    scattering: 0.15
+    absorption: 0.028
+    scattering: 0.4
   - frequencyHz: 8000
-    absorption: 0.05
-    scattering: 0.15
+    absorption: 0.028
+    scattering: 0.4
   admittanceCurve: []
   roughness: 0.5
   density: 2400
@@ -63,14 +63,14 @@ MonoBehaviour:
   - 0.5
   - 0.5
   transmissionBands:
-  - 0.0007117986
-  - 0.00008915549
-  - 0.000011201296
-  - 0.0000014145966
-  - 0.00000032940392
+  - 0.00073029654
+  - 0.00009128707
+  - 0.000011434656
+  - 0.0000014413432
   - 0.00000033287134
-  - 0.00000033287134
-  - 0.00000033287134
+  - 0.0000003253372
+  - 0.0000003253372
+  - 0.0000003253372
   iorBands:
   - 0.06353909
   - 0.063618414

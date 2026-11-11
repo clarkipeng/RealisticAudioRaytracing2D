@@ -28,37 +28,41 @@ SPEECH = ROOT / '.context/church-motion/speech.f32'
 SCENE = 'Assets/Scenes/Church.unity'
 FREQUENCIES = [125, 250, 500, 1000, 2000, 4000, 8000]
 
-# Absorption: M. Vorlander, Auralization (Springer 2008), appendix tables, as transcribed in the
-# pyroomacoustics material database (keywords in brackets); plaster: the classic smooth-plaster
-# table (sengpielaudio.com, "Plaster: smooth on tile/brick"; 8 kHz = 4 kHz). Scattering (ISO 17497-1
-# sense): pews from the same appendix ("theatre_audience"); the others are engineering estimates in
-# the ODEON manner (Christensen & Rindel 2005: a mid-frequency value for the surface's relief depth,
-# rising with frequency); large smooth surfaces ~0.05-0.1 at mid frequencies.
+# Materials (11 November). Main source: the calibrated church model of Planells, Segura, Barba,
+# Cerda, Cibrian & Gimenez, "Analysis of acoustic variations due to different use configurations in
+# the Basilica de Santa Maria de Elche", ICA 2016, paper 331, Table 2 (standardised absorption with the
+# stone masonry's absorption and the diffusion coefficients calibrated against measured T30, EDT, C80
+# in a stone basilica with barrel vaults, marble floor and wooden pews; acusvirt.upv.es). Their 4 kHz
+# value is used at 8 kHz. Their window absorption is the classic ordinary-window-glass table
+# (0.35, 0.25, 0.18, 0.12, 0.07, 0.04; e.g. Everest, Master Handbook of Acoustics), which also fits
+# leaded panes: single glazing vibrates and absorbs at low frequencies. The copper roof's timber
+# lining keeps M. Vorlaender, Auralization (Springer 2008), [wooden_lining] (no counterpart there).
+# Until 10 November: Vorlaender's limestone/plaster/marble/3 mm glass tables and estimated scattering.
 MATERIALS = {
-    'Church stone': dict(absorption=[.02, .02, .03, .04, .05, .05, .05],            # [limestone_wall]
-                         scattering=[.10, .15, .25, .35, .45, .50, .50],            # ornamented masonry, 5-10 cm relief (estimate)
-                         note='Limestone walls [limestone_wall]; scattering estimated for ornamented masonry (pilasters, reveals, joints)'),
-    'Church plaster vault': dict(absorption=[.013, .015, .02, .03, .04, .05, .05],  # smooth plaster on brick/tile
-                                 scattering=[.05, .05, .07, .10, .12, .15, .15],
-                                 note='Plaster, smooth on tile/brick (classic table); smooth vault scattering (estimate)'),
-    'Church floor': dict(absorption=[.01, .01, .01, .02, .02, .02, .02],           # [marble_floor]
-                         scattering=[.05, .05, .07, .10, .12, .15, .15],
-                         note='Marble floor [marble_floor]; smooth paving (estimate)'),
-    'Church wood': dict(absorption=[.14, .10, .06, .08, .10, .10, .10],            # [wooden_door]
-                        scattering=[.05, .07, .10, .15, .20, .25, .25],
-                        note='Solid wooden door [wooden_door] (organ case and tower); panelled wood scattering (estimate)'),
-    'Church door': dict(absorption=[.14, .10, .06, .08, .10, .10, .10],            # [wooden_door]
-                        scattering=[.05, .07, .10, .15, .20, .25, .25],
-                        note='Solid wooden door [wooden_door]; transmission of the leaf with its 4 cm side gaps (church_transmission.py)'),
-    'Church pews': dict(absorption=[.18, .12, .10, .09, .08, .07, .07],            # [wood_16mm]
-                        scattering=[.30, .50, .60, .60, .70, .70, .70],            # [theatre_audience] (seating rows)
-                        note='16 mm wood on studs [wood_16mm]; seating-row scattering [theatre_audience]'),
+    'Church stone': dict(absorption=[.038, .038, .04, .048, .05, .028, .028],      # Planells 2016: stone masonry (calibrated)
+                         scattering=[.12, .13, .14, .15, .16, .17, .17],
+                         note='Stone masonry walls: Planells et al. 2016 (calibrated basilica model)'),
+    'Church plaster vault': dict(absorption=[.038, .038, .04, .048, .05, .028, .028],  # Planells 2016: vaults
+                                 scattering=[.20, .24, .28, .32, .36, .40, .40],
+                                 note='Vaults (ribs, mouldings): Planells et al. 2016'),
+    'Church floor': dict(absorption=[.01, .01, .01, .01, .02, .02, .02],           # Planells 2016: marble floor
+                         scattering=[.12, .13, .14, .15, .16, .17, .17],
+                         note='Marble floor (joints, wear): Planells et al. 2016'),
+    'Church wood': dict(absorption=[.12, .14, .16, .16, .16, .16, .16],            # Planells 2016: organ
+                        scattering=[.20, .24, .28, .32, .36, .40, .40],
+                        note='Organ case and tower: Planells et al. 2016 (organ)'),
+    'Church door': dict(absorption=[.14, .10, .06, .08, .10, .10, .10],            # Planells 2016: wooden doors
+                        scattering=[.12, .13, .14, .15, .16, .17, .17],
+                        note='Wooden doors: Planells et al. 2016; transmission of the leaf with its 4 cm side gaps (church_transmission.py)'),
+    'Church pews': dict(absorption=[.09, .14, .16, .16, .15, .13, .13],            # Planells 2016: wooden pews
+                        scattering=[.30, .40, .50, .60, .70, .70, .70],
+                        note='Wooden pews (and the floor area of the pew blocks): Planells et al. 2016'),
     'Church pews occupied': dict(absorption=[.57, .61, .75, .86, .91, .86, .86],   # occupied wooden pews (classic table)
                                  scattering=[.30, .50, .60, .60, .70, .70, .70],
                                  note='Occupied wooden pews (classic table; 8 kHz = 4 kHz); not assigned (optional)'),
-    'Church glass': dict(absorption=[.08, .04, .03, .03, .02, .02, .02],           # [glass_3mm]
-                         scattering=[.05, .05, .05, .05, .07, .10, .10],
-                         note='Single pane of glass, 3 mm [glass_3mm] (leaded windows); smooth (estimate)'),
+    'Church glass': dict(absorption=[.35, .25, .18, .12, .07, .04, .04],           # Planells 2016 / ordinary window glass
+                         scattering=[.10, .10, .10, .10, .10, .10, .10],
+                         note='Leaded windows: ordinary window glass (Planells et al. 2016; classic table)'),
     'Church copper roof': dict(absorption=[.27, .23, .22, .15, .10, .07, .06],     # [wooden_lining]
                                scattering=[.10, .15, .20, .30, .40, .40, .40],
                                note='Interior side of the copper roof: 12 mm wooden lining on frame [wooden_lining]; rafters and trusses (estimate)'),
@@ -146,6 +150,19 @@ def plan():
             continue
         proxies.append(box)
         report.append(f"pier {v['path']} at ({c['x']:.1f}, {c['z']:.1f}), {side:.2f} m square, {s['y']:.1f} m tall")
+    # Pew blocks: the floor under and between the pews is part of the seating block (a pew block
+    # absorbs per floor area it covers, Martellotta & Cirillo, Applied Acoustics 70, 2009), so a thin
+    # slab with the pews' material covers each block's footprint instead of bare marble.
+    seat_boxes = [a for a in acoustic if a['name'] in ('Seat', 'Back')]
+    for side in (-1, 1):
+        block = [a for a in seat_boxes if a['center']['x'] * side > 0]
+        if not block:
+            continue
+        x0 = min(a['center']['x'] - a['size']['x'] / 2 for a in block); x1 = max(a['center']['x'] + a['size']['x'] / 2 for a in block)
+        z0 = min(a['center']['z'] - a['size']['z'] / 2 for a in block); z1 = max(a['center']['z'] + a['size']['z'] / 2 for a in block)
+        proxies.append(dict(name=f'Pew block {"west" if side < 0 else "east"}', material='Church pews', yaw=0,
+                            center=dict(x=(x0 + x1) / 2, y=1.01, z=(z0 + z1) / 2), size=dict(x=x1 - x0, y=.02, z=z1 - z0)))
+        report.append(f'pew block {side:+d}: x {x0:.1f}..{x1:.1f}, z {z0:.1f}..{z1:.1f} ({(x1 - x0) * (z1 - z0):.0f} m2 of floor)')
     for p in proxies:
         if any(inside(p, r) for r in ROUTE):
             raise SystemExit(f"proxy {p['name']} blocks the walk route")

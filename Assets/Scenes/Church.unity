@@ -3307,6 +3307,39 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 533670778}
   m_Mesh: {fileID: 4300000, guid: 124a320cf697b4dd297cce1c3d2644b9, type: 2}
+--- !u!1 &537925400
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 537925401}
+  m_Layer: 0
+  m_Name: Acoustic interior proxies
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &537925401
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 537925400}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1363001637}
+  - {fileID: 923182651}
+  m_Father: {fileID: 762107864}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &542850510
 GameObject:
   m_ObjectHideFlags: 0
@@ -4779,6 +4812,7 @@ Transform:
   - {fileID: 1594369826}
   - {fileID: 377857098}
   - {fileID: 2040307690}
+  - {fileID: 537925401}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &763112674
@@ -5762,6 +5796,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 909830543}
   m_Mesh: {fileID: 9096884052415582558, guid: f68688db115df45b7b644235d57dd7f0, type: 3}
+--- !u!1 &923182650
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 923182651}
+  - component: {fileID: 923182653}
+  - component: {fileID: 923182652}
+  m_Layer: 0
+  m_Name: Pew block east
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &923182651
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 923182650}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 4, y: 1.01, z: -16.0225}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 537925401}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &923182652
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 923182650}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
+  submeshMaterials: []
+--- !u!65 &923182653
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 923182650}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4, y: 0.02, z: 20.695}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &946206403
 GameObject:
   m_ObjectHideFlags: 0
@@ -8835,6 +8938,75 @@ BoxCollider:
   m_Enabled: 1
   serializedVersion: 3
   m_Size: {x: 4, y: 0.8, z: 0.14}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &1363001636
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1363001637}
+  - component: {fileID: 1363001639}
+  - component: {fileID: 1363001638}
+  m_Layer: 0
+  m_Name: Pew block west
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1363001637
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1363001636}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -4, y: 1.01, z: -16.0225}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 537925401}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1363001638
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1363001636}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 0aa204c5612a94d85b2348cf27e6c055, type: 2}
+  submeshMaterials: []
+--- !u!65 &1363001639
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1363001636}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4, y: 0.02, z: 20.695}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1365545040
 GameObject:
@@ -13364,6 +13536,7 @@ MonoBehaviour:
     methodArrivals: 1
     methodArrivalOrder: 2
     methodArrivalSlots: 64
+    methodNearPlanes: 0
     methodMaxEvents: 65536
     raysPerPair: 0
     diffractionFactor: 0
@@ -13453,6 +13626,9 @@ MonoBehaviour:
   - id: 2515f6d0c548430b8872b886b75ad06e
     transform: {fileID: 526580491}
     geometry: 1
+  - id: 2c22cb5ff4b244bfad673a75699190ce
+    transform: {fileID: 1363001637}
+    geometry: 1
   - id: 2dff4a7131c24a6799be9ba22134f91c
     transform: {fileID: 5111069120412312311}
     geometry: 1
@@ -13479,6 +13655,9 @@ MonoBehaviour:
     geometry: 1
   - id: 547ad526de5b422fada7744914849830
     transform: {fileID: 1205103282}
+    geometry: 1
+  - id: 59d8d2c8ed4244a5acf9f7ab6217980e
+    transform: {fileID: 923182651}
     geometry: 1
   - id: 5ce9ede41392469dbd9d97cb2ef5d311
     transform: {fileID: 249064753}

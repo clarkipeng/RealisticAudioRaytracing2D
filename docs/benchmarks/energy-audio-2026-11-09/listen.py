@@ -55,8 +55,12 @@ METHODS = {
     # 9-13 s, so a 2 s horizon cut it off while still audible), and is the moving average of
     # solves with new walk seeds over 1 s (smooths the walk's sampling noise over about 1.4 m
     # of walking).
-    'energy': dict(COMMON, method=2, methodRays=2048, methodArrivalSlots=64, methodArrivalOrder=2, methodRouletteFloor=1e-6,
-                   specularDetectionRadius=2.0, lateTailSeconds=16.0, lateAccumulationSeconds=1.0, tailSamples=int(17.5 * 44100)),
+    # Second-order reflections of the 96 planes most important to the source and listener each
+    # solve (the Church has 6,869 planes, too many to pair all of them), 96 rendered arrival slots.
+    # The walk renders 6 s after its end (the realism impulse responses keep the full 17.5 s).
+    'energy': dict(COMMON, method=2, methodRays=2048, methodArrivalSlots=96, methodArrivalOrder=2, methodRouletteFloor=1e-6,
+                   specularDetectionRadius=2.0, lateTailSeconds=16.0, lateAccumulationSeconds=1.0, tailSamples=6 * 44100,
+                   methodNearPlanes=96),
 }
 # Diagnostic variants of the energy render (the coordinator's "echo doesn't sound natural" check).
 # They need the uncommitted methodDiagnosticVariant knob (.context/energy-audio/diagnostic-variants.patch):
@@ -213,7 +217,10 @@ def page():
         pcm, rate = read_wav(folder / 'listener-0.wav')
         report = json.loads((folder / 'run.json').read_text())
         latency = int(report.get('dspLatencySamples', 0))
-        tracks[name] = pcm[latency:]
+        pcm = pcm[latency:]
+        # The walk renders stop a few seconds after its end: fade the last second (no click).
+        fade = np.minimum(1, (len(pcm) - np.arange(len(pcm))) / rate)
+        tracks[name] = pcm * (.5 - .5 * np.cos(np.pi * fade))[:, None]
         reports[name] = report
     if not tracks:
         raise SystemExit('No renders yet.')
