@@ -149,16 +149,54 @@ float3 UnitDirection(inout uint rng, bool is2D)
     float z = 2 * RandomRay(rng) - 1, r = sqrt(max(0, 1 - z * z));
     return float3(r * cos(angle), r * sin(angle), z);
 }
+// Air absorption, ISO 9613-1 (20 C, 50% relative humidity, 101.325 kPa) at the octave band
+// centres 125 Hz ... 16 kHz, in dB per metre (sound pressure level; the energy factor over d is
+// 10^(-losses d / 10)). The previous table held the same values per foot (3.28x too small), so
+// the high bands of the late field decayed at the air-limited rate of the wrong table.
 float AirCoefficient(float frequencyHz)
 {
     if (UseAirAbsorption == 0)
         return 0;
-    const float losses[8] = {0.0001, 0.0003, 0.0007, 0.0015, 0.0035, 0.0100, 0.0320, 0.1100};
+    const float losses[8] = {0.00044, 0.00131, 0.00273, 0.00466, 0.00989, 0.02967, 0.10529, 0.36454};
     float at = clamp(log2(max(125, frequencyHz) / 125), 0, 7);
     uint a = (uint)at;
     return lerp(losses[a], losses[min(a + 1, 7)], frac(at)) / 8.685889638;
 }
 static const uint AirMedium = 0xffffffff;
+// Partitions. A surface material's transmission is the whole assembly's (a wall, a door leaf, a
+// window pane): the scene models such an object with two faces (two sheets, or a thin closed
+// solid without refraction), and the assembly's sound reduction applies once per crossing. A
+// transmitted ray or straight connection therefore continues undeviated and leaves the object
+// through its far face when that lies within PartitionDepth (3 m: the Church's buttressed walls
+// are 2.4 m). Media are not partitions: a closed object whose material refracts (acoustic index
+// not 1, e.g. water or a material slab whose travel time matters) is entered with refraction and
+// crossed through its own interior, as before; so is anything thicker than PartitionDepth.
+static const float PartitionDepth = 3.0;
+// The medium of a closed object (Volumes are sorted by owner), or AirMedium for an open one.
+uint VolumeMedium(uint owner)
+{
+    uint lo = 0, hi = VolumeCount;
+    while (lo < hi) { uint mid = lo + (hi - lo) / 2; if (Volumes[mid].ids.z < owner) lo = mid + 1; else hi = mid; }
+    return lo < VolumeCount && Volumes[lo].ids.z == owner ? Volumes[lo].ids.w : AirMedium;
+}
+// medium: the caller's test that the hit object is a refracting medium (see above).
+bool PartitionExit(uint stateOffset, uint hit, float3 position, float3 direction, bool is2D, bool medium, out float depth)
+{
+    uint owner = Primitives[hit].indices.x;
+    float travelled = 2 * RayEpsilon;
+    depth = 0;
+    if (medium) return false;
+    [loop] for (uint i = 0; i < 4; i++)
+    {
+        uint next; float distance; float3 normal;
+        if (!NearestHit(stateOffset, position + direction * travelled, direction, PartitionDepth - travelled, is2D, next, distance, normal))
+            return false;
+        if (Primitives[next].indices.x == owner) { depth = travelled + distance; return true; }
+        travelled += distance + 2 * RayEpsilon;
+        if (travelled >= PartitionDepth) return false;
+    }
+    return false;
+}
 // Containment uses the nearest oriented boundary of each closed object. Choosing
 // the smallest containing volume restores the parent medium in nested solids, and
 // also initializes sources/listeners that start inside one. No fixed medium stack.
@@ -406,6 +444,15 @@ void EvaluateDirect(uint index, bool is2D)
                            time, gain);
             position += direction * distance;
             remaining -= distance;
+            float depth;
+            uint volume = VolumeMedium(Primitives[hit].indices.x);
+            if (gain != 0 && PartitionExit(stateOffset, hit, position, direction, is2D, volume != AirMedium && MediumIor(volume, frequencyBin) != 1, depth) && depth < remaining)
+            {
+                // The far face of the same partition: its transmission was the whole assembly's.
+                Travel(depth, medium, frequencyBin, frequencyHz, time, gain);
+                position += direction * depth;
+                remaining -= depth;
+            }
             uint next = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
             float nextSpeed = SpeedOfSound / MediumIor(next, frequencyBin);
             float3 velocity = PointVelocity(stateOffset + Primitives[hit].indices.x, position);

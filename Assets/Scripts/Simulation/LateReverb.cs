@@ -26,6 +26,7 @@ internal sealed class LateReverb
     readonly Vector2[] work,sum;
     readonly float[] dry;
     readonly double[][] envelope;      // [channel][partition] energy of one band, continued by LateTail
+    readonly double[] room;            // [partition] room energy of one band (energy method), LateTail's decay reference
     readonly float[] gains;            // [channel][partition][band]
     // Emission rows of plane sources at the latest response: amplitude, clip phase, birth.
     readonly float[][] amplitudes;readonly uint[][] phases;readonly long[][] births;readonly int[] sites;
@@ -41,7 +42,7 @@ internal sealed class LateReverb
         latency=settings.DspLatencySamples;step=settings.responseStepSamples;this.rate=rate;
         active=new bool[2*pairs];blocks=new float[2*listeners*channels*partition];
         work=new Vector2[2*partition];sum=new Vector2[bins];dry=new float[2*partition];gains=new float[channels*count*LateBasis.Bands];
-        envelope=new double[channels][];for(int c=0;c<channels;c++)envelope[c]=new double[count];
+        envelope=new double[channels][];for(int c=0;c<channels;c++)envelope[c]=new double[count];room=new double[count];
         amplitudes=new float[signals.Length][];phases=new uint[signals.Length][];births=new long[signals.Length][];sites=new int[signals.Length];
     }
     internal void SetResponse(long sample,bool cut,RayTransport.LateFrame late,AcousticTake.State[] states)
@@ -71,7 +72,8 @@ internal sealed class LateReverb
                     if(k<simulated)for(int d=0;d<LateBasis.Directions;d++)energy+=basis.EarWeights[(d*2+c)*LateBasis.Bands+b]*late.Energy(pair,d,b,k);
                     envelope[c][k]=Math.Max(0,energy)/partition;
                 }
-                LateTail.Extend(envelope,simulated,count);
+                if(late.HasRoom)for(int k=0;k<simulated;k++)room[k]=late.Room(pair,b,k);
+                LateTail.Extend(envelope,simulated,count,late.HasRoom?room:null);
                 for(int c=0;c<channels;c++)for(int k=0;k<count;k++)gains[(c*count+k)*LateBasis.Bands+b]=(float)Math.Sqrt(envelope[c][k]);
             }
             for(int c=0;c<channels;c++)for(int k=0;k<count;k++)

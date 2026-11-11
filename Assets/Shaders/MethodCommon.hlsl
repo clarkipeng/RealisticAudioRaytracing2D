@@ -139,10 +139,17 @@ void MethodDepositPressure(uint band, float time, float2 value, uint key)
     }
 }
 
+// Whether the hit object is a refracting medium (closed, acoustic index not 1): not a partition.
+bool MethodRefracts(uint hit)
+{
+    uint volume = VolumeMedium(Primitives[hit].indices.x);
+    return volume != AirMedium && MethodIor(volume, 3) != 1;
+}
+
 // ---- straight connections ----
 // Visibility with transmission through every crossed surface, as the direct sound
 // (straight line, no refraction): factor[b] is multiplied by the pressure (energy)
-// transmission coefficient of each crossing and the medium loss; time accumulates
+// transmission coefficient of each crossing (once per partition, see PartitionExit) and the medium loss; time accumulates
 // the piecewise travel time. False when an opaque surface blocks the segment.
 bool MethodConnect(float3 a, float3 b, uint medium, bool energy, inout float factor[8], out float time)
 {
@@ -175,6 +182,15 @@ bool MethodConnect(float3 a, float3 b, uint medium, bool energy, inout float fac
         if (!passes) return false;
         p += d * distance;
         remaining -= distance;
+        float depth;
+        if (PartitionExit(MethodState, hit, p, d, false, MethodRefracts(hit), depth) && depth < remaining)
+        {
+            // The far face of the same partition: its transmission was the whole assembly's.
+            time += depth * MethodSlowness(medium);
+            [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] *= exp(-(energy ? 2 : 1) * MethodLoss(medium, k) * depth);
+            p += d * depth;
+            remaining -= depth;
+        }
         medium = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
     }
     time += remaining * MethodSlowness(medium);

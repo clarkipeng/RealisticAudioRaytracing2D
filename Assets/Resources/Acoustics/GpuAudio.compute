@@ -576,7 +576,7 @@ StructuredBuffer<uint> LateOffsets;
 RWStructuredBuffer<float> LateGains,LateBlocks;
 RWStructuredBuffer<float2> LateKernels,LateInputs,LateSums;
 RWStructuredBuffer<uint> LateActive;
-uint LatePartition,LateCount,LateSimulated,LateBasisCount,LateBins,LateBank,LateHistogramOffset,LateRays,LateEmissionRow,LateValid,LateTiles,LateWhich,LateBlend,LateStep,LateBlock;
+uint LatePartition,LateCount,LateSimulated,LateRoomBase,LateBasisCount,LateBins,LateBank,LateHistogramOffset,LateRays,LateEmissionRow,LateValid,LateTiles,LateWhich,LateBlend,LateStep,LateBlock;
 uint2 LateSwap;
 static const uint LATE_BANDS=8,LATE_DIRECTIONS=6;
 [numthreads(64,1,1)]
@@ -604,7 +604,17 @@ void LateExtend(uint3 id:SV_DispatchThreadID)
     uint b=id.x%LATE_BANDS,pair=id.x/LATE_BANDS,S=LateSimulated,K=LateCount;
     uint window=max(2u,S/4),join=max(1u,window/2),fade=max(1u,(K-S)/8);
     float first=0,last=0;
-    for(uint c=0;c<AudioChannels;c++)
+    if(LateRoomBase!=0)
+    {
+        // Room energy of the energy method (all rays): a steadier decay than the listener's envelope.
+        uint room=LateHistogramOffset/2+LateRoomBase-1+(pair*LATE_BANDS+b)*S;
+        for(uint k=0;k<window;k++)
+        {
+            uint u=room+S-2*window+k,v=room+S-window+k;
+            first+=LateHistogram[2*u+1]+LateHistogram[2*u]/4294967296.0;last+=LateHistogram[2*v+1]+LateHistogram[2*v]/4294967296.0;
+        }
+    }
+    else for(uint c=0;c<AudioChannels;c++)
     {
         uint base=((pair*AudioChannels+c)*LATE_BANDS+b)*K;
         for(uint k=0;k<window;k++){float g=LateGains[base+S-2*window+k],h=LateGains[base+S-window+k];first+=g*g;last+=h*h;}

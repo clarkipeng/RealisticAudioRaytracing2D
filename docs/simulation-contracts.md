@@ -2294,10 +2294,14 @@ Edge rays (diffraction continued into the walk) leave the source only, importanc
 A small transmitted share into air (under half of the continuing energy: through an open sheet such as a wall face or a door leaf, or out of a closed solid) is split off instead of drawn.
 The ray continues with the reflected and scattered shares, and the transmitted branch becomes a candidate of a one-slot weighted reservoir (kept with probability its weight over the summed weight of all candidates so far; the kept branch carries that sum).
 When the ray ends, the kept branch is traced from its surface with Russian roulette on its share of a source ray's flux (survival `min(1, w / 0.05)`, at its start and after every event).
-The roulette keeps the cost down: between the two faces of a wall modelled as two sheets a branch would otherwise bounce for hundreds of reflections.
-Entering a closed solid stays a draw: the energy that gets back out (about `t²/a`) is negligible, and splitting there made the Church's solve 47% slower.
+The roulette keeps the cost down where a branch could otherwise bounce for hundreds of reflections (inside a thick solid).
 Drawing every transmission sent about one ray in 10⁴ through a wall with its full energy (`EnergyMethodLeaksThroughWallsSmoothly`: the split's seed-to-seed spread of the leaked field is 19%, 10 November).
-The streaks outside the Church's closed doors in the energy maps are not this: they stay with the split and move when the random sequence changes, so they are most likely rays slipping through narrow gaps in the geometry, each with its full energy (the door leaves stop about 4 cm short of the wall opening on each side, and the wall mesh has 1,119 open edges); sealing those is a scene fix.
+
+**Partitions (both methods, 10 November).**
+A material's transmission is the whole assembly's sound reduction (a wall, a door leaf with its gaps, a window pane), but scenes model such objects with two faces: two sheets, or a thin closed solid.
+Applied at each face, the transmission was squared, and the energy between the faces bounced for hundreds of reflections (a closed glass slab with the default acoustic index transmitted almost nothing: its critical angle is 3.6°).
+Now a transmitted ray, a straight connection (direct sound, scattering-point connections) and the hybrid's direct paths and late rays continue undeviated and leave the object through its far face when that lies within 3 m (`PartitionExit`, Transport.hlsl), so the assembly's transmission applies once (`EnergyPartitionsTransmitOnce`).
+Refracting media are not partitions: a closed object whose material's acoustic index is not 1 is entered with refraction and crossed through its interior, as before (`TransportMedia`, `RayDebugUsesMaterialTravelTimes`); so is anything thicker than 3 m.
 
 **Doppler.**
 Velocities come from the solve's states (`VelocityValid`).
@@ -2317,6 +2321,12 @@ A static or slowly moving listener then hears the average of many independent wa
 With `lateTailSeconds` longer than the horizon (`maximumDelaySeconds`), the late synthesis kernel runs on to that length and each band's envelope continues its fitted exponential decay (`LateTail.cs`, mirrored by `GpuAudio.compute` `LateExtend`; either method's late field).
 The decay per partition is fitted over the last two windows (a quarter of the simulated partitions each) of both channels, each channel continues the exponential with its last window's mean, the last half window blends into it, and the last eighth of the continuation fades out, so a reverberation longer than the horizon decays to inaudibility instead of stopping (`LateTailContinuesTheFittedDecay`, `LateTailFadesTheReverberationOut`).
 This is the late synthesis's own diffuse-field assumption (Polack), applied past the simulated time; envelopes that do not decay over the fit are not continued.
+For the energy method the decay is fitted on the room energy instead: every path deposits its flux at each bin start it passes into a per-pair, per-band block after the histograms (`LateRoomCells`) until it first transmits (energy that leaked into an attic, a side chamber or outside decays at those spaces' slower rates and dominated the sum: a first try fitted 125 Hz at 28 s), so the fit uses all rays in the source's space rather than the few that cross the listener's sphere late in the tail; fitted on the listener's envelope, the 125–250 Hz decay varied from solve to solve enough to leave bursts 60 dB down 12 s into the tail.
+The hybrid's late field has no room block and keeps the listener-envelope fit.
+
+**Air absorption (both methods, 10 November).**
+`AirCoefficient` (Transport.hlsl) now holds ISO 9613-1 values for 20 °C, 50% relative humidity and 101.325 kPa at the band centres (0.00044, 0.00131, 0.00273, 0.00466, 0.00989, 0.0297, 0.105 and 0.365 dB/m from 125 Hz to 16 kHz).
+The previous table held the same numbers per foot, 3.28 times too small, which capped the late decay at 8 kHz at the air-limited 11 dB/s of the wrong table (T30 5.4 s in the Church against 2.4 s predicted).
 
 **Measurement output.**
 In the comparison format every arrival is also deposited into the 1 ms world-frame histogram, so `energy.f32` is arrivals plus diffuse; `MethodTransport.ReadArrivals` lists them.

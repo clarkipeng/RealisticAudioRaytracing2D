@@ -232,6 +232,10 @@ public partial class TakeChecks
             Assert.That(energy[c][total-1],Is.LessThan(.05*(c+1)*Math.Pow(rate,total-1)),"The kernel's end fades out.");
             for(int k=simulated-5;k<simulated;k++)Assert.That(energy[c][k]/((c+1)*Math.Pow(rate,k)),Is.EqualTo(1).Within(.12),"Join bins stay on the line.");
         }
+        // A reference curve (the room energy) sets the decay; the channels only set the level.
+        var noisy=new double[1][];noisy[0]=new double[total];var reference=new double[total];
+        for(int k=0;k<simulated;k++){noisy[0][k]=Math.Pow(rate,k)*(k%2==0?1.6:.4);reference[k]=5*Math.Pow(rate,k);}
+        Assert.That(LateTail.Extend(noisy,simulated,total,reference),Is.EqualTo(rate).Within(1e-9*rate),"The reference's decay.");
         var rising=new double[1][];rising[0]=new double[total];for(int k=0;k<simulated;k++)rising[0][k]=1+k;
         Assert.That(LateTail.Extend(rising,simulated,total),Is.EqualTo(0));
         for(int k=simulated;k<total;k++)Assert.That(rising[0][k],Is.EqualTo(0),"A field that does not decay is not continued.");

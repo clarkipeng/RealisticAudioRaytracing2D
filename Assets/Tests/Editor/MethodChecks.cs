@@ -227,6 +227,48 @@ public partial class TakeChecks
         Assert.That(ratio, Is.EqualTo(10).Within(2.5), "Leaked energy scales with the transmission.");
     }
 
+    // Partitions: a wall modelled as two parallel sheets of one object (0.3 m apart) transmits
+    // its material's transmission once (the assembly's), so the direct sound through it is
+    // (1 - a) t / r^2, not its square; a second wall object adds its own factor.
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void EnergyPartitionsTransmitOnce()
+    {
+        const float a = .1f, t = .01f;
+        var objects = new List<AcousticTake.ObjectDefinition> {new() {id = "source", name = "Source", scale = Vector3.one}, new() {id = "listener", name = "Listener", scale = Vector3.one}};
+        var list = new List<AcousticTake.Primitive>();
+        void Wall(float x0, float x1)
+        {
+            int owner = objects.Count, start = list.Count;
+            foreach (float x in new[] {x0, x1})
+            {
+                list.Add(new AcousticTake.Primitive {objectIndex = owner, a = new Vector3(x, -10, -10), b = new Vector3(x, 10, -10), c = new Vector3(x, 10, 10)});
+                list.Add(new AcousticTake.Primitive {objectIndex = owner, a = new Vector3(x, -10, -10), b = new Vector3(x, 10, 10), c = new Vector3(x, -10, 10)});
+            }
+            objects.Add(new() {id = "wall-" + owner, name = "Wall " + owner, scale = Vector3.one, primitiveStart = start, primitiveCount = list.Count - start});
+        }
+        double Direct(int walls)
+        {
+            objects.RemoveRange(2, objects.Count - 2); list.Clear();
+            for (int w = 0; w < walls; w++) Wall(-.15f + w * 1f, .15f + w * 1f);
+            var scene = new AcousticTake.Scene {dimension = AcousticTake.Dimension.Spatial3D, objects = objects.ToArray(),
+                sources = new[] {new AcousticTake.SourceDefinition {objectIndex = 0, clipIndex = 0}}, listeners = new[] {1},
+                clips = new[] {new AcousticTake.ClipDefinition {name = "test"}}, materials = new[] {LateMaterial(a, 0, t)}};
+            var state = new AcousticTake.State[objects.Count];
+            for (int i = 0; i < state.Length; i++) state[i] = new AcousticTake.State {rotation = Quaternion.identity,
+                flags = AcousticTake.StateFlags.Active | (i == 0 ? AcousticTake.StateFlags.Source : i == 1 ? AcousticTake.StateFlags.Listener : AcousticTake.StateFlags.Geometry)};
+            state[0].position = new Vector3(-3, .2f, .1f); state[1].position = new Vector3(3, -.1f, .3f);
+            var settings = ControlSettings(TakeRender.Method.Energy, 4096, .1f);
+            using var solver = new TransportSolver(scene, list.ToArray(), settings, RequireGpu(), sampleRate: 8000);
+            solver.Solve(state, new TakeRender.DirectPath[1]);
+            double e = 0; foreach (var x in solver.Method.ReadArrivals()) if (x.Family == 0) e += x.Energy(2);
+            return e * (state[1].position - state[0].position).sqrMagnitude;
+        }
+        double one = Direct(1), two = Direct(2), want = (1 - a) * t;
+        TestContext.WriteLine($"one wall {one:G4} (want {want:G4}), two walls {two:G4} (want {want * want:G4})");
+        Assert.That(one / want, Is.EqualTo(1).Within(.01), "One partition, one transmission factor.");
+        Assert.That(two / (want * want), Is.EqualTo(1).Within(.01), "Each partition object its own factor.");
+    }
+
     // Rigid half-plane, listener in the shadow: the pressure method's band response
     // matches the independent signed half-plane quadrature (TunedRoutesMatchIndependentHalfPlane),
     // and the energy method's UTD band energy matches the BTM band energy within 1.5 dB.

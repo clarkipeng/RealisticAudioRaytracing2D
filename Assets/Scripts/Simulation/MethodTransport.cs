@@ -223,11 +223,11 @@ internal sealed class MethodTransport : IDisposable, ILateField
             edgeCdf = new ComputeBuffer(Math.Max(1, EdgeCount), 4); edgeCdf.SetData(new float[Math.Max(1, EdgeCount)]);
             Paths = new RayTransport.Path[audio && readback ? checked(Frames * PathsPerFrame) : 0];
             // Both outputs are (low, high) 32.32 fixed-point pairs.
-            outputCount = audio ? checked(2 * Frames * Pairs * Directions * Bands * Math.Max(1, Bins))
+            outputCount = audio ? checked(2 * Frames * Pairs * (Directions + 1) * Bands * Math.Max(1, Bins))
                         : energy ? 2 * Directions * Bands * Bins : 2 * 2 * TrainBase * ((1 << Bands) - 1);
             statsCount = Bands * Depths * StatStride + Counters;
             output = new ComputeBuffer(outputCount, 4); stats = new ComputeBuffer(statsCount, 4);
-            accumulator = new ComputeBuffer(accumulate ? Math.Max(1, Pairs * Directions * Bands * Bins) : 1, 4);
+            accumulator = new ComputeBuffer(accumulate ? Math.Max(1, Pairs * (Directions + 1) * Bands * Bins) : 1, 4);
             emptyCapture = new ComputeBuffer(2, 16);
             Output = new uint[audio ? 0 : outputCount]; Stats = new uint[statsCount];
             late = new uint[audio && readback ? outputCount : 0];
@@ -320,7 +320,13 @@ internal sealed class MethodTransport : IDisposable, ILateField
         shader.SetInt("MethodState", frame * scene.objects.Length);
         shader.SetInt("MethodSourceObject", scene.sources[pair / scene.listeners.Length].objectIndex);
         shader.SetInt("MethodListenerObject", scene.listeners[pair % scene.listeners.Length]);
-        shader.SetInt("MethodCellBase", Audio ? solve * Directions * Bands * Bins : 0);
+        // Audio frame block: every pair's [direction][band][bin] histogram, then every pair's room
+        // energy [band][bin] (LateRoomCells): the energy of all rays at each bin start, whose decay
+        // LateTail continues past the horizon.
+        int frameCells = Pairs * (Directions + 1) * Bands * Bins;
+        shader.SetInt("MethodCellBase", Audio ? frame * frameCells + pair * Directions * Bands * Bins : 0);
+        shader.SetInt("MethodRoomBase", Audio ? frame * frameCells + Pairs * Directions * Bands * Bins + pair * Bands * Bins : 0);
+        shader.SetInt("MethodRoom", Audio ? 1 : 0);
         shader.SetInt("MethodCountIndex", solve);
         shader.SetInt("MethodArrivalBase", solve * ArrivalCapacity);
         shader.SetInt("MethodSelectedBase", solve * Math.Max(1, ArrivalSlots));
@@ -414,7 +420,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (accumulate)
         {
             // Moving average with time constant lateAccumulationSeconds over solves one response step apart.
-            int cells = Pairs * Directions * Bands * Bins;
+            int cells = Pairs * (Directions + 1) * Bands * Bins;
             shader.SetInt("MethodAccumulateCells", cells);
             shader.SetInt("MethodAccumulateFrames", frames);
             shader.SetInt("MethodAccumulateReset", accumulatedSolves == 0 ? 1 : 0);
@@ -479,7 +485,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // ILateField (audio): the diffuse histogram in the hybrid's late format.
     public uint[] Late => late;
     public ComputeBuffer LateBuffer => output;
-    public int LateUintsPerFrame => Audio ? 2 * Pairs * Directions * Bands * Bins : 0;
+    public int LateUintsPerFrame => Audio ? 2 * Pairs * (Directions + 1) * Bands * Bins : 0;
+    public int LateRoomCells => Audio ? Pairs * Directions * Bands * Bins : -1;
     public int LateBins => Bins;
     public int LateRays => Rays;
     // Added to settings.seed at every dispatch (independent realizations of the walk, e.g. averaged by a measurement).

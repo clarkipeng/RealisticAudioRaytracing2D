@@ -13,6 +13,9 @@ internal interface ILateField
     uint[] Late {get;}
     ComputeBuffer LateBuffer {get;}
     int LateUintsPerFrame {get;}
+    // Cell offset, within a frame, of the room-energy block [pair][band][bin] (energy of all rays
+    // at each bin start), or -1 without one.
+    int LateRoomCells {get;}
     int LateBins {get;}
     int LateRays {get;}
     Emission.Batch Emissions {get;}
@@ -81,6 +84,13 @@ internal sealed class RayTransport : IDisposable, ILateField
             int cell=Frame*Transport.LateUintsPerFrame/2+(pair*TakeRender.Settings.LateDirections+direction)*TakeRender.Settings.LateBands*Transport.LateBins+band*Transport.LateBins+bin;
             return (Transport.Late[2*cell+1]+Transport.Late[2*cell]/4294967296.0)/Transport.LateRays;
         }
+        internal bool HasRoom => Transport.LateRoomCells>=0;
+        // Room energy (all rays) at the start of a bin, arbitrary units per pair and band.
+        internal double Room(int pair,int band,int bin)
+        {
+            int cell=Frame*Transport.LateUintsPerFrame/2+Transport.LateRoomCells+(pair*TakeRender.Settings.LateBands+band)*Transport.LateBins+bin;
+            return Transport.Late[2*cell+1]+Transport.Late[2*cell]/4294967296.0;
+        }
     }
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     public struct Path
@@ -138,6 +148,7 @@ internal sealed class RayTransport : IDisposable, ILateField
     public int LateBins {get;}
     internal int LateCells {get;}
     public int LateUintsPerFrame {get;}
+    public int LateRoomCells => -1;
     public int LateRays => lateRays;
     public ComputeBuffer LateBuffer => lateHistogram;
     public Emission.Batch Emissions => emissions;

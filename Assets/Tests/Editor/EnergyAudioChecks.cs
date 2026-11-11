@@ -237,13 +237,15 @@ public partial class TakeChecks
 
     // CPU reference and GPU audio render the same energy-method response (arrival paths
     // and late field) of a scattering room with a walking, turning listener.
-    [TestCase(TakeRender.ListenerOutput.Mono), TestCase(TakeRender.ListenerOutput.Binaural), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void EnergyAudioMatchesTheCpuReference(TakeRender.ListenerOutput ears)
+    [TestCase(TakeRender.ListenerOutput.Mono), TestCase(TakeRender.ListenerOutput.Binaural), TestCase(TakeRender.ListenerOutput.Binaural, true),
+     Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void EnergyAudioMatchesTheCpuReference(TakeRender.ListenerOutput ears, bool tail = false)
     {
         const int rate = 8192, size = 256;
         LateRoom(AcousticTake.Dimension.Spatial3D, new Vector3(6, 4, 5), LateMaterial(.25f, .4f), new Vector3(-1.2f, .3f, .5f), new Vector3(1.5f, -.4f, -.6f),
                  out var scene, out var geometry, out var state);
         var settings = EnergyAudioSettings(size, .4f); settings.listenerOutput = ears; settings.methodArrivalSlots = 24;
+        if (tail) settings.lateTailSeconds = 1.2f; // continued from the room energy past 0.4 s (LateExtend)
         var clip = new float[509]; for (int n = 0; n < clip.Length; n++) clip[n] = .3f * Mathf.Sin(n * .37f) + .1f * Mathf.Cos(n * 1.93f);
         var signals = new[] {new TakeRender.Signal(clip)};
         signals[0].SetActive(0, true); signals[0].Append(new AcousticTake.VoiceEvent {action = AcousticTake.VoiceAction.Play, gain = 1, loop = true});
@@ -251,10 +253,10 @@ public partial class TakeChecks
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: rate, methodAudio: true);
         var direct = new TakeRender.DirectPath[1]; int channels = settings.ChannelsPerListener;
         var x = new float[size * channels]; var y = new float[x.Length]; double peak = 0, error = 0, energy = 0;
-        for (int frame = 0; frame < 10; frame++)
+        for (int frame = 0; frame < (tail ? 40 : 10); frame++)
         {
             long sample = frame * (long)size;
-            state[1].position = new Vector3(1.5f - frame * .05f, -.4f, -.6f); state[1].rotation = Quaternion.Euler(0, frame * 11, 0);
+            state[1].position = new Vector3(1.5f - frame * (tail ? .0125f : .05f), -.4f, -.6f); state[1].rotation = Quaternion.Euler(0, frame * 11, 0);
             solver.Solve(state, direct);
             cpu.SetResponse(sample, direct, state, frame == 0, solver.RayPaths, 0, late: solver.Late(0));
             gpu.SetResponse(sample, frame == 0, solver.RayBuffer, 0, scene, state, late: solver.Late(0));

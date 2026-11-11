@@ -183,7 +183,17 @@ void TraceLate(uint index, bool is2D)
         }
         float u = RandomRay(rng);
         bool refracted = false;
-        if (u < transmit)
+        float wall;
+        uint volume = VolumeMedium(Primitives[hit].indices.x);
+        if (u < transmit && PartitionExit(stateOffset, hit, position, direction, is2D, volume != AirMedium && LateIor(volume, band) != 1, wall))
+        {
+            // Through a partition (Transport.hlsl): undeviated, out of its far face.
+            position += direction * wall; time += wall / speed; travelled += wall; weight *= exp(-loss * wall);
+            medium = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
+            refracted = transmitted = true;
+            diffuseLast = false;
+        }
+        else if (u < transmit)
         {
             uint next = MediumAt(stateOffset, position + direction * (2 * RayEpsilon), is2D);
             float3 bent = refract(direction, n, LateIor(medium, band) / LateIor(next, band));

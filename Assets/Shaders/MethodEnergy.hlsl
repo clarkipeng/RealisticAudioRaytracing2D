@@ -12,19 +12,19 @@
 //     (1-a)(1-t)(1-s) (delta); impedance surfaces reflect |R(theta)|^2 specularly.
 //     The continuation is drawn with the band-mean energy fractions; each band's
 //     weight is multiplied by its own fraction / that probability. A small
-//     transmitted share into air (under half of the continuing energy, through an
-//     open sheet such as a wall face or a door leaf, or out of a closed solid) is
-//     split off instead of drawn: the ray continues with the
+//     transmitted share (under half of the continuing energy: a wall, a door, a
+//     window) is split off instead of drawn: the ray continues with the
 //     reflected and scattered shares only, and the transmitted branch becomes a
 //     candidate of a one-slot weighted reservoir (probability of keeping it = its
 //     weight / the summed weight of all candidates so far; the kept branch carries
 //     that summed weight). When the ray ends, the kept branch is traced from its
 //     surface with Russian roulette on its energy relative to a source ray's
 //     (survival min(1, w / EnergyBranchFloor), at its start and after every event:
-//     between the two faces of a wall modelled as two sheets a branch would otherwise
-//     bounce for hundreds of reflections). Entering a closed solid stays a draw: the
-//     energy that gets back out of it (about t^2 / a) is negligible, and splitting
-//     there cost the Church's energy solve 47% more for no audible change. Drawing a transmission of t = 1e-4 sent one ray in
+//     inside a thick solid a branch would otherwise bounce for hundreds of
+//     reflections). A transmission through a partition (PartitionExit: an object
+//     with a far face within 3 m, such as a wall's two sheets or a thin pane) applies
+//     the assembly's transmission once and continues undeviated from the far face.
+//     Drawing a transmission of t = 1e-4 sent one ray in
 //     10^4 through the wall with all its energy, which drew streaks of full-strength
 //     interior sound outside; a weak branch that survives carries EnergyBranchFloor
 //     of a source ray's energy, and more branches get through: same expectation;
@@ -73,7 +73,9 @@ struct EnergyArrival
 static const uint EnergyFamilyDirect = 0, EnergyFamilySpecular = 1, EnergyFamilyD = 2, EnergyFamilyDD = 3, EnergyFamilyRD = 4,
                   EnergyFamilyDR = 5;
 static const uint CounterArrivalOverflow = 13, CounterBranches = 14;
-static const float EnergyBranchFloor = .05; // transmitted branches below this share of a source ray's energy play roulette
+static const float EnergyBranchFloor = .05;
+// Audio: room energy cells [band][bin] of this solve (MethodTransport.LateRoomCells).
+uint MethodRoomBase, MethodRoom; // transmitted branches below this share of a source ray's energy play roulette
 RWStructuredBuffer<EnergyArrival> MethodArrivals;
 RWStructuredBuffer<uint> MethodArrivalCounts, MethodSelected;
 StructuredBuffer<uint> MethodPrimitivePlane, MethodPlanePrimitive;
@@ -354,14 +356,6 @@ void EnergyAccumulate(uint cell)
     MethodAccumulator[cell] = acc;
 }
 
-// Whether an object is a closed solid (a volume with its own medium; Volumes are sorted by owner).
-bool EnergySolid(uint object)
-{
-    uint lo = 0, hi = VolumeCount;
-    while (lo < hi) { uint mid = lo + (hi - lo) / 2; if (Volumes[mid].ids.z < object) lo = mid + 1; else hi = mid; }
-    return lo < VolumeCount && Volumes[lo].ids.z == object;
-}
-
 // One flat loop: each iteration makes the pending connections of the latest vertex,
 // then traces one segment (an edge ray or a direction from the anchor starts a new
 // chain), so every heavy helper has a single call site (small kernel and stack).
@@ -392,7 +386,7 @@ void TraceEnergy(uint index)
     float3 p = S, d = 0;
     float Q = 1, tau = 0;
     uint hits = 0, reflections = 0, medium = v.medium, edge = 0;
-    bool through = false, viaEdge = false, fluxPending = false, inBranch = false;
+    bool through = false, viaEdge = false, fluxPending = false, inBranch = false, left = false; // left: crossed a partition or entered a medium
     // Transmitted-branch reservoir (one slot): summed candidate weight, and the kept
     // branch's surface point, direction, medium, time, path counters and band flux / weight.
     float branchSum = 0, branchTau = 0; float3 branchP = 0, branchD = 0; float branchF[8];
@@ -422,7 +416,7 @@ void TraceEnergy(uint index)
             [unroll] for (uint k = 0; k < MethodBands; k++) { Phi0[k] = branchF[k] * branchSum / keep; C[k] = 1; }
             p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1;
             hits = branchHits; reflections = branchReflections; depth = branchDepth;
-            through = true; viaEdge = false; fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true;
+            through = true; viaEdge = false; fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true; left = true;
             MethodCount(CounterBranches);
         }
         if (!travelling)
@@ -493,6 +487,21 @@ void TraceEnergy(uint index)
                           exp(-2 * MethodLoss(AirMedium, k) * edgeM) / (edgeM * edgeM) * edgeExtent * edgeAngle / (edgePick * MethodEdgeProbability);
             }
         }
+        if (MethodRoom != 0 && !fluxPending && !left)
+        {
+            // Room energy: this path's flux at every bin start it passes, while it stays in the
+            // source's space (no transmission yet: energy that leaked into an attic, a side chamber
+            // or outside decays at those spaces' slower rates and would dominate the late sum).
+            // Summed over all rays it is the energy in the room, whose decay LateTail continues past
+            // the horizon (far less noisy than the few paths that cross the listener's sphere).
+            float slowness = MethodSlowness(medium), end = tau + (found ? distance : limit) * slowness;
+            [loop] for (uint bin = (uint)ceil(tau / MethodBinSeconds); bin < MethodBins && bin * MethodBinSeconds < end; bin++)
+            {
+                float along = (bin * MethodBinSeconds - tau) / slowness;
+                [unroll] for (uint k = 0; k < MethodBands; k++)
+                    MethodAddFixed(MethodRoomBase + k * MethodBins + bin, Phi0[k] * C[k] / Q * exp(-2 * MethodLoss(medium, k) * along), ray ^ (events << 8) ^ (bin * 8 + k));
+            }
+        }
         // Specular segments (after a reflection; a transmitted-only leg is the anchor's
         // straight connection) reach the listener through the receiver sphere, except the
         // path classes held by the discrete arrivals: pure reflections from the source up
@@ -538,7 +547,7 @@ void TraceEnergy(uint index)
         }
         float total = mT + mD + mS;
         if (!(total > 0)) { MethodCaptureEvent(ray, slot, CaptureEnd, p, 0, 0, tau); done = true; continue; }
-        bool split = mT > 0 && mT < .5 * total && (medium != AirMedium || !EnergySolid(Primitives[hit].indices.x));
+        bool split = mT > 0 && mT < .5 * total;
         if (split)
         {
             // Small transmitted share: a reservoir candidate (see the header), not a draw.
@@ -549,11 +558,22 @@ void TraceEnergy(uint index)
                 branchSum += weight;
                 if (RandomRay(rng) * branchSum < weight)
                 {
-                    uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
-                    float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
-                    bool refracted = dot(bent, bent) > 0;
-                    branchP = p; branchD = refracted ? normalize(bent) : reflect(d, n); branchMedium = refracted ? next : medium;
-                    branchTau = tau; branchHits = hits + 1; branchReflections = reflections + (refracted ? 0 : 1); branchDepth = depth;
+                    float wall;
+                    if (PartitionExit(MethodState, hit, p, d, false, MethodRefracts(hit), wall))
+                    {
+                        // Through a partition: undeviated, out of its far face.
+                        branchP = p + d * wall; branchD = d; branchMedium = MediumAt(MethodState, branchP + d * (2 * RayEpsilon), false);
+                        branchTau = tau + wall * MethodSlowness(medium); branchReflections = reflections;
+                    }
+                    else
+                    {
+                        uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
+                        float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
+                        bool refracted = dot(bent, bent) > 0;
+                        branchP = p; branchD = refracted ? normalize(bent) : reflect(d, n); branchMedium = refracted ? next : medium;
+                        branchTau = tau; branchReflections = reflections + (refracted ? 0 : 1);
+                    }
+                    branchHits = hits + 1; branchDepth = depth;
                     [unroll] for (uint k = 0; k < MethodBands; k++) branchF[k] = branch[k] / weight;
                 }
             }
@@ -573,12 +593,22 @@ void TraceEnergy(uint index)
         bool transmit = !split && u < mD + mT;
         if (transmit)
         {
-            uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
-            float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
             [unroll] for (uint k = 0; k < MethodBands; k++) C[k] *= eT[k];
             Q *= mT / total;
-            if (dot(bent, bent) > 0) { d = normalize(bent); medium = next; through = true; }
-            else { d = reflect(d, n); reflections++; }
+            left = true;
+            float wall;
+            if (PartitionExit(MethodState, hit, p, d, false, MethodRefracts(hit), wall))
+            {
+                tau += wall * MethodSlowness(medium); p += d * wall; through = true;
+                medium = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
+            }
+            else
+            {
+                uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
+                float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
+                if (dot(bent, bent) > 0) { d = normalize(bent); medium = next; through = true; }
+                else { d = reflect(d, n); reflections++; }
+            }
         }
         else
         {

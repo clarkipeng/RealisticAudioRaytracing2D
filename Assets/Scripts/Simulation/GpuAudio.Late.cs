@@ -54,7 +54,7 @@ internal sealed partial class GpuAudio
         if(late.Valid && sample%latePartition!=0)throw new ArgumentException("Late responses change on partition boundaries.");
         lateBank^=1;lateBlend=lateInitialized && !cut;lateSwap=sample;lateInitialized=true;
         bool valid=late.Valid;var transport=late.Transport;
-        foreach(int k in new[]{lateEnvelope,lateInput})
+        foreach(int k in new[]{lateEnvelope,lateExtend,lateInput})
         {
             commands.SetComputeBufferParam(shader,k,"LateHistogram",valid?transport.LateBuffer:lateEmpty);
             // A late field without emission rows (energy method: point sources) reads the empty rows.
@@ -62,6 +62,7 @@ internal sealed partial class GpuAudio
             commands.SetComputeBufferParam(shader,k,"LateEmissionPoints",valid?transport.EmissionPoints??lateEmpty:lateEmpty);
             commands.SetComputeBufferParam(shader,k,"LateEmissionClocks",valid?transport.EmissionClocks??lateEmpty:lateEmpty);
         }
+        Set("LateRoomBase",valid && transport.LateRoomCells>=0?transport.LateRoomCells+1:0);
         Set("LateValid",valid?1:0);Set("LateBank",lateBank);Set("LateBlend",lateBlend?1:0);Clock("LateSwap",sample);
         Set("LateHistogramOffset",valid?late.Frame*transport.LateUintsPerFrame:0);Set("LateRays",valid?transport.LateRays:1);
         Set("LateEmissionRow",valid && transport.Emissions!=null?late.Frame*transport.Emissions.FrameStride:0);

@@ -15,7 +15,9 @@ using System;
 // simulated bins blend linearly into the fit (a smooth join), and the last eighth
 // of the continuation fades out with a raised cosine, so the kernel's end is never
 // a cut. Envelopes that do not decay over the fit (r >= 1, or an empty window) are
-// not continued.
+// not continued. With a reference curve (the energy method's room energy: all rays,
+// not only those near the listener) the decay is fitted on it instead, which is far
+// steadier where few paths reach the listener late in the tail (the bass bands).
 internal static class LateTail
 {
     internal static int Window(int simulated) => Math.Max(2,simulated/4);
@@ -23,12 +25,13 @@ internal static class LateTail
 
     // energy[channel][bin] for bins < total; bins >= simulated are written (and the
     // join bins blended). Returns the fitted decay per bin, or 0 if not continued.
-    internal static double Extend(double[][] energy,int simulated,int total)
+    internal static double Extend(double[][] energy,int simulated,int total,double[] reference=null)
     {
         if(!Applies(simulated,total))return 0;
         int window=Window(simulated),join=Math.Max(1,window/2),fade=Math.Max(1,(total-simulated)/8);
         double first=0,last=0;
-        foreach(var e in energy)for(int k=0;k<window;k++){first+=e[simulated-2*window+k];last+=e[simulated-window+k];}
+        if(reference!=null)for(int k=0;k<window;k++){first+=reference[simulated-2*window+k];last+=reference[simulated-window+k];}
+        else foreach(var e in energy)for(int k=0;k<window;k++){first+=e[simulated-2*window+k];last+=e[simulated-window+k];}
         if(!(first>0) || !(last>0) || last>=first)
         {
             foreach(var e in energy)for(int k=simulated;k<total;k++)e[k]=0;
