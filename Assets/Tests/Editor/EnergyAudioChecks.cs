@@ -71,11 +71,14 @@ public partial class TakeChecks
     // The discrete arrivals and the walk partition the paths: with the arrivals off the
     // walk estimates every path itself, and both band totals agree (a scattering room;
     // a rigid cube where only edge routes reach the far side).
-    [TestCase(false), TestCase(true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void EnergyArrivalsAndDiffuseFieldSumToTheWalk(bool cube)
+    // near: second order for only the 3 most important of the room's 6 planes (methodNearPlanes);
+    // the walk then keeps the other second-order paths, and the totals still agree.
+    [TestCase(false), TestCase(true), TestCase(false, 3), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void EnergyArrivalsAndDiffuseFieldSumToTheWalk(bool cube, int near = 0)
     {
         AcousticTake.Scene scene; AcousticTake.Primitive[] geometry; AcousticTake.State[] state;
         var settings = ControlSettings(TakeRender.Method.Energy, 1 << 16, cube ? .3f : .4f);
+        settings.methodNearPlanes = near;
         if (cube)
         {
             KnifeEdgeFixture(false, out scene, out _, out state);
@@ -91,7 +94,8 @@ public partial class TakeChecks
             settings.methodArrivals = run == 0;
             using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
             solver.Solve(state, new TakeRender.DirectPath[1]);
-            if (run == 0) TestContext.WriteLine($"families {solver.Method.ArrivalFamilies}, arrivals {solver.Method.ArrivalTotal()}, edges {solver.Method.EdgeCount}");
+            if (run == 0) TestContext.WriteLine($"families {solver.Method.ArrivalFamilies}, arrivals {solver.Method.ArrivalTotal()}, edges {solver.Method.EdgeCount}, near planes {solver.Method.NearPlanes} of {solver.Method.PlaneCount}");
+            if (run == 0 && near > 0) Assert.That(solver.Method.NearPlanes, Is.EqualTo(near));
             for (int b = 0; b < 8; b++) { var e = ControlEnergy(solver, b); totals[run, b] = Window(e, 0, e.Length); }
         }
         for (int b = 0; b < (cube ? 5 : 8); b++)

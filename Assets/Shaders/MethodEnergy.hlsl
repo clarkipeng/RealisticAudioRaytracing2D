@@ -80,6 +80,14 @@ RWStructuredBuffer<EnergyArrival> MethodArrivals;
 RWStructuredBuffer<uint> MethodArrivalCounts, MethodSelected;
 StructuredBuffer<uint> MethodPrimitivePlane, MethodPlanePrimitive;
 uint MethodSourceObject, MethodArrivalFamilies, MethodArrivalOrder, MethodPlaneCount;
+// Near planes (MethodTransport.SelectNearPlanes): when MethodNearPlanes > 0 the second order
+// pairs only this solve's MethodNearPlanes planes, and the walk keeps every other second-order path.
+StructuredBuffer<uint> MethodNearList, MethodNearMask;
+uint MethodNearPlanes, MethodNearBase, MethodNearMaskBase;
+bool EnergyNear(uint plane)
+{
+    return MethodNearPlanes == 0 || (plane < MethodPlaneCount && ((MethodNearMask[MethodNearMaskBase + plane / 32] >> (plane % 32)) & 1) != 0);
+}
 uint MethodArrivalBase, MethodArrivalCapacity, MethodArrivalSlots, MethodArrivalDeposit, MethodCountIndex, MethodSelectedBase;
 uint MethodPathBase, MethodFrequencyBins, MethodFftSize, MethodCountCells;
 uint4 MethodFamilyEnds0, MethodFamilyEnds1; // cumulative candidates: direct, order 1, order 2, D, DD, RD, DR
@@ -387,6 +395,7 @@ void TraceEnergy(uint index)
     float Q = 1, tau = 0;
     uint hits = 0, reflections = 0, medium = v.medium, edge = 0;
     bool through = false, viaEdge = false, fluxPending = false, inBranch = false, left = false; // left: crossed a partition or entered a medium
+    uint chainPlane0 = 0xffffffff, chainPlane1 = 0xffffffff; // planes of a chain's first two reflections (near-plane exclusion)
     // Transmitted-branch reservoir (one slot): summed candidate weight, and the kept
     // branch's surface point, direction, medium, time, path counters and band flux / weight.
     float branchSum = 0, branchTau = 0; float3 branchP = 0, branchD = 0; float branchF[8];
@@ -489,15 +498,19 @@ void TraceEnergy(uint index)
         }
         if (MethodRoom != 0 && !fluxPending && !left)
         {
-            // Room energy: this path's flux at every bin start it passes, while it stays in the
-            // source's space (no transmission yet: energy that leaked into an attic, a side chamber
-            // or outside decays at those spaces' slower rates and would dominate the late sum).
-            // Summed over all rays it is the energy in the room, whose decay LateTail continues past
-            // the horizon (far less noisy than the few paths that cross the listener's sphere).
-            float slowness = MethodSlowness(medium), end = tau + (found ? distance : limit) * slowness;
+            // Decay energy: this path's flux at every bin start it passes while it is within
+            // 4 receiver-sphere radii of the listener (8 m in the Church) and has not transmitted.
+            // Summed over all rays it is the energy of the field around the listener, whose decay
+            // LateTail continues past the horizon: 16 times the sphere's volume, so far steadier
+            // than the listener's own histogram, yet local. Counting every ray in the building
+            // (11 November, first try) let energy in coupled chambers and outside, which decays
+            // three to four times more slowly, set the continuation (T 17-28 s against 6 s simulated).
+            float slowness = MethodSlowness(medium), end = tau + (found ? distance : limit) * slowness, reach = 4 * MethodDetectRadius;
             [loop] for (uint bin = (uint)ceil(tau / MethodBinSeconds); bin < MethodBins && bin * MethodBinSeconds < end; bin++)
             {
                 float along = (bin * MethodBinSeconds - tau) / slowness;
+                float3 at = p + d * along - L;
+                if (dot(at, at) > reach * reach) continue;
                 [unroll] for (uint k = 0; k < MethodBands; k++)
                     MethodAddFixed(MethodRoomBase + k * MethodBins + bin, Phi0[k] * C[k] / Q * exp(-2 * MethodLoss(medium, k) * along), ray ^ (events << 8) ^ (bin * 8 + k));
             }
@@ -508,7 +521,8 @@ void TraceEnergy(uint index)
         // to the enumerated order, and one reflection after an edge ray from the source (DR).
         bool held = air && v.kind == 0 && !through &&
                     (viaEdge ? reflections == 1 && EnergyEnumerated(EnergyFamilyDR)
-                             : reflections <= MethodArrivalOrder && EnergyEnumerated(EnergyFamilySpecular));
+                             : reflections <= MethodArrivalOrder && EnergyEnumerated(EnergyFamilySpecular) &&
+                               (reflections < 2 || (EnergyNear(chainPlane0) && EnergyNear(chainPlane1))));
         if (reflections > 0 && !held)
         {
             float flux[8];
@@ -607,13 +621,14 @@ void TraceEnergy(uint index)
                 uint next = MediumAt(MethodState, p + d * (2 * RayEpsilon), false);
                 float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
                 if (dot(bent, bent) > 0) { d = normalize(bent); medium = next; through = true; }
-                else { d = reflect(d, n); reflections++; }
+                else { if (reflections == 0) chainPlane0 = MethodPrimitivePlane[hit]; else if (reflections == 1) chainPlane1 = MethodPrimitivePlane[hit]; d = reflect(d, n); reflections++; }
             }
         }
         else
         {
             [unroll] for (uint k = 0; k < MethodBands; k++) C[k] *= eS[k];
             Q *= mS / total;
+            if (reflections == 0) chainPlane0 = MethodPrimitivePlane[hit]; else if (reflections == 1) chainPlane1 = MethodPrimitivePlane[hit];
             d = reflect(d, n);
             reflections++;
         }
@@ -727,7 +742,9 @@ void EnergyArrivals(uint index)
         if (route <= 2)
         {
             family = EnergyFamilySpecular; order = route;
-            uint p1 = route == 1 ? local : local / MethodPlaneCount, p2 = route == 1 ? 0 : local % MethodPlaneCount;
+            uint pairs = MethodNearPlanes > 0 ? MethodNearPlanes : MethodPlaneCount;
+            uint p1 = route == 1 ? local : local / pairs, p2 = route == 1 ? 0 : local % pairs;
+            if (route == 2 && MethodNearPlanes > 0) { p1 = MethodNearList[MethodNearBase + p1]; p2 = MethodNearList[MethodNearBase + p2]; }
             valid = route == 1 || p1 != p2;
             targetA = route == 1 ? EnergyPlaneImage(p1, L) : EnergyPlaneImage(p1, EnergyPlaneImage(p2, L));
             countA = route; planesA = uint2(p1, p2);

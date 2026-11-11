@@ -93,6 +93,8 @@ public static partial class TakeRender
         public int methodArrivalOrder=2;
         [Min(1),Tooltip("Energy method audio: discrete arrivals per source/listener pair rendered as delayed paths (the strongest); the rest join the diffuse field.")]
         public int methodArrivalSlots=64;
+        [Min(0),Tooltip("Energy method: in scenes with too many planes to pair all of them, enumerate the second-order reflections of this many planes per solve, those most important to the source and listener (area over squared distance); the walk keeps every other second-order path. Zero: second order only when every plane pair fits.")]
+        public int methodNearPlanes;
         [Min(1),Tooltip("Pressure/Energy methods: interaction cap per ray (a safety bound; the 2 s output horizon normally ends paths first).")]
         public int methodMaxEvents=1<<16;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
@@ -759,7 +761,7 @@ public static partial class TakeRender
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.method!=Method.Hybrid && settings.method!=Method.Pressure && settings.method!=Method.Energy)throw new ArgumentException("Unknown acoustic method.");
         if(settings.method!=Method.Hybrid && (settings.methodRays<1 || !PositiveFinite(settings.specularDetectionRadius) || !(settings.methodEdgeProbability>=0 && settings.methodEdgeProbability<1) || settings.methodMaxEvents<1 || !(settings.methodRouletteFloor>0 && settings.methodRouletteFloor<=1) ||
-            settings.methodArrivalOrder<0 || settings.methodArrivalOrder>2 || settings.methodArrivalSlots<1))
+            settings.methodArrivalOrder<0 || settings.methodArrivalOrder>2 || settings.methodArrivalSlots<1 || settings.methodNearPlanes<0))
             throw new ArgumentException("Invalid single-loop method settings.");
         ValidateFamilyGains(settings);
         if(settings.transport==Transport.Raytraced)

@@ -69,6 +69,16 @@ internal sealed class MethodTransport : IDisposable, ILateField
     long accumulatedSolves;
     readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, output, stats, emptyCapture;
     readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf;
+    // Near planes (settings.methodNearPlanes): per solve, the planes whose second-order
+    // reflections are enumerated ([solve][NearPlanes] plane ids) and a bit mask of them for
+    // the walk's exclusion ([solve][words]). Plane object, object-space centroid and area rank them.
+    public readonly int NearPlanes;
+    readonly ComputeBuffer nearList, nearMask;
+    readonly int nearWords;
+    readonly int[] planeObject;
+    readonly Vector3[] planeCentroid;
+    readonly float[] planeArea;
+    uint[] nearListData, nearMaskData;
     public readonly uint[] Output, Stats;
     // CPU copies for the CPU reference audio (readback only when requested).
     public readonly RayTransport.Path[] Paths;
@@ -192,6 +202,15 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 planeOf[i] = plane;
             }
             PlaneCount = representatives.Count;
+            planeObject = new int[Math.Max(1, PlaneCount)]; planeCentroid = new Vector3[Math.Max(1, PlaneCount)]; planeArea = new float[Math.Max(1, PlaneCount)];
+            for (int i = 0; i < geometry.Length; i++)
+            {
+                if (planeOf[i] == uint.MaxValue) continue;
+                var g = geometry[i]; int p = (int)planeOf[i];
+                float area = .5f * Vector3.Cross(g.b - g.a, g.c - g.a).magnitude;
+                planeObject[p] = g.objectIndex; planeCentroid[p] += area * (g.a + g.b + g.c) / 3; planeArea[p] += area;
+            }
+            for (int p = 0; p < PlaneCount; p++) if (planeArea[p] > 0) planeCentroid[p] /= planeArea[p];
             primitivePlanes = new ComputeBuffer(planeOf.Length, 4); primitivePlanes.SetData(planeOf);
             planePrimitives = new ComputeBuffer(Math.Max(1, PlaneCount), 4);
             if (PlaneCount > 0) planePrimitives.SetData(representatives);
@@ -199,11 +218,13 @@ internal sealed class MethodTransport : IDisposable, ILateField
             // candidate count exceeds FamilyCandidateLimit stays with the walk.
             bool arrivalsOn = energy && settings.methodArrivals, edges = EdgeCount > 0 && settings.diffractionFactor > 0;
             long planes = PlaneCount, e = EdgeCount;
-            ArrivalOrder = !arrivalsOn ? 0 : settings.methodArrivalOrder >= 2 && planes * planes <= FamilyCandidateLimit ? 2 :
+            NearPlanes = arrivalsOn && settings.methodArrivalOrder >= 2 && settings.methodNearPlanes > 0 && settings.methodNearPlanes < planes
+                ? (int)Math.Min(settings.methodNearPlanes, (long)Math.Sqrt(FamilyCandidateLimit)) : 0;
+            ArrivalOrder = !arrivalsOn ? 0 : settings.methodArrivalOrder >= 2 && (planes * planes <= FamilyCandidateLimit || NearPlanes > 0) ? 2 :
                            settings.methodArrivalOrder >= 1 && planes <= FamilyCandidateLimit ? Math.Min(1, settings.methodArrivalOrder) : 0;
             FamilyCandidates[0] = arrivalsOn ? 1 : 0;
             FamilyCandidates[1] = ArrivalOrder >= 1 ? planes : 0;
-            FamilyCandidates[2] = ArrivalOrder >= 2 ? planes * planes : 0;
+            FamilyCandidates[2] = ArrivalOrder >= 2 ? (NearPlanes > 0 ? (long)NearPlanes * NearPlanes : planes * planes) : 0;
             FamilyCandidates[3] = arrivalsOn && edges ? e : 0;
             FamilyCandidates[4] = arrivalsOn && edges && e * e <= FamilyCandidateLimit ? e * e : 0;
             FamilyCandidates[5] = arrivalsOn && edges && planes * e <= FamilyCandidateLimit ? planes * e : 0;
@@ -221,6 +242,10 @@ internal sealed class MethodTransport : IDisposable, ILateField
             selected = new ComputeBuffer(Math.Max(1, checked(solves * Math.Max(1, ArrivalSlots))), 4);
             paths = new ComputeBuffer(audio ? Math.Max(1, checked(Frames * PathsPerFrame)) : 1, RayTransport.PathStride);
             edgeCdf = new ComputeBuffer(Math.Max(1, EdgeCount), 4); edgeCdf.SetData(new float[Math.Max(1, EdgeCount)]);
+            nearWords = Math.Max(1, (PlaneCount + 31) / 32);
+            nearList = new ComputeBuffer(Math.Max(1, solves * Math.Max(1, NearPlanes)), 4);
+            nearMask = new ComputeBuffer(Math.Max(1, solves * nearWords), 4);
+            if (NearPlanes > 0) { nearListData = new uint[solves * NearPlanes]; nearMaskData = new uint[solves * nearWords]; }
             Paths = new RayTransport.Path[audio && readback ? checked(Frames * PathsPerFrame) : 0];
             // Both outputs are (low, high) 32.32 fixed-point pairs.
             outputCount = audio ? checked(2 * Frames * Pairs * (Directions + 1) * Bands * Math.Max(1, Bins))
@@ -257,6 +282,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                     shader.SetBuffer(kernel, "MethodSelected", selected); shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes);
                     shader.SetBuffer(kernel, "MethodPlanePrimitive", planePrimitives); shader.SetBuffer(kernel, "RayPaths", paths);
                     shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf);
+                    shader.SetBuffer(kernel, "MethodNearList", nearList); shader.SetBuffer(kernel, "MethodNearMask", nearMask);
                 }
             }
             shader.SetInt("PrimitiveCount", geometry.Length);
@@ -296,6 +322,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.SetInt("MethodArrivalFamilies", ArrivalFamilies);
             shader.SetInt("MethodArrivalOrder", ArrivalOrder);
             shader.SetInt("MethodPlaneCount", PlaneCount);
+            shader.SetInt("MethodNearPlanes", NearPlanes);
             shader.SetInt("MethodArrivalCapacity", ArrivalCapacity);
             shader.SetInt("MethodArrivalSlots", ArrivalSlots);
             shader.SetInt("MethodArrivalDeposit", audio ? 0 : 1);
@@ -331,6 +358,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
         shader.SetInt("MethodArrivalBase", solve * ArrivalCapacity);
         shader.SetInt("MethodSelectedBase", solve * Math.Max(1, ArrivalSlots));
         shader.SetInt("MethodPathBase", Audio ? frame * PathsPerFrame + layout.Ranges[pair].x : 0);
+        shader.SetInt("MethodNearBase", solve * Math.Max(1, NearPlanes));
+        shader.SetInt("MethodNearMaskBase", solve * nearWords);
     }
     void Clear()
     {
@@ -489,6 +518,38 @@ internal sealed class MethodTransport : IDisposable, ILateField
     public int LateRoomCells => Audio ? Pairs * Directions * Bands * Bins : -1;
     public int LateBins => Bins;
     public int LateRays => Rays;
+    // Near planes for the next dispatch: per frame and pair, the NearPlanes planes with the
+    // largest area / (1 + squared distance to the nearer of source and listener), from the
+    // frames' states (object poses move the planes). Called by TransportSolver before each dispatch.
+    public void SelectNearPlanes(AcousticTake.State[] states, int frames)
+    {
+        if (NearPlanes == 0) return;
+        int objects = scene.objects.Length;
+        var score = new float[PlaneCount]; var order = new int[PlaneCount];
+        for (int frame = 0; frame < frames; frame++)
+            for (int pair = 0; pair < Pairs; pair++)
+            {
+                Vector3 S = states[frame * objects + scene.sources[pair / scene.listeners.Length].objectIndex].position;
+                Vector3 L = states[frame * objects + scene.listeners[pair % scene.listeners.Length]].position;
+                for (int p = 0; p < PlaneCount; p++)
+                {
+                    var pose = states[frame * objects + planeObject[p]];
+                    Vector3 c = pose.position + pose.rotation * planeCentroid[p];
+                    float d = Mathf.Min((c - S).sqrMagnitude, (c - L).sqrMagnitude);
+                    score[p] = -planeArea[p] / (1 + d); order[p] = p;
+                }
+                Array.Sort(score, order);
+                int solve = frame * Pairs + pair;
+                Array.Clear(nearMaskData, solve * nearWords, nearWords);
+                for (int i = 0; i < NearPlanes; i++)
+                {
+                    int p = order[i]; nearListData[solve * NearPlanes + i] = (uint)p;
+                    nearMaskData[solve * nearWords + p / 32] |= 1u << (p % 32);
+                }
+            }
+        nearList.SetData(nearListData, 0, 0, frames * Pairs * NearPlanes);
+        nearMask.SetData(nearMaskData, 0, 0, frames * Pairs * nearWords);
+    }
     // Added to settings.seed at every dispatch (independent realizations of the walk, e.g. averaged by a measurement).
     public int SeedOffset { get; set; }
     public Emission.Batch Emissions => null;
@@ -537,5 +598,6 @@ internal sealed class MethodTransport : IDisposable, ILateField
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
         arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose();
+        nearList?.Dispose(); nearMask?.Dispose();
     }
 }

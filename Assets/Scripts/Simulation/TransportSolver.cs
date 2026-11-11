@@ -239,6 +239,7 @@ public sealed class TransportSolver : IDisposable
             {
                 // Diagnostic direct path on the CPU; the method traces its own direct sound.
                 TakeRender.SolveDirect(scene, geometry, state, settings, output, bvh);
+                method.SelectNearPlanes(state, 1);
                 if (method.Audio) method.DispatchAudio(1, bvh?.NodeCount ?? 0, false);
                 else method.Dispatch(bvh?.NodeCount ?? 0);
                 DispatchReadbackSeconds += TakeRender.Elapsed(start);
@@ -296,6 +297,7 @@ public sealed class TransportSolver : IDisposable
         using var buffer = new ComputeBuffer(Math.Max(2, data.Length), 16);
         buffer.SetData(data);
         Upload(state, 1);
+        method.SelectNearPlanes(state, 1);
         method.Dispatch(bvh?.NodeCount ?? 0, buffer, rays, events);
         buffer.GetData(data);
         return data;
@@ -375,6 +377,7 @@ public sealed class TransportSolver : IDisposable
                         }
                     Upload(state, frames);
                     long start = Stopwatch.GetTimestamp();
+                    method.SelectNearPlanes(state, frames);
                     method.DispatchAudio(frames, bvh?.NodeCount ?? 0, true);
                     DispatchReadbackSeconds += TakeRender.Elapsed(start);
                     completed = true;
