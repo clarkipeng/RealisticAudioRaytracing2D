@@ -280,6 +280,62 @@ bool PathDetect(PathChain c, float4 fluxLow, float4 fluxHigh, float3 S, float3 L
     return true;
 }
 
+// Deferred chain connections. A detection's retrace and trials take tens to hundreds of ray
+// casts while the other rays of its SIMD group wait, so the walk only makes the cheap region test
+// and queues the candidates; PathConnect then runs one candidate per thread. Same estimator.
+struct PathRequest
+{
+    float4 originKind, normalHits, omegaHash, unfold0, unfold1, unfold2, edge, travel, fluxLow, fluxHigh;
+};
+RWStructuredBuffer<PathRequest> PathRequests;
+RWStructuredBuffer<uint> PathRequestCount; // [0] requests of the current ray chunk
+uint PathRequestCapacity;
+static const uint CounterRequestOverflow = 9;
+// The walk's region test: could this ray's direction lie in its chain's detection region?
+// Point chains: the cone about the listener image. Edge chains: always queued (box test there).
+bool PathCandidate(PathChain c, float3 L)
+{
+    if (c.kind == 2) return true;
+    float3 w = mul(c.unfold, L) + c.shift - c.origin;
+    float distance = length(w);
+    if (distance <= RayEpsilon) return false;
+    float s = min(MethodDetectRadius / distance, .5);
+    return dot(c.omega, w / distance) >= sqrt(1 - s * s);
+}
+void PathQueue(PathChain c, float flux[8])
+{
+    uint at;
+    InterlockedAdd(PathRequestCount[0], 1u, at);
+    if (at >= PathRequestCapacity) { MethodCount(CounterRequestOverflow); return; }
+    PathRequest r;
+    r.originKind = float4(c.origin, asfloat(c.kind));
+    r.normalHits = float4(c.normal, asfloat(c.hits));
+    r.omegaHash = float4(c.omega, asfloat(c.hash));
+    r.unfold0 = float4(c.unfold[0], c.shift.x); r.unfold1 = float4(c.unfold[1], c.shift.y); r.unfold2 = float4(c.unfold[2], c.shift.z);
+    r.edge = float4(asfloat(c.edge), c.edgeZ, c.edgePhi, c.edgePick);
+    r.travel = float4(c.travelled, c.time, asfloat(c.through.x), asfloat(c.through.y));
+    r.fluxLow = float4(flux[0], flux[1], flux[2], flux[3]); r.fluxHigh = float4(flux[4], flux[5], flux[6], flux[7]);
+    PathRequests[at] = r;
+}
+void PathConnect(uint index)
+{
+    if (index >= min(PathRequestCount[0], PathRequestCapacity)) return;
+    PathRequest r = PathRequests[index];
+    PathChain c;
+    c.origin = r.originKind.xyz; c.kind = asuint(r.originKind.w); c.normal = r.normalHits.xyz; c.hits = asuint(r.normalHits.w);
+    c.omega = r.omegaHash.xyz; c.hash = asuint(r.omegaHash.w);
+    c.unfold = float3x3(r.unfold0.xyz, r.unfold1.xyz, r.unfold2.xyz); c.shift = float3(r.unfold0.w, r.unfold1.w, r.unfold2.w);
+    c.edge = asuint(r.edge.x); c.edgeZ = r.edge.y; c.edgePhi = r.edge.z; c.edgePick = r.edge.w;
+    c.travelled = r.travel.x; c.time = r.travel.y; c.through = uint2(asuint(r.travel.z), asuint(r.travel.w));
+    c.reflections = 0; c.detectable = true; c.edgeLow = 1; c.edgeHigh = 1;
+    float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
+    uint rng = HashRay(index * 0x9e3779b9u ^ HashRay(RaySeed * 0x27d4eb2fu + MethodRayOffset * 0x165667b1u + 0x61c88647u));
+    float4 low, high; float time; float3 from;
+    if (PathDetect(c, r.fluxLow, r.fluxHigh, S, L, rng, low, high, time, from))
+        PathDeposit(from, low, high, time, HashRay(rng ^ 0x5bd1e995u));
+}
+void PathResetRequests() { PathRequestCount[0] = 0; }
+
 // Straight connection of a non-delta vertex to the listener (through transmitting walls).
 bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, out float4 low, out float4 high, out float time, out float3 from, out float lengthOut)
 {
@@ -412,7 +468,7 @@ void TracePath(uint index)
     { I[k] = ReferenceDistance * ReferenceDistance; cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; flux[k] = 0; }
     MethodAnchor c = v;
     // Ray 0 makes the source's straight connection for every ray (it is deterministic).
-    bool connectListener = ray == 0, connectEdge = true, detect = false, hasPending = false;
+    bool connectListener = ray == 0, connectEdge = true, hasPending = false;
     float listenerScale = MethodTotalRays, pendingTime = 0;
     float3 pendingFrom = 0;
     uint events = 0;
@@ -448,12 +504,6 @@ void TracePath(uint index)
         {
             connectEdge = false;
             hasPending = PathEdgeConnection(c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, rng, pendingLow, pendingHigh, pendingTime, pendingFrom);
-            continue;
-        }
-        if (detect)
-        {
-            detect = false;
-            hasPending = PathDetect(chain, float4(flux[0], flux[1], flux[2], flux[3]), float4(flux[4], flux[5], flux[6], flux[7]), S, L, rng, pendingLow, pendingHigh, pendingTime, pendingFrom);
             continue;
         }
         if (done)
@@ -641,8 +691,8 @@ void TracePath(uint index)
             PathEvent(chain, plane, false, n, p);
             d = reflect(d, n);
         }
-        // Connect the chain to the listener (next iteration), with the flux before roulette.
-        if (chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1))
+        // Connect the chain to the listener (PathConnect), with the flux before roulette.
+        if (chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, L))
         {
             bool any = false;
             [unroll] for (uint k15 = 0; k15 < MethodBands; k15++)
@@ -651,7 +701,7 @@ void TracePath(uint index)
                 flux[k15] = scale > 0 ? Phi0[k15] * C[k15] / Q / scale : 0;
                 any = any || flux[k15] > 0;
             }
-            detect = any;
+            if (any) PathQueue(chain, flux);
         }
         float weight = 0;
         [unroll] for (uint k16 = 0; k16 < MethodBands; k16++) weight = max(weight, C[k16]);

@@ -64,6 +64,10 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly RayTransport.Layout layout;
     readonly ComputeShader shader;
     readonly Action bind;
+    readonly int connectKernel = -1, resetKernel = -1;
+    // Path: queued specular-chain connections of one chunk of rays (MethodPath.hlsl PathConnect).
+    public const int RequestsPerRay = 32, RequestStride = 160;
+    readonly ComputeBuffer requests, requestCount;
     readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
     // Late-field accumulation across solves (settings.lateAccumulationSeconds, audio only):
     // every solve draws a new walk seed and the late histogram is the exponential moving
@@ -142,6 +146,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (path)
         {
             edgeWeightKernel = shader.FindKernel("PathEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("PathEdgeScan");
+            connectKernel = shader.FindKernel("PathConnect3D" + suffix); resetKernel = shader.FindKernel("PathResetRequestsKernel");
             if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
         }
         else if (energy)
@@ -271,6 +276,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
                         : audio ? checked(2 * Frames * Pairs * (Directions + 1) * Bands * Math.Max(1, Bins))
                         : energy ? 2 * Directions * Bands * Bins : 2 * 2 * TrainBase * ((1 << Bands) - 1);
             countCells = path ? checked(Frames * Pairs * TimeBins.Count) : 1;
+            requests = new ComputeBuffer(path ? ChunkRays * RequestsPerRay : 1, RequestStride);
+            requestCount = new ComputeBuffer(1, 4);
             counts = new ComputeBuffer(countCells, 4);
             Counts = new uint[path ? countCells : 0];
             statsCount = Bands * Depths * StatStride + Counters;
@@ -286,7 +293,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             bool anyTransmission = transmissive || volumeData.Length > 0;
             var kernels = new List<int> {traceKernel, clearKernel};
             if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
-            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); }
+            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, connectKernel, resetKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); }
             if (accumulate) kernels.Add(accumulateKernel);
             bind = () =>
             {
@@ -305,6 +312,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                     shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
                     shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
                     shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
+                    shader.SetBuffer(kernel, "PathRequests", requests); shader.SetBuffer(kernel, "PathRequestCount", requestCount);
                 }
                 if (energy)
                 {
@@ -361,6 +369,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetInt("PathCountCells", countCells);
                 shader.SetInt("PathAudio", audio ? 1 : 0);
                 shader.SetInt("PathMaxTrials", Math.Max(1, settings.pathMaxTrials));
+                shader.SetInt("PathRequestCapacity", ChunkRays * RequestsPerRay);
                 return;
             }
             if (!energy) return;
@@ -457,6 +466,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
         shader.Dispatch(edgeScanKernel, 1, 1, 1);
     }
 
+    // Path: one chunk of rays, then its queued chain connections (one per thread).
+    void TraceChunk(int count)
+    {
+        shader.Dispatch(resetKernel, 1, 1, 1);
+        shader.Dispatch(traceKernel, (count + 63) / 64, 1, 1);
+        shader.Dispatch(connectKernel, ChunkRays * RequestsPerRay / 64, 1, 1);
+    }
+
     // Measurement: trace every ray of one solve and read the outputs back. With a capture
     // buffer, rays below captureRays record up to captureEvents events (two float4 each).
     public void Dispatch(int bvhNodeCount, ComputeBuffer capture = null, int captureRays = 0, int captureEvents = 0)
@@ -482,7 +499,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.SetInt("MethodRayOffset", first);
             shader.SetInt("MethodRayCount", count);
             long start = Stopwatch.GetTimestamp();
-            shader.Dispatch(traceKernel, (count + 63) / 64, 1, 1);
+            if (path) TraceChunk(count);
+            else shader.Dispatch(traceKernel, (count + 63) / 64, 1, 1);
             AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion(); // fence: this chunk is done
             double busy = TakeRender.Elapsed(start);
             GpuSeconds += busy;
@@ -514,9 +532,12 @@ internal sealed class MethodTransport : IDisposable, ILateField
                     // temporal averaging here; that is the denoiser's job).
                     shader.SetInt("RaySeed", unchecked(settings.seed + SeedOffset + (int)(pathSolves * Pairs + frame * Pairs + pair)));
                     DispatchEdgeDistribution();
-                    shader.SetInt("MethodRayOffset", 0);
-                    shader.SetInt("MethodRayCount", Rays);
-                    shader.Dispatch(traceKernel, (Rays + 63) / 64, 1, 1);
+                    for (int first = 0; first < Rays; first += ChunkRays)
+                    {
+                        shader.SetInt("MethodRayOffset", first);
+                        shader.SetInt("MethodRayCount", Math.Min(ChunkRays, Rays - first));
+                        TraceChunk(Math.Min(ChunkRays, Rays - first));
+                    }
                     shader.Dispatch(expandKernel, (frequencyBins + 63) / 64, 1, 1);
                     continue;
                 }
@@ -699,7 +720,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); pending = false; }
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
-        counts?.Dispose();
+        counts?.Dispose(); requests?.Dispose(); requestCount?.Dispose();
         arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose();
         nearList?.Dispose(); nearMask?.Dispose();
     }
