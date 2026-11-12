@@ -123,7 +123,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             throw new NotSupportedException("The pressure method does not render audio.");
         if (!audio && (scene.sources.Length != 1 || scene.listeners.Length != 1))
             throw new NotSupportedException("Method measurements solve one source and one listener.");
-        if (!audio && settings.maximumDelaySeconds > TrainSeconds - LeadSeconds - .05f)
+        if (!audio && settings.method == TakeRender.Method.Pressure && settings.maximumDelaySeconds > TrainSeconds - LeadSeconds - .05f)
             throw new ArgumentOutOfRangeException(nameof(settings.maximumDelaySeconds), "The method horizon must stay inside the band trains.");
         Kind = settings.method; Audio = audio; this.scene = scene; this.settings = settings; rate = sampleRate;
         Frames = audio ? maximumFrames : 1;
@@ -372,6 +372,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetInt("PathMaxTrials", Math.Max(1, settings.pathMaxTrials));
                 shader.SetInt("PathRequestCapacity", ChunkRays * RequestsPerRay);
                 shader.SetInt("PathProfileFlags", 0);
+                shader.SetFloat("PathSurvivalSeconds", settings.pathSurvivalSeconds);
                 return;
             }
             if (!energy) return;

@@ -124,6 +124,9 @@ public partial class TakeChecks
         var size = new Vector3(5, 4, 3); var source = new Vector3(-1.1f, .4f, .3f); var listener = new Vector3(1.3f, -.6f, -.2f);
         LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(.1f, 0), source, listener, out var scene, out var geometry, out var state);
         var settings = ControlSettings(method, 1 << 16, .2f);
+        // Path: every path lives to the horizon here, so the 20 ms windows test the connections at the
+        // energy method's sampling density (survival in time is checked by PathMethodLeaksThroughWalls...).
+        settings.pathSurvivalSeconds = 0;
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         solver.Solve(state, new TakeRender.DirectPath[1]);
         var corner = size * .5f; int bins = solver.Method.Bins;

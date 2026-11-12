@@ -148,6 +148,7 @@ public partial class TakeChecks
         // get independent noise, as live solves do), and air absorption.
         public bool seedPerReceiver, airAbsorption;
         public int pathMaxTrials = 0; // 0: the settings' default
+        public float pathSurvivalSeconds = -1; // < 0: the settings' default
     }
     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
     [Serializable] sealed class MethodRunRecord
@@ -202,6 +203,7 @@ public partial class TakeChecks
         settings.methodRays = budget; settings.specularDetectionRadius = job.detectionRadius;
         settings.methodEdgeProbability = job.edgeProbability; settings.methodRouletteFloor = job.rouletteFloor;
         if (job.pathMaxTrials > 0) settings.pathMaxTrials = job.pathMaxTrials;
+        if (job.pathSurvivalSeconds >= 0) settings.pathSurvivalSeconds = job.pathSurvivalSeconds;
         return settings;
     }
     static void MethodWrite(string path, float[] values)

@@ -30,7 +30,14 @@
 // (each bin PathRatio times its start time).
 float PathBin0, PathRatio;
 uint PathFineBins, PathBins, PathCountBase, PathCountCells, PathAudio, PathMaxTrials;
-uint PathProfileFlags; // profiling only: bit 0 skips histogram writes, bit 1 the connection trials
+uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 1 connection trials, 2 straight connections, 3 edge connections; bit 4 traces every blocked connection
+// Survival in time (Russian roulette per time bin, weight-compensated, unbiased): a path is alive at
+// time t with probability S(t) = min(1, PathSurvivalSeconds / t). The histogram's bins widen in
+// proportion to t after the fine region, so with S proportional to 1/t each bin keeps about as many
+// contributing paths as a fine early bin, while the work over a horizon T falls from T to
+// T0 (1 + ln(T / T0)). Zero disables it.
+float PathSurvivalSeconds;
+float PathSurvival(float time) { return PathSurvivalSeconds > 0 ? min(1, PathSurvivalSeconds / max(time, 1e-6)) : 1; }
 RWStructuredBuffer<uint> PathCounts; // contributions per [solve][bin]
 static const uint CounterTrialCap = 13, CounterTrials = 15;
 
@@ -391,7 +398,11 @@ void PathConnect(uint group, uint thread)
 void PathResetRequests() { PathRequestCount[0] = 0; }
 
 // Straight connection of a non-delta vertex to the listener (through transmitting walls).
-bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, out float4 low, out float4 high, out float time, out float3 from, out float lengthOut)
+// Unless `exact` (the source's direct sound), a connection blocked by a surface is traced through
+// the walls only with probability q = that surface's largest energy transmission over the bands, and
+// weighted by 1 / q (Russian roulette, unbiased): the transmitted energy is at most that factor, so
+// the weight stays bounded, and in stone rooms (t of 1e-6) the crossing loop is almost never run.
+bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, bool exact, inout uint rng, out float4 low, out float4 high, out float time, out float3 from, out float lengthOut)
 {
     low = 0; high = 0;
     time = 0; from = 0; lengthOut = 0;
@@ -401,14 +412,62 @@ bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, out float4 
     w /= d;
     float D = EnergyDirectivity(v, w);
     if (D == 0) return false;
-    float factor[8]; float t;
+    float factor[8]; float t, keep = 1;
     [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] = 1;
-    if (!MethodConnect(v.position, L, v.medium, true, factor, t)) return false;
+    bool clear = false;
+    if (!exact && MethodAnyTransmission != 0 && (PathProfileFlags & 16) == 0) // (bit 4: always trace, a check of this roulette)
+    {
+        uint hit; float distance; float3 normal;
+        if (NearestHit(MethodState, v.position, w, d - RayEpsilon, false, hit, distance, normal))
+        {
+            keep = 0;
+            [unroll] for (uint k2 = 0; k2 < MethodBands; k2++)
+            {
+                RayMaterial m = MethodSurface(hit, k2);
+                keep = max(keep, m.medium.w != 0 ? 0 : saturate((1 - m.surface.x) * m.surface.z));
+            }
+            if (!(RandomRay(rng) < keep)) return false;
+        }
+        else clear = true; // nothing in between: one medium, no crossing loop needed
+    }
+    if (clear)
+    {
+        t = d * MethodSlowness(v.medium);
+        [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) factor[k3] = exp(-2 * MethodLoss(v.medium, k3) * d);
+    }
+    else if (!MethodConnect(v.position, L, v.medium, true, factor, t)) return false;
     float r = max(MinimumDistance, d);
     float e[8];
-    [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) e[k1] = I[k1] * D * factor[k1] / (r * r) * scale;
+    [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) e[k1] = I[k1] * D * factor[k1] / (r * r) * scale / keep;
     low = float4(e[0], e[1], e[2], e[3]); high = float4(e[4], e[5], e[6], e[7]);
     time = v.time + t; from = -w; lengthOut = d;
+    return true;
+}
+// Mirror leg start -> primitive -> end (CompleteMirror without its scan of every lower-index
+// primitive of the object, which made each RD connection cost a pass over the whole scene): a hit
+// on the triangle's boundary, where a neighbour could claim the same contact, is rejected instead
+// (a set of measure zero, so no bias).
+bool PathMirror(uint primitive, float3 start, float3 end, out float3 hit, out float cosine)
+{
+    hit = 0; cosine = 0;
+    float3 n, unused;
+    float3 image = CompleteImage(primitive, MethodState, start, false, n), delta = end - image;
+    float lengthTo = length(delta);
+    if (lengthTo <= RayEpsilon) return false;
+    float3 direction = delta / lengthTo;
+    float distance = PrimitiveDistance(primitive, MethodState, image, direction, false, unused);
+    if (distance <= RayEpsilon || distance >= lengthTo - RayEpsilon) return false;
+    hit = image + distance * direction;
+    Primitive t = Primitives[primitive]; State pose = States[MethodState + t.indices.x];
+    float3 a = pose.position.xyz + Rotate(pose.rotation, t.a.xyz), b = pose.position.xyz + Rotate(pose.rotation, t.b.xyz),
+           c = pose.position.xyz + Rotate(pose.rotation, t.c.xyz);
+    float3 m = cross(b - a, c - a);
+    float area = dot(m, m);
+    float3 w = float3(dot(cross(c - b, hit - b), m), dot(cross(a - c, hit - c), m), dot(cross(b - a, hit - a), m)) / max(area, 1e-20);
+    if (min(w.x, min(w.y, w.z)) <= 1e-5) return false;
+    [loop] for (uint leg = 0; leg < 2; leg++)
+        if (!Visible(MethodState, leg == 0 ? start : hit, leg == 0 ? hit : end, false)) return false;
+    cosine = abs(dot(normalize(hit - start), n));
     return true;
 }
 // Listener connection through one edge (D), one mirror and one edge (RD), or two parallel
@@ -443,7 +502,7 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     else if (!UtdApex(edge, from, L, e) || !UtdAngles(edge, from, e, L, n, phiIn, phiOut, sinBeta)) return false;
     float3 last = pair ? e2 : e;
     first = e;
-    if (image) { if (!CompleteMirror(mirror, MethodState, v.position, e, false, hit, cosine)) return false; first = hit; }
+    if (image) { if (!PathMirror(mirror, v.position, e, hit, cosine)) return false; first = hit; }
     [loop] for (uint segment = image ? 1u : 0u; segment < 2; segment++)
         if (!Visible(MethodState, segment == 0 ? v.position : last, segment == 0 ? e : L, false)) return false;
     float D = EnergyDirectivity(v, normalize(first - v.position));
@@ -531,7 +590,7 @@ void TracePath(uint index)
     float Q = 1, tau = 0;
     uint medium = v.medium;
     PathChain chain = PathStart(S, 0, 0, 0, 0, false), branch = chain;
-    float branchSum = 0, branchTau = 0; float3 branchP = 0, branchD = 0; float branchF[8];
+    float branchSum = 0, branchTau = 0, branchSurvival = 1, survival = 1; float3 branchP = 0, branchD = 0; float branchF[8];
     uint branchMedium = 0;
     [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) branchF[k1] = 0;
     float edgeExtent = 1, edgeAngle = 1, edgeM = 1, edgeSinBeta = 1, edgePhiIn = 0, edgeD = 1;
@@ -546,7 +605,8 @@ void TracePath(uint index)
         {
             connectListener = false;
             float length0;
-            hasPending = PathListener(c, cI, L, listenerScale, pendingLow, pendingHigh, pendingTime, pendingFrom, length0);
+            if ((PathProfileFlags & 4) != 0 && ray != 0) continue;
+            hasPending = PathListener(c, cI, L, listenerScale, c.kind == 0, rng, pendingLow, pendingHigh, pendingTime, pendingFrom, length0);
             if (hasPending && PathAudio != 0 && c.kind == 0)
             {
                 PathDirectArrival(S, L, pendingLow, pendingHigh, listenerScale, pendingTime, length0); // exact, rendered as a delayed path
@@ -557,6 +617,7 @@ void TracePath(uint index)
         if (connectEdge)
         {
             connectEdge = false;
+            if ((PathProfileFlags & 8) != 0) continue;
             hasPending = PathEdgeConnection(c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, rng, pendingLow, pendingHigh, pendingTime, pendingFrom);
             continue;
         }
@@ -568,7 +629,7 @@ void TracePath(uint index)
             float keep = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
             if (RandomRay(rng) >= keep) break;
             [unroll] for (uint k2 = 0; k2 < MethodBands; k2++) { Phi0[k2] = branchF[k2] * branchSum / keep; C[k2] = 1; }
-            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1;
+            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival;
             chain = branch;
             fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true;
             MethodCount(CounterBranches);
@@ -669,58 +730,61 @@ void TracePath(uint index)
         float total = mT + mD + mS;
         if (!(total > 0)) { done = true; continue; }
         uint plane = MethodPrimitivePlane[hit];
-        // Where a transmission would go (one call site each): out of a partition's far face,
-        // or into the medium behind the surface.
+        // Choose first (the reservoir candidate and the continuation), then find where a transmission
+        // goes (out of a partition's far face, or into the medium behind the surface) only if one was
+        // chosen: one call site each, and no traversal for the many hits that do not transmit.
+        bool split = mT > 0 && mT < .5 * total, keepBranch = false;
+        float part[8], partWeight = 0;
+        [unroll] for (uint k10 = 0; k10 < MethodBands; k10++) { part[k10] = Phi0[k10] * C[k10] * eT[k10] / Q; partWeight = max(partWeight, part[k10]); }
+        if (split && partWeight > 0)
+        {
+            // Small transmitted share: a reservoir candidate (MethodEnergy.hlsl header), not a draw.
+            branchSum += partWeight;
+            keepBranch = RandomRay(rng) * branchSum < partWeight;
+        }
+        if (split) total = mD + mS;
+        float pick = RandomRay(rng) * total;
+        bool transmit = !split && pick >= mD && pick < mD + mT;
         float wall = 0; bool partition = false; uint next = medium;
-        if (mT > 0)
+        if (keepBranch || transmit)
         {
             partition = PartitionExit(MethodState, hit, p, d, false, MethodRefracts(hit), wall);
             next = MediumAt(MethodState, p + d * ((partition ? wall : 0) + 2 * RayEpsilon), false);
         }
-        bool split = mT > 0 && mT < .5 * total;
-        if (split)
+        if (keepBranch)
         {
-            // Small transmitted share: a reservoir candidate (MethodEnergy.hlsl header), not a draw.
-            float part[8], weight = 0;
-            [unroll] for (uint k10 = 0; k10 < MethodBands; k10++) { part[k10] = Phi0[k10] * C[k10] * eT[k10] / Q; weight = max(weight, part[k10]); }
-            if (weight > 0)
+            branch = chain; branchSurvival = survival;
+            if (partition)
             {
-                branchSum += weight;
-                if (RandomRay(rng) * branchSum < weight)
-                {
-                    branch = chain;
-                    if (partition)
-                    {
-                        // Through a partition: undeviated, out of its far face.
-                        branchP = p + d * wall; branchD = d; branchMedium = next;
-                        branchTau = tau + wall * MethodSlowness(medium);
-                        PathEvent(branch, plane, true, n, p);
-                        branch.travelled += wall;
-                    }
-                    else
-                    {
-                        float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
-                        bool refracted = dot(bent, bent) > 0;
-                        branchP = p; branchD = refracted ? normalize(bent) : reflect(d, n); branchMedium = refracted ? next : medium;
-                        branchTau = tau;
-                        if (refracted) branch.detectable = false; else PathEvent(branch, plane, false, n, p);
-                    }
-                    [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / weight;
-                }
+                // Through a partition: undeviated, out of its far face.
+                branchP = p + d * wall; branchD = d; branchMedium = next;
+                branchTau = tau + wall * MethodSlowness(medium);
+                PathEvent(branch, plane, true, n, p);
+                branch.travelled += wall;
             }
-            total = mD + mS;
+            else
+            {
+                float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
+                bool refracted = dot(bent, bent) > 0;
+                branchP = p; branchD = refracted ? normalize(bent) : reflect(d, n); branchMedium = refracted ? next : medium;
+                branchTau = tau;
+                if (refracted) branch.detectable = false; else PathEvent(branch, plane, false, n, p);
+            }
+            [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
         }
-        float pick = RandomRay(rng) * total;
         if (pick < mD)
         {
-            [unroll] for (uint k12 = 0; k12 < MethodBands; k12++) I[k12] = cI[k12] * (total / mD);
+            // Survival in time also at scattering points (the specular events apply it below).
+            float alive = PathSurvival(tau), keepAlive = alive / survival;
+            survival = alive;
+            if (keepAlive < 1 && RandomRay(rng) >= keepAlive) { MethodCount(CounterRoulette); done = true; continue; }
+            [unroll] for (uint k12 = 0; k12 < MethodBands; k12++) I[k12] = cI[k12] * (total / mD) / min(1, keepAlive);
             v = x;
             travelling = false;
             MethodCount(CounterDiffuse);
             if (v.time > MethodHorizon) { MethodCount(CounterHorizon); done = true; }
             continue;
         }
-        bool transmit = !split && pick < mD + mT;
         if (transmit)
         {
             [unroll] for (uint k13 = 0; k13 < MethodBands; k13++) C[k13] *= eT[k13];
@@ -766,6 +830,9 @@ void TracePath(uint index)
             [unroll] for (uint k17 = 0; k17 < MethodBands; k17++) fluxNow = max(fluxNow, Phi0[k17] * C[k17]);
             survive = min(survive, fluxNow / (Q * 4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
         }
+        float alive = PathSurvival(tau);
+        survive *= alive / survival;
+        survival = alive;
         if (survive < 1)
         {
             if (RandomRay(rng) >= survive) { MethodCount(CounterRoulette); done = true; continue; }

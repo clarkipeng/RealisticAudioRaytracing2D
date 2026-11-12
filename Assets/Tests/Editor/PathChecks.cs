@@ -34,6 +34,36 @@ public partial class TakeChecks
         TestContext.WriteLine($"T60 {t60:F3} s, Eyring {eyring:F3} s, counted contributions {Sum(solver.Method.Counts)}");
         Assert.That(t60 / eyring, Is.EqualTo(1).Within(.15));
     }
+    // Sound leaking out of a scattering room through its walls (t = 1e-3), listener outside: the path
+    // method's connections through walls (traced with probability = the first wall's transmission,
+    // weighted back) give the energy method's leaked energy. Both are estimates; the tolerance covers
+    // their seed noise.
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void PathMethodLeaksThroughWallsLikeTheEnergyMethod()
+    {
+        var size = new Vector3(6, 5, 4);
+        double Leak(TakeRender.Method method, int seed, float survival = -1, int flags = 0)
+        {
+            LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(.1f, .5f, 1e-3f), new Vector3(-1.5f, .5f, .4f), new Vector3(3.8f, -.3f, .2f),
+                     out var scene, out var geometry, out var state);
+            var settings = ControlSettings(method, 1 << 16, .4f); settings.seed = seed; settings.specularDetectionRadius = .5f;
+            if (survival >= 0) settings.pathSurvivalSeconds = survival;
+            using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+            if (method == TakeRender.Method.Path) solver.Method.ProfileFlags = flags;
+            solver.Solve(state, new TakeRender.DirectPath[1]);
+            double direct = (new Vector3(3.8f, -.3f, .2f) - new Vector3(-1.5f, .5f, .4f)).magnitude / 343;
+            return Window(ControlEnergy(solver, 2), (int)Math.Ceiling(direct * 1000) + 5, int.MaxValue);
+        }
+        double path = 0, all = 0, lifelong = 0, energy = 0;
+        for (int seed = 0; seed < 2; seed++)
+        {
+            path += Leak(TakeRender.Method.Path, seed) / 2; all += Leak(TakeRender.Method.Path, seed, -1, 16) / 2;
+            lifelong += Leak(TakeRender.Method.Path, seed, 0, 16) / 2; energy += Leak(TakeRender.Method.Energy, seed) / 2;
+        }
+        TestContext.WriteLine($"leaked energy: path {path:G4}; every blocked connection traced {all:G4}; and no survival in time {lifelong:G4}; energy method {energy:G4}");
+        Assert.That(path / all, Is.EqualTo(1).Within(.2), "Tracing blocked connections with probability t (weighted 1/t) keeps the mean.");
+        Assert.That(all / lifelong, Is.EqualTo(1).Within(.2), "Survival in time keeps the mean.");
+    }
     static long Sum(uint[] values) { long s = 0; foreach (var v in values) s += v; return s; }
 
     // A specular image whose detection region straddles a visibility boundary: a rigid floor and

@@ -106,6 +106,8 @@ public static partial class TakeRender
         public int pathFineBins=64;
         [Min(1),Tooltip("Path method: cap on the geometric trials that measure the share of a detection region following a specular chain (expected 1/share; a capped detection is counted and biased low).")]
         public int pathMaxTrials=64;
+        [Min(0),Tooltip("Path method: survival in time. A path is alive at time t with probability min(1, this / t), weight-compensated (unbiased), so each histogram bin keeps about as many contributing paths while late work falls sharply. Zero: every path lives to the horizon (roulette on energy only).")]
+        public float pathSurvivalSeconds=.1f;
         // Exact arrivals rendered as delayed paths per pair: Energy's slots, Path's direct sound.
         internal int ArrivalSlots => method==Method.Path?1:methodArrivalSlots;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
@@ -784,7 +786,7 @@ public static partial class TakeRender
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.method!=Method.Hybrid && settings.method!=Method.Pressure && settings.method!=Method.Energy && settings.method!=Method.Path)throw new ArgumentException("Unknown acoustic method.");
-        if(settings.method==Method.Path && (!PositiveFinite(settings.pathBinSeconds) || settings.pathFineBins<1 || settings.pathMaxTrials<1))throw new ArgumentException("Invalid path method settings.");
+        if(settings.method==Method.Path && (!PositiveFinite(settings.pathBinSeconds) || settings.pathFineBins<1 || settings.pathMaxTrials<1 || !(settings.pathSurvivalSeconds>=0)))throw new ArgumentException("Invalid path method settings.");
         if(settings.method!=Method.Hybrid && (settings.methodRays<1 || !PositiveFinite(settings.specularDetectionRadius) || !(settings.methodEdgeProbability>=0 && settings.methodEdgeProbability<1) || settings.methodMaxEvents<1 || !(settings.methodRouletteFloor>0 && settings.methodRouletteFloor<=1) ||
             settings.methodArrivalOrder<0 || settings.methodArrivalOrder>2 || settings.methodArrivalSlots<1 || settings.methodNearPlanes<0))
             throw new ArgumentException("Invalid single-loop method settings.");
