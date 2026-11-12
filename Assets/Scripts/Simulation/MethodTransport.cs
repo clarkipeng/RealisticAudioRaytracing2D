@@ -66,7 +66,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly Action bind;
     readonly int connectKernel = -1, resetKernel = -1;
     // Path: queued specular-chain connections of one chunk of rays (MethodPath.hlsl PathConnect).
-    public const int RequestsPerRay = 32, RequestStride = 160;
+    // Requests are about 0.5 per ray in a closed specular room; overflow is counted (counter 9).
+    public const int RequestsPerRay = 8, RequestStride = 160, CandidatesPerGroup = 8;
     readonly ComputeBuffer requests, requestCount;
     readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
     // Late-field accumulation across solves (settings.lateAccumulationSeconds, audio only):
@@ -370,6 +371,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetInt("PathAudio", audio ? 1 : 0);
                 shader.SetInt("PathMaxTrials", Math.Max(1, settings.pathMaxTrials));
                 shader.SetInt("PathRequestCapacity", ChunkRays * RequestsPerRay);
+                shader.SetInt("PathProfileFlags", 0);
                 return;
             }
             if (!energy) return;
@@ -470,9 +472,19 @@ internal sealed class MethodTransport : IDisposable, ILateField
     void TraceChunk(int count)
     {
         shader.Dispatch(resetKernel, 1, 1, 1);
+        long start = Stopwatch.GetTimestamp();
         shader.Dispatch(traceKernel, (count + 63) / 64, 1, 1);
-        shader.Dispatch(connectKernel, ChunkRays * RequestsPerRay / 64, 1, 1);
+        if (Profile) { Fence(); PhaseSeconds[1] += TakeRender.Elapsed(start); start = Stopwatch.GetTimestamp(); }
+        shader.Dispatch(connectKernel, ChunkRays * RequestsPerRay / CandidatesPerGroup, 1, 1); // groups past the queued count idle
+        if (Profile) { Fence(); PhaseSeconds[2] += TakeRender.Elapsed(start); }
     }
+    void Fence() => AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion();
+    // Profiling (measurement only): a fence after every phase, and seconds per phase
+    // [edge distribution, walk, connections, readback]. ProfileFlags (MethodPath.hlsl): bit 0 skips
+    // the histogram writes, bit 1 the connection trials (exact retrace only); both change the result.
+    public bool Profile;
+    public int ProfileFlags;
+    public readonly double[] PhaseSeconds = new double[4];
 
     // Measurement: trace every ray of one solve and read the outputs back. With a capture
     // buffer, rays below captureRays record up to captureEvents events (two float4 each).
@@ -489,9 +501,10 @@ internal sealed class MethodTransport : IDisposable, ILateField
         {
             SetSolve(0, 0);
             long start = Stopwatch.GetTimestamp();
-            if (path) DispatchEdgeDistribution(); else DispatchArrivals();
+            if (path) { shader.SetInt("PathProfileFlags", ProfileFlags); DispatchEdgeDistribution(); } else DispatchArrivals();
             AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion();
             GpuSeconds += TakeRender.Elapsed(start);
+            PhaseSeconds[0] += TakeRender.Elapsed(start);
         }
         for (int first = 0; first < Rays; first += ChunkRays)
         {
@@ -506,9 +519,11 @@ internal sealed class MethodTransport : IDisposable, ILateField
             GpuSeconds += busy;
             if (WorkFraction < 1) System.Threading.Thread.Sleep((int)Math.Ceiling(busy * 1000 * (1 / WorkFraction - 1)));
         }
+        long read = Stopwatch.GetTimestamp();
         output.GetData(Output);
         stats.GetData(Stats);
         if (path) counts.GetData(Counts);
+        PhaseSeconds[3] += TakeRender.Elapsed(read);
         shader.SetBuffer(traceKernel, "MethodCapture", emptyCapture);
     }
     // Audio: every pair of `frames` uploaded frames. The outputs stay on the GPU for

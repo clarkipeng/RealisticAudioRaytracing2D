@@ -147,6 +147,7 @@ public partial class TakeChecks
         // Dataset runs (tools/path_dataset.py): a new seed per receiver (frames of a moving listener
         // get independent noise, as live solves do), and air absorption.
         public bool seedPerReceiver, airAbsorption;
+        public int pathMaxTrials = 0; // 0: the settings' default
     }
     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
     [Serializable] sealed class MethodRunRecord
@@ -200,6 +201,7 @@ public partial class TakeChecks
         settings.lateRays = budget; settings.completeRouteSamples = job.hybridRouteFactor * budget;
         settings.methodRays = budget; settings.specularDetectionRadius = job.detectionRadius;
         settings.methodEdgeProbability = job.edgeProbability; settings.methodRouletteFloor = job.rouletteFloor;
+        if (job.pathMaxTrials > 0) settings.pathMaxTrials = job.pathMaxTrials;
         return settings;
     }
     static void MethodWrite(string path, float[] values)

@@ -15,7 +15,7 @@
 //       specular by the material's energy fractions (small transmissions are split off into
 //       one reservoir branch per ray), Russian roulette as an unbiased terminator
 //     after every specular reflection or transmission: connect the chain to the listener
-//       (PathDetect): if the ray left its vertex inside a small region around the listener's
+//       (PathConnect): if the ray left its vertex inside a small region around the listener's
 //       mirror image, retrace the exact image path and score it divided by the probability of
 //       that detection. The probability is the region's sampling probability times the share of
 //       rays in the region that follow the same plane sequence; the share's inverse is estimated
@@ -30,6 +30,7 @@
 // (each bin PathRatio times its start time).
 float PathBin0, PathRatio;
 uint PathFineBins, PathBins, PathCountBase, PathCountCells, PathAudio, PathMaxTrials;
+uint PathProfileFlags; // profiling only: bit 0 skips histogram writes, bit 1 the connection trials
 RWStructuredBuffer<uint> PathCounts; // contributions per [solve][bin]
 static const uint CounterTrialCap = 13, CounterTrials = 15;
 
@@ -44,6 +45,7 @@ uint PathBinOf(float time)
 // moving arrival never jumps between direction bins. 32.32 fixed point with an unbiased dither.
 void PathDeposit(float3 from, float4 low, float4 high, float time, uint key)
 {
+    if ((PathProfileFlags & 1) != 0) return;
     if (!(time >= 0) || time > MethodHorizon) { MethodCount(CounterNonFinite); return; }
     uint bin = PathBinOf(time);
     if (bin >= PathBins) { MethodCount(CounterNonFinite); return; }
@@ -146,143 +148,136 @@ float3 PathCone(float3 w, float oneMinusCos, inout uint rng)
     return c * w + s * (cos(a) * t + sin(a) * cross(w, t));
 }
 
-// Connection of a specular chain to the listener (see the header). flux: the walk's
-// Phi0 C / Q right after the chain's latest event (edge chains: over the edge ray's flux, i.e.
-// the chain's C / Q, which also holds for a transmitted branch of the chain). Point origins: the region is a cone about the
-// direction to the listener image with half-angle asin(r / distance) (at most 30 degrees);
-// trial directions are uniform in it and, for a scattering point, accepted with probability
-// cos / (largest cos in the cone), so trials follow the walk's own density. Edge chains: the
-// region is a box in (point on the edge, azimuth) about Keller's stationary point, sampled with
-// the walk's densities. score = exact contribution x N / (region probability, without p_seq).
-// Bands travel as two float4 (125-1000 Hz, 2-16 kHz): array parameters in and out of this
-// function, and writes to out parameters inside a [loop], lost the result on Metal.
-bool PathDetect(PathChain c, float4 fluxLow, float4 fluxHigh, float3 S, float3 L, inout uint rng, out float4 low, out float4 high, out float time, out float3 from)
+// Connection of a specular chain to the listener (see the header), split for the parallel
+// connection pass (PathConnect): the detection region, one attempt, and the score.
+// Point origins: the region is a cone about the direction to the listener image with half-angle
+// asin(r / distance) (at most 30 degrees); trial directions are uniform in it and, for a
+// scattering point, accepted with probability cos / (largest cos in the cone), so trials follow
+// the walk's own density. Edge chains: the region is a box in (point on the edge, azimuth) about
+// Keller's stationary point, sampled with the walk's densities.
+// score = exact contribution x N / (region probability, without the followed share), N the index
+// of the first trial that follows the chain (geometric, mean 1 / share).
+struct PathRegion
 {
-    low = 0; high = 0;
-    time = 0; from = 0;
-    float3 image = mul(c.unfold, L) + c.shift;
-    bool edgeChain = c.kind == 2;
-    MethodCount(CounterDetections);
-    // Edge chain: Keller's stationary point between the source and the listener image.
-    float3 a = 0, u = 0, f = 0, nn = 0; float extent = 1, angle = 1, n = 1, phiIn = 0, phiStar = 0, sinBeta = 1, zStar = 0, m = 0, l = 0;
-    float z0 = 0, re = 1, span = 1, lowZ = 0, highZ = 0, lowPhi = 0, highPhi = 0, oneMinus = 0, cmax = 1, region = 1;
-    float3 start = c.origin, toward = 0;
-    if (edgeChain)
+    float3 image, start, toward, a, u, f, nn;
+    float extent, angle, n, phiIn, phiStar, sinBeta, m, l, z0, re, lowZ, highZ, lowPhi, highPhi, oneMinus, cmax, region, total;
+    bool edge;
+};
+bool PathRegionOf(PathChain c, float3 S, float3 L, out PathRegion R)
+{
+    R = (PathRegion)0;
+    R.extent = 1; R.angle = 1; R.n = 1; R.sinBeta = 1; R.re = 1; R.cmax = 1; R.region = 1;
+    R.image = mul(c.unfold, L) + c.shift;
+    R.edge = c.kind == 2;
+    R.start = c.origin;
+    if (R.edge)
     {
-        float3 e;
-        EdgeFrame(c.edge, MethodState, false, a, u, f, nn, extent, angle);
-        if (!UtdApex(c.edge, S, image, e) || !UtdAngles(c.edge, S, e, image, n, phiIn, phiStar, sinBeta)) return false;
-        zStar = dot(e - a, u); m = length(e - S); l = length(image - e);
-        if (m <= RayEpsilon || l <= RayEpsilon) return false;
-        float r = MethodDetectRadius, dz = min(extent, r * m / ((m + l) * sinBeta)), dphi = min(.5 * angle, r / (l * sinBeta));
-        lowZ = max(0, zStar - dz); highZ = min(extent, zStar + dz); lowPhi = max(0, phiStar - dphi); highPhi = min(angle, phiStar + dphi);
-        if (c.edgeZ < lowZ || c.edgeZ > highZ || c.edgePhi < lowPhi || c.edgePhi > highPhi) return false;
-        span = EnergyEdgeSpan(a, u, extent, S, z0, re);
+        float3 e; float span;
+        EdgeFrame(c.edge, MethodState, false, R.a, R.u, R.f, R.nn, R.extent, R.angle);
+        if (!UtdApex(c.edge, S, R.image, e) || !UtdAngles(c.edge, S, e, R.image, R.n, R.phiIn, R.phiStar, R.sinBeta)) return false;
+        float zStar = dot(e - R.a, R.u);
+        R.m = length(e - S); R.l = length(R.image - e);
+        if (R.m <= RayEpsilon || R.l <= RayEpsilon) return false;
+        float r = MethodDetectRadius, dz = min(R.extent, r * R.m / ((R.m + R.l) * R.sinBeta)), dphi = min(.5 * R.angle, r / (R.l * R.sinBeta));
+        R.lowZ = max(0, zStar - dz); R.highZ = min(R.extent, zStar + dz); R.lowPhi = max(0, R.phiStar - dphi); R.highPhi = min(R.angle, R.phiStar + dphi);
+        if (c.edgeZ < R.lowZ || c.edgeZ > R.highZ || c.edgePhi < R.lowPhi || c.edgePhi > R.highPhi) return false;
+        span = EnergyEdgeSpan(R.a, R.u, R.extent, S, R.z0, R.re);
         // Region probability: edge ray, this edge, z in the box (Cauchy law), azimuth in the box.
-        region = MethodEdgeProbability * c.edgePick * (atan((highZ - z0) / re) - atan((lowZ - z0) / re)) / span * (highPhi - lowPhi) / angle;
-        start = e; toward = normalize(image - e);
+        R.region = MethodEdgeProbability * c.edgePick * (atan((R.highZ - R.z0) / R.re) - atan((R.lowZ - R.z0) / R.re)) / span * (R.highPhi - R.lowPhi) / R.angle;
+        R.start = e; R.toward = normalize(R.image - e); R.total = R.l;
+        return true;
     }
-    else
+    float3 w = R.image - c.origin;
+    float distance = length(w);
+    if (distance <= RayEpsilon) return false;
+    w /= distance;
+    float s = min(MethodDetectRadius / distance, .5), cosA = sqrt(1 - s * s);
+    if (dot(c.omega, w) < cosA) return false;
+    R.oneMinus = s * s / (1 + cosA);
+    if (c.kind == 1)
     {
-        float3 w = image - c.origin;
-        float distance = length(w);
-        if (distance <= RayEpsilon) return false;
-        w /= distance;
-        float s = min(MethodDetectRadius / distance, .5), cosA = sqrt(1 - s * s);
-        if (dot(c.omega, w) < cosA) return false;
-        oneMinus = s * s / (1 + cosA);
-        if (c.kind == 1)
-        {
-            float cw = dot(w, c.normal);
-            if (cw <= 0) return false;
-            cmax = cos(max(0, acos(min(1, cw)) - asin(s)));
-        }
-        region = 2 * RayPi * oneMinus; // solid angle; the density bound is folded into the score
-        toward = w;
+        float cw = dot(w, c.normal);
+        if (cw <= 0) return false;
+        R.cmax = cos(max(0, acos(min(1, cw)) - asin(s)));
     }
-    // Attempt 0 is the exact image path (with its last leg to the listener); attempts 1.. are the
-    // geometric trials. One visibility call site: the edge chain's first leg, then the last leg.
-    float total = edgeChain ? l : length(image - c.origin);
-    uint trials = 0;
-    float3 qExact = 0, eExact = 0;
-    [loop] for (uint attempt = 0; attempt <= PathMaxTrials; attempt++)
+    R.region = 2 * RayPi * R.oneMinus; // solid angle; the density bound is folded into the score
+    R.toward = w; R.total = distance;
+    return true;
+}
+// Attempt 0 is the exact image path with its last leg to the listener (q, e: its last vertex and
+// direction); attempt i > 0 is a trial: a ray drawn in the region with the walk's density, which
+// succeeds if it follows the chain's planes (edge chains: with the walk's first-leg tests).
+bool PathTry(PathChain c, PathRegion R, float3 S, float3 L, uint attempt, uint rng, out float3 q, out float3 e)
+{
+    float3 p = R.start, d = R.toward;
+    bool valid = true;
+    if (attempt > 0)
     {
-        float3 p = start, d = toward;
-        bool valid = true;
-        if (attempt > 0)
+        if (R.edge)
         {
-            if (edgeChain)
-            {
-                // The walk's edge ray restricted to the box.
-                float t0 = atan((lowZ - z0) / re), t1 = atan((highZ - z0) / re);
-                float z = clamp(z0 + re * tan(t0 + RandomRay(rng) * (t1 - t0)), 0, extent), phi = lowPhi + RandomRay(rng) * (highPhi - lowPhi);
-                p = a + z * u;
-                float3 w = p - S; float mw = length(w);
-                valid = mw > RayEpsilon && TunedEdgeAngle(-w, f, nn, angle) <= angle;
-                w /= max(mw, 1e-12);
-                float cosBeta = dot(w, u), sb = sqrt(max(0, 1 - cosBeta * cosBeta));
-                valid = valid && sb > 1e-4;
-                d = normalize(u * cosBeta + sb * (f * cos(phi) + nn * sin(phi)));
-            }
-            else
-            {
-                d = PathCone(toward, oneMinus, rng);
-                if (c.kind == 1) valid = RandomRay(rng) * cmax <= max(0, dot(d, c.normal));
-            }
+            float t0 = atan((R.lowZ - R.z0) / R.re), t1 = atan((R.highZ - R.z0) / R.re);
+            float z = clamp(R.z0 + R.re * tan(t0 + RandomRay(rng) * (t1 - t0)), 0, R.extent), phi = R.lowPhi + RandomRay(rng) * (R.highPhi - R.lowPhi);
+            p = R.a + z * R.u;
+            float3 w = p - S; float mw = length(w);
+            valid = mw > RayEpsilon && TunedEdgeAngle(-w, R.f, R.nn, R.angle) <= R.angle;
+            w /= max(mw, 1e-12);
+            float cosBeta = dot(w, R.u), sb = sqrt(max(0, 1 - cosBeta * cosBeta));
+            valid = valid && sb > 1e-4;
+            d = normalize(R.u * cosBeta + sb * (R.f * cos(phi) + R.nn * sin(phi)));
         }
-        uint hash = 0; float3 q = 0, e = 0; float travelled = 0;
-        bool follows = false;
-        if (valid) follows = PathFollow(p, d, c.hits, c.through, hash, q, e, travelled) && hash == c.hash; // (no short-circuit in HLSL)
-        if (attempt == 0 && follows)
+        else
         {
-            float remaining = total - travelled;
-            follows = remaining > RayEpsilon && length(q + e * remaining - L) <= 1e-3 * max(1, total);
+            d = PathCone(R.toward, R.oneMinus, rng);
+            if (c.kind == 1) valid = RandomRay(rng) * R.cmax <= max(0, dot(d, c.normal));
         }
-        [loop] for (uint leg = 0; leg < 2; leg++)
-        {
-            // The edge chain's first leg (source -> edge point) as for the walk; the exact path's last leg.
-            bool need = follows && (leg == 0 ? edgeChain : attempt == 0);
-            if (need) follows = Visible(MethodState, leg == 0 ? S : q, leg == 0 ? p : L, false);
-        }
-        if (attempt == 0)
-        {
-            if (!follows) return false;
-            qExact = q; eExact = e;
-            continue;
-        }
-        MethodCount(CounterTrials);
-        if (follows) { trials = attempt; break; }
     }
-    if (trials == 0) { MethodCount(CounterTrialCap); trials = PathMaxTrials; }
-    MethodCount(CounterChains);
-    from = -eExact;
-    float ratio = (float)trials / region, s2 = sinBeta * sinBeta;
-    time = edgeChain ? (m + l) * MethodSlowness(AirMedium) : c.time + total * MethodSlowness(AirMedium);
+    uint hash = 0; float travelled = 0;
+    q = 0; e = 0;
+    bool follows = false;
+    if (valid) follows = PathFollow(p, d, c.hits, c.through, hash, q, e, travelled) && hash == c.hash; // (no short-circuit in HLSL)
+    if (attempt == 0 && follows)
+    {
+        float remaining = R.total - travelled;
+        follows = remaining > RayEpsilon && length(q + e * remaining - L) <= 1e-3 * max(1, R.total);
+    }
+    [loop] for (uint leg = 0; leg < 2; leg++)
+    {
+        // The edge chain's first leg (source -> edge point) as for the walk; the exact path's last leg.
+        bool need = follows && (leg == 0 ? R.edge : attempt == 0);
+        if (need) follows = Visible(MethodState, leg == 0 ? S : q, leg == 0 ? p : L, false);
+    }
+    return follows;
+}
+// Bands travel as two float4 (125-1000 Hz, 2-16 kHz): array parameters in and out of a
+// function, and writes to out parameters inside a [loop], lost the result on Metal.
+void PathScore(PathChain c, PathRegion R, uint trials, float4 fluxLow, float4 fluxHigh, out float4 low, out float4 high, out float time)
+{
+    float ratio = (float)trials / R.region, s2 = R.sinBeta * R.sinBeta;
+    time = R.edge ? (R.m + R.l) * MethodSlowness(AirMedium) : c.time + R.total * MethodSlowness(AirMedium);
     // Point origin: flux (pdf/D)(omega) D(exact) / total^2 over the density bound M:
     // source pdf/D = M = 1/(4 pi); scattering point pdf/D = 1/pi, M = cmax/pi.
-    float shape = c.kind == 1 ? max(0, dot(toward, c.normal)) / cmax : 1;
-    float4 sumLow = 0, sumHigh = 0; // written to the out parameters after the loop (writes to them inside a [loop] were lost on Metal)
+    float shape = c.kind == 1 ? max(0, dot(R.toward, c.normal)) / R.cmax : 1;
+    float4 sumLow = 0, sumHigh = 0;
     [loop] for (uint k = 0; k < MethodBands; k++)
     {
         float4 lane = float4((k & 3) == uint4(0, 1, 2, 3)); // one-hot: no dynamic vector writes in a loop
         float flux = dot(k < 4 ? fluxLow : fluxHigh, lane), value;
-        if (edgeChain)
+        if (R.edge)
         {
             float opacity = MethodEdgeOpacity(c.edge, k);
-            value = ReferenceDistance * ReferenceDistance * UtdEnergy(n, phiIn, phiStar, sinBeta, MethodWavenumber(k), m * l / (m + l) * s2) *
+            value = ReferenceDistance * ReferenceDistance * UtdEnergy(R.n, R.phiIn, R.phiStar, R.sinBeta, MethodWavenumber(k), R.m * R.l / (R.m + R.l) * s2) *
                     opacity * opacity * DiffractionFactor * DiffractionFactor * flux *
-                    exp(-2 * MethodLoss(AirMedium, k) * (m + l - c.travelled)) / (m * l * (m + l)) * ratio;
+                    exp(-2 * MethodLoss(AirMedium, k) * (R.m + R.l - c.travelled)) / (R.m * R.l * (R.m + R.l)) * ratio;
         }
-        else value = flux * shape * exp(-2 * MethodLoss(AirMedium, k) * (total - c.travelled)) / (total * total) * ratio;
+        else value = flux * shape * exp(-2 * MethodLoss(AirMedium, k) * (R.total - c.travelled)) / (R.total * R.total) * ratio;
         if (k < 4) sumLow += value * lane; else sumHigh += value * lane;
     }
     low = sumLow; high = sumHigh;
-    return true;
 }
 
 // Deferred chain connections. A detection's retrace and trials take tens to hundreds of ray
 // casts while the other rays of its SIMD group wait, so the walk only makes the cheap region test
-// and queues the candidates; PathConnect then runs one candidate per thread. Same estimator.
+// and queues the candidates; PathConnect then runs them, each candidate's trials in parallel. Same estimator.
 struct PathRequest
 {
     float4 originKind, normalHits, omegaHash, unfold0, unfold1, unfold2, edge, travel, fluxLow, fluxHigh;
@@ -291,7 +286,7 @@ RWStructuredBuffer<PathRequest> PathRequests;
 RWStructuredBuffer<uint> PathRequestCount; // [0] requests of the current ray chunk
 uint PathRequestCapacity;
 static const uint CounterRequestOverflow = 9;
-// The walk's region test (the same regions as PathDetect): does this ray lie in its chain's
+// The walk's region test (the same regions as PathRegionOf): does this ray lie in its chain's
 // detection region? Point chains: the cone about the listener image. Edge chains: the box in
 // (point on the edge, azimuth) about Keller's stationary point. No ray casts.
 bool PathCandidate(PathChain c, float3 S, float3 L)
@@ -328,10 +323,17 @@ void PathQueue(PathChain c, float flux[8])
     r.fluxLow = float4(flux[0], flux[1], flux[2], flux[3]); r.fluxHigh = float4(flux[4], flux[5], flux[6], flux[7]);
     PathRequests[at] = r;
 }
-void PathConnect(uint index)
+// Parallel connections: a thread group of 64 holds PathLanes candidates with 64 / PathLanes lanes
+// each. Round 0: lane 0 retraces the exact path, the other lanes draw trials 1..L-1; round r > 0:
+// lanes draw trials r L .. r L + L - 1. The smallest successful trial index is the geometric
+// count N of the sequential version (trials are independent and identically distributed), so
+// the estimate is unchanged; a candidate's latency is about N / L retraces instead of N.
+// The rounds are a fixed number (barriers need uniform flow); finished candidates idle. Each round
+// reads the shared state, synchronises, works, synchronises.
+static const uint PathGroup = 64, PathLanes = 8, PathCandidates = PathGroup / PathLanes;
+groupshared uint PathFirst[PathCandidates], PathState[PathCandidates]; // first successful trial; 0 running, 1 failed
+PathChain PathChainOf(PathRequest r)
 {
-    if (index >= min(PathRequestCount[0], PathRequestCapacity)) return;
-    PathRequest r = PathRequests[index];
     PathChain c;
     c.origin = r.originKind.xyz; c.kind = asuint(r.originKind.w); c.normal = r.normalHits.xyz; c.hits = asuint(r.normalHits.w);
     c.omega = r.omegaHash.xyz; c.hash = asuint(r.omegaHash.w);
@@ -339,11 +341,52 @@ void PathConnect(uint index)
     c.edge = asuint(r.edge.x); c.edgeZ = r.edge.y; c.edgePhi = r.edge.z; c.edgePick = r.edge.w;
     c.travelled = r.travel.x; c.time = r.travel.y; c.through = uint2(asuint(r.travel.z), asuint(r.travel.w));
     c.reflections = 0; c.detectable = true; c.edgeLow = 1; c.edgeHigh = 1;
+    return c;
+}
+void PathConnect(uint group, uint thread)
+{
+    uint slot = thread / PathLanes, lane = thread % PathLanes, index = group * PathCandidates + slot, count = min(PathRequestCount[0], PathRequestCapacity);
+    // (no early return for empty groups: the compiler cannot prove a buffer-dependent exit uniform, and
+    // every thread must reach the barriers; empty slots idle through the rounds)
+    bool real = index < count;
+    PathRequest r = PathRequests[min(index, PathRequestCapacity - 1)];
+    PathChain c = PathChainOf(r);
     float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
-    uint rng = HashRay(index * 0x9e3779b9u ^ HashRay(RaySeed * 0x27d4eb2fu + MethodRayOffset * 0x165667b1u + 0x61c88647u));
-    float4 low, high; float time; float3 from;
-    if (PathDetect(c, r.fluxLow, r.fluxHigh, S, L, rng, low, high, time, from))
-        PathDeposit(from, low, high, time, HashRay(rng ^ 0x5bd1e995u));
+    PathRegion R;
+    bool inRegion = real && PathRegionOf(c, S, L, R);
+    if (lane == 0)
+    {
+        PathFirst[slot] = 0xffffffff; PathState[slot] = inRegion ? 0 : 1;
+        if (real) MethodCount(CounterDetections);
+    }
+    GroupMemoryBarrierWithGroupSync();
+    uint seed = HashRay(index * 0x9e3779b9u ^ HashRay(RaySeed * 0x27d4eb2fu + MethodRayOffset * 0x165667b1u + 0x61c88647u));
+    uint rounds = (PathMaxTrials + PathLanes) / PathLanes; // attempts 0 .. rounds L - 1
+    float3 qExact = 0, eExact = 0;
+    [loop] for (uint round = 0; round < rounds; round++)
+    {
+        // Decide from the previous rounds only (a success later in this round must not stop a lane
+        // whose smaller trial index could still succeed).
+        uint attempt = round * PathLanes + lane;
+        bool go = PathState[slot] == 0 && PathFirst[slot] == 0xffffffff && attempt <= PathMaxTrials && (attempt == 0 || (PathProfileFlags & 2) == 0);
+        GroupMemoryBarrierWithGroupSync();
+        if (go)
+        {
+            float3 q, e;
+            bool follows = PathTry(c, R, S, L, attempt, HashRay(seed ^ HashRay(attempt * 0x85ebca6bu)), q, e);
+            if (attempt == 0) { if (follows) { qExact = q; eExact = e; } else PathState[slot] = 1; }
+            else if (follows) InterlockedMin(PathFirst[slot], attempt);
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (lane != 0 || PathState[slot] != 0) return;
+    uint trials = PathFirst[slot];
+    if (trials == 0xffffffff) { MethodCount(CounterTrialCap); trials = PathMaxTrials; }
+    MethodCount(CounterChains);
+    MethodCount(CounterTrials, trials);
+    float4 low, high; float time;
+    PathScore(c, R, trials, r.fluxLow, r.fluxHigh, low, high, time);
+    PathDeposit(-eExact, low, high, time, HashRay(seed ^ 0x5bd1e995u));
 }
 void PathResetRequests() { PathRequestCount[0] = 0; }
 
