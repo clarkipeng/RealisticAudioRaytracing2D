@@ -144,12 +144,15 @@ public partial class TakeChecks
         public int[] budgets, seeds;
         public float maximumDelaySeconds = 2, detectionRadius = .25f, diffractionFactor = 1, edgeProbability = .5f, rouletteFloor = 1e-6f;
         public int receivers = -1, captureReceiver = -1, captureRays = 48, captureEvents = 192, hybridRouteFactor = 1;
+        // Dataset runs (tools/path_dataset.py): a new seed per receiver (frames of a moving listener
+        // get independent noise, as live solves do), and air absorption.
+        public bool seedPerReceiver, airAbsorption;
     }
     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
     [Serializable] sealed class MethodRunRecord
     {
         public string schema = "methods-raw-v1", sceneId, sceneSha256, method, backend, unityVersion, codeSha256;
-        public int budget, seed, receivers, bins, primitives, edges, droppedEdges, lateRays, completeRouteSamples, methodRays;
+        public int budget, seed, receivers, bins, primitives, edges, droppedEdges, lateRays, completeRouteSamples, methodRays, histogramBins;
         public float detectionRadius, rouletteFloor, maximumDelaySeconds, workFraction, binSeconds;
         public float[] frequencies, solveSeconds;
         public double busySeconds, gpuSeconds, analysisSeconds, wallSeconds;
@@ -180,14 +183,14 @@ public partial class TakeChecks
         var all = new List<byte>();
         foreach (var name in new[] {"Shaders/Geometry.hlsl", "Shaders/Transport.hlsl", "Shaders/Transport.compute", "Shaders/CompleteDiffraction.hlsl",
                                    "Shaders/DiffractionIntegral.hlsl", "Shaders/LateEnergy.hlsl", "Shaders/MethodCommon.hlsl", "Shaders/MethodPressure.hlsl",
-                                   "Shaders/MethodEnergy.hlsl", "Scripts/Simulation/MethodTransport.cs", "Scripts/Simulation/RayTransport.cs"})
+                                   "Shaders/MethodEnergy.hlsl", "Shaders/MethodPath.hlsl", "Scripts/Simulation/MethodTransport.cs", "Scripts/Simulation/RayTransport.cs"})
             all.AddRange(File.ReadAllBytes(Path.Combine(Application.dataPath, name)));
         return BitConverter.ToString(sha.ComputeHash(all.ToArray())).Replace("-", "").ToLowerInvariant();
     }
     TakeRender.Settings MethodSettings(TakeRender.Method method, MethodJob job, int budget, int seed, float speed)
     {
         var settings = SpectralSettings();
-        settings.method = method; settings.useBvh = true; settings.airAbsorption = false; settings.speedOfSound = speed;
+        settings.method = method; settings.useBvh = true; settings.airAbsorption = job.airAbsorption; settings.speedOfSound = speed;
         settings.minimumDistance = .01f; settings.maximumDelaySeconds = job.maximumDelaySeconds; settings.seed = seed;
         settings.diffractionFactor = job.diffractionFactor;
         // Hybrid: 32 kHz / 256-point grid puts an FFT bin on every band centre (125 Hz
@@ -230,8 +233,8 @@ public partial class TakeChecks
             int receivers = job.receivers > 0 ? Math.Min(job.receivers, spec.points.Length / 3) : spec.points.Length / 3;
             foreach (string name in job.methods)
             {
-                var method = name == "pressure" ? TakeRender.Method.Pressure : name == "energy" ? TakeRender.Method.Energy : TakeRender.Method.Hybrid;
-                Assert.That(name, Is.EqualTo("hybrid").Or.EqualTo("pressure").Or.EqualTo("energy"));
+                var method = name == "pressure" ? TakeRender.Method.Pressure : name == "energy" ? TakeRender.Method.Energy : name == "path" ? TakeRender.Method.Path : TakeRender.Method.Hybrid;
+                Assert.That(name, Is.EqualTo("hybrid").Or.EqualTo("pressure").Or.EqualTo("energy").Or.EqualTo("path"));
                 for (int b = 0; b < job.budgets.Length; b++)
                     foreach (int seed in job.seeds)
                     {
@@ -257,8 +260,11 @@ public partial class TakeChecks
         var state = (AcousticTake.State[])baked.states.Clone();
         var frequencies = spec.frequencies ?? new float[0];
         var energy = new float[receivers * 8 * bins]; var late = hybrid ? new float[energy.Length] : null;
-        var direction = method == TakeRender.Method.Energy ? new float[receivers * 8 * bins * 6] : null;
-        var complex = method == TakeRender.Method.Energy ? null : new float[receivers * frequencies.Length * 2];
+        bool histogramMethod = method == TakeRender.Method.Energy || method == TakeRender.Method.Path;
+        var direction = histogramMethod ? new float[receivers * 8 * bins * 6] : null;
+        var complex = histogramMethod ? null : new float[receivers * frequencies.Length * 2];
+        // Path: the native histogram [receiver][direction][band][bin] and contributions [receiver][bin].
+        float[] native = null; uint[] nativeCounts = null; PathBins pathBins = null;
         var stats = hybrid ? null : new float[receivers * 8 * MethodTransport.Depths * 4];
         var magnitudes = hybrid ? null : new float[8 * MethodTransport.Depths * MethodTransport.Magnitudes]; // summed over receivers
         var counters = new long[MethodTransport.Counters];
@@ -278,6 +284,7 @@ public partial class TakeChecks
             for (int p = 0; p < receivers; p++)
             {
                 state[1].position = WaveVector(spec.points, 3 * p);
+                if (job.seedPerReceiver && solver.Method != null) solver.Method.SeedOffset = p * 1000003;
                 long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                 solver.Solve(state, direct);
                 double work = TakeRender.Elapsed(t0);
@@ -287,7 +294,15 @@ public partial class TakeChecks
                 else
                 {
                     var m = solver.Method;
-                    if (method == TakeRender.Method.Energy)
+                    if (method == TakeRender.Method.Path)
+                    {
+                        pathBins ??= m.TimeBins; int B = pathBins.Count;
+                        native ??= new float[receivers * 6 * 8 * B]; nativeCounts ??= new uint[receivers * B];
+                        for (int d = 0; d < 6; d++) for (int b = 0; b < 8; b++) for (int k = 0; k < B; k++)
+                            native[((p * 6 + d) * 8 + b) * B + k] = (float)m.HistogramEnergy(0, 0, d, b, k);
+                        Array.Copy(m.Counts, 0, nativeCounts, p * B, B);
+                    }
+                    if (histogramMethod)
                     {
                         for (int b = 0; b < 8; b++) for (int k = 0; k < bins; k++)
                         {
@@ -324,9 +339,19 @@ public partial class TakeChecks
         if (complex != null) MethodWrite(Path.Combine(partial, "complex.f32"), complex);
         if (stats != null) MethodWrite(Path.Combine(partial, "stats.f32"), stats);
         if (magnitudes != null) MethodWrite(Path.Combine(partial, "magnitudes.f32"), magnitudes); // [band, depth, floor(log2|c|)+40]
+        if (native != null)
+        {
+            MethodWrite(Path.Combine(partial, "histogram.f32"), native);
+            using (var writer = new BinaryWriter(File.Create(Path.Combine(partial, "counts.u32")))) foreach (uint c in nativeCounts) writer.Write(c);
+            var edges = new float[pathBins.Count + 1]; for (int k = 0; k <= pathBins.Count; k++) edges[k] = (float)pathBins.Start(k);
+            MethodWrite(Path.Combine(partial, "bin-edges.f32"), edges);
+            record.histogramBins = pathBins.Count;
+        }
         record.wallSeconds = TakeRender.Elapsed(started);
         record.notes = hybrid ? "early (direct, first images, complete routes) band-limited in energy.f32; late histogram (not band-limited) in late.f32"
-                              : method == TakeRender.Method.Pressure ? "band-limited energies from the coherent band trains" : "arrival energies (not band-limited)";
+                              : method == TakeRender.Method.Pressure ? "band-limited energies from the coherent band trains"
+                              : method == TakeRender.Method.Path ? "arrival energies (not band-limited), resampled to 1 ms from the native histogram (histogram.f32, counts.u32, bin-edges.f32)"
+                              : "arrival energies (not band-limited)";
         File.WriteAllText(Path.Combine(partial, "run.json"), JsonUtility.ToJson(record, true));
         if (Directory.Exists(output)) Directory.Delete(output, true);
         Directory.Move(partial, output);

@@ -37,7 +37,8 @@ internal sealed partial class GpuAudio : IDisposable
     public long UploadedBytes {get;private set;}
     public long ReadbackBytes {get;private set;}
     public static bool Selected(TakeRender.Settings settings,ComputeShader transport) =>
-        transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu;
+        transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu &&
+        settings.method!=TakeRender.Method.Path; // the path method's histogram synthesis (PathReverb) runs on the CPU
     public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1,bool transported=false)
     {
         Emission.Configure(scene,signals);AudioSourcePlane.ValidateRender(scene,settings);layout=new RayTransport.Layout(scene,settings);slots=layout.MaximumSlots;

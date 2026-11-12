@@ -5,9 +5,14 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-// GPU driver of the single-loop methods (TakeRender.Method.Pressure and .Energy;
-// MethodPressure.hlsl, MethodEnergy.hlsl), 3D point sources only. The hybrid
+// GPU driver of the single-loop methods (TakeRender.Method.Pressure, .Energy and .Path;
+// MethodPressure.hlsl, MethodEnergy.hlsl, MethodPath.hlsl), 3D point sources only. The hybrid
 // renderer (RayTransport) is not involved.
+//
+// Path (MethodPath.hlsl): one histogram per solve, [direction 6][band 8][bin] on the bins of
+// PathBins (fine, then constant relative resolution) plus the contribution count per bin.
+// Measurement reads it back (Energy() resamples it to 1 ms bins for the comparison); audio
+// keeps it per frame and pair for PathReverb, and renders the exact direct arrival as paths.
 //
 // Measurement (both methods): one static frame, one source and one listener per solve,
 // results read back synchronously.
@@ -68,7 +73,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly bool accumulate;
     long accumulatedSolves;
     readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, output, stats, emptyCapture;
-    readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf;
+    readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf, counts;
+    // Path method: its histogram bins, the contribution counts (measurement readback) and solves so far (seeds).
+    readonly bool path;
+    public readonly PathBins TimeBins;
+    public readonly uint[] Counts;
+    readonly int countCells;
+    long pathSolves;
+    int ArrivalsPerSolve => path ? 1 : ArrivalCapacity;
     // Near planes (settings.methodNearPlanes): per solve, the planes whose second-order
     // reflections are enumerated ([solve][NearPlanes] plane ids) and a bit mask of them for
     // the walk's exclusion ([solve][words]). Plane object, object-space centroid and area rank them.
@@ -96,14 +108,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
                            ComputeBuffer listeners, ComputeBuffer bvhNodes, ComputeBuffer bvhIndices,
                            bool audio = false, int sampleRate = 48000, int maximumFrames = 1, bool readback = false)
     {
-        if (settings.method != TakeRender.Method.Pressure && settings.method != TakeRender.Method.Energy)
-            throw new ArgumentException("MethodTransport runs the Pressure or Energy method.");
+        if (settings.method != TakeRender.Method.Pressure && settings.method != TakeRender.Method.Energy && settings.method != TakeRender.Method.Path)
+            throw new ArgumentException("MethodTransport runs the Pressure, Energy or Path method.");
         if (scene.dimension != AcousticTake.Dimension.Spatial3D)
             throw new NotSupportedException("The single-loop methods are 3D only.");
         if (scene.planes != null && scene.planes.Length > 0)
             throw new NotSupportedException("The single-loop methods take point sources only.");
-        if (audio && settings.method != TakeRender.Method.Energy)
-            throw new NotSupportedException("Only the energy method renders audio.");
+        if (audio && settings.method == TakeRender.Method.Pressure)
+            throw new NotSupportedException("The pressure method does not render audio.");
         if (!audio && (scene.sources.Length != 1 || scene.listeners.Length != 1))
             throw new NotSupportedException("Method measurements solve one source and one listener.");
         if (!audio && settings.maximumDelaySeconds > TrainSeconds - LeadSeconds - .05f)
@@ -114,18 +126,25 @@ internal sealed class MethodTransport : IDisposable, ILateField
         // One compute shader per method (Resources/Acoustics/PressureMethod.compute,
         // EnergyMethod.compute): neither the renderer's Transport.compute nor the other
         // method ever compiles these kernels.
-        string name = settings.method == TakeRender.Method.Pressure ? "Acoustics/PressureMethod" : "Acoustics/EnergyMethod";
+        string name = settings.method == TakeRender.Method.Pressure ? "Acoustics/PressureMethod" : settings.method == TakeRender.Method.Path ? "Acoustics/PathMethod" : "Acoustics/EnergyMethod";
         var asset = Resources.Load<ComputeShader>(name);
         if (asset == null) throw new InvalidOperationException(name + ".compute is missing.");
         shader = asset;
         Rays = settings.methodRays;
-        Bins = audio ? settings.LateBins(sampleRate) : (int)Math.Ceiling(settings.maximumDelaySeconds / BinSeconds - 1e-6);
+        path = Kind == TakeRender.Method.Path;
+        TimeBins = path ? new PathBins(settings) : null;
+        Bins = audio && !path ? settings.LateBins(sampleRate) : (int)Math.Ceiling(settings.maximumDelaySeconds / BinSeconds - 1e-6);
         TrainBase = (int)Math.Round(TrainSeconds * TrainRate0);
         bool energy = Kind == TakeRender.Method.Energy;
         string suffix = settings.useBvh ? "Bvh" : "";
-        traceKernel = shader.FindKernel((energy ? "TraceEnergy3D" : "TracePressure3D") + suffix);
-        clearKernel = shader.FindKernel("ClearMethod");
-        if (energy)
+        traceKernel = shader.FindKernel((path ? "TracePath3D" : energy ? "TraceEnergy3D" : "TracePressure3D") + suffix);
+        clearKernel = shader.FindKernel(path ? "PathClear" : "ClearMethod");
+        if (path)
+        {
+            edgeWeightKernel = shader.FindKernel("PathEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("PathEdgeScan");
+            if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
+        }
+        else if (energy)
         {
             arrivalKernel = shader.FindKernel("EnergyArrivals3D" + suffix);
             selectKernel = shader.FindKernel("EnergySelectArrivals"); expandKernel = shader.FindKernel("EnergyExpandArrivals");
@@ -136,7 +155,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         foreach (int kernel in new[] {traceKernel, clearKernel, arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel, accumulateKernel})
             if (kernel >= 0 && !shader.IsSupported(kernel)) throw new NotSupportedException("Method kernels are unavailable on this GPU.");
         frequencyBins = settings.FrequencyBins;
-        ArrivalSlots = audio ? settings.methodArrivalSlots : 0;
+        ArrivalSlots = audio ? settings.ArrivalSlots : 0;
         if (audio) { layout = new RayTransport.Layout(scene, settings); PathsPerFrame = layout.Capacity; }
         try
         {
@@ -216,7 +235,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             if (PlaneCount > 0) planePrimitives.SetData(representatives);
             // Enumerated families (bit per MethodEnergy.hlsl EnergyFamily*). A family whose
             // candidate count exceeds FamilyCandidateLimit stays with the walk.
-            bool arrivalsOn = energy && settings.methodArrivals, edges = EdgeCount > 0 && settings.diffractionFactor > 0;
+            bool arrivalsOn = energy && !path && settings.methodArrivals, edges = EdgeCount > 0 && settings.diffractionFactor > 0;
             long planes = PlaneCount, e = EdgeCount;
             NearPlanes = arrivalsOn && settings.methodArrivalOrder >= 2 && settings.methodNearPlanes > 0 && settings.methodNearPlanes < planes
                 ? (int)Math.Min(settings.methodNearPlanes, (long)Math.Sqrt(FamilyCandidateLimit)) : 0;
@@ -237,7 +256,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             var ends = new uint[7]; long sum = 0;
             for (int f = 0; f < 7; f++) { sum += FamilyCandidates[f]; ends[f] = checked((uint)sum); }
             int solves = Frames * Pairs;
-            arrivals = new ComputeBuffer(energy ? checked(solves * ArrivalCapacity) : 1, ArrivalStride);
+            arrivals = new ComputeBuffer(energy || path ? checked(solves * ArrivalsPerSolve) : 1, ArrivalStride);
             arrivalCounts = new ComputeBuffer(Math.Max(1, solves), 4);
             selected = new ComputeBuffer(Math.Max(1, checked(solves * Math.Max(1, ArrivalSlots))), 4);
             paths = new ComputeBuffer(audio ? Math.Max(1, checked(Frames * PathsPerFrame)) : 1, RayTransport.PathStride);
@@ -248,14 +267,18 @@ internal sealed class MethodTransport : IDisposable, ILateField
             if (NearPlanes > 0) { nearListData = new uint[solves * NearPlanes]; nearMaskData = new uint[solves * nearWords]; }
             Paths = new RayTransport.Path[audio && readback ? checked(Frames * PathsPerFrame) : 0];
             // Both outputs are (low, high) 32.32 fixed-point pairs.
-            outputCount = audio ? checked(2 * Frames * Pairs * (Directions + 1) * Bands * Math.Max(1, Bins))
+            outputCount = path ? checked(2 * Frames * Pairs * Directions * Bands * TimeBins.Count)
+                        : audio ? checked(2 * Frames * Pairs * (Directions + 1) * Bands * Math.Max(1, Bins))
                         : energy ? 2 * Directions * Bands * Bins : 2 * 2 * TrainBase * ((1 << Bands) - 1);
+            countCells = path ? checked(Frames * Pairs * TimeBins.Count) : 1;
+            counts = new ComputeBuffer(countCells, 4);
+            Counts = new uint[path ? countCells : 0];
             statsCount = Bands * Depths * StatStride + Counters;
             output = new ComputeBuffer(outputCount, 4); stats = new ComputeBuffer(statsCount, 4);
             accumulator = new ComputeBuffer(accumulate ? Math.Max(1, Pairs * (Directions + 1) * Bands * Bins) : 1, 4);
             emptyCapture = new ComputeBuffer(2, 16);
             Output = new uint[audio ? 0 : outputCount]; Stats = new uint[statsCount];
-            late = new uint[audio && readback ? outputCount : 0];
+            late = new uint[audio && (readback || path) ? outputCount : 0];
             // The shader asset is shared by every solver of this method (one compile per
             // process; a per-solver instance recompiled it each time and the compiler's
             // memory accumulated), so all bindings are made again at every dispatch.
@@ -263,6 +286,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             bool anyTransmission = transmissive || volumeData.Length > 0;
             var kernels = new List<int> {traceKernel, clearKernel};
             if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
+            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); }
             if (accumulate) kernels.Add(accumulateKernel);
             bind = () =>
             {
@@ -276,6 +300,12 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetBuffer(kernel, "MethodStats", stats); shader.SetBuffer(kernel, "MethodCapture", emptyCapture);
                 shader.SetBuffer(kernel, "MethodAccumulator", accumulator);
                 if (bvhNodes != null) { shader.SetBuffer(kernel, "BvhNodes", bvhNodes); shader.SetBuffer(kernel, "BvhIndices", bvhIndices); }
+                if (path)
+                {
+                    shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
+                    shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
+                    shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
+                }
                 if (energy)
                 {
                     shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
@@ -315,7 +345,24 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.SetFloat("MethodLeadSeconds", LeadSeconds);
             // Energy only: the pressure loop has no edge continuation (known gap, see
             // MethodPressure.hlsl), so the setting does not apply to it.
-            shader.SetFloat("MethodEdgeProbability", energy ? settings.methodEdgeProbability : 0);
+            shader.SetFloat("MethodEdgeProbability", energy || path ? settings.methodEdgeProbability : 0);
+            if (path)
+            {
+                shader.SetFloat("MethodRouletteFloor", settings.methodRouletteFloor);
+                shader.SetInt("MethodHeadFrame", audio ? 1 : 0);
+                shader.SetInt("MethodCountCells", solves);
+                shader.SetInt("MethodFrequencyBins", frequencyBins);
+                shader.SetInt("MethodFftSize", settings.fftSize);
+                shader.SetFloat("MethodSampleRate", sampleRate);
+                shader.SetFloat("PathBin0", (float)TimeBins.FineSeconds);
+                shader.SetFloat("PathRatio", (float)(1.0 / TimeBins.FineBins));
+                shader.SetInt("PathFineBins", TimeBins.FineBins);
+                shader.SetInt("PathBins", TimeBins.Count);
+                shader.SetInt("PathCountCells", countCells);
+                shader.SetInt("PathAudio", audio ? 1 : 0);
+                shader.SetInt("PathMaxTrials", Math.Max(1, settings.pathMaxTrials));
+                return;
+            }
             if (!energy) return;
             shader.SetFloat("MethodRouletteFloor", settings.methodRouletteFloor);
             shader.SetInt("MethodHeadFrame", audio ? 1 : 0);
@@ -336,7 +383,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         }
         catch { Dispose(); throw; }
     }
-    public long GpuBytes => (long)(outputCount + statsCount) * 4 + (materials?.count ?? 0) * 32L + (edgeBuffer?.count ?? 0) * 80L +
+    public long GpuBytes => (long)(outputCount + statsCount + countCells) * 4 + (materials?.count ?? 0) * 32L + (edgeBuffer?.count ?? 0) * 80L +
                             (arrivals?.count ?? 0) * (long)ArrivalStride + (paths?.count ?? 0) * (long)RayTransport.PathStride;
     public long CpuBytes => (long)(Output.Length + Stats.Length + late.Length) * 4 + Paths.Length * (long)RayTransport.PathStride;
     internal ComputeBuffer PathBuffer => Audio ? paths : null;
@@ -344,6 +391,18 @@ internal sealed class MethodTransport : IDisposable, ILateField
     void SetSolve(int frame, int pair)
     {
         int solve = frame * Pairs + pair;
+        if (path)
+        {
+            shader.SetInt("MethodState", frame * scene.objects.Length);
+            shader.SetInt("MethodSourceObject", scene.sources[pair / scene.listeners.Length].objectIndex);
+            shader.SetInt("MethodListenerObject", scene.listeners[pair % scene.listeners.Length]);
+            shader.SetInt("MethodCellBase", solve * Directions * Bands * TimeBins.Count);
+            shader.SetInt("PathCountBase", solve * TimeBins.Count);
+            shader.SetInt("MethodCountIndex", solve);
+            shader.SetInt("MethodArrivalBase", solve);
+            shader.SetInt("MethodPathBase", Audio ? frame * PathsPerFrame + layout.Ranges[pair].x : 0);
+            return;
+        }
         shader.SetInt("MethodState", frame * scene.objects.Length);
         shader.SetInt("MethodSourceObject", scene.sources[pair / scene.listeners.Length].objectIndex);
         shader.SetInt("MethodListenerObject", scene.listeners[pair % scene.listeners.Length]);
@@ -363,7 +422,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     }
     void Clear()
     {
-        int clear = Math.Max(Math.Max(outputCount, statsCount), Frames * Pairs);
+        int clear = Math.Max(Math.Max(Math.Max(outputCount, statsCount), Frames * Pairs), countCells);
         for (int first = 0; first < clear; first += 65535 * 64)
         {
             shader.SetInt("MethodClearOffset", first);
@@ -390,6 +449,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
         }
     }
 
+    // Path: the source's edge-ray distribution of the current solve (read by the trace that follows).
+    void DispatchEdgeDistribution()
+    {
+        if (EdgeCount == 0 || settings.diffractionFactor <= 0) return;
+        shader.Dispatch(edgeWeightKernel, (EdgeCount + 63) / 64, 1, 1);
+        shader.Dispatch(edgeScanKernel, 1, 1, 1);
+    }
+
     // Measurement: trace every ray of one solve and read the outputs back. With a capture
     // buffer, rays below captureRays record up to captureEvents events (two float4 each).
     public void Dispatch(int bvhNodeCount, ComputeBuffer capture = null, int captureRays = 0, int captureEvents = 0)
@@ -401,11 +468,11 @@ internal sealed class MethodTransport : IDisposable, ILateField
         shader.SetInt("MethodCaptureRays", capture == null ? 0 : captureRays);
         shader.SetInt("MethodCaptureEvents", capture == null ? 0 : captureEvents);
         Clear();
-        if (Kind == TakeRender.Method.Energy)
+        if (Kind == TakeRender.Method.Energy || path)
         {
             SetSolve(0, 0);
             long start = Stopwatch.GetTimestamp();
-            DispatchArrivals();
+            if (path) DispatchEdgeDistribution(); else DispatchArrivals();
             AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion();
             GpuSeconds += TakeRender.Elapsed(start);
         }
@@ -423,6 +490,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         }
         output.GetData(Output);
         stats.GetData(Stats);
+        if (path) counts.GetData(Counts);
         shader.SetBuffer(traceKernel, "MethodCapture", emptyCapture);
     }
     // Audio: every pair of `frames` uploaded frames. The outputs stay on the GPU for
@@ -440,6 +508,18 @@ internal sealed class MethodTransport : IDisposable, ILateField
             for (int pair = 0; pair < Pairs; pair++)
             {
                 SetSolve(frame, pair);
+                if (path)
+                {
+                    // A new seed for every solve: independent noise from frame to frame (no
+                    // temporal averaging here; that is the denoiser's job).
+                    shader.SetInt("RaySeed", unchecked(settings.seed + SeedOffset + (int)(pathSolves * Pairs + frame * Pairs + pair)));
+                    DispatchEdgeDistribution();
+                    shader.SetInt("MethodRayOffset", 0);
+                    shader.SetInt("MethodRayCount", Rays);
+                    shader.Dispatch(traceKernel, (Rays + 63) / 64, 1, 1);
+                    shader.Dispatch(expandKernel, (frequencyBins + 63) / 64, 1, 1);
+                    continue;
+                }
                 if (accumulate) shader.SetInt("RaySeed", unchecked(settings.seed + SeedOffset + (int)(accumulatedSolves + frame)));
                 DispatchArrivals();
                 shader.SetInt("MethodRayOffset", 0);
@@ -457,18 +537,20 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.Dispatch(accumulateKernel, (cells + 63) / 64, 1, 1);
             accumulatedSolves += frames;
         }
+        if (path) pathSolves += frames;
         GpuSeconds += TakeRender.Elapsed(start);
-        if (Paths.Length == 0) return;
+        if (Paths.Length == 0 && !path) return;
         if (asynchronous)
         {
             pending = true; failed = false; pathsDone = lateDone = false;
-            pathRequest = AsyncGPUReadback.Request(paths, checked(frames * PathsPerFrame * RayTransport.PathStride), 0, value =>
+            if (Paths.Length == 0) pathsDone = true;
+            else pathRequest = AsyncGPUReadback.Request(paths, checked(frames * PathsPerFrame * RayTransport.PathStride), 0, value =>
             {
                 failed |= value.hasError;
                 if (!value.hasError) Unity.Collections.NativeArray<RayTransport.Path>.Copy(value.GetData<RayTransport.Path>(), Paths, value.GetData<RayTransport.Path>().Length);
                 pathsDone = true;
             });
-            lateRequest = AsyncGPUReadback.Request(output, checked(frames * LateUintsPerFrame * 4), 0, value =>
+            lateRequest = AsyncGPUReadback.Request(output, checked(frames * ReadbackUintsPerFrame * 4), 0, value =>
             {
                 failed |= value.hasError;
                 if (!value.hasError) Unity.Collections.NativeArray<uint>.Copy(value.GetData<uint>(), late, value.GetData<uint>().Length);
@@ -477,8 +559,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
         }
         else
         {
-            paths.GetData(Paths, 0, 0, frames * PathsPerFrame);
-            output.GetData(late, 0, 0, frames * LateUintsPerFrame);
+            if (Paths.Length > 0) paths.GetData(Paths, 0, 0, frames * PathsPerFrame);
+            output.GetData(late, 0, 0, frames * ReadbackUintsPerFrame);
         }
     }
     public bool TryComplete(bool wait)
@@ -486,8 +568,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (!pending) return true;
         if (!pathsDone || !lateDone)
         {
-            if (wait) { pathRequest.WaitForCompletion(); lateRequest.WaitForCompletion(); }
-            else { pathRequest.Update(); lateRequest.Update(); }
+            if (wait) { if (!pathsDone) pathRequest.WaitForCompletion(); lateRequest.WaitForCompletion(); }
+            else { if (!pathsDone) pathRequest.Update(); lateRequest.Update(); }
         }
         if (!pathsDone || !lateDone) return false;
         pending = false;
@@ -497,12 +579,12 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // The discrete arrivals of one solve (measurement: frame 0, pair 0), read synchronously.
     public Arrival[] ReadArrivals(int frame = 0, int pair = 0)
     {
-        if (Kind != TakeRender.Method.Energy) return new Arrival[0];
+        if (Kind != TakeRender.Method.Energy && !path) return new Arrival[0];
         var count = new uint[Frames * Pairs];
         arrivalCounts.GetData(count);
-        int solve = frame * Pairs + pair, n = (int)Math.Min(count[solve], (uint)ArrivalCapacity);
+        int solve = frame * Pairs + pair, n = (int)Math.Min(count[solve], (uint)ArrivalsPerSolve);
         var result = new Arrival[n];
-        if (n > 0) arrivals.GetData(result, 0, solve * ArrivalCapacity, n);
+        if (n > 0) arrivals.GetData(result, 0, solve * ArrivalsPerSolve, n);
         return result;
     }
     public long ArrivalTotal(int frame = 0, int pair = 0)
@@ -514,7 +596,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // ILateField (audio): the diffuse histogram in the hybrid's late format.
     public uint[] Late => late;
     public ComputeBuffer LateBuffer => output;
-    public int LateUintsPerFrame => Audio ? 2 * Pairs * (Directions + 1) * Bands * Bins : 0;
+    // The Path method's histogram has its own layout (PathFrame), not the late field's.
+    public int LateUintsPerFrame => Audio && !path ? 2 * Pairs * (Directions + 1) * Bands * Bins : 0;
+    int ReadbackUintsPerFrame => path ? 2 * Pairs * Directions * Bands * TimeBins.Count : LateUintsPerFrame;
     public int LateRoomCells => Audio ? Pairs * Directions * Bands * Bins : -1;
     public int LateBins => Bins;
     public int LateRays => Rays;
@@ -523,7 +607,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // frames' states (object poses move the planes). Called by TransportSolver before each dispatch.
     public void SelectNearPlanes(AcousticTake.State[] states, int frames)
     {
-        if (NearPlanes == 0) return;
+        if (NearPlanes == 0 || path) return;
         int objects = scene.objects.Length;
         var score = new float[PlaneCount]; var order = new int[PlaneCount];
         for (int frame = 0; frame < frames; frame++)
@@ -557,12 +641,30 @@ internal sealed class MethodTransport : IDisposable, ILateField
     public ComputeBuffer EmissionPoints => null;
     public ComputeBuffer EmissionClocks => null;
 
-    // Energy of one histogram cell (Energy method measurement), direct-sound units.
+    // Energy of one 1 ms histogram cell (Energy and Path measurement), direct-sound units. The Path
+    // histogram is resampled: each of its bins spreads its energy uniformly over its time span.
     public double Energy(int direction, int band, int bin)
     {
+        if (path)
+        {
+            double sum = 0;
+            for (int k = TimeBins.FirstOverlap(bin * BinSeconds); k < TimeBins.Count && TimeBins.Start(k) < (bin + 1) * BinSeconds; k++)
+                sum += HistogramEnergy(0, 0, direction, band, k) * TimeBins.Overlap(k, bin * BinSeconds, (bin + 1) * BinSeconds);
+            return sum;
+        }
         int cell = (direction * Bands + band) * Bins + bin;
         return (Output[2 * cell + 1] + Output[2 * cell] / 4294967296.0) / Rays;
     }
+    // Path histogram cell of one solve (measurement: frame 0, pair 0, from Output; audio: from the
+    // readback of the latest dispatch), direct-sound units; and its contribution count.
+    public double HistogramEnergy(int frame, int pair, int direction, int band, int bin)
+    {
+        var source = Audio ? late : Output;
+        int cell = ((frame * Pairs + pair) * Directions + direction) * Bands * TimeBins.Count + band * TimeBins.Count + bin;
+        return (source[2 * cell + 1] + source[2 * cell] / 4294967296.0) / Rays;
+    }
+    public uint HistogramCount(int bin) => Counts[bin];
+    public bool IsPath => path;
     double Fixed(int index) => (((long)(int)Output[2 * index + 1] << 32) | Output[2 * index]) / 4294967296.0;
     // Band train of the Pressure method: real and imaginary samples (already / N).
     public int TrainLength(int band) => TrainBase << band;
@@ -597,6 +699,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); pending = false; }
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
+        counts?.Dispose();
         arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose();
         nearList?.Dispose(); nearMask?.Dispose();
     }

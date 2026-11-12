@@ -17,13 +17,16 @@ public static partial class TakeRender
     public enum AudioBackend { Gpu, CpuReference }
     public enum ReflectionSampling { FirstImages, PrimitiveBaseline }
     // Acoustic method of the transport solver. Hybrid is the renderer (phase-exact early
-    // part + energy late field). Pressure and Energy are single-loop measurement kernels
-    // (MethodPressure.hlsl, MethodEnergy.hlsl) for offline comparison; they produce band
-    // responses (MethodTransport), not audio.
-    public enum Method { Hybrid, Pressure, Energy }
+    // part + energy late field). Pressure and Energy are single-loop kernels (MethodPressure.hlsl,
+    // MethodEnergy.hlsl; Energy also renders audio). Path is one energy path tracer
+    // (MethodPath.hlsl, docs/benchmarks/path-tracer-2026-11-12): one histogram per solve, rendered
+    // by PathReverb with the exact direct arrival.
+    public enum Method { Hybrid, Pressure, Energy, Path }
     [Serializable] public sealed class Settings : ISerializationCallbackReceiver
     {
         public int responseStepSamples = 512;
+        [Min(0),Tooltip("Offline renders: render only the first this many seconds of the take (plus the tail); zero renders all of it.")]
+        public float renderSeconds;
         public float speedOfSound = 343, referenceDistance = 1, minimumDistance = .1f;
         public int tailSamples;
         [Tooltip("Direct/IR output fade. Spectral interpolates consecutive responses at acoustic arrival time.")]
@@ -97,6 +100,14 @@ public static partial class TakeRender
         public int methodNearPlanes;
         [Min(1),Tooltip("Pressure/Energy methods: interaction cap per ray (a safety bound; the 2 s output horizon normally ends paths first).")]
         public int methodMaxEvents=1<<16;
+        [Min(1e-6f),Tooltip("Path method: width (s) of the histogram's fine time bins, used up to pathFineBins of them; also the impulse spacing of its audio synthesis.")]
+        public float pathBinSeconds=.00025f;
+        [Min(1),Tooltip("Path method: number of fine bins; after them each bin is 1/pathFineBins of its start time (constant relative resolution).")]
+        public int pathFineBins=64;
+        [Min(1),Tooltip("Path method: cap on the geometric trials that measure the share of a detection region following a specular chain (expected 1/share; a capped detection is counted and biased low).")]
+        public int pathMaxTrials=64;
+        // Exact arrivals rendered as delayed paths per pair: Energy's slots, Path's direct sound.
+        internal int ArrivalSlots => method==Method.Path?1:methodArrivalSlots;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
         public int FrequencyBins => fftSize/2+1;
         public int RaysPerBin => raysPerPair>0 ? checked((raysPerPair-1)/FrequencyBins+1):raysPerBin;
@@ -279,7 +290,8 @@ public static partial class TakeRender
         var metadata=take.Metadata; var scene=metadata.scene;
         bool useGpuAudio=GpuAudio.Selected(settings,shader);
         if (scene.sources.Length == 0 || scene.listeners.Length == 0) throw new InvalidOperationException("Rendering requires a recorded source and listener.");
-        long length=checked(metadata.durationSamples+1+settings.tailSamples);
+        long duration=settings.renderSeconds>0?Math.Min(metadata.durationSamples,(long)Math.Ceiling(settings.renderSeconds*(double)metadata.sampleRate)):metadata.durationSamples;
+        long length=checked(duration+1+settings.tailSamples);
         if (length > (uint.MaxValue-36)/(4L*settings.ChannelsPerListener)) throw new InvalidOperationException("Output exceeds the WAV size limit; render a shorter take.");
         Directory.CreateDirectory(outputDirectory);
         var report=new Report {takeSourceHash=AcousticTake.SourceHash(metadata), sceneHash=metadata.sceneHash, takeStateHash=metadata.stateHash, takeEventHash=metadata.eventHash,
@@ -297,6 +309,11 @@ public static partial class TakeRender
             }
             report.responseLayout="Direct opaque diagnostic probes only; indirect and transmitted arrivals are synthesized into WAVs. "+report.responseLayout;
             report.transportDescription="Synthesis="+settings.synthesis+". Phase-exact early sound: retarded direct arrivals with material transmission, first-order image sources (selection="+settings.reflectionSampling+", candidate budget floor="+settings.reflectionCandidates+"; First Images keep each candidate as a separate delayed arrival) and, with complete early-route samples="+settings.CompleteSamples+", the wave-tuned signed one/two-edge integral for D/DD/RD/DR/RR. Late field: incoherent energy from "+settings.lateRays+" rays per octave band (8 bands, 125 Hz-16 kHz) with deterministic absorption/air loss and transmission/diffuse/specular continuations chosen by energy fraction, detected by diffuse rain and a "+settings.lateReceiverRadius+" m receiver sphere into a head-frame six-direction energy histogram; paths held by the early part (direct/transmitted-only and unobstructed specular paths up to order "+settings.LateEarlyOrder+") are excluded and the late field has no diffraction. It is synthesized as seeded band-split noise shaped by the histogram envelope (Polack), with diffuse-field interaural coherence for binaural output, by partitioned convolution of each source's emitted signal. First mirrors use retarded image sources with locally constant rigid velocity; other geometry is frozen at solve time. Not a validated wave reference.";
+            if(settings.method==Method.Path)
+            {
+                report.method=report.provenance.solverContract="path-histogram-v1";
+                report.transportDescription="Synthesis="+settings.synthesis+". Path method (MethodPath.hlsl): one energy path tracer with "+settings.methodRays+" rays per solve and a new seed every solve; next-event connections at the source and scattering points (straight, through walls, and through edges), UTD edge rays from the source, and specular chains connected by exact image retrace over a "+settings.specularDetectionRadius+" m detection region whose probability is measured by geometric trials (unbiased). Output: one histogram per solve (six head-frame directions, eight octave bands, "+settings.pathBinSeconds*1000+" ms bins up to "+settings.pathFineBins+" of them, then 1/"+settings.pathFineBins+" relative resolution, to "+settings.maximumDelaySeconds+" s). Audio: the exact direct arrival as a delayed path with Doppler; everything else from the histogram as fixed random-sign impulses per fine slot with amplitude sqrt(energy), band-filtered, with diffuse-field equalised ear band energies and interaural coherence, crossfaded per update (PathReverb, CPU). Not a validated wave reference.";
+            }
             if(settings.method==Method.Energy)
             {
                 report.method=report.provenance.solverContract="energy-arrivals-diffuse-v1";
@@ -565,6 +582,7 @@ public static partial class TakeRender
         readonly SpectralAudio spectral;
         readonly ImpulseResponseAudio ir;
         readonly LateReverb late;
+        readonly PathReverb pathLate;
         readonly TakeRender.DelayFilter delayFilter;
         readonly int sincRadius;
         readonly Hrtf.Blend[] earBlend,oldEarBlend;
@@ -574,7 +592,7 @@ public static partial class TakeRender
         long directSupport;
         readonly long lateSupport;
         public long ResponseSupportSamples => Math.Max(lateSupport,spectral?.ResponseSupportSamples??ir?.ResponseSupportSamples??directSupport);
-        public long NumericBytes => (late?.NumericBytes??0)+(spectral?.NumericBytes??ir?.NumericBytes??(long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
+        public long NumericBytes => (late?.NumericBytes??0)+(pathLate?.NumericBytes??0)+(spectral?.NumericBytes??ir?.NumericBytes??(long)(current.Length+previous.Length)*DirectPathStride+(long)(delay.Length+oldDelay.Length)*8+
             (long)(earBlend.Length+oldEarBlend.Length)*32+(long)(weights.Length+oldWeights.Length+delayWeights.Length+input.Length)*4+(long)mixed.Length*8+enabled.Length+oldEnabled.Length+(hrtf?.NumericBytes ?? 0));
         public Mixer(AcousticTake.Scene scene,int sampleRate,Settings settings,Signal[] signals)
         {
@@ -586,7 +604,11 @@ public static partial class TakeRender
             {
                 if(settings.synthesis==Synthesis.ImpulseResponse)ir=new ImpulseResponseAudio(scene,sampleRate,settings,signals);
                 else spectral=new SpectralAudio(scene,sampleRate,settings,signals);
-                if(settings.maxBounces>0)
+                if(settings.maxBounces>0 && settings.method==Method.Path)
+                {
+                    pathLate=new PathReverb(scene,sampleRate,settings,signals);lateSupport=pathLate.SupportSamples;
+                }
+                else if(settings.maxBounces>0)
                 {
                     Emission.Configure(scene,signals);late=new LateReverb(scene,sampleRate,settings,signals);
                     lateSupport=(long)settings.LateKernelBins(sampleRate)*settings.LatePartition+settings.DspLatencySamples;
@@ -615,10 +637,10 @@ public static partial class TakeRender
             if(spectral!=null || ir!=null)
             {
                 if(spectral!=null)spectral.SetResponse(sample,cut,arrivals,offset,scene,state,anchor,headStates);else ir.SetResponse(sample,cut,arrivals,offset,scene,state);
-                if(this.late!=null)
+                if(this.late!=null || pathLate!=null)
                 {
                     bool lateCut=cut;foreach(var s in state)lateCut|=(s.flags&AcousticTake.StateFlags.Cut)!=0;
-                    this.late.SetResponse(sample,lateCut,late,state);
+                    if(pathLate!=null)pathLate.SetResponse(sample,lateCut,PathReverb.Histogram(late),state);else this.late.SetResponse(sample,lateCut,late,state);
                 }
                 responseSample=sample;initialized=true;return;
             }
@@ -669,7 +691,7 @@ public static partial class TakeRender
                 if(spectral!=null || ir!=null)
                 {
                     if(spectral!=null)spectral.Render(sample,count,interleaved);else ir.Render(sample,count,interleaved);
-                    late?.Render(sample,count,interleaved);
+                    late?.Render(sample,count,interleaved);pathLate?.Render(sample,count,interleaved);
                     for(int i=0;i<count*scene.listeners.Length*channels;i++)if(!float.IsFinite(interleaved[i]))throw new InvalidOperationException("Non-finite late audio.");
                     return;
                 }
@@ -743,10 +765,12 @@ public static partial class TakeRender
     // kernel whose band responses are read from TransportSolver.Method.
     public static void RequireAudioMethod(Settings settings)
     {
-        if(settings.method!=Method.Hybrid && settings.method!=Method.Energy)
-            throw new NotSupportedException($"Audio rendering uses the hybrid or energy method; {settings.method} is an offline measurement kernel.");
-        if(settings.method==Method.Energy && settings.transport!=Transport.Raytraced)
-            throw new NotSupportedException("The energy method renders through raytraced transport.");
+        if(settings.method==Method.Pressure)
+            throw new NotSupportedException($"Audio rendering uses the hybrid, energy or path method; {settings.method} is an offline measurement kernel.");
+        if((settings.method==Method.Energy || settings.method==Method.Path) && settings.transport!=Transport.Raytraced)
+            throw new NotSupportedException("The energy and path methods render through raytraced transport.");
+        if(settings.method==Method.Path && settings.synthesis!=Synthesis.Spectral)
+            throw new NotSupportedException("The path method renders with spectral synthesis.");
     }
     public static void Validate(Settings settings)
     {
@@ -759,7 +783,8 @@ public static partial class TakeRender
         if(settings.audioBackend!=AudioBackend.Gpu && settings.audioBackend!=AudioBackend.CpuReference)throw new ArgumentException("Unknown audio backend.");
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
-        if(settings.method!=Method.Hybrid && settings.method!=Method.Pressure && settings.method!=Method.Energy)throw new ArgumentException("Unknown acoustic method.");
+        if(settings.method!=Method.Hybrid && settings.method!=Method.Pressure && settings.method!=Method.Energy && settings.method!=Method.Path)throw new ArgumentException("Unknown acoustic method.");
+        if(settings.method==Method.Path && (!PositiveFinite(settings.pathBinSeconds) || settings.pathFineBins<1 || settings.pathMaxTrials<1))throw new ArgumentException("Invalid path method settings.");
         if(settings.method!=Method.Hybrid && (settings.methodRays<1 || !PositiveFinite(settings.specularDetectionRadius) || !(settings.methodEdgeProbability>=0 && settings.methodEdgeProbability<1) || settings.methodMaxEvents<1 || !(settings.methodRouletteFloor>0 && settings.methodRouletteFloor<=1) ||
             settings.methodArrivalOrder<0 || settings.methodArrivalOrder>2 || settings.methodArrivalSlots<1 || settings.methodNearPlanes<0))
             throw new ArgumentException("Invalid single-loop method settings.");

@@ -21,7 +21,7 @@ public partial class TakeChecks
     static double[] ControlEnergy(TransportSolver solver, int band)
     {
         var m = solver.Method; var energy = new double[m.Bins];
-        if (m.Kind == TakeRender.Method.Energy)
+        if (m.Kind == TakeRender.Method.Energy || m.Kind == TakeRender.Method.Path)
         {
             for (int k = 0; k < m.Bins; k++) for (int d = 0; d < 6; d++) energy[k] += m.Energy(d, band, k);
             return energy;
@@ -53,7 +53,7 @@ public partial class TakeChecks
     // Free field: the direct sound arrives at r/c with energy 1/r^2 in every band.
     // Slow like every method check: compiling the two method shaders costs the shared
     // runner about 0.6 GiB of shader-compiler memory, which the quick tier cannot spare.
-    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), Category("GPU"), Category("Methods"), Category("Slow")]
+    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void MethodsMatchTheFreeField(TakeRender.Method method)
     {
         var scene = Scene(); scene.materials = new[] {RigidControl()};
@@ -66,14 +66,15 @@ public partial class TakeChecks
         {
             var e = ControlEnergy(solver, b); double total = Window(e, 0, e.Length);
             TestContext.WriteLine($"{method} band {b}: total {total * r * r:F6} x 1/r^2, bin {bin} holds {e[bin] / total:F3}");
-            Assert.That(total * r * r, Is.EqualTo(1).Within(method == TakeRender.Method.Energy ? 1e-6 : .01));
-            Assert.That(Window(e, bin - 4, bin + 5) / total, Is.GreaterThan(method == TakeRender.Method.Energy ? .999 : .9));
-            if (method == TakeRender.Method.Energy) Assert.That(e[bin] / total, Is.GreaterThan(.999));
+            bool energy = method != TakeRender.Method.Pressure;
+            Assert.That(total * r * r, Is.EqualTo(1).Within(energy ? 1e-6 : .01));
+            Assert.That(Window(e, bin - 4, bin + 5) / total, Is.GreaterThan(energy ? .999 : .9));
+            if (energy) Assert.That(e[bin] / total, Is.GreaterThan(.999));
         }
     }
 
     // One rigid plane: direct sound plus its image, nothing else (diffraction off).
-    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void MethodsReproduceARigidPlaneImage(TakeRender.Method method)
     {
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
@@ -83,12 +84,19 @@ public partial class TakeChecks
         var state = States(2); state[0].position = new Vector3(0, 1.5f, 0); state[1].position = new Vector3(4, 1.2f, .5f);
         state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
         var settings = ControlSettings(method, 1 << 18, .1f);
+        if (method == TakeRender.Method.Path) settings.useBvh = false; // two triangles; spares the BVH kernel's compile
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         solver.Solve(state, new TakeRender.DirectPath[1]);
         var image = new Vector3(0, -1.5f, 0);
+        if (method == TakeRender.Method.Path)
+        {
+            var m = solver.Method; var counts = new System.Text.StringBuilder();
+            for (int k = 0; k < m.TimeBins.Count; k++) if (m.Counts[k] > 0) counts.Append($"{k}:{m.Counts[k]} ");
+            TestContext.WriteLine($"contributions per bin {counts}; rejected deposits {m.Counter(6)}");
+        }
         double r = (state[1].position - state[0].position).magnitude, ri = (state[1].position - image).magnitude;
         int bi = (int)Math.Floor(ri / 343 / .001);
-        if (method == TakeRender.Method.Energy)
+        if (method != TakeRender.Method.Pressure)
         {
             var e = ControlEnergy(solver, 2); double held = Window(e, bi, bi + 1), total = Window(e, 0, e.Length);
             TestContext.WriteLine($"image {held * ri * ri:F4} x 1/ri^2, total {total / (1 / (r * r) + 1 / (ri * ri)):F4} x expected, chains {solver.Method.Counter(8)}");
@@ -110,7 +118,7 @@ public partial class TakeChecks
 
     // Rigid-walled shoebox (alpha = 0.1, no scattering): the energy histogram is the
     // image lattice; the pressure trains, band-filtered, match the lattice's arrivals.
-    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void MethodsReproduceTheShoeboxImageLattice(TakeRender.Method method)
     {
         var size = new Vector3(5, 4, 3); var source = new Vector3(-1.1f, .4f, .3f); var listener = new Vector3(1.3f, -.6f, -.2f);
@@ -119,7 +127,7 @@ public partial class TakeChecks
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         solver.Solve(state, new TakeRender.DirectPath[1]);
         var corner = size * .5f; int bins = solver.Method.Bins;
-        if (method == TakeRender.Method.Energy)
+        if (method != TakeRender.Method.Pressure)
         {
             var e = ControlEnergy(solver, 0); var want = ImageLattice(size, source + corner, listener + corner, .1, .001, bins, 0);
             double worst = 0;
@@ -272,7 +280,7 @@ public partial class TakeChecks
     // Rigid half-plane, listener in the shadow: the pressure method's band response
     // matches the independent signed half-plane quadrature (TunedRoutesMatchIndependentHalfPlane),
     // and the energy method's UTD band energy matches the BTM band energy within 1.5 dB.
-    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void MethodsMatchTheHalfPlaneReference(TakeRender.Method method)
     {
         KnifeEdgeFixture(false, out var scene, out var geometry, out var state);
@@ -306,7 +314,7 @@ public partial class TakeChecks
     // (DD over parallel edges) and longer chains reach the listener. Pressure matches
     // the independent EDtoolbox second-order field of TunedRoutesReachTheFarSideOfASolid;
     // energy (UTD, DD connections) is checked on single walls against btm_reference.py.
-    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void MethodsReachTheFarSideOfASolid(TakeRender.Method method)
     {
         KnifeEdgeFixture(false, out var scene, out _, out var state);

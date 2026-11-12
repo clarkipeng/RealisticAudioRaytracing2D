@@ -45,19 +45,19 @@ internal sealed class RayTransport : IDisposable, ILateField
             foreach(var material in scene.materials)sharedGeometry&=Constant(material.ior);
             var direct=new List<Vector2Int>();
             // Energy method: each pair owns methodArrivalSlots discrete arrivals, one path per FFT bin.
-            bool energy=settings.method==TakeRender.Method.Energy;
+            bool energy=settings.method==TakeRender.Method.Energy || settings.method==TakeRender.Method.Path;
             for(int s=0;s<scene.sources.Length;s++)
             {
                 int sites=scene.planes==null?1:Array.Find(scene.planes,p=>p.source==s)?.samples??1;
                 int rays=energy || settings.RaysPerPair==0?0:checked(settings.FrequencyBins*settings.SourceRaysPerBin(scene,s));
-                int slots=energy?checked(settings.FrequencyBins*settings.methodArrivalSlots):
+                int slots=energy?checked(settings.FrequencyBins*settings.ArrivalSlots):
                     checked(sites*settings.FrequencyBins*(1+settings.MirrorCandidates(scene)+settings.CompleteSlots(scene))+rays*settings.PathSlotsPerRay);
                 int geometricBins=sharedGeometry?1:settings.FrequencyBins;
                 int mirrors=settings.MirrorCandidates(scene)*sites;
                 if(settings.reflectionSampling==TakeRender.ReflectionSampling.PrimitiveBaseline)mirrors=rays/settings.FrequencyBins;
                 // Frequency-dependent loss changes pressure, not route geometry;
                 // only a frequency-dependent speed splits a route into per-bin groups.
-                int groups=energy?settings.methodArrivalSlots:checked((sites+mirrors)*geometricBins+sites*settings.CompleteSlots(scene));
+                int groups=energy?settings.ArrivalSlots:checked((sites+mirrors)*geometricBins+sites*settings.CompleteSlots(scene));
                 MaximumSlots=Math.Max(MaximumSlots,slots);
                 for(int l=0;l<scene.listeners.Length;l++)
                 {

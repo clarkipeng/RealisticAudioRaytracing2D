@@ -139,7 +139,7 @@ internal sealed class LateBasis
         return weights;
     }
     // Diffuse-field interaural coherence of the HRTF set, interpolated to the noise grid.
-    static double[] Coherence(Hrtf hrtf,int rate,int length)
+    internal static double[] Coherence(Hrtf hrtf,int rate,int length)
     {
         var result=new double[length/2+1];
         if(hrtf==null)return result;

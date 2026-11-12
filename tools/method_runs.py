@@ -1,4 +1,4 @@
-"""Runs of the three acoustic methods (hybrid, pressure, energy) for the method comparison.
+"""Runs of the acoustic methods (hybrid, pressure, energy, path) for the method comparison.
 
     PY=.context/fdtd-teacher/venv/bin/python
     nice -n 19 $PY tools/method_runs.py tests "TakeChecks.MethodsMatchTheFreeField"   # Unity checks
@@ -173,7 +173,7 @@ def render(name, work_fraction=hg.WORK_FRACTION):
     path = WORK / 'jobs' / f'{name}.json'
     jobs = json.loads(path.read_text())['jobs']
     failures = []
-    for method in ['hybrid', 'pressure', 'energy']:
+    for method in ['hybrid', 'pressure', 'energy', 'path']:
         for job in jobs:
             if method not in job['methods']:
                 continue
@@ -226,7 +226,6 @@ def pack_one(folder, root=COMPARE):
     if run['receivers'] != points:
         return None   # a receiver subset (convergence study), not a comparison output
     energy = data['energy'].astype(np.float64)
-    banded = run['method'] != 'energy'
     if data['late'] is not None:
         energy = energy + mc.smooth(data['late'].astype(np.float64))
     T = energy.shape[2]
@@ -239,15 +238,18 @@ def pack_one(folder, root=COMPARE):
     if data['complex'] is not None:
         complex_pressure = data['complex'][..., 0] + 1j * data['complex'][..., 1]
     budget_unit = 'late rays per band (complete-route samples equal)' if run['method'] == 'hybrid' else 'rays (all bands per ray)'
+    banded = run['method'] not in ('energy', 'path')
     meta = dict(method=run['method'], budget=f"r{run['budget']:05d}", seed=run['seed'], budgetValue=run['budget'], budgetUnit=budget_unit,
                 sceneId=scene_id, sceneSha256=run['sceneSha256'],
                 code=dict(name={'hybrid': 'Transport.hlsl+LateEnergy.hlsl', 'pressure': 'MethodPressure.hlsl',
-                                'energy': 'MethodEnergy.hlsl'}[run['method']], sha256=run['codeSha256']),
+                                'energy': 'MethodEnergy.hlsl', 'path': 'MethodPath.hlsl'}[run['method']], sha256=run['codeSha256']),
                 wallSeconds=run['busySeconds'], gpuSeconds=run['gpuSeconds'] or None, validSeconds=run['maximumDelaySeconds'],
                 bandLimited=banded, wallModel='absorption',
                 notes=run['notes'] + {'pressure': f"; specular detection radius {run['detectionRadius']} m",
                                       'energy': f"; discrete arrivals plus walk with receiver sphere radius {run['detectionRadius']} m, "
-                                                f"roulette floor {run.get('rouletteFloor', 1)}"}.get(run['method'], ''))
+                                                f"roulette floor {run.get('rouletteFloor', 1)}",
+                                      'path': f"; one path tracer, chain detection region {run['detectionRadius']} m (unbiased: measured share), "
+                                              f"roulette floor {run.get('rouletteFloor', 1)}"}.get(run['method'], ''))
     if meta['gpuSeconds'] is None:
         del meta['gpuSeconds']
     if complex_pressure is not None:
@@ -354,7 +356,7 @@ def main(argv=None):
     j = sub.add_parser('jobs')
     j.add_argument('name')
     j.add_argument('--scenes', nargs='+', required=True)
-    j.add_argument('--methods', nargs='+', default=['hybrid', 'pressure', 'energy'])
+    j.add_argument('--methods', nargs='+', default=['hybrid', 'pressure', 'energy'], help='hybrid, pressure, energy, path')
     j.add_argument('--budgets', nargs='+', type=int, default=[128, 512, 2048, 8192])
     j.add_argument('--seeds', nargs='+', type=int, default=[0, 1, 2])
     j.add_argument('--capture', type=int, default=-1)
