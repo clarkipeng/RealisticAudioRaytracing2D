@@ -291,12 +291,23 @@ RWStructuredBuffer<PathRequest> PathRequests;
 RWStructuredBuffer<uint> PathRequestCount; // [0] requests of the current ray chunk
 uint PathRequestCapacity;
 static const uint CounterRequestOverflow = 9;
-// The walk's region test: could this ray's direction lie in its chain's detection region?
-// Point chains: the cone about the listener image. Edge chains: always queued (box test there).
-bool PathCandidate(PathChain c, float3 L)
+// The walk's region test (the same regions as PathDetect): does this ray lie in its chain's
+// detection region? Point chains: the cone about the listener image. Edge chains: the box in
+// (point on the edge, azimuth) about Keller's stationary point. No ray casts.
+bool PathCandidate(PathChain c, float3 S, float3 L)
 {
-    if (c.kind == 2) return true;
-    float3 w = mul(c.unfold, L) + c.shift - c.origin;
+    float3 image = mul(c.unfold, L) + c.shift;
+    if (c.kind == 2)
+    {
+        float3 a, u, f, nn, e; float extent, angle, n, phiIn, phiStar, sinBeta;
+        EdgeFrame(c.edge, MethodState, false, a, u, f, nn, extent, angle);
+        if (!UtdApex(c.edge, S, image, e) || !UtdAngles(c.edge, S, e, image, n, phiIn, phiStar, sinBeta)) return false;
+        float m = length(e - S), l = length(image - e);
+        if (m <= RayEpsilon || l <= RayEpsilon) return false;
+        float r = MethodDetectRadius, dz = min(extent, r * m / ((m + l) * sinBeta)), dphi = min(.5 * angle, r / (l * sinBeta));
+        return abs(c.edgeZ - dot(e - a, u)) <= dz && abs(c.edgePhi - phiStar) <= dphi;
+    }
+    float3 w = image - c.origin;
     float distance = length(w);
     if (distance <= RayEpsilon) return false;
     float s = min(MethodDetectRadius / distance, .5);
@@ -692,7 +703,7 @@ void TracePath(uint index)
             d = reflect(d, n);
         }
         // Connect the chain to the listener (PathConnect), with the flux before roulette.
-        if (chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, L))
+        if (chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, S, L))
         {
             bool any = false;
             [unroll] for (uint k15 = 0; k15 < MethodBands; k15++)
