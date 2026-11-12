@@ -4,6 +4,7 @@
     $PY tools/path_dataset.py plan --per-family 8        # scene specs, receivers and Unity jobs
     nice -n 19 $PY tools/path_dataset.py render          # box scenes (guarded Unity, batches of scenes)
     nice -n 19 $PY tools/path_dataset.py church          # Church walk frames (guarded Unity)
+    nice -n 19 $PY tools/path_dataset.py render-all      # both in one Unity process
     $PY tools/path_dataset.py pack                       # dataset index, targets, noise, hashes, splits
     $PY tools/path_dataset.py verify
 
@@ -31,13 +32,13 @@ import dlss_scenes as ds  # noqa: E402
 WORK = ROOT / '.context/path-dataset'
 RAW = WORK / 'raw'
 NAME = 'path-pilot-v1'
-LOW = dict(rays=1024, seeds=[0, 1, 2, 3])       # realtime budget, input seeds
-HIGH = dict(rays=16384, seeds=[100, 101])       # target budget, independent seeds
-STATIC, FRAMES = 8, 16                          # receivers per scene: static poses, frames of one walk
+LOW = dict(rays=1024, seeds=[0, 1])             # realtime budget, input seeds
+HIGH = dict(rays=8192, seeds=[100, 101])        # target budget, independent seeds
+STATIC, FRAMES = 4, 8                           # receivers per scene: static poses, frames of one walk
 STEP_SECONDS, SPEED = 1024 / 44100, 1.4         # response step of the renders, walking speed (m/s)
 HORIZON, RADIUS = 2.0, .25
 CHURCH_TAKE = ROOT / '.context/energy-audio/church/speech-walk/take'
-CHURCH_WINDOWS = {'standing': 1.0, 'walking': 7.5, 'outside': 14.5}   # start (s) of 16-frame windows
+CHURCH_WINDOWS = {'standing': 1.0, 'walking': 7.5, 'outside': 14.5}   # start (s) of FRAMES-frame windows
 
 
 def sha256(path):
@@ -146,8 +147,8 @@ def render(batch, work_fraction):
                                     dict(ACOUSTIC_METHOD_JOBS=str(part)), work_fraction)
 
 
-def church(work_fraction):
-    import method_runs as mr
+def church_job():
+    """TakeBatch job, samples and runs of the Church walk frames (MeasurePathTake)."""
     meta = json.loads((CHURCH_TAKE / 'take.json').read_text())
     rate, step = meta['sampleRate'], 1024
     samples = []
@@ -164,10 +165,26 @@ def church(work_fraction):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(job, indent=1) + '\n')
     runs = f"{LOW['rays']}:{LOW['seeds'][0]}:{len(LOW['seeds'])},{HIGH['rays']}:{HIGH['seeds'][0]}:{len(HIGH['seeds'])}"
+    return dict(ACOUSTIC_PATH_TAKE=str(path), ACOUSTIC_PATH_SAMPLES=','.join(map(str, samples)), ACOUSTIC_PATH_RUNS=runs)
+
+
+def church(work_fraction):
+    import method_runs as mr
     mr.LOGS = WORK / 'logs'
     mr.launch('path-dataset-church', ['-runTests', '-testPlatform', 'EditMode', '-testFilter', 'TakeChecks.MeasurePathTake',
-                                      '-testResults', str(WORK / 'logs' / '.church.xml')],
-              dict(ACOUSTIC_PATH_TAKE=str(path), ACOUSTIC_PATH_SAMPLES=','.join(map(str, samples)), ACOUSTIC_PATH_RUNS=runs), work_fraction)
+                                      '-testResults', str(WORK / 'logs' / '.church.xml')], church_job(), work_fraction)
+
+
+def render_all(work_fraction):
+    """Box scenes and the Church frames in one Unity process (saves a start-up)."""
+    import method_runs as mr
+    part = WORK / 'jobs' / 'all.json'
+    if not part.exists():   # may also carry other MeasureMethods jobs that share the process
+        plan_ = json.loads((WORK / 'jobs' / 'plan.json').read_text())
+        part.write_text(json.dumps(dict(jobs=plan_['low'] + plan_['high']), indent=1) + '\n')
+    mr.LOGS = WORK / 'logs'
+    mr.launch('path-dataset-all', ['-runTests', '-testPlatform', 'EditMode', '-testFilter', 'TakeChecks.MeasureMethods;TakeChecks.MeasurePathTake',
+                                   '-testResults', str(WORK / 'logs' / '.all.xml')], dict(church_job(), ACOUSTIC_METHOD_JOBS=str(part)), work_fraction)
 
 
 # ------------------------------------------------------------------ pack
@@ -312,9 +329,10 @@ def verify():
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
-    p = sub.add_parser('plan'); p.add_argument('--per-family', type=int, default=8)
+    p = sub.add_parser('plan'); p.add_argument('--per-family', type=int, default=4)
     r = sub.add_parser('render'); r.add_argument('--batch', type=int, default=24); r.add_argument('--work-fraction', type=float, default=.5)
     c = sub.add_parser('church'); c.add_argument('--work-fraction', type=float, default=.5)
+    a = sub.add_parser('render-all'); a.add_argument('--work-fraction', type=float, default=.5)
     sub.add_parser('pack'); sub.add_parser('verify')
     args = parser.parse_args(argv)
     if args.command == 'plan':
@@ -323,6 +341,8 @@ def main(argv=None):
         render(args.batch, args.work_fraction)
     elif args.command == 'church':
         church(args.work_fraction)
+    elif args.command == 'render-all':
+        render_all(args.work_fraction)
     elif args.command == 'pack':
         pack()
     else:

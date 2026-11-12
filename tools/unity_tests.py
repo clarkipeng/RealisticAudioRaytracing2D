@@ -29,7 +29,7 @@ LOGS = ROOT / '.context/unity-tests'
 # cached), so slow cases are split: renderer cases, then the method checks, each in a fresh process.
 # Method checks are selected by category: a name-pattern selection of them left the batch editor idle.
 TIERS = {'quick': [('TakeChecks', '!Slow')],
-         'full': [('TakeChecks', '!Slow'), (r'TakeChecks\.(?!Methods|EnergyMethod)', 'Slow'), ('TakeChecks', 'Methods')]}
+         'full': [('TakeChecks', '!Slow'), (r'TakeChecks\.(?!Methods|EnergyMethod|PathMethod|PathDetection)', 'Slow'), ('TakeChecks', 'Methods')]}
 
 
 def clear_stale_lock():
