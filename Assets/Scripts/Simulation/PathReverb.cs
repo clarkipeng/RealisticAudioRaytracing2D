@@ -20,7 +20,11 @@ using UnityEngine;
 // band energies (LateBasis.EarWeights; interaural level only, no interaural delay), and two
 // independent sign sequences are mixed per band to the HRTF set's diffuse-field interaural
 // coherence. Positions and signs are fixed per pair, so an update changes amplitudes only.
-// Updates crossfade sample by sample over one response step (two kernel banks), as LateReverb.
+// Updates crossfade sample by sample over one response step (two kernel banks), as LateReverb, with
+// a power correction: the two outputs share signs but their amplitudes differ (independent noisy
+// estimates), so a linear crossfade loses energy (about 1.2 dB at 512 rays in the Church). Over each
+// block the blended output is scaled so its power is the linear interpolation of the two outputs'
+// powers, which is what the histograms say; equal responses keep a gain of one.
 // Convolution: uniform partitioned overlap-save; each partition's kernel is a weighted sum of
 // fixed spectra of its impulse groups (no FFT per update).
 internal sealed class PathReverb
@@ -44,6 +48,7 @@ internal sealed class PathReverb
     readonly long[] halfBlock;     // per source: block of the stored half
     readonly bool[] active;        // [bank][pair]
     readonly float[] blocks;       // [bank][listener*channels][P]
+    readonly double[] powers;      // [listener*channels][3]: new, old and cross power of a blended block
     readonly Vector2[] work,wide,sum;
     readonly double[] energy;      // [channel][band][histogram bin] of one pair
     int bank,computedBlock=-1;
@@ -75,7 +80,7 @@ internal sealed class PathReverb
         kernels=new Vector2[checked(2L*pairs*channels*Bands*count*bins)];
         inputs=new Vector2[checked((long)sources*Bands*count*bins)];
         halves=new float[sources*Bands*partition];halfBlock=new long[sources];Array.Fill(halfBlock,long.MinValue);
-        active=new bool[2*pairs];blocks=new float[2*listeners*channels*partition];
+        active=new bool[2*pairs];blocks=new float[2*listeners*channels*partition];powers=new double[3*listeners*channels];
         work=new Vector2[2*partition];wide=new Vector2[2*partition];sum=new Vector2[bins];
         energy=new double[channels*Bands*histogram.Count];
     }
@@ -306,6 +311,24 @@ internal sealed class PathReverb
                 for(int n=0;n<partition;n++)blocks[(b0*listeners*channels+l*channels+c)*partition+n]=work[partition+n].x;
             }
         }
+        if(!both)return;
+        for(int channel=0;channel<listeners*channels;channel++)
+        {
+            int a=(bank*listeners*channels+channel)*partition,o=((bank^1)*listeners*channels+channel)*partition;
+            double pa=0,po=0,cross=0;
+            for(int n=0;n<partition;n++){double x=blocks[a+n],y=blocks[o+n];pa+=x*x;po+=y*y;cross+=x*y;}
+            powers[3*channel]=pa;powers[3*channel+1]=po;powers[3*channel+2]=cross;
+        }
+    }
+    // Gain that gives the blend w new + (1 - w) old the power w P_new + (1 - w) P_old over the block.
+    // Bounded at 4 (the blend's power can only vanish if the two outputs cancel, which shared signs
+    // and non-negative amplitudes make unlikely).
+    float BlendGain(int channel,float weight)
+    {
+        double pa=powers[3*channel],po=powers[3*channel+1],cross=powers[3*channel+2],w=weight,v=1-w;
+        double want=w*pa+v*po,have=w*w*pa+v*v*po+2*w*v*cross;
+        if(!(want>0))return 1;
+        return have>want/16?(float)Math.Sqrt(want/have):4f;
     }
     // Adds the reverberation to interleaved listener/channel PCM.
     internal void Render(long sample,int length,float[] pcm)
@@ -320,7 +343,7 @@ internal sealed class PathReverb
             for(int channel=0;channel<listeners*channels;channel++)
             {
                 float value=blocks[(bank*listeners*channels+channel)*partition+at]*weight;
-                if(both && weight<1)value+=blocks[((bank^1)*listeners*channels+channel)*partition+at]*(1-weight);
+                if(both && weight<1)value=(value+blocks[((bank^1)*listeners*channels+channel)*partition+at]*(1-weight))*BlendGain(channel,weight);
                 pcm[n*listeners*channels+channel]+=value;
             }
         }

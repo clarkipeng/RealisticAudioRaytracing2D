@@ -7,7 +7,8 @@ using UnityEngine;
 // horizon, so their level gap can be split by time (docs/benchmarks/path-denoise-2026-11-12).
 //   ACOUSTIC_CHURCH_LEVELS=/abs/out.json       results
 //   ACOUSTIC_CHURCH_LEVELS_TAKE=/abs/take      a take (its first frame: poses, doors)
-//   ACOUSTIC_CHURCH_LEVELS_POINTS=x,y,z;x,y,z  listener positions
+//   ACOUSTIC_CHURCH_LEVELS_POINTS=x,y,z;x,y,z  listener positions ("take": the take's own listener position)
+//   ACOUSTIC_CHURCH_LEVELS_SAMPLE=n            take sample for poses and doors (default 0)
 // Each method solves with 8,192 rays and a 2 s horizon, air absorption on; the energy method with its
 // listening settings (2 m receiver sphere, arrivals, 96 near planes), the path method with its defaults.
 // Output per method, point and band: energy in [0, 50 ms), [50, 200 ms), [200 ms, 2 s) after emission.
@@ -23,6 +24,7 @@ public partial class TakeChecks
         var points = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_POINTS").Split(';');
         var state = new AcousticTake.State[scene.objects.Length];
         int listener = scene.listeners[0];
+        long sample = long.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_SAMPLE") ?? "0");
         var json = new System.Text.StringBuilder("{");
         // Path variants: ACOUSTIC_CHURCH_LEVELS_PATH = radius:seed;radius:seed (default 0.25:0).
         var variants = new System.Collections.Generic.List<(TakeRender.Method method, float radius, int seed, string key)>();
@@ -50,9 +52,12 @@ public partial class TakeChecks
             json.Append((key == variants[0].key ? "" : ",") + "\"" + key + "\":[");
             for (int i = 0; i < points.Length; i++)
             {
-                take.Evaluate(0, state);
-                var xyz = Array.ConvertAll(points[i].Split(','), v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture));
-                state[listener].position = new Vector3(xyz[0], xyz[1], xyz[2]);
+                take.Evaluate(sample, state);
+                if (points[i] != "take")
+                {
+                    var xyz = Array.ConvertAll(points[i].Split(','), v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture));
+                    state[listener].position = new Vector3(xyz[0], xyz[1], xyz[2]);
+                }
                 state[listener].velocity = Vector3.zero; state[listener].flags &= ~AcousticTake.StateFlags.VelocityValid;
                 solver.Solve(state, new TakeRender.DirectPath[1]);
                 json.Append((i == 0 ? "" : ",") + "[");
@@ -65,7 +70,7 @@ public partial class TakeChecks
                 json.Append("]");
                 var names = MethodTransport.CounterNames; var parts = new System.Text.StringBuilder();
                 for (int c = 0; c < MethodTransport.Counters; c++) parts.Append($"{names[c]} {m.Counter(c)}, ");
-                Debug.Log($"Church levels {key} point {i}: {parts}");
+                Debug.Log($"Church levels {key} point {i} at {state[listener].position}: {parts}");
             }
             json.Append("]");
         }

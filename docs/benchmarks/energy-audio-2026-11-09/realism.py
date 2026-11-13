@@ -65,6 +65,7 @@ def ours():
     for k, name in (('near', 'crossing'), ('far', 'nave by the doors')):
         d[f'church-{k}'] = (f'Church (energy method), {name}', OUT / 'renders' / k, distance(k))
         d[f'church-{k}-hybrid'] = (f'Church (hybrid), {name}', OUT / 'renders' / f'{k}-hybrid', distance(k))
+        d[f'church-{k}-path'] = (f'Church (path method, clean), {name}', OUT / 'renders' / f'{k}-path', distance(k))
     d['church-near-before'] = ('Church (energy method), crossing, before (10 November materials)', BEFORE / 'near', distance('near'))
     return d
 
@@ -374,8 +375,8 @@ def walk_clips():
 
 COLOURS = {'stpauls-9m': '#0072B2', 'york-24m': '#009E73', 'stpauls-32m': '#56B4E9', 'church-near': '#D55E00', 'church-far': '#E69F00',
            'church-near-hybrid': '#CC79A7', 'church-far-hybrid': '#F0E442', 'church-near-before': '#999999',
-           'baseline-near': '#000000', 'baseline-far': '#555555'}
-STYLES = {'church-near-before': ':', 'baseline-near': '--', 'baseline-far': '--'}
+           'church-near-path': '#D55E00', 'church-far-path': '#E69F00', 'baseline-near': '#000000', 'baseline-far': '#555555'}
+STYLES = {'church-near-before': ':', 'baseline-near': '--', 'baseline-far': '--', 'church-near-path': '-.', 'church-far-path': '-.'}
 
 
 def figures(irs):
@@ -519,6 +520,8 @@ def page():
              'church-near': 'our Church, energy method, binaural, listener in the crossing 10.3 m from the organ (doors closed)',
              'church-far': 'our Church, energy method, binaural, listener in the nave by the doors, 48 m from the organ (walk start)',
              'church-near-hybrid': 'our Church, hybrid method, same point as "near"', 'church-far-hybrid': 'our Church, hybrid method, same point as "far"',
+             'church-near-path': 'our Church, path method (8,192 rays, 2 m detection region; docs/benchmarks/path-denoise-2026-11-12), same point as "near"',
+             'church-far-path': 'our Church, path method (8,192 rays, 2 m detection region), same point as "far"',
              'church-near-before': 'our Church as rendered before the 11 November materials, early reflections, ear equalisation and envelope (same point as "near")',
              'baseline-near': "baseline: St Paul's 9.5 m response as a static reverb, direct sound at 10.3 m",
              'baseline-far': "baseline: St Paul's 31.6 m response as a static reverb, direct sound at 48 m"}

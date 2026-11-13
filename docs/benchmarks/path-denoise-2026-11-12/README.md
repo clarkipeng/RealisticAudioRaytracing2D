@@ -156,3 +156,71 @@ The path tracer is lower in every band, by 1.5–2 standard errors; that is not 
 More seeds, or a better estimator for sound behind a partition, are needed to decide it.
 
 All path checks pass with these changes (free field, rigid plane, image lattice, half-plane, walls, Eyring, the clipped-region image, the two leak checks, the synthesis check).
+On the 11-scene wave suite (2,048 rays, two seeds) the level error falls from 4.03 to 3.52 dB with these fixes (in shadow 5.84 → 5.05 dB, from the edge distribution; closed rooms 1.97 dB, unchanged).
+
+## 4. The Church walk with the path tracer
+
+`church.py` (beside this file) renders the energy listening render's speech walk (`.context/energy-audio/church/speech-walk/take`) with the Path method: the same DSP as the energy render (spectral synthesis, FFT 1,024, 1,024-sample updates, binaural), a 6 s horizon, a 2 m detection region (part 3), and 512 rays (realtime budget, raw) or 8,192 rays (clean).
+The page is `.context/energy-audio/listen/path.html` (both path renders beside the energy render and the static-IR baseline, one playback gain); the live view (`.context/live-view`) has "Path (realtime)" and "Path (clean)" buttons playing the same files.
+
+### A synthesis loss, found and fixed
+
+The first realtime render was 4 dB quieter than the energy render.
+Part of it was the update crossfade: `PathReverb` crossfades linearly between the old and new response over each update, and its impulses keep their signs between updates, so a crossfade between two equal responses keeps the power; but two independent noisy estimates differ, and a linear crossfade between unequal amplitudes loses power.
+From the realtime render's exported histograms the expected loss was a factor 0.75 (−1.2 dB) in every part of the walk.
+The crossfade now scales each block of the blend so that its power is the linear interpolation of the two outputs' powers (measured over the block, with their cross term); equal responses keep a gain of one.
+New Core check `PathReverbCrossfadeKeepsThePower`: updating every step between two histograms that split a late field over disjoint bins gives 0.70 of the fixed mean's output energy with the plain crossfade (−1.55 dB) and 1.001 with the correction.
+The renders below use the corrected crossfade.
+
+### Levels of the walk
+
+Level of each render (dBFS, both ears, render gain), per part of the walk:
+
+| Render | standing and turning (0–5 s) | walking to the organ and back (5–13 s) | doors open, outside (13–18 s) |
+|---|---:|---:|---:|
+| energy method | −43.8 | −43.4 | −51.9 |
+| path, 512 rays | −45.1 | −46.6 | −60.9 |
+| path, 8,192 rays | −45.4 | −45.3 | −60.5 |
+
+The clean render is as loud as the realtime one (within 0.4 dB standing and outside), so the remaining difference from the energy render is not noise.
+Inside the church the path renders are 1.6–1.9 dB (clean) quieter than the energy render; the static impulse responses at fixed points (below) agree in level within 0.4 dB at the crossing, so part of the walk's difference is probably the rendering of early arrivals (the energy method renders its 96 strongest arrivals as paths through the full HRTF; the path method renders everything from the histogram with diffuse-field ear weights), not the transport; this is not verified.
+
+**Outside: a 10–12 dB difference in the late field, not resolved.**
+At the walk's outside position at 16.5 s (listener at (12.0, 2.7, −46.3), `MeasureChurchLevels` with the new `ACOUSTIC_CHURCH_LEVELS_SAMPLE` and `POINTS=take`, 8,192 rays, four seeds each):
+
+| 125 / 500 / 2,000 Hz | 50–200 ms | 0.2–2 s |
+|---|---|---|
+| energy, doors open | 1.31e-5 / 3.20e-6 / 6.86e-7 | 5.7e-4 / 2.9e-4 / 1.4e-4 |
+| path, doors open | 0.94e-5 / 2.30e-6 / 4.93e-7 (one seed of four missed it) | 3.2e-5 / 2.1e-5 / 1.4e-5 |
+| energy, doors closed (two seeds) | 1.31e-5 / 3.20e-6 / 6.86e-7 | 1.1e-4 / 3.8e-5 / 1.1e-5 |
+| path, doors closed (two seeds) | 1.32e-5 / 3.22e-6 / 6.89e-7 | 1.0e-5 / 2.6e-6 / 0.7e-6 |
+
+The diffracted sound (50–200 ms) agrees, and both methods respond to opening the doors; the late field outside is 10–13 dB lower with the path tracer in both door states.
+Neither number is a sampling accident: the four energy seeds spread by a factor of two, the path seeds by 30%; the energy method gives the same within its noise with a 0.5 m or 1 m receiver sphere (3.4e-4 and 8.7e-4 at 125 Hz), and the path tracer the same with a 0.5 m region (2.5e-5), so its outside late field comes from next-event connections, not detected chains.
+One of the two methods is biased for sound that leaves the building late; an analytic aperture case (a diffuse room with an open hole, the τ = 1 limit of the leak check) would decide which, and is the next check to write.
+Until then the outside part of the path renders is not trustworthy, and neither is the energy method's.
+
+### Against the scoreboard
+
+Static impulse responses at the realism page's two points (doors closed, clean path settings: 8,192 rays, 2 m region; `church.py irs`, `church.py metrics`), now rows of [the scoreboard](../energy-audio-2026-11-09/scoreboard.md) (T30 s / EDT s / C80 dB):
+
+| Response | level | 125 Hz | 500 Hz | 2,000 Hz | 8,000 Hz | echo density (150 ms) |
+|---|---:|---|---|---|---|---:|
+| church-near, energy | −19.9 dB | 6.8 / 5.1 / −0.1 | 6.2 / 5.2 / −2.2 | 5.0 / 4.2 / −0.1 | 2.3 / 1.1 / +4.8 | 0.78 |
+| church-near, path | −19.5 dB | 6.3 / 3.0 / +1.7 | 6.3 / 4.4 / +1.5 | 4.8 / 4.6 / +1.4 | 2.9 / 0.7 / +5.6 | 0.30 |
+| church-far, energy | −26.1 dB | 5.0 / 7.9 / −1.9 | 5.0 / 7.5 / −9.1 | 4.9 / 6.1 / −5.9 | 3.1 / 3.2 / −1.0 | 0.85 |
+| church-far, path | −23.4 dB | 4.5 / 14.0 / −3.0 | 3.9 / 16.1 / −3.9 | 4.7 / 5.4 / −1.6 | 3.0 / 1.3 / +2.2 | 0.36 |
+| St Paul's 9.5 m (measured) | | 9.0 / 6.9 / −4.7 | 10.7 / 6.9 / −1.8 | 7.0 / 3.5 / +6.1 | 2.0 / 0.1 / +13.0 | 0.79 |
+| York Minster 24 m (measured) | | 7.8 / 7.4 / +0.7 | 8.2 / 8.1 / −3.6 | 5.8 / 5.0 / +0.1 | 1.4 / 1.3 / +7.2 | 0.91 |
+
+T30 agrees with the energy method within 0.5 s at the crossing and 1.1 s in the far nave.
+At the crossing the path response has more early energy (C80 1.5–3.6 dB higher, EDT shorter), and in the far nave its EDT is unreliable (10–16 s, longer than its T30): one 8,192-ray solve at 48 m is still noisy in the first 100 ms (part 3 measured −5 to +7 dB seed spread at 500 Hz in 50–200 ms there).
+The echo density is 0.30–0.36 against 0.78–0.91 for the energy method and the measured halls: `PathReverb` places one impulse per 0.25 ms slot, which at 44.1 kHz is one sample in 11, and such a train measures about 0.3 by construction (normal noise measures 1).
+That is a property of the synthesis, not of the transport; denser impulses per slot (several per slot sharing the slot's energy) would remove it, at the cost of more kernel spectra.
+On the wave suite the scoreboard now lists the path method too (2,048 rays): level error 3.52 dB against the baseline's 8.85 and the energy method's 3.04.
+
+### Cost
+
+The realtime render's solves took 230 ms per update on average (238 s for 1,034 updates; 3.4 s worst), the clean render's 2.2 s, under 50% pacing and with the 6 s horizon and the 2 m region.
+That is 3–6 times part 2's profile of the Church at 512 rays (40–70 ms, unpaced, 2 s horizon, 0.25 m region); the pacing accounts for a factor of two, the longer horizon and the larger region (about 100 times more chain candidates) for the rest.
+At 512 rays the Church is not realtime in this configuration.

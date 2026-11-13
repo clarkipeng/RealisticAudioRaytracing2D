@@ -6,8 +6,8 @@ One command: rebuilds the static-IR baseline on the wave-ground-truth suite
 (tools/baseline_static_ir.py), scores every method there (tools/method_compare.py score), and
 writes scoreboard.md and scoreboard.json beside this file with
 1. the suite: RMS errors against the wave ground truth (level dB, EDT %, T30 %, C50 dB, C80 dB,
-   ETC distance dB) for baseline-static-ir, energy and hybrid, overall, in view, in shadow, in
-   open and in closed scenes, and whether the energy method beats the baseline;
+   ETC distance dB) for baseline-static-ir, energy, hybrid and path, overall, in view, in shadow, in
+   open and in closed scenes, and whether the energy and path methods beat the baseline;
 2. the Church: T30 / EDT / C80 per octave band and the echo density of our renders, the static
    baseline and the measured cathedrals (from .context/energy-audio/realism/metrics.json, written
    by realism.py page). There is no ground truth there; the measured cathedrals are the reference
@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / 'tools'))
 import baseline_static_ir as base  # noqa: E402
 import method_compare as mc  # noqa: E402
 
-METHODS = ('baseline-static-ir', 'energy', 'hybrid')
+METHODS = ('baseline-static-ir', 'energy', 'hybrid', 'path')
 METRICS = (('level', 'level dB'), ('EDT', 'EDT %'), ('T30', 'T30 %'), ('C50', 'C50 dB'), ('C80', 'C80 dB'), ('etc', 'ETC dB'))
 GROUPS = (('all', lambda r: r['group'] == 'all'), ('in view', lambda r: r['group'] == 'view'), ('shadow', lambda r: r['group'] == 'shadow'),
           ('open scenes', lambda r: r['group'] == 'all' and not r['closed']), ('closed scenes', lambda r: r['group'] == 'all' and r['closed']))
@@ -61,7 +61,7 @@ def markdown(s, c):
              '## Wave-ground-truth suite (11 scenes)', '',
              'RMS error against the wave ground truth, lower is better, all bands with ground truth pooled.',
              '`baseline-static-ir`: the ground truth of one central in-view receiver used at every receiver, with only the direct sound moved to each receiver\'s distance (no occlusion), i.e. a game convolution reverb.',
-             'A ✓ marks where the energy method beats the baseline.', '']
+             'A ✓ marks where the energy or path method beats the baseline.', '']
     for g, _ in GROUPS:
         lines += [f'### {g}', '', '| method | ' + ' | '.join(n for _, n in METRICS) + ' |', '|---' * (len(METRICS) + 1) + '|']
         for m in METHODS:
@@ -69,7 +69,7 @@ def markdown(s, c):
             cells = []
             for k, _ in METRICS:
                 v = row[k]; b = s['baseline-static-ir']['groups'][g][k]
-                mark = ' ✓' if m == 'energy' and v is not None and b is not None and v < b else ''
+                mark = ' ✓' if m in ('energy', 'path') and v is not None and b is not None and v < b else ''
                 cells.append(fmt(v) + mark)
             lines.append(f'| {m} | ' + ' | '.join(cells) + ' |')
         lines.append('')

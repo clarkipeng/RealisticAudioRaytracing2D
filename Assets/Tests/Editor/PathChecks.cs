@@ -201,6 +201,41 @@ public partial class TakeChecks
             Assert.That(late / wantLate, Is.EqualTo(1).Within(b == 0 ? .3 : .15), "The late field keeps its band energy.");
         }
     }
+    // Updates every step between two histograms that split a late field over disjoint bins (the
+    // extreme of two independent noisy estimates) must sound as loud as their mean, held fixed.
+    [Test, Category("Core")]
+    public void PathReverbCrossfadeKeepsThePower()
+    {
+        const int rate = 32000;
+        var settings = SpectralSettings(); settings.method = TakeRender.Method.Path; settings.maximumDelaySeconds = .5f;
+        settings.responseStepSamples = 512; settings.fftSize = 512; settings.listenerOutput = TakeRender.ListenerOutput.Mono;
+        var bins = new PathBins(settings);
+        var scene = Scene(); var state = States();
+        double Late(int k, int b) => bins.Start(k) >= .02 && bins.Start(k) < .4 ? .002 * Math.Pow(.8, b) * bins.Width(k) / .001 : 0;
+        Func<int, int, int, int, double> mean = (p, d, b, k) => d == 2 ? Late(k, b) : 0;
+        Func<int, int, int, int, double> even = (p, d, b, k) => d == 2 && k % 2 == 0 ? 2 * Late(k, b) : 0;
+        Func<int, int, int, int, double> odd = (p, d, b, k) => d == 2 && k % 2 == 1 ? 2 * Late(k, b) : 0;
+        int length = 3 * rate, step = settings.responseStepSamples;
+        var noise = new float[length]; var rng = new System.Random(1);
+        for (int n = 0; n < length; n++) noise[n] = (float)(rng.NextDouble() * 2 - 1);
+        double Energy(bool alternate)
+        {
+            var signal = new TakeRender.Signal(noise); signal.SetActive(0, true);
+            signal.Append(new AcousticTake.VoiceEvent {action = AcousticTake.VoiceAction.Play, gain = 1});
+            var reverb = new PathReverb(scene, rate, settings, new[] {signal});
+            var block = new float[step]; double energy = 0;
+            for (int at = 0, i = 0; at < length; at += step, i++)
+            {
+                reverb.SetResponse(at, false, alternate ? (i % 2 == 0 ? even : odd) : mean, state);
+                Array.Clear(block, 0, step); reverb.Render(at, step, block);
+                if (at >= rate / 2) foreach (var x in block) energy += (double)x * x;
+            }
+            return energy;
+        }
+        double fixedEnergy = Energy(false), alternating = Energy(true);
+        TestContext.WriteLine($"alternating / fixed output energy {alternating / fixedEnergy:F3} ({10 * Math.Log10(alternating / fixedEnergy):+0.00;-0.00} dB; a plain linear crossfade gives 0.70, -1.55 dB)");
+        Assert.That(alternating / fixedEnergy, Is.EqualTo(1).Within(.05), "Crossfading between updates keeps the power.");
+    }
     // Band energies in 1 ms bins of a sampled impulse response (unit sample = 1 m free field), with
     // the comparison's zero-phase band filters (tools/method_compare.py energy_from_impulse).
     static double[] ImpulseBandEnergy(double[] h, int rate, int band, int bins)
