@@ -140,8 +140,8 @@ bool PathFollow(float3 p, float3 d, uint count, uint2 through, out uint hash, ou
         if (t)
         {
             float wall;
-            if (!PartitionExit(MethodState, hit, p, d, false, MethodRefracts(hit), wall)) return false;
-            p += d * wall; travelled += wall;
+            // Through a partition (out of its far face), or straight through a single sheet (no thickness).
+            if (PartitionExit(MethodState, hit, p, d, false, MethodRefracts(hit), wall)) { p += d * wall; travelled += wall; }
         }
         else d = reflect(d, dot(d, normal) < 0 ? normal : -normal);
     }
@@ -397,6 +397,33 @@ void PathConnect(uint group, uint thread)
 }
 void PathResetRequests() { PathRequestCount[0] = 0; }
 
+// The solve's edge distribution (edge rays from the source and the source's edge connections draw
+// from it): edge e has weight angle_e x (integral of 1/m^2 along it from the source) x (the same
+// from the listener) x 0.1 for each end that a quick test does not see (and for a source outside
+// the wedge, which an image source may still reach). Every edge keeps a positive weight, so any
+// path is still sampled (unbiased); the weight only steers samples to edges between the two ends.
+// EnergyEdgeWeights (energy method) weighted by the source alone, which left the edges of an open
+// doorway between the organ and a listener outside almost never drawn.
+void PathEdgeWeights(uint edge)
+{
+    if (edge >= MethodEdgeCount) return;
+    float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
+    float3 a, u, f, nn; float extent, angle, z0, r;
+    EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
+    float3 mid = a + .5 * extent * u;
+    float weight = angle * (TunedEdgeAngle(S - mid, f, nn, angle) <= angle ? 1 : MethodEdgeHidden);
+    [loop] for (uint end = 0; end < 2; end++)
+    {
+        float3 x = end == 0 ? S : L;
+        weight *= EnergyEdgeSpan(a, u, extent, x, z0, r) / r;
+        float3 nearest = a + clamp(z0, 0, extent) * u;
+        bool seen = false;
+        [loop] for (uint i = 0; i < 2 && !seen; i++) seen = Visible(MethodState, x, i == 0 ? nearest : mid, false);
+        weight *= seen ? 1 : MethodEdgeHidden;
+    }
+    MethodEdgeCdf[edge] = weight;
+}
+
 // Straight connection of a non-delta vertex to the listener (through transmitting walls).
 // Unless `exact` (the source's direct sound), a connection blocked by a surface is traced through
 // the walls only with probability q = that surface's largest energy transmission over the bands, and
@@ -478,7 +505,15 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     time = 0; fromOut = 0;
     if (MethodEdgeCount == 0 || DiffractionFactor <= 0) return false;
     float pick, pick2 = 1;
-    uint edge = MethodPickEdge(v.kind == 1 ? v.primitive : 0xffffffff, rng, pick), edge2 = edge;
+    // From the source, draw the edge from the solve's distribution (PathEdgeWeights: edges between
+    // source and listener) instead of uniformly over every edge of the scene: in the Church (14,075
+    // edges) a uniform pick found the edges of the doorway between the organ and a listener outside
+    // in one seed out of three. Scattering points keep the local/uniform pick.
+    uint edge, edge2;
+    float uSource = RandomRay(rng);
+    if (v.kind == 0 && MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0) edge = EnergySampleEdge(uSource, pick);
+    else edge = MethodPickEdge(v.kind == 1 ? v.primitive : 0xffffffff, rng, pick);
+    edge2 = edge;
     float r = RandomRay(rng);
     bool mirrors = PrimitiveCount > 0;
     bool image = mirrors && r < 1.0 / 3, pair = r >= (mirrors ? 2.0 / 3 : .5);
@@ -633,6 +668,20 @@ void TracePath(uint index)
             chain = branch;
             fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true;
             MethodCount(CounterBranches);
+            // The branch's chain ends with its transmission: connect it here, as the walk connects a chain
+            // after each of its events (without this, sound that reflects and then crosses a wall to the
+            // listener was never connected: the diffuse-field leak check lost exactly the specular share).
+            if (chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, S, L))
+            {
+                bool anyBranch = false;
+                [unroll] for (uint k22 = 0; k22 < MethodBands; k22++)
+                {
+                    float scale = chain.kind == 2 ? PathEdgeFlux(chain, k22) : 1;
+                    flux[k22] = scale > 0 ? Phi0[k22] / scale : 0;
+                    anyBranch = anyBranch || flux[k22] > 0;
+                }
+                if (anyBranch) PathQueue(chain, flux);
+            }
         }
         if (!travelling)
         {
@@ -768,7 +817,7 @@ void TracePath(uint index)
                 bool refracted = dot(bent, bent) > 0;
                 branchP = p; branchD = refracted ? normalize(bent) : reflect(d, n); branchMedium = refracted ? next : medium;
                 branchTau = tau;
-                if (refracted) branch.detectable = false; else PathEvent(branch, plane, false, n, p);
+                if (refracted && !(medium == AirMedium && next == AirMedium)) branch.detectable = false; else PathEvent(branch, plane, !refracted ? false : true, n, p);
             }
             [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
         }
@@ -798,7 +847,13 @@ void TracePath(uint index)
             else
             {
                 float3 bent = refract(d, n, MethodIor(medium, 3) / MethodIor(next, 3));
-                if (dot(bent, bent) > 0) { d = normalize(bent); medium = next; chain.detectable = false; }
+                if (dot(bent, bent) > 0)
+                {
+                    // A single sheet between air and air is a crossing of no thickness: the chain goes on
+                    // (an image through it exists); into or out of another medium it does not.
+                    if (medium == AirMedium && next == AirMedium) PathEvent(chain, plane, true, n, p); else chain.detectable = false;
+                    d = normalize(bent); medium = next;
+                }
                 else { PathEvent(chain, plane, false, n, p); d = reflect(d, n); }
             }
         }

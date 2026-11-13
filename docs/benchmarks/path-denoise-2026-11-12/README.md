@@ -103,3 +103,56 @@ Per update at the default (`T0` = 100 ms) and at `T0` = 16 ms, walk + connection
 At 256–512 rays the shoeboxes, doorway and corridor now fit the 23 ms budget; the furnished room (about 80 ms) and the Church (about 40 ms) do not.
 Their time hardly falls from 512 to 256 rays: it is set by the longest paths and the longest retraces, one GPU thread each, not by the ray count; the Church times also vary by a factor of two between runs (other work on the machine).
 **Not done and next**: splitting long paths and long retraces across threads (the wavefront idea applied to the walk: compact the surviving rays between bounces), and the EARS-style survival learned from measured per-bin variance; together they target exactly this latency floor.
+
+## 3. The level gap against the energy method
+
+The first realtime Church render was about 4 dB quieter than the energy render inside and much quieter outside, and in the earlier leak check the path tracer leaked half as much as the energy method.
+Before the Church goes on the scoreboard, three small measurements decided which method is right.
+
+### An analytic leak reference
+
+`MethodsLeakAsTheDiffuseFieldPredicts` (`PathChecks.cs`): in a closed room with a diffuse field the radiance at a wall is `E_in / 4π`, `E_in` the reverberant energy measured just inside it; a wall transmitting `τ = (1 − a) t` (undeviated) shows a listener outside the radiance `τ E_in / 4π` over the wall's solid angle `Ω`, so the reverberant energy outside is `τ E_in Ω / 4π` (direct sounds subtracted on both sides).
+Room 6 × 5 × 4 m, a = 0.1, t = 1e-3, listener 0.8 m outside a wall (Ω = 4.32 sr), 2^16 rays, two seeds.
+
+| Case | path, before | path, after the fix | energy method |
+|---|---:|---:|---:|
+| s = 1 (diffuse) | 0.994 | 0.994 | 1.012 |
+| s = 0.5 | **0.501** | **1.043** | 1.119 |
+
+**Cause.** A ray's small transmitted share is split off into one reservoir branch, traced after the ray ends.
+The walk connects a specular chain to the listener after each of its events; the branch's chain ends with its transmission, but that last connection was never made, because the branch starts after the event.
+So sound that reflects and then crosses a wall straight to the listener was lost: exactly the specular share of the leaked energy (half at s = 0.5).
+The fix connects the branch's chain when it is resumed.
+A second, smaller loss is fixed too: a transmission through a single sheet between air and air (no far face to exit) was treated like refraction and ended the chain's connections.
+The connection roulette through walls was not the cause: its probability is already the largest transmission over the bands and every band is divided by it (traced always 0.88e-3, with the roulette 0.91e-3).
+The energy method's +12% at s = 0.5 is most likely its 0.5 m receiver sphere next to the wall (it averages the field over a sphere whose near side sees more of the wall); not investigated further.
+
+### The Church: fixed points, same window
+
+`MeasureChurchLevels` (`ChurchLevelMeasurement.cs`) solves both methods at three Church points (doors closed) with 8,192 rays, a 2 s window and air absorption, and splits the energy into 0–50 ms, 50–200 ms and 0.2–2 s.
+The energy method uses its listening settings (2 m receiver sphere, arrivals, 96 near planes).
+Path minus energy (dB), at 125 / 500 / 2,000 Hz for each window:
+
+| Point | path, 0.25 m region (as rendered) | path, 2 m region, three seeds |
+|---|---|---|
+| crossing, 10 m from the organ | −2 / −2 / −7 | 0 to +1 / 0 to +4 / −1 to −3 |
+| far nave, 48 m | – / −8 / −2 to −7 | – / −5 to +7 / −3 to 0 |
+| outside the closed doors | – / −30 to −45 / −20 | – / −2 to +2 / −18 to −24 |
+
+**Inside: variance, not bias.**
+With a 0.25 m region, 8,192 rays found 3–16 candidate specular chains in the whole 31,000 m³ church per solve (2–8 scored), against 1,368 receiver-sphere hits of the energy method with its 2 m sphere: the specular part of the field (stone scatters only 12–17% per bounce) was almost unsampled, so a single solve is low most of the time and rarely very high.
+The region size only sets variance (the estimate divides by its measured probability), so with the energy method's 2 m the path tracer gets 1,060–1,190 candidates and agrees within about 1 dB at the crossing in every window and within the seed spread in the far nave; without survival in time, eight seeds give 0.088 ± 0.010 against the energy method's 0.082 for the crossing's late energy at 125 Hz.
+The Church renders therefore use a 2 m region (as the energy method's listening render did); the default stays 0.25 m for the small suite rooms.
+The region should scale with the room's size; that is not automatic yet.
+
+**Outside, 50–200 ms: a sampling fix.**
+That window is sound diffracted around the doorway's edges; the energy method enumerates every edge exactly, and the path tracer drew one edge uniformly out of 14,075 for each source connection, so two seeds of three missed it entirely.
+The edge distribution of a solve (used by the source's edge rays and now by its edge connections too) now weights each edge by its angle and by the integral of 1/m² along it from the source *and* from the listener, with 0.1 for each end that cannot see it; every edge keeps a positive weight, so it stays unbiased.
+Over eight seeds the path tracer now gives 2.77e-5 ± 0.44e-5 against the energy method's 3.22e-5 (125 Hz), within 1.1 standard errors.
+
+**Outside, 0.2–2 s: not resolved.**
+Both methods are dominated by rare large samples here (sound that leaks through the closed doors late): over eight seeds, at 125 Hz, the energy method gives 7.6e-5 ± 4.6e-5 (single seeds from 2.0e-6 to 3.7e-4) and the path tracer 0.9e-5 ± 0.7e-5 (3.0e-5 ± 2.8e-5 without survival in time).
+The path tracer is lower in every band, by 1.5–2 standard errors; that is not significant with these spreads, and both are 20 dB or more below the inside level.
+More seeds, or a better estimator for sound behind a partition, are needed to decide it.
+
+All path checks pass with these changes (free field, rigid plane, image lattice, half-plane, walls, Eyring, the clipped-region image, the two leak checks, the synthesis check).

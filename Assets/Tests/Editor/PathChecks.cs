@@ -64,6 +64,39 @@ public partial class TakeChecks
         Assert.That(path / all, Is.EqualTo(1).Within(.2), "Tracing blocked connections with probability t (weighted 1/t) keeps the mean.");
         Assert.That(all / lifelong, Is.EqualTo(1).Within(.2), "Survival in time keeps the mean.");
     }
+    // Diffuse-field leakage, an analytic reference for sound through walls. In a closed room whose field
+    // is diffuse (isotropic, uniform), the radiance L at a wall is E_in / (4 pi), E_in the reverberant
+    // energy measured just inside it; a wall transmitting tau = (1 - a) t (undeviated) shows the
+    // listener outside radiance tau L over the solid angle Omega it subtends, so the reverberant energy
+    // outside is tau E_in Omega / (4 pi). The direct sound through the wall, (1 - a) t / r^2, is
+    // subtracted from the outside total, and the direct sound from the inside one. s = 1 makes the
+    // field diffuse; s = 0.5 leaves half of every reflection specular (the field is then only
+    // approximately diffuse, and its specular part leaks through chains of reflections).
+    [TestCase(TakeRender.Method.Path, 1f), TestCase(TakeRender.Method.Path, .5f), TestCase(TakeRender.Method.Energy, 1f), TestCase(TakeRender.Method.Energy, .5f),
+     Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsLeakAsTheDiffuseFieldPredicts(TakeRender.Method method, float scattering)
+    {
+        var size = new Vector3(6, 5, 4); const float a = .1f, t = 1e-3f;
+        var source = new Vector3(-1.5f, .5f, .4f); var inside = new Vector3(2.2f, -.3f, .2f); var outside = new Vector3(3.8f, -.3f, .2f);
+        double Total(Vector3 listener, int seed)
+        {
+            LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(a, scattering, t), source, listener, out var scene, out var geometry, out var state);
+            var settings = ControlSettings(method, 1 << 16, 1.5f); settings.seed = seed; settings.specularDetectionRadius = .5f;
+            using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+            solver.Solve(state, new TakeRender.DirectPath[1]);
+            return Window(ControlEnergy(solver, 2), 0, int.MaxValue);
+        }
+        double tau = (1 - a) * t;
+        double inRev = (Total(inside, 0) + Total(inside, 1)) / 2 - 1 / (inside - source).sqrMagnitude;
+        double outRev = (Total(outside, 0) + Total(outside, 1)) / 2 - tau / (outside - source).sqrMagnitude;
+        double h = outside.x - size.x / 2, omega = 0;
+        foreach (double ay in new[] {size.y / 2 - outside.y, size.y / 2 + outside.y})
+            foreach (double bz in new[] {size.z / 2 - outside.z, size.z / 2 + outside.z})
+                omega += Math.Atan(ay * bz / (h * Math.Sqrt(h * h + ay * ay + bz * bz)));
+        double predicted = tau * inRev * omega / (4 * Math.PI);
+        TestContext.WriteLine($"{method}, s = {scattering}: reverberant energy inside {inRev:G4}, outside {outRev:G4}, diffuse-field prediction {predicted:G4} (wall solid angle {omega:F3} sr), ratio {outRev / predicted:F3}");
+        Assert.That(outRev / predicted, Is.EqualTo(1).Within(scattering >= 1 ? .2 : .35));
+    }
     static long Sum(uint[] values) { long s = 0; foreach (var v in values) s += v; return s; }
 
     // A specular image whose detection region straddles a visibility boundary: a rigid floor and

@@ -593,11 +593,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 if (!value.hasError) Unity.Collections.NativeArray<uint>.Copy(value.GetData<uint>(), late, value.GetData<uint>().Length);
                 lateDone = true;
             });
+            // Path: the contribution counts too (histogram export for the denoiser), read with the histogram.
+            if (path && !string.IsNullOrEmpty(settings.pathHistogramExport)) counts.GetData(Counts, 0, 0, frames * Pairs * TimeBins.Count);
         }
         else
         {
             if (Paths.Length > 0) paths.GetData(Paths, 0, 0, frames * PathsPerFrame);
             output.GetData(late, 0, 0, frames * ReadbackUintsPerFrame);
+            if (path && !string.IsNullOrEmpty(settings.pathHistogramExport)) counts.GetData(Counts, 0, 0, frames * Pairs * TimeBins.Count);
         }
     }
     public bool TryComplete(bool wait)
@@ -701,6 +704,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         return (source[2 * cell + 1] + source[2 * cell] / 4294967296.0) / Rays;
     }
     public uint HistogramCount(int bin) => Counts[bin];
+    public uint HistogramCount(int frame, int pair, int bin) => Counts[(frame * Pairs + pair) * TimeBins.Count + bin];
     public bool IsPath => path;
     double Fixed(int index) => (((long)(int)Output[2 * index + 1] << 32) | Output[2 * index]) / 4294967296.0;
     // Band train of the Pressure method: real and imaginary samples (already / N).

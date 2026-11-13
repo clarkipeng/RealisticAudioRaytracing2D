@@ -22,8 +22,8 @@
 
 [numthreads(64,1,1)] void TracePath3D(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DBvh(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { EnergyEdgeWeights(id.x); }
-[numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { EnergyEdgeWeights(id.x); }
+[numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
+[numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(256,1,1)] void PathEdgeScan(uint3 t:SV_GroupThreadID) { EnergyEdgeScan(t.x); }
 [numthreads(64,1,1)] void PathConnect3D(uint3 g:SV_GroupID, uint3 t:SV_GroupThreadID) { PathConnect(g.x, t.x); }
 [numthreads(64,1,1)] void PathConnect3DBvh(uint3 g:SV_GroupID, uint3 t:SV_GroupThreadID) { PathConnect(g.x, t.x); }

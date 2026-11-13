@@ -162,9 +162,52 @@ internal sealed class PathReverb
         if(!(late.Transport is MethodTransport m) || !m.IsPath)return null;
         int frame=late.Frame;return (pair,d,b,k)=>m.HistogramEnergy(frame,pair,d,b,k);
     }
-    // histogram(pair, direction, band, bin): energy in direct-sound units; null renders silence.
-    internal void SetResponse(long sample,bool cut,Func<int,int,int,int,double> histogram,AcousticTake.State[] states)
+    internal static Func<int,int,uint> Counts(RayTransport.LateFrame late)
     {
+        if(!(late.Transport is MethodTransport m) || !m.IsPath)return null;
+        int frame=late.Frame;return (pair,k)=>m.HistogramCount(frame,pair,k);
+    }
+    // Offline experiments (settings.pathHistogramExport / pathHistogramImport): every valid response's
+    // histograms [pair][direction][band][bin] (float32), counts [pair][bin] (uint32) and its sample (int64)
+    // are appended to <dir>/histogram.f32, counts.u32 and samples.i64; an import replaces the tracer's
+    // histogram of the i-th valid response by the i-th record of <dir>/histogram.f32 (e.g. denoised).
+    System.IO.BinaryWriter exportHistogram,exportCounts,exportSamples;
+    System.IO.FileStream import;
+    long importRecord;
+    internal void Configure(string exportDirectory,string importDirectory)
+    {
+        if(!string.IsNullOrEmpty(exportDirectory))
+        {
+            System.IO.Directory.CreateDirectory(exportDirectory);
+            exportHistogram=new System.IO.BinaryWriter(System.IO.File.Create(System.IO.Path.Combine(exportDirectory,"histogram.f32")));
+            exportCounts=new System.IO.BinaryWriter(System.IO.File.Create(System.IO.Path.Combine(exportDirectory,"counts.u32")));
+            exportSamples=new System.IO.BinaryWriter(System.IO.File.Create(System.IO.Path.Combine(exportDirectory,"samples.i64")));
+        }
+        if(!string.IsNullOrEmpty(importDirectory))import=System.IO.File.OpenRead(System.IO.Path.Combine(importDirectory,"histogram.f32"));
+    }
+    internal void Close(){exportHistogram?.Dispose();exportCounts?.Dispose();exportSamples?.Dispose();import?.Dispose();exportHistogram=null;exportCounts=null;exportSamples=null;import=null;}
+    Func<int,int,int,int,double> Exchange(long sample,Func<int,int,int,int,double> histogram,Func<int,int,uint> counts)
+    {
+        if(histogram==null)return null;
+        int B=this.histogram.Count;
+        if(exportHistogram!=null)
+        {
+            for(int p=0;p<pairs;p++)for(int d=0;d<Directions;d++)for(int b=0;b<Bands;b++)for(int k=0;k<B;k++)exportHistogram.Write((float)histogram(p,d,b,k));
+            for(int p=0;p<pairs;p++)for(int k=0;k<B;k++)exportCounts.Write(counts==null?0u:counts(p,k));
+            exportSamples.Write(sample);
+            exportHistogram.Flush();exportCounts.Flush();exportSamples.Flush(); // the mixer has no end-of-render hook
+        }
+        if(import==null)return histogram;
+        var record=new float[pairs*Directions*Bands*B];var bytes=new byte[record.Length*4];
+        import.Seek(importRecord++*bytes.Length,System.IO.SeekOrigin.Begin);
+        if(import.Read(bytes,0,bytes.Length)!=bytes.Length)throw new InvalidOperationException("The imported histograms end before the render.");
+        Buffer.BlockCopy(bytes,0,record,0,bytes.Length);
+        return (p,d,b,k)=>record[((p*Directions+d)*Bands+b)*B+k];
+    }
+    // histogram(pair, direction, band, bin): energy in direct-sound units; null renders silence.
+    internal void SetResponse(long sample,bool cut,Func<int,int,int,int,double> histogram,AcousticTake.State[] states,Func<int,int,uint> counts=null)
+    {
+        histogram=Exchange(sample,histogram,counts);
         if(initialized && sample<swap)throw new ArgumentException("Path responses must be ordered.");
         bool valid=histogram!=null;
         if(valid && sample%partition!=0)throw new ArgumentException("Path responses change on partition boundaries.");

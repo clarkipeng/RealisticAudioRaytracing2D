@@ -108,6 +108,10 @@ public static partial class TakeRender
         public int pathMaxTrials=64;
         [Min(0),Tooltip("Path method: survival in time. A path is alive at time t with probability min(1, this / t), weight-compensated (unbiased), so each histogram bin keeps about as many contributing paths while late work falls sharply. Zero: every path lives to the horizon (roulette on energy only).")]
         public float pathSurvivalSeconds=.1f;
+        [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
+        public string pathHistogramExport="";
+        [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]
+        public string pathHistogramImport="";
         // Exact arrivals rendered as delayed paths per pair: Energy's slots, Path's direct sound.
         internal int ArrivalSlots => method==Method.Path?1:methodArrivalSlots;
         [HideInInspector] public int raysPerPair; // Read older serialized total-ray settings.
@@ -609,6 +613,7 @@ public static partial class TakeRender
                 if(settings.maxBounces>0 && settings.method==Method.Path)
                 {
                     pathLate=new PathReverb(scene,sampleRate,settings,signals);lateSupport=pathLate.SupportSamples;
+                    pathLate.Configure(settings.pathHistogramExport,settings.pathHistogramImport);
                 }
                 else if(settings.maxBounces>0)
                 {
@@ -642,7 +647,7 @@ public static partial class TakeRender
                 if(this.late!=null || pathLate!=null)
                 {
                     bool lateCut=cut;foreach(var s in state)lateCut|=(s.flags&AcousticTake.StateFlags.Cut)!=0;
-                    if(pathLate!=null)pathLate.SetResponse(sample,lateCut,PathReverb.Histogram(late),state);else this.late.SetResponse(sample,lateCut,late,state);
+                    if(pathLate!=null)pathLate.SetResponse(sample,lateCut,PathReverb.Histogram(late),state,PathReverb.Counts(late));else this.late.SetResponse(sample,lateCut,late,state);
                 }
                 responseSample=sample;initialized=true;return;
             }
