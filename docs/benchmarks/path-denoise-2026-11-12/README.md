@@ -224,3 +224,77 @@ On the wave suite the scoreboard now lists the path method too (2,048 rays): lev
 The realtime render's solves took 230 ms per update on average (238 s for 1,034 updates; 3.4 s worst), the clean render's 2.2 s, under 50% pacing and with the 6 s horizon and the 2 m region.
 That is 3–6 times part 2's profile of the Church at 512 rays (40–70 ms, unpaced, 2 s horizon, 0.25 m region); the pacing accounts for a factor of two, the longer horizon and the larger region (about 100 times more chain candidates) for the rest.
 At 512 rays the Church is not realtime in this configuration.
+
+## 5. A denoiser
+
+### Data
+
+`tools/path_dataset.py --name path-v2` (plan, render, church, pack, verify) built 48 generated scenes (eight per family: shoebox, doorway, corridor, canopy, barriers, furnished; `tools/dlss_scenes.py`) plus the Church walk, 600 listener poses in all.
+Each box scene has four static receivers and an eight-frame walk at 1.4 m/s (one frame per 23 ms update); the Church contributes 24 frames of the speech walk (standing, walking, outside), rendered with the 2 m region of the Church renders.
+Inputs: the Path method at 256, 512, 1,024 and 2,048 rays, four seeds each (every walk frame its own seed, as live solves are).
+Splits are whole families, by the frozen rule of `dlss_scenes.split_for`: corridor is validation, canopy (open) and the Church are test, and two doorway and two furnished scenes fall in test and validation; training has 28 scenes of the other families.
+`verify` checks 1,715 payload hashes and that each split group sits in one split.
+Rendering took about 75 minutes of guarded Unity time (one 4 GiB guard trip after 816 of 864 runs; the rest ran in batches of eight).
+
+**Targets: more rays, not coarser bins.**
+The target of a pose is the mean of two independent 8,192-ray solves (16,384 rays, 32 to 64 times the realtime inputs).
+It is still noisy per fine bin (25% energy-weighted median, against 124% for one 512-ray input), but it is unbiased, and the loss is L2, so Noise2Noise applies: the minimiser is the conditional mean of the target, which is the clean answer because the target's noise has zero mean and is independent of the inputs.
+Coarser target bins would have removed the noise only by blurring the early arrivals that the denoiser must keep in place; summing into perceptual windows happens in the loss instead (below), where it costs no resolution in the output.
+
+### Model and training
+
+`tools/path_denoise.py`: a 1D dilated convolutional network along the time bins (232,000 parameters, eight convolutions of width 96, receptive field 67 bins) on the last four frames of a pose (log energies of 6 directions × 8 bands, and log contribution counts, normalised by the four frames' total).
+It predicts each cell as a gain on the four-frame mean plus a non-negative multiple of a smoothed level (so it can fill cells no frame reached), and then rescales every band's energy in each time segment (0–50 ms, 50–200 ms, later) to the four-frame mean's.
+Those totals are therefore unbiased, the band levels are exactly the plain temporal average's, and the network only moves energy within a band and segment.
+The loss is L2 on energies summed into perceptual windows (1 ms up to 16 ms, then about t/8; per direction and band), each divided by an input-only normaliser; one model is trained for all four budgets, with the eight rotations and reflections about the vertical axis as augmentation; the checkpoint with the best validation window error is kept (step 1,250 of 8,000; 3 minutes on the M5's GPU through MPS).
+Inference takes 1 ms per pose on one CPU core.
+
+**What did not work, in order.**
+A per-fine-bin L2 loss (each bin divided by a smoothed input level) did not train: it was dominated by single specular arrivals that no input frame had detected, up to 10⁴ times the local level, and the validation loss stayed flat.
+A gain on the smoothed level alone, with window loss, learned but overfit within 500 steps and lost 3–7 dB of level in the open canopy and the Church (held-out families); at 2,048 rays it was worse than the plain four-frame mean everywhere.
+The residual form (identity is the starting point), training on all budgets, the symmetry augmentation and the per-segment energy rescaling fixed the level and most of the overfitting.
+
+### Results on the held-out families
+
+Errors against the target, mean over 264 validation and test poses (window dB / band level dB / decay curve dB; definitions in `metrics()`); "equal compute" spends the denoiser's time on rays instead (1 ms against 170–400 ms per guarded solve here, or against part 2's 13 ms per update at best: at most 8% more rays, under 0.2 dB on these curves):
+
+| Rays | (a) one frame | (b) more rays, equal compute | (b′) four-frame mean | (bK) four frames at equal compute | denoised | (c) one 8,192-ray seed against the target |
+|---|---|---|---|---|---|---|
+| 256 | 9.05 / 2.34 / 5.79 | 9.11 / 2.31 / 5.84 | 6.77 / 1.67 / 4.25 | 6.48 / 1.66 / 3.92 | **5.48 / 1.67 / 3.51** | 1.61 / 0.43 / 0.90 |
+| 512 | 7.67 / 1.86 / 4.58 | 7.77 / 1.96 / 4.74 | 5.62 / 1.34 / 3.26 | 5.33 / 1.39 / 3.15 | **4.77 / 1.34 / 3.00** | 1.61 / 0.43 / 0.90 |
+| 2,048 | 5.35 / 1.36 / 3.12 | 5.34 / 1.39 / 3.16 | 4.00 / 0.96 / 2.33 | 3.63 / 0.89 / 2.06 | **4.18 / 0.96 / 2.68** | 1.61 / 0.43 / 0.90 |
+
+At 256 and 512 rays the denoiser beats more rays at equal compute, both for one frame (b) and for the strict bar of four frames (bK): at 512 rays its window error (4.77 dB) is what plain averaging reaches with about 3,000 rays, 1.5 times the four frames' 2,048.
+Its band levels equal the four-frame mean's by construction, about as good as (bK); its decay curves are better at 256 and 512 rays.
+At 2,048 rays it is worse than plain averaging on every metric: the inputs are already good there, and the network's redistribution adds more error than it removes.
+So it is useful at the realtime budgets only, and below 2,048 rays it should be switched off or retrained for that budget.
+
+Per family at 512 rays (window dB / decay dB), four-frame mean → denoised: corridor 5.12 / 2.64 → 4.16 / 2.48; canopy 6.40 / 4.63 → 5.58 / 3.75; doorway 3.92 / 1.63 → 3.37 / 2.04; furnished 3.85 / 1.35 → 3.09 / 1.60; Church 7.93 / 3.78 → 7.12 / 4.44.
+The window error falls in every family; the decay curve gets worse in the doorway, furnished and Church poses, where it smooths the late decay of single frames more than the targets support.
+
+### Against the wave ground truth
+
+`ground_truth.py` (beside this file) solved the 11 suite scenes at 512 rays with four seeds, ran the denoiser on each receiver's four solves (as a static listener's last four frames), and scored the variants with `tools/method_compare.py` against the wave ground truth (RMS over receivers and bands, as on the scoreboard; the suite's 2,048-ray solves are the same rays in one solve, i.e. bK):
+
+| Variant | level dB | EDT % | T30 % | ETC dB |
+|---|---:|---:|---:|---:|
+| path, 512 rays, one solve | 4.96 | 293 | 77.1 | 20.5 |
+| path, mean of four 512-ray solves | 3.45 | 466 | 68.2 | 18.4 |
+| path, 2,048 rays, one solve (equal rays) | 3.52 | 435 | 72.0 | 18.3 |
+| path, four 512-ray solves denoised | 3.45 | 416 | 64.6 | 14.8 |
+
+Against the wave solution the denoised estimate is better than the same rays spent in one solve on decay time and on the energy-time curve (3.5 dB better), and equal in level (the four-solve mean's by construction).
+EDT errors are large for every variant (and C50/C80 are not meaningful on this suite: their RMS runs to thousands of dB where a receiver's early energy is nearly zero; the scoreboard shows the same for every method).
+One suite scene shares its geometry with a dataset scene (furnished-0005, with the presets' scattering in the dataset and zero scattering in the suite); that dataset scene is in the validation split, so it was not trained on but did help pick the checkpoint; the other suite scenes are distinct instances, and corridor and canopy are held-out families.
+
+### The Church walk, denoised
+
+The realtime render's exported histograms (512 rays, one per update) went through the denoiser with the three previous updates as context (`path_denoise.py church`), and `church.py render path-denoised` rendered the walk from them (`pathHistogramImport`); it is on the page and in the live view as "Path (denoised)".
+The frame-to-frame change of the 500 Hz band energy, median over the walk, falls from 4.2 to 0.7 dB in 50–200 ms and from 3.8 to 0.7 dB after 200 ms; the plain four-frame running average gives the same 0.7 dB (consecutive averages share three of their four frames), so on this measure the improvement is the temporal averaging, not the network.
+Its levels per part of the walk are −44.7, −46.8 and −61.3 dBFS (realtime −45.1, −46.6, −60.9; clean −45.4, −45.3, −60.5): the denoiser keeps the level, and so keeps the outside difference of part 4.
+The Church is a held-out family here and its decay curves got worse than the plain four-frame mean's (above), so whether the denoised walk sounds closer to the clean one is for listening, not established by these numbers.
+
+### Not done
+
+The denoiser is trained once, on one seed of training, for one model size; there is no hyperparameter search, and validation picks the checkpoint from a single run.
+The training set is small (28 scenes), and the best checkpoint comes early (step 1,250): more scenes are the most likely improvement.

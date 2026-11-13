@@ -29,14 +29,28 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 import dlss_scenes as ds  # noqa: E402
 
-WORK = ROOT / '.context/path-dataset'
-RAW = WORK / 'raw'
-NAME = 'path-pilot-v1'
-LOW = dict(rays=1024, seeds=[0, 1])             # realtime budget, input seeds
+# Recipes: the 10-scene pilot of 12 November, and v2 (about 50 scenes plus the Church, inputs at four
+# budgets so the denoiser can be compared with more rays at equal cost).
+RECIPES = {
+    'path-pilot-v1': dict(work='.context/path-dataset', low=[1024], seeds=[0, 1], perFamily=2),
+    'path-v2': dict(work='.context/path-dataset-v2', low=[256, 512, 1024, 2048], seeds=[0, 1, 2, 3], perFamily=8),
+}
 HIGH = dict(rays=8192, seeds=[100, 101])        # target budget, independent seeds
 STATIC, FRAMES = 4, 8                           # receivers per scene: static poses, frames of one walk
+
+
+def use(name):
+    """Select a recipe: sets WORK, RAW, NAME and LOW (input budgets and seeds)."""
+    global WORK, RAW, NAME, LOW, PER_FAMILY
+    recipe = RECIPES[name]
+    WORK = ROOT / recipe['work']; RAW = WORK / 'raw'; NAME = name
+    LOW = dict(budgets=recipe['low'], rays=recipe['low'][0], seeds=recipe['seeds']); PER_FAMILY = recipe['perFamily']
+
+
+use('path-pilot-v1')
 STEP_SECONDS, SPEED = 1024 / 44100, 1.4         # response step of the renders, walking speed (m/s)
 HORIZON, RADIUS = 2.0, .25
+CHURCH_RADIUS = 2.0                              # the Church renders' detection region (docs/benchmarks/path-denoise-2026-11-12, part 3)
 CHURCH_TAKE = ROOT / '.context/energy-audio/church/speech-walk/take'
 CHURCH_WINDOWS = {'standing': 1.0, 'walking': 7.5, 'outside': 14.5}   # start (s) of FRAMES-frame windows
 
@@ -114,7 +128,7 @@ def plan(per_family):
             (folder / 'spec.json').write_text(json.dumps(spec) + '\n')
             common = dict(sceneFile=str(folder / 'spec.json'), output=str(RAW), methods=['path'], maximumDelaySeconds=HORIZON,
                           detectionRadius=RADIUS, rouletteFloor=1e-6, receivers=-1, captureReceiver=-1, seedPerReceiver=True, airAbsorption=True)
-            jobs_low.append(dict(common, budgets=[LOW['rays']], seeds=LOW['seeds']))
+            jobs_low.append(dict(common, budgets=LOW['budgets'], seeds=LOW['seeds']))
             jobs_high.append(dict(common, budgets=[HIGH['rays']], seeds=HIGH['seeds']))
             scenes.append(base['sceneId'])
     (WORK / 'jobs').mkdir(parents=True, exist_ok=True)
@@ -157,14 +171,14 @@ def church_job():
         samples += [first + f * step for f in range(FRAMES)]
     settings = dict(responseStepSamples=step, speedOfSound=343.0, referenceDistance=1.0, minimumDistance=.1, maximumDelaySeconds=HORIZON,
                     useBvh=True, transport=1, synthesis=1, audioBackend=1, seed=0, diffractionFactor=1.0, airAbsorption=True,
-                    fftSize=1024, spectralHop=256, maxBounces=64, method=3, methodRays=LOW['rays'], specularDetectionRadius=RADIUS,
+                    fftSize=1024, spectralHop=256, maxBounces=64, method=3, methodRays=LOW['rays'], specularDetectionRadius=CHURCH_RADIUS,
                     methodRouletteFloor=1e-6, methodEdgeProbability=.5)
     out = RAW / 'church-walk' / 'path'
     job = dict(take=str(CHURCH_TAKE), output=str(out), shader='Assets/Shaders/Transport.compute', settings=settings)
     path = WORK / 'jobs' / 'church.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(job, indent=1) + '\n')
-    runs = f"{LOW['rays']}:{LOW['seeds'][0]}:{len(LOW['seeds'])},{HIGH['rays']}:{HIGH['seeds'][0]}:{len(HIGH['seeds'])}"
+    runs = ','.join([f"{b}:{LOW['seeds'][0]}:{len(LOW['seeds'])}" for b in LOW['budgets']] + [f"{HIGH['rays']}:{HIGH['seeds'][0]}:{len(HIGH['seeds'])}"])
     return dict(ACOUSTIC_PATH_TAKE=str(path), ACOUSTIC_PATH_SAMPLES=','.join(map(str, samples)), ACOUSTIC_PATH_RUNS=runs)
 
 
@@ -218,8 +232,9 @@ def pack():
             family, split, group, kinds = scene['family'], scene['split'], scene['splitGroup'], scene['receiverKinds']
         base = RAW / scene_id / 'path'
         try:
-            low = [read_run(base / f"r{LOW['rays']:05d}" / str(s)) for s in LOW['seeds']]
+            lows = {b: [read_run(base / f"r{b:05d}" / str(s)) for s in LOW['seeds']] for b in LOW['budgets']}
             high = [read_run(base / f"r{HIGH['rays']:05d}" / str(s)) for s in HIGH['seeds']]
+            low = lows[LOW['budgets'][0]]
         except FileNotFoundError as missing:
             rejected.append(dict(scene=scene_id, reason=f'missing run: {missing.filename}'))
             continue
@@ -243,9 +258,9 @@ def pack():
         files['targetMean'] = descriptor(folder / 'target-mean.f32', 'float32', mean.shape, ['pose', 'direction', 'band', 'bin'])
         files['targetVariance'] = descriptor(folder / 'target-variance.f32', 'float32', var.shape, ['pose', 'direction', 'band', 'bin'])
         files['targetCounts'] = descriptor(folder / 'target-counts.u32', 'uint32', (R, mean.shape[-1]), ['pose', 'bin'])
-        files['inputs'] = [dict(seed=s, histogram=descriptor(base / f"r{LOW['rays']:05d}" / str(s) / 'histogram.f32', 'float32', r[1].shape, ['pose', 'direction', 'band', 'bin']),
-                                counts=descriptor(base / f"r{LOW['rays']:05d}" / str(s) / 'counts.u32', 'uint32', r[2].shape, ['pose', 'bin']))
-                           for s, r in zip(LOW['seeds'], low)]
+        files['inputs'] = [dict(rays=b, seed=s, histogram=descriptor(base / f"r{b:05d}" / str(s) / 'histogram.f32', 'float32', r[1].shape, ['pose', 'direction', 'band', 'bin']),
+                                counts=descriptor(base / f"r{b:05d}" / str(s) / 'counts.u32', 'uint32', r[2].shape, ['pose', 'bin']))
+                           for b in LOW['budgets'] for s, r in zip(LOW['seeds'], lows[b])]
         # Noise: energy-weighted relative standard error per bin, and the band level's standard error (dB).
         band_mean = mean.sum(1)                                     # [pose, band, bin]
         band_var = var.sum(1)
@@ -254,13 +269,16 @@ def pack():
         bin_rel = np.sqrt(band_var / len(HIGH['seeds'])) / np.maximum(band_mean, 1e-30)
         target_bin_noise = float((weight * np.minimum(bin_rel, 10)).sum())
         level_se = np.sqrt(var.sum((1, 3)) / len(HIGH['seeds'])) / np.maximum(mean.sum((1, 3)), 1e-30)
-        inputs = np.stack([r[1] for r in low]).astype(np.float64).sum(2)   # [seed, pose, band, bin]
-        input_rel = np.sqrt(((inputs - band_mean[None]) ** 2).mean(0)) / np.maximum(band_mean, 1e-30)
-        input_bin_noise = float((weight * np.minimum(input_rel, 10)).sum())
-        cost = dict(lowSeconds=float(sum(r[4] for r in low)), highSeconds=float(sum(r[4] for r in high)))
+        input_noise = {}
+        for b in LOW['budgets']:
+            inputs = np.stack([r[1] for r in lows[b]]).astype(np.float64).sum(2)   # [seed, pose, band, bin]
+            input_rel = np.sqrt(((inputs - band_mean[None]) ** 2).mean(0)) / np.maximum(band_mean, 1e-30)
+            input_noise[str(b)] = float((weight * np.minimum(input_rel, 10)).sum())
+        input_bin_noise = input_noise[str(LOW['budgets'][0])]
+        cost = dict(lowSeconds={str(b): float(sum(r[4] for r in lows[b])) for b in LOW['budgets']}, highSeconds=float(sum(r[4] for r in high)))
         costs[scene_id] = cost
         bundle = dict(scene=scene_id, family=family, split=split, splitGroup=group, poses=R, files=files, cost=cost,
-                      quality=dict(targetBinNoise=target_bin_noise, inputBinNoise=input_bin_noise, targetRelativeStandardError=float(se_rel),
+                      quality=dict(targetBinNoise=target_bin_noise, inputBinNoise=input_bin_noise, inputBinNoiseByRays=input_noise, targetRelativeStandardError=float(se_rel),
                                    targetLevelStandardErrorDb=float(10 * np.log10(1 + np.median(level_se)))))
         if not church:
             bundle['sceneSha256'] = sha256(WORK / 'scenes' / scene_id / 'scene.json')
@@ -287,14 +305,14 @@ def pack():
     splits = {}
     for b in bundles:
         splits.setdefault(b['split'], []).append(b['family'])
-    summary = dict(schema='path-pilot-dataset-v1', name=NAME, generator=ds.GENERATOR_VERSION, horizonSeconds=HORIZON, detectionRadius=RADIUS,
-                   inputs=dict(rays=LOW['rays'], seeds=LOW['seeds']), targets=dict(rays=HIGH['rays'], seeds=HIGH['seeds']),
+    summary = dict(schema='path-pilot-dataset-v1', name=NAME, generator=ds.GENERATOR_VERSION, horizonSeconds=HORIZON, detectionRadius=dict(boxes=RADIUS, church=CHURCH_RADIUS),
+                   inputs=dict(rays=LOW['budgets'], seeds=LOW['seeds']), targets=dict(rays=HIGH['rays'], seeds=HIGH['seeds']),
                    poses=dict(static=STATIC, movingFrames=FRAMES, stepSeconds=STEP_SECONDS, speed=SPEED),
                    binEdges=descriptor(edges_path, 'float32', (len(edges_ref),), ['edge seconds']),
                    splitRule='dlss_scenes.split_for (frozen); corridor = validation and canopy = test are held-out families; the Church is test',
                    scenes=len(bundles), examples=len(examples), splits={k: dict(scenes=len(v), families=sorted(set(v))) for k, v in splits.items()},
                    rejected=rejected,
-                   cost=dict(perScene=costs, meanLowSeconds=float(np.mean([c['lowSeconds'] for c in costs.values()])) if costs else None,
+                   cost=dict(perScene=costs, meanLowSeconds=float(np.mean([sum(c['lowSeconds'].values()) if isinstance(c['lowSeconds'], dict) else c['lowSeconds'] for c in costs.values()])) if costs else None,
                              meanHighSeconds=float(np.mean([c['highSeconds'] for c in costs.values()])) if costs else None),
                    noise=dict(targetBinNoiseMedian=float(np.median([b['quality']['targetBinNoise'] for b in bundles])) if bundles else None,
                               inputBinNoiseMedian=float(np.median([b['quality']['inputBinNoise'] for b in bundles])) if bundles else None),
@@ -329,14 +347,16 @@ def verify():
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='command', required=True)
-    p = sub.add_parser('plan'); p.add_argument('--per-family', type=int, default=4)
+    p = sub.add_parser('plan'); p.add_argument('--per-family', type=int)
     r = sub.add_parser('render'); r.add_argument('--batch', type=int, default=24); r.add_argument('--work-fraction', type=float, default=.5)
     c = sub.add_parser('church'); c.add_argument('--work-fraction', type=float, default=.5)
     a = sub.add_parser('render-all'); a.add_argument('--work-fraction', type=float, default=.5)
     sub.add_parser('pack'); sub.add_parser('verify')
+    parser.add_argument('--name', default='path-v2', choices=sorted(RECIPES))
     args = parser.parse_args(argv)
+    use(args.name)
     if args.command == 'plan':
-        plan(args.per_family)
+        plan(args.per_family or PER_FAMILY)
     elif args.command == 'render':
         render(args.batch, args.work_fraction)
     elif args.command == 'church':
