@@ -30,7 +30,10 @@
 // (each bin PathRatio times its start time).
 float PathBin0, PathRatio;
 uint PathFineBins, PathBins, PathCountBase, PathCountCells, PathAudio, PathMaxTrials;
-uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 1 connection trials, 2 straight connections, 3 edge connections; bit 4 traces every blocked connection
+uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 1 connection trials, 2 straight connections, 3 edge connections; bit 4 traces every blocked connection;
+                      // diagnostics (docs/benchmarks/path-denoise-2026-11-12, part 6): bit 5 stops rays (and zeroes branches) that refract into a medium
+                      // outside a partition, counted as nonFinite; bit 10 draws small transmissions instead of keeping reservoir branches; bit 14 keeps
+                      // only unobstructed straight connections
 // Survival in time (Russian roulette per time bin, weight-compensated, unbiased): a path is alive at
 // time t with probability S(t) = min(1, PathSurvivalSeconds / t). The histogram's bins widen in
 // proportion to t after the fine region, so with S proportional to 1/t each bin keeps about as many
@@ -457,6 +460,7 @@ bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, bool exact,
         }
         else clear = true; // nothing in between: one medium, no crossing loop needed
     }
+    if ((PathProfileFlags & 16384) != 0 && !exact && !clear) return false; // (bit 14: unobstructed connections only)
     if (clear)
     {
         t = d * MethodSlowness(v.medium);
@@ -782,7 +786,7 @@ void TracePath(uint index)
         // Choose first (the reservoir candidate and the continuation), then find where a transmission
         // goes (out of a partition's far face, or into the medium behind the surface) only if one was
         // chosen: one call site each, and no traversal for the many hits that do not transmit.
-        bool split = mT > 0 && mT < .5 * total, keepBranch = false;
+        bool split = mT > 0 && mT < .5 * total && (PathProfileFlags & 1024) == 0, keepBranch = false; // (bit 10: no reservoir branches)
         float part[8], partWeight = 0;
         [unroll] for (uint k10 = 0; k10 < MethodBands; k10++) { part[k10] = Phi0[k10] * C[k10] * eT[k10] / Q; partWeight = max(partWeight, part[k10]); }
         if (split && partWeight > 0)
@@ -818,6 +822,7 @@ void TracePath(uint index)
                 branchP = p; branchD = refracted ? normalize(bent) : reflect(d, n); branchMedium = refracted ? next : medium;
                 branchTau = tau;
                 if (refracted && !(medium == AirMedium && next == AirMedium)) branch.detectable = false; else PathEvent(branch, plane, !refracted ? false : true, n, p);
+                if (refracted && !(medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); partWeight = 1e30; }
             }
             [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
         }
@@ -852,6 +857,7 @@ void TracePath(uint index)
                     // A single sheet between air and air is a crossing of no thickness: the chain goes on
                     // (an image through it exists); into or out of another medium it does not.
                     if (medium == AirMedium && next == AirMedium) PathEvent(chain, plane, true, n, p); else chain.detectable = false;
+                    if (!(medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); done = true; continue; }
                     d = normalize(bent); medium = next;
                 }
                 else { PathEvent(chain, plane, false, n, p); d = reflect(d, n); }

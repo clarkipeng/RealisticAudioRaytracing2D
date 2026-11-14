@@ -298,3 +298,60 @@ The Church is a held-out family here and its decay curves got worse than the pla
 
 The denoiser is trained once, on one seed of training, for one model size; there is no hyperparameter search, and validation picks the checkpoint from a single run.
 The training set is small (28 scenes), and the best checkpoint comes early (step 1,250): more scenes are the most likely improvement.
+
+## 6. The late field outside the Church
+
+Part 4 left the path tracer 10–13 dB below the energy method in the late field (0.2–2 s) at the walk's outside position (16.5 s, listener at (12.0, 2.7, −46.3), 1.7 m above the courtyard, doors open).
+All numbers here are 125 Hz energies in that window from `MeasureChurchLevels` (8,192 rays per solve, 2 m region or sphere unless stated); 500 and 2,000 Hz behave the same.
+
+### 1. An aperture check
+
+New fixture (`ApertureRoom`, `PathChecks.cs`): the leak check's diffuse room (6 × 5 × 4 m, a = 0.1, s = 1) with a 1.2 m × 1.0 m hole in one wall and the listener 0.8 m outside it, the τ = 1 limit of `MethodsLeakAsTheDiffuseFieldPredicts`.
+The prediction is the inside reverberant energy times the hole's solid angle over 4π.
+
+| Case | energy method | path method |
+|---|---:|---:|
+| in view of the hole: outside / prediction (`MethodsRadiateThroughAHoleAsTheDiffuseFieldPredicts`) | 1.151 | 1.150 |
+| in view, with a scattering ground outside (a = 0.3, s = 1) | 0.3227 | 0.3228 |
+| behind an absorbing screen, only sound scattered by the ground (`MethodsAgreeOnSoundScatteredOutsideAHole`) | 3.25e-6 | 3.71e-6 |
+| the same with transmitting walls (t = 0.01) | 3.69e-5 | 3.80e-5 |
+| behind a screen raised 1 m over a specular ground (a = 0.01, s = 0), 12 seeds, radius 0.25 m / 1 m | 2.03e-3 / 1.61e-3 | 1.56e-3 / 1.87e-3 |
+
+The two methods agree within 0.2% in view and within 15% behind the screen; both are 15% above the diffuse-field value in view (the field near a hole is not perfectly diffuse).
+The first and third rows are now tests (Slow tier).
+With one specular bounce the two agree within their spread (the energy method's sphere average moves by 25% with its radius there, so neither is a reference to better than that).
+
+### 2. Refraction into media
+
+Every Church material except glass has an acoustic index (0.064 for stone, 0.095 for wood), so its solids are media, not partitions, and a transmission into them refracts.
+Stopping such rays (diagnostic bit 5, counted) found 75 per 8,192 rays: refraction from air into stone is total reflection beyond 3.6° from the normal, so almost every transmitted share comes back as a reflection.
+The outside late field did not change, and setting every index to one (`ACOUSTIC_CHURCH_LEVELS_IOR1`) did not change it either: these chains carry no outside energy.
+
+### 3. Where the outside late energy comes from
+
+**Transmission: nowhere.**
+Making materials opaque one group at a time (`ACOUSTIC_CHURCH_LEVELS_OPAQUE`: glass, door leaves, stone and vault and floor, copper roof, wood and pews, ground) left the median of either method unchanged.
+The listener sees no surface inside the church (a ray cast from it: courtyard floor 5.2 sr, sky 4.5 sr, facade 1.9 sr, meadow 0.9 sr, door frame and leaves 0.09 sr); the door opens into a porch 7.6 m deep, and all the outside late sound leaves through that opening and then reaches the listener scattered or reflected by the courtyard, the facade and the porch.
+Some of these runs first looked like large effects (all materials opaque: path ×5): they are not. Both estimates are heavy-tailed here, and changing any transmission changes the random number stream, so a different rare large sample lands in a different seed; drawing transmissions instead of keeping reservoir branches (bit 10) gives nearly the all-opaque values seed by seed (the same rare samples), and dropping the kept branches leaves the baseline unchanged (2.69e-5 against 2.73e-5).
+
+**By estimator (no diffraction, so edges are out of it):**
+
+| Part | energy method | path method |
+|---|---|---|
+| straight connections from scattering points (energy: 0.01 m sphere, 8 seeds; path: median) | 1.05e-5 | 1.0e-5 |
+| everything (energy: track-length sphere for specular segments; path: chain detection) | 2.54e-4 ± 0.19e-4 (2 m, 64 seeds); 2.61e-4 ± 0.77e-4 (0.5 m, 64 seeds) | 8.8e-5 ± 1.2e-5 (2 m, 512 seeds); 8.0e-5 ± 2.4e-5 (4 m, 128 seeds) |
+| median of one solve | 2.35e-4 (2 m) | 1.2e-5 |
+
+The straight connections agree.
+The difference is the specular part: the energy method's sphere gives 2.4e-4 with any radius from 0.5 to 2 m, the path tracer's chain detection 7.7e-5 with a 2 or a 4 m region, three times less (4.6 dB) and many standard errors apart, though the path estimate is so heavy-tailed (the top 5 of 512 solves carry 23% of its sum, and its mean rose from 3.8e-5 at 64 solves to 8.8e-5 at 512) that its error bar is optimistic.
+A single path solve almost never scores an outside specular chain: of 41 candidates in eight 32,768-ray solves with a 0.25 m region, none scored (51% failed the exact path's last leg, 37% followed a different plane sequence, 10% missed the listener); with a 1 m region 12 of 1,194 scored.
+So what the realtime render plays outside is the straight-connection part, 13 dB below the energy method.
+
+### What this settles, and what not
+
+The aperture checks show both methods right for sound leaving a room through an opening, both straight to the listener and scattered on the way; refraction into media and transmission through walls, doors and glass play no part outside the Church.
+The remaining 4.6 dB is between the two specular estimators, and I could not decide it.
+Both are unbiased in construction and each is independent of its own radius, which points at the path tracer, whose candidates almost all fail the exact retrace even with a region of 0.25 m; but the candidate test is directional only (a ray whose unfolded line passes near the listener but which hits something first is a candidate whose exact path is rightly blocked), so a high failure rate alone is not a bug.
+The next check is a controlled exterior case with two or more specular bounces (a porch in front of the hole), where one of the two must disagree with the other, and then, if it is the path tracer, the energy method's sphere hits tagged with their plane sequence to see which exact paths the retrace rejects.
+Nothing was fixed in either method.
+I tried grouping coplanar triangles with a tolerance instead of rounded keys (a split plane would make a chain fail its sequence test); it changed nothing here and was reverted.

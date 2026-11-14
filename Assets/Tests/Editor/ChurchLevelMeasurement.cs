@@ -9,6 +9,10 @@ using UnityEngine;
 //   ACOUSTIC_CHURCH_LEVELS_TAKE=/abs/take      a take (its first frame: poses, doors)
 //   ACOUSTIC_CHURCH_LEVELS_POINTS=x,y,z;x,y,z  listener positions ("take": the take's own listener position)
 //   ACOUSTIC_CHURCH_LEVELS_SAMPLE=n            take sample for poses and doors (default 0)
+//   ACOUSTIC_CHURCH_LEVELS_OPAQUE=glass,door   materials (name substrings, "!name" for all others, or "all") made opaque
+//   ACOUSTIC_CHURCH_LEVELS_IOR1=1              every material's acoustic index set to one (no refracting solids)
+//   ACOUSTIC_CHURCH_LEVELS_DIFFRACTION=f       diffraction factor (default 1)
+//   ACOUSTIC_CHURCH_LEVELS_FLAGS=n             Path profile flags (MethodPath.hlsl PathProfileFlags)
 // Each method solves with 8,192 rays and a 2 s horizon, air absorption on; the energy method with its
 // listening settings (2 m receiver sphere, arrivals, 96 near planes), the path method with its defaults.
 // Output per method, point and band: energy in [0, 50 ms), [50, 200 ms), [200 ms, 2 s) after emission.
@@ -25,6 +29,19 @@ public partial class TakeChecks
         var state = new AcousticTake.State[scene.objects.Length];
         int listener = scene.listeners[0];
         long sample = long.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_SAMPLE") ?? "0");
+        int flags = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_FLAGS") ?? "0");
+        string opaque = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_OPAQUE");
+        if (Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_IOR1") == "1")
+            foreach (var material in scene.materials) if (material.ior != null) material.ior = Array.ConvertAll(material.ior, _ => 1f);
+        if (!string.IsNullOrEmpty(opaque))
+            foreach (var material in scene.materials)
+                foreach (string name in opaque.Split(','))
+                    if (name == "all" || (name.StartsWith("!") ? material.name.IndexOf(name.Substring(1), StringComparison.OrdinalIgnoreCase) < 0
+                                                               : material.name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        material.transmission = new float[material.transmission.Length];
+                        Debug.Log($"Church levels: {material.name} made opaque");
+                    }
         var json = new System.Text.StringBuilder("{");
         // Path variants: ACOUSTIC_CHURCH_LEVELS_PATH = radius:seed;radius:seed (default 0.25:0).
         var variants = new System.Collections.Generic.List<(TakeRender.Method method, float radius, int seed, string key)>();
@@ -45,10 +62,13 @@ public partial class TakeChecks
             settings.method = method; settings.useBvh = true; settings.airAbsorption = true; settings.speedOfSound = 343; settings.minimumDistance = .1f;
             settings.maximumDelaySeconds = 2; settings.methodRays = rays; settings.diffractionFactor = 1; settings.maxBounces = 64;
             settings.specularDetectionRadius = radius; settings.seed = seed;
+            string diffraction = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_DIFFRACTION");
+            if (!string.IsNullOrEmpty(diffraction)) settings.diffractionFactor = float.Parse(diffraction, System.Globalization.CultureInfo.InvariantCulture);
             string survival = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_SURVIVAL");
             if (!string.IsNullOrEmpty(survival)) settings.pathSurvivalSeconds = float.Parse(survival, System.Globalization.CultureInfo.InvariantCulture);
             if (method == TakeRender.Method.Energy) { settings.methodArrivalSlots = 96; settings.methodNearPlanes = 96; }
             using var solver = new TransportSolver(scene, take.Geometry, settings, RequireGpu(), sampleRate: take.Metadata.sampleRate);
+            if (method == TakeRender.Method.Path) solver.Method.ProfileFlags = flags;
             json.Append((key == variants[0].key ? "" : ",") + "\"" + key + "\":[");
             for (int i = 0; i < points.Length; i++)
             {

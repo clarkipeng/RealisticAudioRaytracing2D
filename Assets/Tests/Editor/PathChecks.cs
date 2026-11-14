@@ -99,6 +99,137 @@ public partial class TakeChecks
     }
     static long Sum(uint[] values) { long s = 0; foreach (var v in values) s += v; return s; }
 
+    // The tau = 1 limit of the leak check: an open hole. The room (6 x 5 x 4 m, open sheets, a = 0.1,
+    // s = 1) has a 1.2 m x 1.0 m hole in its +x wall, centred at (y, z) = (-0.3, 0.2); outside, the
+    // hole shows the listener the inside radiance E_in / (4 pi) over its solid angle, so the reverberant
+    // energy outside is E_in Omega / (4 pi). Optional outside surfaces (ApertureCase): a ground at the
+    // floor's height out to 40 m (a = 0.3, s = 1) and an absorbing screen at x = 3.4 that hides the hole
+    // from the listener, so that only sound scattered by the ground reaches it.
+    // Measured (12 November): both methods 1.15 times the prediction in view (the field near the hole
+    // is not perfectly diffuse; the methods agree to 0.2%), and within 15% of each other behind the screen.
+    static readonly Vector3 ApertureSize = new Vector3(6, 5, 4), ApertureSource = new Vector3(-1.5f, .5f, .4f);
+    static readonly Vector3 ApertureInside = new Vector3(1.2f, -.3f, .2f), ApertureOutside = new Vector3(3.8f, -.3f, .2f);
+    const float ApertureY = -.3f, ApertureZ = .2f, ApertureHalfY = .6f, ApertureHalfZ = .5f;
+    static void ApertureRoom(bool ground, bool screen, Vector3 listener, out AcousticTake.Scene scene, out AcousticTake.Primitive[] geometry, out AcousticTake.State[] states, float transmission = 0, float groundScattering = 1, float screenGap = 0)
+    {
+        LateRoom(AcousticTake.Dimension.Spatial3D, ApertureSize, LateMaterial(.1f, 1, transmission), ApertureSource, listener, out scene, out var room, out states);
+        var list = new List<AcousticTake.Primitive>();
+        var objects = new List<AcousticTake.ObjectDefinition>(scene.objects);
+        void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, int material)
+        {
+            list.Add(new AcousticTake.Primitive {materialIndex = material, a = a, b = b, c = c});
+            list.Add(new AcousticTake.Primitive {materialIndex = material, a = a, b = c, c = d});
+        }
+        void Add(string id, int first)
+        {
+            for (int i = first; i < list.Count; i++) { var q = list[i]; q.objectIndex = objects.Count; list[i] = q; }
+            objects.Add(new AcousticTake.ObjectDefinition {id = id, name = id, scale = Vector3.one, primitiveStart = first, primitiveCount = list.Count - first});
+        }
+        // Keep every face but +x (face 1, object 3), then the +x wall as a frame around the hole.
+        var kept = new List<AcousticTake.ObjectDefinition>();
+        foreach (var o in objects)
+        {
+            if (o.id == "face-1") continue;
+            int first = o.primitiveStart; var copy = o;
+            if (o.primitiveCount > 0)
+            {
+                copy.primitiveStart = list.Count;
+                for (int i = 0; i < o.primitiveCount; i++) { var q = room[first + i]; q.objectIndex = kept.Count; list.Add(q); }
+            }
+            kept.Add(copy);
+        }
+        objects = kept;
+        float x = ApertureSize.x / 2, y0 = -ApertureSize.y / 2, y1 = ApertureSize.y / 2, z0 = -ApertureSize.z / 2, z1 = ApertureSize.z / 2;
+        float hy0 = ApertureY - ApertureHalfY, hy1 = ApertureY + ApertureHalfY, hz0 = ApertureZ - ApertureHalfZ, hz1 = ApertureZ + ApertureHalfZ;
+        int start = list.Count;
+        Quad(new Vector3(x, y0, z0), new Vector3(x, hy0, z0), new Vector3(x, hy0, z1), new Vector3(x, y0, z1), 0);   // below the hole
+        Quad(new Vector3(x, hy1, z0), new Vector3(x, y1, z0), new Vector3(x, y1, z1), new Vector3(x, hy1, z1), 0);   // above
+        Quad(new Vector3(x, hy0, z0), new Vector3(x, hy1, z0), new Vector3(x, hy1, hz0), new Vector3(x, hy0, hz0), 0); // beside, -z
+        Quad(new Vector3(x, hy0, hz1), new Vector3(x, hy1, hz1), new Vector3(x, hy1, z1), new Vector3(x, hy0, z1), 0); // beside, +z
+        Add("wall-with-hole", start);
+        var materials = new List<AcousticTake.MaterialDefinition>(scene.materials);
+        if (ground)
+        {
+            materials.Add(groundScattering >= 1 ? LateMaterial(.3f, 1) : LateMaterial(.01f, groundScattering)); start = list.Count;
+            Quad(new Vector3(x, y0, -40), new Vector3(40, y0, -40), new Vector3(40, y0, 40), new Vector3(x, y0, 40), materials.Count - 1);
+            Add("ground", start);
+        }
+        if (screen)
+        {
+            materials.Add(LateMaterial(1, 0)); start = list.Count;
+            float bottom = y0 + screenGap;
+            Quad(new Vector3(3.4f, bottom, -3), new Vector3(3.4f, 3.5f, -3), new Vector3(3.4f, 3.5f, 3), new Vector3(3.4f, bottom, 3), materials.Count - 1);
+            Add("screen", start);
+        }
+        scene.objects = objects.ToArray(); scene.materials = materials.ToArray(); geometry = list.ToArray();
+        var old = states; states = new AcousticTake.State[objects.Count];
+        for (int i = 0; i < states.Length; i++)
+            states[i] = i < 2 ? old[i] : new AcousticTake.State {rotation = Quaternion.identity, flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry};
+    }
+    double ApertureTotal(TakeRender.Method method, bool ground, bool screen, Vector3 listener, int seed, int rays = 1 << 16, float transmission = 0,
+                         float groundScattering = 1, float screenGap = 0, float radius = .5f)
+    {
+        ApertureRoom(ground, screen, listener, out var scene, out var geometry, out var state, transmission, groundScattering, screenGap);
+        var settings = ControlSettings(method, rays, 1.5f); settings.seed = seed; settings.specularDetectionRadius = radius;
+        using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+        solver.Solve(state, new TakeRender.DirectPath[1]);
+        return Window(ControlEnergy(solver, 2), 0, int.MaxValue);
+    }
+    // Opt-in (ACOUSTIC_APERTURE=1): the hole's outside energy per method, in view without and with the
+    // ground, and behind the screen. Options: ACOUSTIC_APERTURE_T (wall transmission), _S (ground
+    // scattering; below 1 the ground is a = 0.01), _GAP (the screen's height above the ground),
+    // _SEEDS (more than 4: the screen case only), _RADIUS (detection radius).
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(3600000)]
+    public void MeasureApertureCases()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE"))) Assert.Ignore("Set ACOUSTIC_APERTURE.");
+        float transmission = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_T") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+        float groundScattering = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_S") ?? "1", System.Globalization.CultureInfo.InvariantCulture);
+        float gap = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_GAP") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+        float radius = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_RADIUS") ?? ".5", System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var (name, ground, screen) in new[] {("in view", false, false), ("in view, ground", true, false), ("behind the screen, ground", true, true)})
+            foreach (var method in new[] {TakeRender.Method.Energy, TakeRender.Method.Path})
+            {
+                int seeds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_SEEDS") ?? "4");
+                if (seeds > 4 && !screen) continue;
+                var values = new double[seeds];
+                for (int seed = 0; seed < seeds; seed++)
+                    values[seed] = ApertureTotal(method, ground, screen, ApertureOutside, seed, 1 << 16, transmission, groundScattering, gap, radius) -
+                                   (screen ? 0 : 1 / (ApertureOutside - ApertureSource).sqrMagnitude);
+                TestContext.WriteLine($"{name}, {method}: reverberant outside {string.Join(", ", Array.ConvertAll(values, v => v.ToString("G4")))}");
+                Debug.Log($"Aperture {name}, {method}: {string.Join(", ", Array.ConvertAll(values, v => v.ToString("G4")))}");
+            }
+    }
+    [TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Energy), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsRadiateThroughAHoleAsTheDiffuseFieldPredicts(TakeRender.Method method)
+    {
+        double inRev = 0, outRev = 0;
+        for (int seed = 0; seed < 2; seed++)
+        {
+            inRev += (ApertureTotal(method, false, false, ApertureInside, seed) - 1 / (ApertureInside - ApertureSource).sqrMagnitude) / 2;
+            outRev += (ApertureTotal(method, false, false, ApertureOutside, seed) - 1 / (ApertureOutside - ApertureSource).sqrMagnitude) / 2;
+        }
+        double h = ApertureOutside.x - ApertureSize.x / 2, omega = 4 * Math.Atan(ApertureHalfY * ApertureHalfZ / (h * Math.Sqrt(h * h + ApertureHalfY * ApertureHalfY + ApertureHalfZ * ApertureHalfZ)));
+        double predicted = inRev * omega / (4 * Math.PI);
+        TestContext.WriteLine($"{method}: reverberant energy inside {inRev:G4}, outside {outRev:G4}, diffuse-field prediction {predicted:G4} (hole solid angle {omega:F3} sr), ratio {outRev / predicted:F3}");
+        Assert.That(outRev / predicted, Is.EqualTo(1).Within(.2));
+    }
+    // Behind the screen only sound scattered by the ground reaches the listener (no analytic value):
+    // the two methods must agree. A specular ground seen beneath a raised screen is measured by
+    // MeasureApertureCases (the Path method's estimate there is much noisier; README part 6).
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsAgreeOnSoundScatteredOutsideAHole()
+    {
+        double energy = 0, path = 0;
+        for (int seed = 0; seed < 4; seed++)
+        {
+            energy += ApertureTotal(TakeRender.Method.Energy, true, true, ApertureOutside, seed) / 4;
+            path += ApertureTotal(TakeRender.Method.Path, true, true, ApertureOutside, seed) / 4;
+        }
+        TestContext.WriteLine($"behind the screen, scattering ground: energy method {energy:G4}, path method {path:G4}, ratio {path / energy:F3}");
+        Assert.That(path / energy, Is.EqualTo(1).Within(.3));
+    }
+
     // A specular image whose detection region straddles a visibility boundary: a rigid floor and
     // an absorbing panel that clips about half of the region but not the exact image path. The
     // retrace-and-divide-by-the-region estimator is low by the clipped share; dividing by the
