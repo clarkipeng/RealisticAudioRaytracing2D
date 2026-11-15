@@ -539,3 +539,30 @@ The beams cost one visibility ray per scored segment and save the whole connecti
 
 The beams are at least as accurate as the exact connection on the wave ground truth, better on level, EDT, T30 and ETC overall and in shadow, and cheaper in rooms, so they are the Path method now; the exact connection's machinery is removed.
 Open: the late decay's noise in closed rooms at 2,048 rays, the double counting next to reflection boundaries (section 5), and the heavy-tailed diffracted field outside the Church.
+
+## 9. Echo density of the synthesis
+
+`PathReverb` placed one impulse per 0.25 ms slot, which at 44.1 kHz is one sample in eleven: such a train measures about 0.3 on the normalised echo density (Abel and Huang), whatever the room, against 0.79–0.91 for the measured cathedrals.
+
+**Change.**
+Each slot now holds two fixed noise-like sequences (one per ear) instead of one impulse, scaled by the square root of the slot's histogram energy as before:
+- Gaussian per sample, so a filled late field is Gaussian noise (normalised echo density near one), while an isolated arrival stays a 0.25 ms burst and an empty bin stays silent;
+- the first sequence has area ±1 and the second area zero, both unit energy and orthogonal (Gram–Schmidt), so bands whose period is long against a slot see the slot's energy exactly, as from an impulse;
+- per group of slots and per band, the two sequences are mixed by W = sqrt(target) G^(−1/2), where G is the Gram matrix of the band-filtered pair (computed exactly from the 2P-point spectra the convolution already uses) and the target is what an impulse train of the same energy would give through that band; so each band's energy is exact for every group, at any interaural coherence, and not only on average.
+
+The plain version (Gaussian noise per sample, normalised per slot in broadband energy) failed the synthesis check: a 0.25 ms burst has a sinc-like spectrum and random detail, and a single arrival kept 0.73 of its 1 kHz band energy.
+With the band-wise mixing `PathReverbReproducesTheHistogram` passes: through the comparison's band filters (not the synthesis's own), a single arrival keeps its band energy within 4% at 125–500 Hz and 4 kHz, +9% at 1 kHz and −13% at 2 kHz (tolerance 15%), and the late field within 10% at 125 Hz and 3% above; the crossfade check gives 0.998.
+
+**Church static responses** (the realism page's two points; these are also the first with the beams of part 8, which change T30, EDT and C80, while the echo density is the synthesis's):
+
+| Response | echo density (mean over 150 ms) | mixing time | T30 / EDT / C80 at 500 Hz |
+|---|---:|---:|---|
+| path, near, before (impulses, exact connection) | 0.30 | never | 6.3 / 4.4 / +1.5 |
+| path, near, now | 0.76 | 66 ms | 6.5 / 5.1 / +0.6 |
+| energy method, near | 0.78 | 41 ms | 6.2 / 5.2 / −2.2 |
+| path, far, before | 0.36 | never | 3.9 / 16.1 / −3.9 |
+| path, far, now | 0.77 | 72 ms | 5.0 / 5.4 / −5.0 |
+| energy method, far | 0.85 | 50 ms | 5.0 / 7.5 / −9.1 |
+| St Paul's 9.5 m / York 24 m / St Paul's 32 m (measured) | 0.79 / 0.91 / 0.89 | 41 / 35 / 35 ms | |
+
+The echo density is now within 0.02–0.15 of the measured halls and the energy method; it takes 66–72 ms to reach 0.9 against 35–50 ms for them, because the early part of the histogram is sparse (single arrivals) for longer.

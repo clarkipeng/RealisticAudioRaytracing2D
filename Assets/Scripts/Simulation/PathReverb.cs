@@ -7,10 +7,12 @@ using UnityEngine;
 // energy arriving at the listener (the exact direct arrival is rendered separately as a path).
 //
 // Impulse response. Time is cut into slots of the histogram's fine width (0.25 ms). Each slot
-// holds one impulse at a fixed random position inside it, with a fixed random sign; its energy
-// is the histogram energy that falls in the slot (a bin spreads its energy uniformly over its
-// span, so a fine bin is one impulse with amplitude sqrt(E) and a wide late bin is a train of
-// impulses sharing it). Phase is random: a listening test found exact phase inaudible here.
+// holds a fixed noise-like sequence of unit energy (Gaussian per sample, see SlotSequences), scaled
+// by sqrt of the histogram energy that falls in the slot (a bin spreads its energy uniformly over its
+// span): an isolated arrival is a 0.25 ms burst, an empty bin is silent, and a filled late field is
+// Gaussian noise, as dense as real reverberation (one impulse per slot measured an echo density
+// of 0.3 against about 0.85 for real halls). Phase is random: a listening test found exact phase
+// inaudible here.
 // Bands: the impulse is band-filtered with amplitude-complementary weights cos^2 in log
 // frequency between neighbouring band centres (they sum to one, so one impulse with equal band
 // energies stays one flat click), i.e. each band of the source signal is convolved with its own
@@ -18,7 +20,7 @@ using UnityEngine;
 // source with P/2 samples of lookahead (inside the DSP latency), so the trains stay exact.
 // Ears: per channel the six directions combine with the existing diffuse-field equalised HRTF
 // band energies (LateBasis.EarWeights; interaural level only, no interaural delay), and two
-// independent sign sequences are mixed per band to the HRTF set's diffuse-field interaural
+// independent (orthogonal) slot sequences are mixed per band to the HRTF set's diffuse-field interaural
 // coherence. Positions and signs are fixed per pair, so an update changes amplitudes only.
 // Updates crossfade sample by sample over one response step (two kernel banks), as LateReverb, with
 // a power correction: the two outputs share signs but their amplitudes differ (independent noisy
@@ -41,7 +43,8 @@ internal sealed class PathReverb
     struct Group { public int partition,first,terms; } // terms: entries in groupBins/groupWeights
     readonly List<Group>[] groups; // per pair
     readonly List<int>[] groupBins;readonly List<float>[] groupWeights;
-    readonly Vector2[][] spectra;  // per pair: [group][sign sequence 2][bin]
+    readonly Vector2[][] spectra;  // per pair: [group][slot sequence 2][bin]
+    readonly float[][] mixes;      // per pair: [group][band][W11, W12, W22], each band's exact-energy mix of the two sequences
     readonly Vector2[] kernels;    // [bank][pair][channel][band][partition][bin]
     readonly Vector2[] inputs;     // [source][band][ring partition][bin]
     readonly float[] halves;       // [source][band][P]: the latest band-filtered half block
@@ -54,7 +57,7 @@ internal sealed class PathReverb
     int bank,computedBlock=-1;
     long cursor,swap;
     bool initialized,blend;
-    internal long NumericBytes { get { long b=(kernels.LongLength+inputs.LongLength+work.Length+wide.Length+sum.Length)*8+(halves.Length+blocks.Length)*4L+energy.Length*8L; foreach(var s in spectra)b+=s.LongLength*8; return b; } }
+    internal long NumericBytes { get { long b=(kernels.LongLength+inputs.LongLength+work.Length+wide.Length+sum.Length)*8+(halves.Length+blocks.Length)*4L+energy.Length*8L; foreach(var s in spectra)b+=s.LongLength*8; foreach(var m in mixes)b+=m.LongLength*4; return b; } }
     internal long SupportSamples => (long)count*partition+latency;
 
     internal PathReverb(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals)
@@ -75,7 +78,7 @@ internal sealed class PathReverb
             alpha[b]=(float)Math.Sqrt((1+g)/2);beta[b]=(float)Math.Sqrt((1-g)/2);
         }
         filters=BandFilters(rate,partition);
-        groups=new List<Group>[pairs];groupBins=new List<int>[pairs];groupWeights=new List<float>[pairs];spectra=new Vector2[pairs][];
+        groups=new List<Group>[pairs];groupBins=new List<int>[pairs];groupWeights=new List<float>[pairs];spectra=new Vector2[pairs][];mixes=new float[pairs][];
         for(int p=0;p<pairs;p++)BuildGroups(p);
         kernels=new Vector2[checked(2L*pairs*channels*Bands*count*bins)];
         inputs=new Vector2[checked((long)sources*Bands*count*bins)];
@@ -110,7 +113,36 @@ internal sealed class PathReverb
         return result;
     }
     static uint Hash(uint x) => AudioSourcePlane.Hash(x);
-    // Slot j covers [j, j + 1) x FineSeconds; its impulse is at a fixed random sample inside it.
+    // Slot j covers [j, j + 1) x FineSeconds, samples [first, last). Its content is fixed per pair: two
+    // unit-energy sequences (one per ear), noise-like (Gaussian per sample, so the late field is as dense
+    // as real reverberation), with the slot's energy exact: s1 = m 1/M + r1 (area m = +-1, so a band whose
+    // period is long against the slot sees exactly the slot's energy, as from one impulse) and s2 = r2,
+    // with r1, r2 orthogonal to the constant and to each other (Gram-Schmidt), so the two ears' mix keeps
+    // the slot's energy exactly at any coherence. Slots of one or two samples fall back to impulses.
+    static double Gaussian(uint h)
+    {
+        double u1=((Hash(h)>>8)+.5)*(1.0/16777216.0),u2=((Hash(h^0x9e3779b9u)>>8)+.5)*(1.0/16777216.0);
+        return Math.Sqrt(-2*Math.Log(u1))*Math.Cos(2*Math.PI*u2);
+    }
+    static void SlotSequences(uint h,int m,double[] s1,double[] s2)
+    {
+        double sign=(Hash(h^0x68bc21ebu)&1)==0?1:-1,sign2=(Hash(h^0x02e5be93u)&1)==0?1:-1;
+        if(m<3)
+        {
+            Array.Clear(s1,0,m);Array.Clear(s2,0,m);
+            int at=(int)((Hash(h)>>8)*(1.0/16777216.0)*m);s1[at]=sign;
+            if(m==2)s2[1-at]=sign2;else s2[0]=sign2;
+            return;
+        }
+        // r1, r2: Gaussian, minus their means (orthogonal to the constant), r2 also orthogonal to r1.
+        double mean1=0,mean2=0;
+        for(int n=0;n<m;n++){s1[n]=Gaussian(h^(uint)(2*n+1)*0x85ebca6bu);s2[n]=Gaussian(h^(uint)(2*n+2)*0xc2b2ae35u);mean1+=s1[n];mean2+=s2[n];}
+        mean1/=m;mean2/=m;double e1=0,dot=0;
+        for(int n=0;n<m;n++){s1[n]-=mean1;s2[n]-=mean2;e1+=s1[n]*s1[n];dot+=s1[n]*s2[n];}
+        double e2=0;for(int n=0;n<m;n++){s2[n]-=dot/e1*s1[n];e2+=s2[n]*s2[n];}
+        double a=Math.Sqrt((1-1.0/m)/e1),b=1/Math.Sqrt(e2);
+        for(int n=0;n<m;n++){s1[n]=sign/m+a*s1[n];s2[n]*=b;}
+    }
     void BuildGroups(int pair)
     {
         var list=new List<Group>();var gb=new List<int>();var gw=new List<float>();
@@ -127,15 +159,16 @@ internal sealed class PathReverb
             at.Clear();s1.Clear();s2.Clear();
         }
         var terms=new List<(int,float)>();
+        var q1=new double[64];var q2=new double[64];
         for(int j=0;j<slots;j++)
         {
             double a=j*fine,b=Math.Min(histogram.Horizon,(j+1)*fine);
             long first=(long)Math.Ceiling(a*rate),last=(long)Math.Ceiling(b*rate);
             if(last<=first)continue;
-            uint h=Hash(seed^(uint)j*0x85ebca6bu);
-            long sample=first+(long)((Hash(h)>>8)*(1.0/16777216.0)*(last-first));
-            int part=(int)(sample/partition);
-            if(part>=count)break;
+            if((int)(first/partition)>=count)break;
+            int m=(int)(last-first);
+            if(q1.Length<m){q1=new double[m];q2=new double[m];}
+            SlotSequences(Hash(seed^(uint)j*0x85ebca6bu),m,q1,q2);
             // Slot energy = sum over bins of E_bin x (overlap / bin width).
             terms.Clear();
             for(int k=histogram.FirstOverlap(a);k<histogram.Count && histogram.Start(k)<b;k++)
@@ -143,22 +176,50 @@ internal sealed class PathReverb
                 double w=Math.Max(0,Math.Min(histogram.End(k),b)-Math.Max(histogram.Start(k),a))/histogram.Width(k);
                 if(w>0)terms.Add((k,(float)w));
             }
-            bool same=part==currentPartition && terms.Count==key.Count;
-            for(int i=0;same && i<terms.Count;i++)same=terms[i].Item1==key[i].Item1 && Math.Abs(terms[i].Item2-key[i].Item2)<=1e-6f*terms[i].Item2;
-            if(!same){Close();currentPartition=part;key.Clear();key.AddRange(terms);}
-            at.Add((int)(sample-(long)part*partition));
-            s1.Add((Hash(h^0x68bc21ebu)&1)==0?1:-1);s2.Add((Hash(h^0x02e5be93u)&1)==0?1:-1);
+            for(int n=0;n<m;n++)
+            {
+                long sample=first+n;int part=(int)(sample/partition);
+                if(part>=count)break;
+                bool same=part==currentPartition && terms.Count==key.Count;
+                for(int i=0;same && i<terms.Count;i++)same=terms[i].Item1==key[i].Item1 && Math.Abs(terms[i].Item2-key[i].Item2)<=1e-6f*terms[i].Item2;
+                if(!same){Close();currentPartition=part;key.Clear();key.AddRange(terms);}
+                at.Add((int)(sample-(long)part*partition));
+                s1.Add((float)q1[n]);s2.Add((float)q2[n]);
+            }
         }
         Close();
-        // Fixed spectra of each group's two sign sequences (zero-padded to 2P).
-        var spectrum=new Vector2[checked(trains.Count*2*bins)];var x=new Vector2[2*partition];
-        for(int g=0;g<trains.Count;g++)for(int q=0;q<2;q++)
+        // Fixed spectra of each group's two slot sequences (zero-padded to 2P).
+        var spectrum=new Vector2[checked(trains.Count*2*bins)];var x=new Vector2[2*partition];var y=new Vector2[2*partition];
+        var mix=new float[trains.Count*Bands*3];int n2=2*partition;
+        for(int g=0;g<trains.Count;g++)
         {
-            Array.Clear(x,0,x.Length);var t=trains[g];
-            for(int i=0;i<t.at.Length;i++)x[t.at[i]].x+=q==0?t.s1[i]:t.s2[i];
-            ImpulseResponseAudio.Fft(x,false);Array.Copy(x,0,spectrum,(g*2+q)*bins,bins);
+            var t=trains[g];double e1=0,e2=0;
+            Array.Clear(x,0,n2);Array.Clear(y,0,n2);
+            for(int i=0;i<t.at.Length;i++){x[t.at[i]].x+=t.s1[i];y[t.at[i]].x+=t.s2[i];e1+=t.s1[i]*t.s1[i];e2+=t.s2[i]*t.s2[i];}
+            ImpulseResponseAudio.Fft(x,false);ImpulseResponseAudio.Fft(y,false);
+            Array.Copy(x,0,spectrum,(g*2)*bins,bins);Array.Copy(y,0,spectrum,(g*2+1)*bins,bins);
+            // Exact band energy: the band-filtered pair (h_b * s1, h_b * s2) is made orthonormal at the
+            // energy an impulse train of the same broadband energy would give, W = sqrt(target) G^(-1/2),
+            // G its Gram matrix (2P points: the linear convolution fits, so these sums are exact).
+            for(int b=0;b<Bands;b++)
+            {
+                double a=0,c=0,d=0,reference=0;
+                for(int k=0;k<n2;k++)
+                {
+                    var h=filters[b*n2+k];double h2=h.x*h.x+h.y*h.y;var u=x[k];var v=y[k];
+                    a+=h2*(u.x*u.x+u.y*u.y);d+=h2*(v.x*v.x+v.y*v.y);c+=h2*(u.x*v.x+u.y*v.y);reference+=h2;
+                }
+                a/=n2;c/=n2;d/=n2;reference/=n2;
+                double target=.5*(e1+e2)*reference,det=a*d-c*c;int o=(g*Bands+b)*3;
+                if(det>1e-9*a*d && a>0 && d>0)
+                {
+                    double sd=Math.Sqrt(det),tr=Math.Sqrt(a+d+2*sd),scale=Math.Sqrt(target)/(sd*tr);
+                    mix[o]=(float)((d+sd)*scale);mix[o+1]=(float)(-c*scale);mix[o+2]=(float)((a+sd)*scale);
+                }
+                else if(a>0){mix[o]=(float)Math.Sqrt(target/a);mix[o+1]=0;mix[o+2]=0;}
+            }
         }
-        groups[pair]=list;groupBins[pair]=gb;groupWeights[pair]=gw;spectra[pair]=spectrum;
+        groups[pair]=list;groupBins[pair]=gb;groupWeights[pair]=gw;spectra[pair]=spectrum;mixes[pair]=mix;
     }
 
     // The histogram of one solved frame (MethodTransport), or null.
@@ -232,7 +293,7 @@ internal sealed class PathReverb
                 double e=histogram(pair,d,b,k);if(!(e>0))continue;
                 for(int c=0;c<channels;c++)energy[(c*Bands+b)*B+k]+=earWeights[(d*2+c)*Bands+b]*e;
             }
-            var list=groups[pair];var gb=groupBins[pair];var gw=groupWeights[pair];var spectrum=spectra[pair];
+            var list=groups[pair];var gb=groupBins[pair];var gw=groupWeights[pair];var spectrum=spectra[pair];var mix=mixes[pair];
             for(int c=0;c<channels;c++)for(int b=0;b<Bands;b++)
             {
                 float a1=alpha[b],a2=channels==2?(c==0?beta[b]:-beta[b]):0;
@@ -243,7 +304,8 @@ internal sealed class PathReverb
                     for(int i=0;i<group.terms;i++)slotEnergy+=energy[(c*Bands+b)*B+gb[group.first+i]]*gw[group.first+i];
                     if(!(slotEnergy>0))continue;
                     float amplitude=(float)Math.Sqrt(slotEnergy);
-                    float w1=amplitude*a1,w2=amplitude*a2;
+                    int o=(g*Bands+b)*3;
+                    float w1=amplitude*(a1*mix[o]+a2*mix[o+1]),w2=amplitude*(a1*mix[o+1]+a2*mix[o+2]);
                     long kernel=baseKernel+(long)group.partition*bins;int v1=(g*2)*bins,v2=v1+bins;
                     for(int i=0;i<bins;i++)kernels[kernel+i]+=spectrum[v1+i]*w1+spectrum[v2+i]*w2;
                 }
