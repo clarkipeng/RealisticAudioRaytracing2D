@@ -110,9 +110,9 @@ public partial class TakeChecks
     static readonly Vector3 ApertureSize = new Vector3(6, 5, 4), ApertureSource = new Vector3(-1.5f, .5f, .4f);
     static readonly Vector3 ApertureInside = new Vector3(1.2f, -.3f, .2f), ApertureOutside = new Vector3(3.8f, -.3f, .2f);
     const float ApertureY = -.3f, ApertureZ = .2f, ApertureHalfY = .6f, ApertureHalfZ = .5f;
-    static void ApertureRoom(bool ground, bool screen, Vector3 listener, out AcousticTake.Scene scene, out AcousticTake.Primitive[] geometry, out AcousticTake.State[] states, float transmission = 0, float groundScattering = 1, float screenGap = 0)
+    static void ApertureRoom(bool ground, bool screen, Vector3 listener, out AcousticTake.Scene scene, out AcousticTake.Primitive[] geometry, out AcousticTake.State[] states, float transmission = 0, float groundScattering = 1, float screenGap = 0, bool porch = false, float roomScattering = 1)
     {
-        LateRoom(AcousticTake.Dimension.Spatial3D, ApertureSize, LateMaterial(.1f, 1, transmission), ApertureSource, listener, out scene, out var room, out states);
+        LateRoom(AcousticTake.Dimension.Spatial3D, ApertureSize, LateMaterial(.1f, roomScattering, transmission), ApertureSource, listener, out scene, out var room, out states);
         var list = new List<AcousticTake.Primitive>();
         var objects = new List<AcousticTake.ObjectDefinition>(scene.objects);
         void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, int material)
@@ -161,19 +161,158 @@ public partial class TakeChecks
             Quad(new Vector3(3.4f, bottom, -3), new Vector3(3.4f, 3.5f, -3), new Vector3(3.4f, 3.5f, 3), new Vector3(3.4f, bottom, 3), materials.Count - 1);
             Add("screen", start);
         }
+        if (porch)
+        {
+            // A duct of the hole's cross-section, PorchLength deep: floor, roof and two side walls (open sheets, specular).
+            materials.Add(LateMaterial(PorchAbsorption, 0)); start = list.Count; int m = materials.Count - 1; float x1 = x + PorchLength;
+            Quad(new Vector3(x, hy0, hz0), new Vector3(x1, hy0, hz0), new Vector3(x1, hy0, hz1), new Vector3(x, hy0, hz1), m); // floor
+            Quad(new Vector3(x, hy1, hz0), new Vector3(x1, hy1, hz0), new Vector3(x1, hy1, hz1), new Vector3(x, hy1, hz1), m); // roof
+            Quad(new Vector3(x, hy0, hz0), new Vector3(x1, hy0, hz0), new Vector3(x1, hy1, hz0), new Vector3(x, hy1, hz0), m); // side, -z
+            Quad(new Vector3(x, hy0, hz1), new Vector3(x1, hy0, hz1), new Vector3(x1, hy1, hz1), new Vector3(x, hy1, hz1), m); // side, +z
+            Add("porch", start);
+        }
         scene.objects = objects.ToArray(); scene.materials = materials.ToArray(); geometry = list.ToArray();
         var old = states; states = new AcousticTake.State[objects.Count];
         for (int i = 0; i < states.Length; i++)
             states[i] = i < 2 ? old[i] : new AcousticTake.State {rotation = Quaternion.identity, flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry};
     }
     double ApertureTotal(TakeRender.Method method, bool ground, bool screen, Vector3 listener, int seed, int rays = 1 << 16, float transmission = 0,
-                         float groundScattering = 1, float screenGap = 0, float radius = .5f)
+                         float groundScattering = 1, float screenGap = 0, float radius = .5f, bool porch = false, float roomScattering = 1)
     {
-        ApertureRoom(ground, screen, listener, out var scene, out var geometry, out var state, transmission, groundScattering, screenGap);
+        ApertureRoom(ground, screen, listener, out var scene, out var geometry, out var state, transmission, groundScattering, screenGap, porch, roomScattering);
         var settings = ControlSettings(method, rays, 1.5f); settings.seed = seed; settings.specularDetectionRadius = radius;
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         solver.Solve(state, new TakeRender.DirectPath[1]);
         return Window(ControlEnergy(solver, 2), 0, int.MaxValue);
+    }
+    // The porch: the hole opens into a duct of its own cross-section (1.2 m x 1.0 m), 3 m deep, whose
+    // floor, roof and side walls are specular (a = 0.05, s = 0). The listener stands 4 m beyond the
+    // mouth and off its axis (PorchListener), where every ray it sends back through the mouth meets
+    // the duct walls at least twice before it reaches the hole. Reference (PorchReference): unfold the
+    // duct (its walls form a rectangular lattice of images of the hole) and integrate over the mouth
+    // the radiance through the hole times (1 - a)^k, k the reflections of the unfolded ray, plus the
+    // source's own image paths through the hole. The radiance through the hole is kappa E_in / (4 pi),
+    // E_in the reverberant energy inside, with kappa measured in view of the bare hole in the same
+    // direction as the porch's rays (PorchCalibration; both methods agree there to 0.2%).
+    const float PorchLength = 3, PorchAbsorption = .05f;
+    static readonly Vector3 PorchListener = new Vector3(10, 2.1f, 2.2f), PorchCalibration = new Vector3(4.5f, .6f, .95f);
+    // Integral over a rectangle (x = constant, y0..y1, z0..z1) of cos / r^2 seen from L, with each point's weight w(P).
+    static double MouthIntegral(Vector3 L, double x, double y0, double y1, double z0, double z1, Func<double, double, double> weight, int n = 600)
+    {
+        double sum = 0, dy = (y1 - y0) / n, dz = (z1 - z0) / n;
+        for (int i = 0; i < n; i++) for (int j = 0; j < n; j++)
+        {
+            double y = y0 + (i + .5) * dy, z = z0 + (j + .5) * dz, vx = x - L.x, vy = y - L.y, vz = z - L.z, r2 = vx * vx + vy * vy + vz * vz;
+            sum += weight(y, z) * Math.Abs(vx) / (r2 * Math.Sqrt(r2)) * dy * dz;
+        }
+        return sum;
+    }
+    // The direct sound at an outside point if its line to the source passes through the hole, else 0.
+    static double DirectThroughHole(Vector3 L)
+    {
+        var S = ApertureSource; double t = (ApertureSize.x / 2 - S.x) / (L.x - S.x), y = S.y + t * (L.y - S.y), z = S.z + t * (L.z - S.z);
+        bool open = Math.Abs(y - ApertureY) <= ApertureHalfY && Math.Abs(z - ApertureZ) <= ApertureHalfZ;
+        return open ? 1 / (L - S).sqrMagnitude : 0;
+    }
+    // Reflections of an unfolded coordinate in a lattice of walls at lo + i (hi - lo); the folded coordinate.
+    static int Crossings(double u, double lo, double hi, out double folded)
+    {
+        double w = hi - lo, c = Math.Floor((u - lo) / w), f = u - lo - c * w;
+        int i = (int)c; folded = lo + ((i & 1) == 0 ? f : w - f);
+        return Math.Abs(i);
+    }
+    // The porch's exact energy at L: radiance x sum over the mouth of (1 - a)^k cos / r^2, and the source's image paths.
+    static double PorchReference(Vector3 L, double radiance, out double reverberant, out double source, out double meanReflections)
+    {
+        double hy0 = ApertureY - ApertureHalfY, hy1 = ApertureY + ApertureHalfY, hz0 = ApertureZ - ApertureHalfZ, hz1 = ApertureZ + ApertureHalfZ;
+        double x0 = ApertureSize.x / 2, x1 = x0 + PorchLength, rho = 1 - PorchAbsorption, kSum = 0, wSum = 0;
+        reverberant = radiance * MouthIntegral(L, x1, hy0, hy1, hz0, hz1, (y, z) =>
+        {
+            double t = (x1 - x0) / (x1 - L.x); // continue the ray L -> mouth point on to x0 (unfolded)
+            int k = Crossings(y + (y - L.y) * -t, hy0, hy1, out _) + Crossings(z + (z - L.z) * -t, hz0, hz1, out _);
+            double w = Math.Pow(rho, k); kSum += k * w; wSum += w;
+            return w;
+        });
+        meanReflections = kSum / wSum;
+        source = 0;
+        var S = ApertureSource;
+        for (int iy = -12; iy <= 12; iy++) for (int iz = -12; iz <= 12; iz++)
+        {
+            // The image of S in cell (iy, iz) of the lattice (only the walls between x0 and x1 reflect; the room behind is diffuse).
+            double Wy = hy1 - hy0, Wz = hz1 - hz0;
+            double sy = hy0 + iy * Wy + ((iy & 1) == 0 ? S.y - hy0 : hy1 - S.y), sz = hz0 + iz * Wz + ((iz & 1) == 0 ? S.z - hz0 : hz1 - S.z);
+            double dx = S.x - L.x, dy = sy - L.y, dz = sz - L.z;
+            double at1 = (x1 - L.x) / dx, at0 = (x0 - L.x) / dx;
+            double my = L.y + dy * at1, mz = L.z + dz * at1, hy = L.y + dy * at0, hz = L.z + dz * at0;
+            if (my < hy0 || my > hy1 || mz < hz0 || mz > hz1) continue;                      // enters through the mouth
+            if (hy < hy0 + iy * Wy || hy > hy0 + (iy + 1) * Wy || hz < hz0 + iz * Wz || hz > hz0 + (iz + 1) * Wz) continue; // leaves through the hole's image
+            source += Math.Pow(rho, Math.Abs(iy) + Math.Abs(iz)) / (dx * dx + dy * dy + dz * dz);
+        }
+        return reverberant + source;
+    }
+    // Diffuse room (s = 1): the porch listener's energy against the image reference. Measured over 128
+    // seeds (README part 7): energy method 1.050 +- 0.013, path method 1.089 +- 0.016 times the
+    // reference, whose radiance factor kappa is taken in one direction only (it is 1.15 on the hole's
+    // axis and 1.04 at the porch's 38 degrees), so the reference itself is good to about 5%.
+    [TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Energy), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsSeeThroughAPorchAsTheImageReferencePredicts(TakeRender.Method method)
+    {
+        double hy0 = ApertureY - ApertureHalfY, hy1 = ApertureY + ApertureHalfY, hz0 = ApertureZ - ApertureHalfZ, hz1 = ApertureZ + ApertureHalfZ;
+        double omega = MouthIntegral(PorchCalibration, ApertureSize.x / 2, hy0, hy1, hz0, hz1, (y, z) => 1);
+        double inside = 0, outside = 0, calibration = 0; const int seeds = 8;
+        for (int seed = 0; seed < seeds; seed++)
+        {
+            inside += (ApertureTotal(method, false, false, ApertureInside, seed, porch: true) - 1 / (ApertureInside - ApertureSource).sqrMagnitude) / seeds;
+            outside += ApertureTotal(method, false, false, PorchListener, seed, porch: true) / seeds;
+            calibration += (ApertureTotal(method, false, false, PorchCalibration, seed) - DirectThroughHole(PorchCalibration)) / seeds;
+        }
+        double kappa = calibration * 4 * Math.PI / (inside * omega);
+        double reference = PorchReference(PorchListener, kappa * inside / (4 * Math.PI), out _, out double source, out double reflections);
+        TestContext.WriteLine($"{method}: porch {outside:G4}, image reference {reference:G4} (kappa {kappa:F3}, source paths {source:G3}, {reflections:F2} reflections on average), ratio {outside / reference:F3}");
+        Assert.That(outside / reference, Is.EqualTo(1).Within(.2));
+    }
+    // Specular room (s = 0.12): no reference, but the Path method's estimate must not depend on its
+    // detection region (it only sets the variance), which is what decides between the two methods
+    // here (README part 7: the energy method's sphere average falls from 0.0095 at 0.25 m to 0.0071 at 1 m).
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void PathPorchEstimateIsIndependentOfTheRegion()
+    {
+        double small = 0, large = 0; const int seeds = 16;
+        for (int seed = 0; seed < seeds; seed++)
+        {
+            small += ApertureTotal(TakeRender.Method.Path, false, false, PorchListener, seed, radius: .25f, porch: true, roomScattering: .12f) / seeds;
+            large += ApertureTotal(TakeRender.Method.Path, false, false, PorchListener, seed, radius: 1, porch: true, roomScattering: .12f) / seeds;
+        }
+        TestContext.WriteLine($"specular room, porch listener: path method {small:G4} with a 0.25 m region, {large:G4} with 1 m, ratio {large / small:F3}");
+        Assert.That(large / small, Is.EqualTo(1).Within(.2));
+    }
+    // Opt-in (ACOUSTIC_PORCH=1): per method and seed, the inside reverberant energy and the porch listener's
+    // total, and the calibration in view of the bare hole; ACOUSTIC_PORCH_SEEDS (default 16), _RAYS, _RADIUS.
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(7200000)]
+    public void MeasurePorch()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH"))) Assert.Ignore("Set ACOUSTIC_PORCH.");
+        int seeds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_SEEDS") ?? "16"), first = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_FIRST") ?? "0");
+        int rays = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_RAYS") ?? "65536");
+        float radius = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_RADIUS") ?? ".5", System.Globalization.CultureInfo.InvariantCulture);
+        string methods = Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_METHODS") ?? "Energy,Path";
+        float roomScattering = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_ROOM_SCATTERING") ?? "1", System.Globalization.CultureInfo.InvariantCulture);
+        double hy0 = ApertureY - ApertureHalfY, hy1 = ApertureY + ApertureHalfY, hz0 = ApertureZ - ApertureHalfZ, hz1 = ApertureZ + ApertureHalfZ;
+        double omega = MouthIntegral(PorchCalibration, ApertureSize.x / 2, hy0, hy1, hz0, hz1, (y, z) => 1);
+        PorchReference(PorchListener, 1, out double unit, out double source, out double meanK);
+        Debug.Log($"Porch geometry: calibration solid angle {omega:G6} sr, porch unit-radiance integral {unit:G6}, source image paths {source:G6}, mean reflections {meanK:F2}");
+        foreach (string name in methods.Split(','))
+        {
+            var method = (TakeRender.Method)Enum.Parse(typeof(TakeRender.Method), name);
+            for (int seed = first; seed < first + seeds; seed++)
+            {
+                double inside = ApertureTotal(method, false, false, ApertureInside, seed, rays, 0, 1, 0, radius, true, roomScattering) - 1 / (ApertureInside - ApertureSource).sqrMagnitude;
+                double outside = ApertureTotal(method, false, false, PorchListener, seed, rays, 0, 1, 0, radius, true, roomScattering);
+                double calibration = ApertureTotal(method, false, false, PorchCalibration, seed, rays, 0, 1, 0, radius, false, roomScattering) - DirectThroughHole(PorchCalibration);
+                double calibrationInside = inside; // the porch returns no sound into the room: its walls are parallel to the axis
+                Debug.Log(FormattableString.Invariant($"Porch {name} seed {seed}: inside {inside:R} outside {outside:R} calibration inside {calibrationInside:R} calibration {calibration:R}"));
+            }
+        }
     }
     // Opt-in (ACOUSTIC_APERTURE=1): the hole's outside energy per method, in view without and with the
     // ground, and behind the screen. Options: ACOUSTIC_APERTURE_T (wall transmission), _S (ground

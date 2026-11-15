@@ -355,3 +355,78 @@ Both are unbiased in construction and each is independent of its own radius, whi
 The next check is a controlled exterior case with two or more specular bounces (a porch in front of the hole), where one of the two must disagree with the other, and then, if it is the path tracer, the energy method's sphere hits tagged with their plane sequence to see which exact paths the retrace rejects.
 Nothing was fixed in either method.
 I tried grouping coplanar triangles with a tolerance instead of rounded keys (a split plane would make a chain fail its sequence test); it changed nothing here and was reverted.
+
+## 7. A controlled porch
+
+### The case
+
+The aperture room of part 6 (6 × 5 × 4 m, a = 0.1) with its 1.2 m × 1.0 m hole opening into a porch: a duct of the hole's own cross-section, 3 m deep, whose floor, roof and two side walls are specular (a = 0.05, s = 0).
+The listener stands 4 m beyond the mouth and off its axis, at (10, 2.1, 2.2), out of view of the hole: every ray it sends back through the mouth meets the porch walls 1 to 5 times (2.97 on average, energy-weighted) before it reaches the hole.
+The porch walls are parallel to its axis, so they return no sound into the room (the inside energy is the same with and without them, to the last digit).
+Fixture and reference: `ApertureRoom(porch: true)`, `PorchReference`, `MeasurePorch` (opt-in) in `PathChecks.cs`.
+
+**Reference.**
+Unfolded, the porch walls form a rectangular lattice of images of the hole, and the mouth is the window through which the listener sees them.
+The reference integrates over the mouth the radiance through the hole times (1 − a)^k, k the reflections of each unfolded ray, plus the source's own image paths through the hole and porch (there are none at this listener).
+The radiance through the hole is κ E_in / 4π, E_in the inside reverberant energy, with κ measured in view of the bare hole in the porch's direction (38° off its axis; both methods agree there within 0.1%).
+κ is 1.04 there and 1.15 on the axis, so the radiance is not isotropic and the reference, which uses one κ for all the porch's directions, is good to about 5%.
+
+### Diffuse room (s = 1): both right
+
+128 seeds per method, 65,536 rays per solve, 0.5 m region or sphere; ratio to the reference, with the running mean by doubling:
+
+| Seeds | energy method | path method |
+|---:|---:|---:|
+| 16 | 1.069 ± 0.039 | 1.049 ± 0.035 |
+| 32 | 1.063 ± 0.026 | 1.069 ± 0.029 |
+| 64 | 1.045 ± 0.017 | 1.086 ± 0.023 |
+| 128 | 1.050 ± 0.013 | 1.089 ± 0.016 |
+
+Both converge 5–9% above the reference, within its own uncertainty, and within 3.7% (1.9 standard errors) of each other.
+Neither is heavy-tailed here: the standard deviation of one solve is 14% (energy) and 17% (path) of the mean, and the largest of 128 solves is 1.4 and 1.6 times the mean.
+
+### Specular room (s = 0.12, like the Church's stone): the energy method is biased
+
+With a mostly specular room the radiance through the hole is no longer diffuse, so there is no reference; but each method's estimate must not depend on its own radius, and that decides it:
+
+| Radius | energy method (sphere) | path method (region) |
+|---:|---:|---:|
+| 0.25 m (64 seeds) | 0.00951 ± 0.00031 | 0.00932 ± 0.00032 |
+| 0.5 m (128 seeds) | 0.00826 ± 0.00009 | 0.00939 ± 0.00017 |
+| 1 m (64 seeds) | 0.00705 ± 0.00006 | 0.00931 ± 0.00019 |
+
+The path tracer gives the same value with every region (its mean is flat by doubling: 1.610, 1.569, 1.566, 1.598 in units of the diffuse reference at 16, 32, 64, 128 seeds).
+The energy method's sphere average falls below the path tracer's by 12% at 0.5 m and 24% at 1 m and approaches the path tracer's value as the radius shrinks.
+The field behind the porch is a set of beams (the images of the hole seen through the mouth), and a sphere averages a beam with its darker surroundings; the exact connection does not.
+So in this case the energy method is biased low by its sphere and the path tracer is unbiased, with a moderate variance (21% per solve at 65,536 rays, largest of 128 solves 1.5 times the mean).
+No path-tracer chains are rejected wrongly here, so there was nothing to tag.
+
+### Back to the Church
+
+The porch shows the mechanism that can bias the energy method near specular beams, but not its sign at the Church listener: a sphere centred in a beam reads low (the porch), one centred beside a beam reads high.
+At the Church's outside listener (no diffraction, 125 Hz, 0.2–2 s) the energy method gives 2.54e-4 ± 0.19e-4 with a 2 m sphere (64 seeds), 2.61e-4 ± 0.77e-4 with 0.5 m (64) and 2.2e-4 ± 1.3e-4 with 0.25 m (128 seeds; the top 5 of 128 solves carry 93% of the sum); the path tracer gives 8.8e-5 ± 1.2e-5 (2 m region, 512 seeds) and 8.0e-5 ± 2.4e-5 (4 m, 128).
+Below 0.5 m the energy method becomes as heavy-tailed as the path tracer, so its radius test cannot be carried to the radius where a beam would show; the two remain 4.6 dB apart and the Church is still not decided by measurement.
+What is decided: the path tracer is unbiased in a controlled multi-bounce porch, where the energy method is not; and at the Church its estimate is heavy-tailed (one solve's median is 7 times below its mean, 13 dB below the energy method), which is what the realtime render plays.
+
+New slow-tier checks: `MethodsSeeThroughAPorchAsTheImageReferencePredicts` (both methods within 20% of the reference; 1.05 and 1.04 with 8 seeds) and `PathPorchEstimateIsIndependentOfTheRegion` (specular room, 0.25 m against 1 m; 0.983).
+
+### Sketch: a lower-variance estimator for specular arrivals (not implemented)
+
+The path tracer is unbiased but impractical where the listener receives most of its late sound by specular chains through small openings: an update scores such a chain rarely, with a large weight.
+The proposal combines three estimators of the same specular arrivals, weighted by multiple importance sampling as in vertex connection and merging (Georgiev et al. 2012, *Light transport simulation with vertex connection and merging*):
+
+1. **Connection (as now).** A source-side chain whose unfolded ray passes within r of the listener image is retraced exactly and divided by its region probability times the followed share. Density p_c = (region solid angle × walk density at the chain's first vertex) × share; unbiased.
+2. **Merging.** The same walk segments scored by a small receiver sphere (radius r_m, e.g. 0.25 m), as the energy method does, with density p_m = π r_m² × the segment's density per unit area at the listener. Biased by the sphere average (within 2% of the exact value at 0.25 m in the porch above, 12% low at 0.5 m), low variance.
+3. **Listener subpaths by reciprocity.** Trace a few hundred rays from the listener (energy transport is reciprocal), follow them through specular events to their first scattering vertex y, and connect y to the source-side scattering vertices x of the same update by straight connections (as the existing next-event connections do, with transmission). A path source → … → x → y → specular chain → listener is then found from both ends: the listener subpath carries the specular chain exactly (a ray from the listener follows it with probability one), so the arrivals that the forward walk scores rarely become a connection of two diffuse vertices.
+
+Each full path is reachable by all three techniques; with the balance heuristic, its weight for technique i is p_i / Σ p_j, with every p_j evaluated for that path (the forward chain's region density, the sphere's area density, and the listener subpath's density of reaching y times the connection's).
+The merged estimator keeps the result consistent rather than unbiased; a fixed small r_m bounds the bias (the porch measures it), and r_m can shrink with the update count for static listeners.
+In the porch case technique 3 alone would score every listener ray that leaves through the mouth; in the Church, every listener ray that reaches the porch or the nave through the doorway.
+
+**Cost estimate**, against today's Church update at 512 rays (40–70 ms unpaced in part 2):
+- listener subpaths: 256 rays to their first scattering vertex, mostly specular steps without connections, about 10–15% of a forward update;
+- connections: one shadow ray per listener vertex to one sampled source-side vertex per subpath pair (a buffer of the update's ~5,000 source-side scattering vertices, sampled by their flux), with transmission when blocked: as many shadow rays as today's next-event connections of 256 rays, about 25–35%;
+- merging: a hash grid of the update's walk segments that pass within r_m of the listener (tens per update), negligible;
+- MIS weights: each technique's density must be evaluated for paths found by the others, which needs the forward region probability for listener-found chains (one cone test) and the listener-subpath density for forward-found ones (stored per vertex), a few percent.
+In total about 1.4–1.6 times today's update, or the same cost at about 350 forward rays plus 160 listener rays.
+The gain cannot be estimated without building it; the porch and Church fixtures are the tests it would have to pass (unchanged means in the porch, a stable median at the Church listener).
