@@ -12,6 +12,7 @@ using UnityEngine;
 //   ACOUSTIC_CHURCH_LEVELS_OPAQUE=glass,door   materials (name substrings, "!name" for all others, or "all") made opaque
 //   ACOUSTIC_CHURCH_LEVELS_IOR1=1              every material's acoustic index set to one (no refracting solids)
 //   ACOUSTIC_CHURCH_LEVELS_DIFFRACTION=f       diffraction factor (default 1)
+//   ACOUSTIC_CHURCH_LEVELS_EDGE_PROBABILITY=p  share of the source's rays that are edge rays (default the settings')
 //   ACOUSTIC_CHURCH_LEVELS_FLAGS=n             Path profile flags (MethodPath.hlsl PathProfileFlags)
 // Each method solves with 8,192 rays and a 2 s horizon, air absorption on; the energy method with its
 // listening settings (2 m receiver sphere, arrivals, 96 near planes), the path method with its defaults.
@@ -63,6 +64,8 @@ public partial class TakeChecks
             settings.maximumDelaySeconds = 2; settings.methodRays = rays; settings.diffractionFactor = 1; settings.maxBounces = 64;
             settings.specularDetectionRadius = radius; settings.seed = seed;
             string diffraction = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_DIFFRACTION");
+            string edgeProbability = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_EDGE_PROBABILITY");
+            if (!string.IsNullOrEmpty(edgeProbability)) settings.methodEdgeProbability = float.Parse(edgeProbability, System.Globalization.CultureInfo.InvariantCulture);
             if (!string.IsNullOrEmpty(diffraction)) settings.diffractionFactor = float.Parse(diffraction, System.Globalization.CultureInfo.InvariantCulture);
             string survival = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_SURVIVAL");
             if (!string.IsNullOrEmpty(survival)) settings.pathSurvivalSeconds = float.Parse(survival, System.Globalization.CultureInfo.InvariantCulture);

@@ -98,6 +98,17 @@ public partial class TakeChecks
                     foreach (int band in new[] {1, 3, 5}) line.Append(FormattableString.Invariant($" {Window(ControlEnergy(solver, band), 0, int.MaxValue) - 1 / (x * x):G4}"));
                     line.Append(";");
                 }
+            {
+                // Coherent reference: the Pressure method (exact image paths and edge diffraction, coherently summed).
+                var state = States(2); state[0].position = new Vector3(0, 1, 0); state[1].position = new Vector3(x, 1, 0);
+                state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
+                var settings = ControlSettings(TakeRender.Method.Pressure, 1 << 16, .1f); settings.useBvh = false; settings.diffractionFactor = 1;
+                using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+                solver.Solve(state, new TakeRender.DirectPath[1]);
+                line.Append(" pressure");
+                foreach (int band in new[] {1, 3, 5}) line.Append(FormattableString.Invariant($" {Window(ControlEnergy(solver, band), 0, int.MaxValue) - 1 / (x * x):G4}"));
+                line.Append(";");
+            }
             TestContext.WriteLine(line.ToString()); Debug.Log("Boundary " + line);
         }
     }

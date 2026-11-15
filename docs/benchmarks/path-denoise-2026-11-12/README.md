@@ -601,3 +601,46 @@ So the walk was rendered denoised; as in part 5, the frame-to-frame change of th
 **Published.**
 The listening page `.context/energy-audio/listen/path.html` and the live view (`build.py` rerun) have the three new path renders; the stale denoised track of part 5 was removed.
 The scoreboard (`scoreboard.py`) now shows the beams on the wave suite (`beams.py publish` replaced the suite's path runs at 2,048 rays: level 3.27 dB, EDT 226%, T30 65.7%, ETC 13.9 dB against 3.52 / 435 / 72.0 / 18.3) and the new Church responses with their echo densities (part 9's table).
+
+## 11. Edges
+
+### (a) UTD's reflection-boundary terms against the beam width
+
+UTD's two reflection-boundary terms (those in φ + φ′) now carry the weight 1 − exp(−2 X s′/s) in the Path method's edge connections (`PathUtdEnergy`), X = kLa their transition argument and s, s′ the source- and listener-side distances.
+The weight is one minus the beam kernel at the listener's offset x from the boundary: with w² = λ(s + s′)/π and, near the boundary, X ≈ π s x² / (λ s′(s + s′)), the kernel's exponent 2x²/w² equals 2X s′/s; no constant enters.
+Where the beam reaches past the boundary UTD's transition is not added a second time; far from it UTD is unchanged; the incident-boundary terms are untouched, because the direct sound is exact and not a beam.
+Double-edge (DD) connections keep plain UTD (there is no beam to compare with); the energy method is unchanged.
+
+On the 2 m plate (`MeasureReflectionBoundary`, 250 Hz / 1 kHz / 4 kHz):
+
+| x | beams | beams + UTD before | beams + UTD now | exact + UTD (part 8) |
+|---:|---|---|---|---|
+| 1.5 m | 0.125 / 0.147 / 0.163 | 0.183 / 0.168 / 0.165 | 0.151 / 0.158 / 0.165 | 0.213 / 0.179 / 0.163 |
+| 1.9 m | 0.075 / 0.079 / 0.093 | 0.139 / 0.116 / 0.110 | 0.094 / 0.082 / 0.085 | 0.194 / 0.168 / 0.156 |
+| 2.1 m | 0.055 / 0.047 / 0.036 | 0.073 / 0.065 / 0.051 | 0.060 / 0.047 / 0.034 | 0.018 / 0.019 / 0.017 |
+| 2.5 m | 0.028 / 0.011 / 0.001 | 0.037 / 0.018 / 0.004 | 0.031 / 0.012 / 0.004 | 0.009 / 0.007 / 0.003 |
+| 3.0 m | 0.011 / 0.001 / 0.000 | 0.016 / 0.003 / 0.001 | 0.013 / 0.003 / 0.001 | 0.005 / 0.003 / 0.001 |
+
+Past the boundary UTD now adds 0.005 at 2.1 m and 250 Hz instead of 0.018; what remains above exact + UTD there is the beam's own smoothing.
+On the lit side the result is now lower than exact + UTD, which is not a reference there: it adds |D|² on top of the full geometric reflection, while the coherent field at the boundary has a quarter of the geometric intensity; the energy integrated over the line is 0.83 against 1.07 (exact + UTD) and 0.69 for the beams alone.
+A coherent reference would decide the lit side; the Pressure method's coherent sum (also printed by the measurement) interferes with the direct sound at this geometry and gives negative "reflected" energies, so it is not one.
+On the wave suite (`beams.py`, `PATH_BEAMS_RAW=raw-path-beam-utd`, 2,048 rays, two seeds) the weighting improves the level error from 3.27 to 3.17 dB (shadow 4.68 → 4.57 dB) and EDT from 226 to 213%, with T30, C80 and ETC unchanged (`beams-utd.json`).
+
+### (b) The heavy tail of the diffracted sound outside the Church
+
+At the walk's outside position (125 / 500 / 2,000 Hz, 0.2–2 s, 64 seeds of 8,192 rays), one solve's median against the mean:
+
+| Configuration | median / mean |
+|---|---|
+| no diffraction (part 8) | 0.47 / 0.66 / 0.52 |
+| diffraction, no edge rays, no edge connections | 0.47 / 0.66 / 0.52 |
+| diffraction, no edge rays | 0.29 / 0.15 / 0.10 |
+| diffraction (edge rays half of the source's rays, the default) | 0.09 / 0.12 / 0.13 |
+| ... with scattering points also drawing edges from the listener-aware distribution | 0.12 / 0.15 / 0.18 |
+| ... and RD mirrors drawn by area | 0.11 / 0.09 / 0.09 |
+| ... and edge-ray azimuths drawn by |D|² (half the time) | 0.06 / 0.09 / 0.11 (reverted) |
+
+The tail comes from the edge connections of scattering points and from the source's edge rays, not from the beams.
+Two unbiased changes are kept: scattering points draw their edge half the time from the solve's listener-aware edge distribution (the other half local or uniform, weighted by the mixture's probability), and the mirror of an RD connection is drawn in proportion to its area instead of uniformly among 17,345 triangles (`PathMirrorCdf`); drawing edge-ray azimuths in proportion to |D|² made the 125 Hz tail worse and was reverted.
+With 64 seeds the medians themselves are uncertain to perhaps 30%, so the kept changes are justified by construction (each makes the probability of a sample closer to its contribution) more than by these numbers, and the tail is not fixed: the outside of the walk still plays about 9 dB below its mean in a single update.
+What remains is the 1/(m l (m + l)) geometry of a D connection from a scattering point close to an edge (the door frame's own faces), which no edge distribution changes; sampling the edge point by that geometry, or splitting the edge's energy over the walk's next segments, is the next thing to try.

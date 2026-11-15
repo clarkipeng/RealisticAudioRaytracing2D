@@ -27,7 +27,8 @@ import method_compare as mc  # noqa: E402
 import method_runs as mr  # noqa: E402
 import variants  # noqa: E402
 
-BEAM = mr.WORK / 'raw-path-beam'
+import os
+BEAM = mr.WORK / os.environ.get('PATH_BEAMS_RAW', 'raw-path-beam')   # another folder for a variant of the method
 SEEDS = [0, 1]
 
 
@@ -59,8 +60,10 @@ def busy(folder):
 def score():
     ids = scenes()
     names = {'path-exact': (mr.RAW, 'r02048')}
+    if BEAM.name != 'raw-path-beam':
+        names['path-beam-reference'] = (mr.WORK / 'raw-path-beam', 'r02048')
     for budget in sorted({p.name for s in ids for p in (BEAM / s / 'path').glob('r*')} if BEAM.exists() else []):
-        names[f'path-beam-{int(budget[1:])}'] = (BEAM, budget)
+        names[f'path-{BEAM.name[9:] or "beam"}-{int(budget[1:])}'] = (BEAM, budget)
     made = []
     try:
         cost = {}

@@ -50,6 +50,7 @@ float PathSurvivalSeconds;
 // cell (the room's copy in the unfolded space), so the kernel is truncated at R and renormalised: wider,
 // it would lose the mass of rays that belong to a neighbouring image.
 RWStructuredBuffer<uint> PathClearanceOut;
+StructuredBuffer<float> PathMirrorCdf; // cumulative primitive areas (RD mirrors drawn by area)
 groupshared uint PathClearanceMin;
 void PathClearance(uint thread)
 {
@@ -232,6 +233,27 @@ bool PathMirror(uint primitive, float3 start, float3 end, out float3 hit, out fl
     cosine = abs(dot(normalize(hit - start), n));
     return true;
 }
+// UtdEnergy with its reflection-boundary terms (the two with phiOut + phiIn) weighted by
+// 1 - exp(-2 X s'/s), X = k L a their transition argument and s, s' the source- and listener-side
+// distances. Near a reflection boundary the beams (see "Beams") already smooth the reflected field
+// over the beam width w, w^2 = lambda (s + s') / pi; a listener offset x from the boundary has
+// 2 x^2 / w^2 = 2 X s'/s, so the weight is one minus the beam kernel at that offset: where the beam
+// reaches past the boundary UTD's transition is not added again, far beyond it UTD is unchanged.
+// The incident-boundary terms (phiOut - phiIn) stay: the direct sound is exact, not a beam.
+float PathUtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k, float distance, float ratio)
+{
+    float2 sum = 0;
+    [unroll] for (uint i = 0; i < 4; i++)
+    {
+        float sign = (i & 1) == 0 ? 1 : -1, x = i < 2 ? phiOut - phiIn : phiOut + phiIn;
+        float argument = (RayPi + sign * x) / (2 * n);
+        if (abs(sin(argument)) < 1e-5) { x += sign * 4e-5 * n; argument = (RayPi + sign * x) / (2 * n); }
+        float N = round((x + sign * RayPi) / (2 * RayPi * n)), c = cos(n * RayPi * N - .5 * x), X = k * distance * 2 * c * c;
+        float weight = i < 2 || ratio <= 0 ? 1 : 1 - exp(-2 * X * ratio); // ratio 0: no beam to compare with
+        sum += weight * (cos(argument) / sin(argument)) * UtdTransition(X);
+    }
+    return dot(sum, sum) / (8 * RayPi * k * n * n * sinBeta * sinBeta);
+}
 // Listener connection through one edge (D), one mirror and one edge (RD), or two parallel
 // edges (DD): EnergyEdgeConnection's kernels, with one UtdEnergy body per edge (bands in a loop).
 bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, inout uint rng, out float4 low, out float4 high, out float time, out float3 fromOut)
@@ -243,17 +265,45 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     // From the source, draw the edge from the solve's distribution (PathEdgeWeights: edges between
     // source and listener) instead of uniformly over every edge of the scene: in the Church (14,075
     // edges) a uniform pick found the edges of the doorway between the organ and a listener outside
-    // in one seed out of three. Scattering points keep the local/uniform pick.
+    // in one seed out of three.
+    // Scattering points mix that distribution in too (half the time; the other half the local/uniform
+    // pick), with the mixture's probability: in the Church a uniform pick of the doorway's edges from
+    // points in the nave made the diffracted sound outside heavy-tailed (one solve's median a tenth of
+    // the mean). Same estimator, lower variance.
     uint edge, edge2;
     float uSource = RandomRay(rng);
-    if (v.kind == 0 && MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0) edge = EnergySampleEdge(uSource, pick);
+    bool distribution = MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0;
+    if (v.kind == 0 && distribution) edge = EnergySampleEdge(uSource, pick);
+    else if (v.kind == 1 && distribution)
+    {
+        float pickCdf, pickLocal;
+        if (uSource < .5) edge = EnergySampleEdge(2 * uSource, pickCdf);
+        else edge = MethodPickEdge(v.primitive, rng, pickLocal);
+        float total = MethodEdgeCdf[MethodEdgeCount - 1];
+        pickCdf = (MethodEdgeCdf[edge] - (edge > 0 ? MethodEdgeCdf[edge - 1] : 0)) / total;
+        uint2 local = v.primitive == 0xffffffff ? uint2(0, 0) : EdgeRanges[v.primitive];
+        pickLocal = (local.y > 0 ? .5 : 1) / MethodEdgeCount;
+        [loop] for (uint i = 0; i < local.y; i++) if (EdgeIndices[local.x + i] == edge) pickLocal += .5 / local.y;
+        pick = .5 * pickCdf + .5 * pickLocal;
+    }
     else edge = MethodPickEdge(v.kind == 1 ? v.primitive : 0xffffffff, rng, pick);
     edge2 = edge;
     float r = RandomRay(rng);
     bool mirrors = PrimitiveCount > 0;
     bool image = mirrors && r < 1.0 / 3, pair = r >= (mirrors ? 2.0 / 3 : .5);
-    float variant = mirrors ? (image ? 1.0 / (3 * PrimitiveCount) : 1.0 / 3) : .5;
-    uint mirror = image ? min(PrimitiveCount - 1, (uint)(RandomRay(rng) * PrimitiveCount)) : 0;
+    float variant = mirrors ? 1.0 / 3 : .5;
+    uint mirror = 0;
+    if (image)
+    {
+        // The mirror in proportion to its area (PathMirrorCdf), with that probability.
+        float total = PathMirrorCdf[PrimitiveCount - 1], target = RandomRay(rng) * total;
+        uint lo = 0, hi = PrimitiveCount - 1;
+        [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (PathMirrorCdf[mid] > target) hi = mid; else lo = mid + 1; }
+        mirror = lo;
+        float area = PathMirrorCdf[lo] - (lo > 0 ? PathMirrorCdf[lo - 1] : 0);
+        if (!(area > 0)) return false;
+        variant *= area / total;
+    }
     float3 from = v.position, unused, e, e2 = 0, first, hit;
     if (image)
     {
@@ -286,7 +336,7 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     {
         float opacity = MethodEdgeOpacity(edge, k);
         float4 lane = float4((k & 3) == uint4(0, 1, 2, 3)); // one-hot: no dynamic vector writes in a loop
-        float share = UtdEnergy(n, phiIn, phiOut, sinBeta, MethodWavenumber(k), m * (d + l) / total * s2) * dot(k < 4 ? inLow : inHigh, lane) * D *
+        float share = PathUtdEnergy(n, phiIn, phiOut, sinBeta, MethodWavenumber(k), m * (d + l) / total * s2, pair ? 0 : l / m) * dot(k < 4 ? inLow : inHigh, lane) * D *
                       DiffractionFactor * DiffractionFactor * opacity * opacity;
         if (pair)
         {

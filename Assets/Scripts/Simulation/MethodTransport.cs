@@ -67,7 +67,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly int clearanceKernel = -1;
     // Path: queued specular-chain connections of one chunk of rays (MethodPath.hlsl PathConnect).
     // Requests are about 0.5 per ray in a closed specular room; overflow is counted (counter 9).
-    readonly ComputeBuffer clearance;
+    readonly ComputeBuffer clearance, mirrorCdf;
     readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
     // Late-field accumulation across solves (settings.lateAccumulationSeconds, audio only):
     // every solve draws a new walk seed and the late histogram is the exponential moving
@@ -266,6 +266,15 @@ internal sealed class MethodTransport : IDisposable, ILateField
             selected = new ComputeBuffer(Math.Max(1, checked(solves * Math.Max(1, ArrivalSlots))), 4);
             paths = new ComputeBuffer(audio ? Math.Max(1, checked(Frames * PathsPerFrame)) : 1, RayTransport.PathStride);
             edgeCdf = new ComputeBuffer(Math.Max(1, EdgeCount), 4); edgeCdf.SetData(new float[Math.Max(1, EdgeCount)]);
+            // Path: mirrors of the RD edge connection are drawn in proportion to their area (local
+            // coordinates: rigid motion keeps the area), so that a large wall or floor, where a mirror
+            // reflection is likely to exist, is not drawn as rarely as one of thousands of small triangles.
+            var areaCdf = new float[Math.Max(1, geometry.Length)]; double areaSum = 0;
+            for (int i = 0; i < geometry.Length; i++)
+            {
+                var gm = geometry[i]; areaSum += .5 * Vector3.Cross(gm.b - gm.a, gm.c - gm.a).magnitude; areaCdf[i] = (float)areaSum;
+            }
+            mirrorCdf = new ComputeBuffer(areaCdf.Length, 4); mirrorCdf.SetData(areaCdf);
             nearWords = Math.Max(1, (PlaneCount + 31) / 32);
             nearList = new ComputeBuffer(Math.Max(1, solves * Math.Max(1, NearPlanes)), 4);
             nearMask = new ComputeBuffer(Math.Max(1, solves * nearWords), 4);
@@ -311,7 +320,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                     shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
                     shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
                     shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
-                    shader.SetBuffer(kernel, "PathClearanceOut", clearance);
+                    shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
                 }
                 if (energy)
                 {
@@ -735,7 +744,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
         counts?.Dispose();
-        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose();
+        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); mirrorCdf?.Dispose();
         nearList?.Dispose(); nearMask?.Dispose();
     }
 }
