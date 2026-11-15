@@ -690,3 +690,31 @@ The profile says what it would buy: the latency is the longest-lived rays', so w
 | Church | 247 ms | 60 ms |
 | furnished room | 46 ms | (default unchanged) |
 | stone shoebox | 6 ms | (default unchanged) |
+
+## 13. Survival time set by efficiency: derivation, and why it waits for step 2
+
+**The quantity to optimise.**
+Survival in time keeps a path alive at t with probability S(t) and divides its weight by S, so every positive S is unbiased; what S changes is variance and cost.
+Efficiency is 1 / (variance × cost) (EARS, Rath et al. 2022, for splitting and roulette factors).
+
+**Variance.**
+For the late field the measured relative variance of one solve fits var(T0) = a + b / T0 for S = min(1, T0/t): standing in the Church at 500 Hz, a = 0.37 (the path-to-path variance that roulette does not add) and b = 0.022 s (what roulette adds), from part 12's T0 = 100, 30 and 10 ms (the fit predicts 1.09 at 30 ms, measured 1.14).
+
+**Cost.**
+The cost that matters is the time of an update, and that is not the work: a dispatch lasts as long as its slowest group, whose time is the longest-lived of its G rays, about min(G·T0, path lifetime) in path time for S = T0/t.
+Fitted to the Church's measured times, L(T0) ≈ c + d·T0 with c ≈ 30 ms (everything that does not depend on survival) and d ≈ 1,000 ms per second of T0 (G = 64 rays per group times 15.6 ms per second of path time).
+
+**Optimum.**
+Minimising (a + b/T0)(c + d·T0) gives the square-root rule of EARS:
+
+T0* = sqrt( (b / a) · (c / d) ).
+
+For the Church, sqrt(0.058 s × 0.030 s) = 42 ms, close to the 30 ms that measured best.
+In the suite's rooms paths end by absorption well before G·T0 (their path lifetime is about the reverberation time, under a second), so d is near zero there and T0* goes to the path lifetime: no time roulette, which is what the suite preferred (100 ms better than 30 ms).
+Both the room dependence asked for and its direction follow without a tuned constant, from two measured ratios: b/a, the variance that roulette adds relative to what is there anyway, and c/d, the fixed time relative to the time per unit of path life.
+
+**Why it is not built yet.**
+The ratio c/d is a property of the dispatch, not of the room: it is large because one long-lived ray holds a whole group.
+Step 2 (wavefront passes with compaction) removes exactly that, and with it d changes from "longest ray in the group" to "average work per ray"; with the work model (cost proportional to the total path time, ∫S(t)L(t) dt) and the histogram's own per-bin relative error (one count per distinct path, bins in constant relative width), the same minimisation has no interior optimum at all: T0* is the path lifetime, i.e. no time roulette (computed for lifetimes from 0.5 to 6 s; the optimum is within 10% of the lifetime in every case).
+Building the rule now would tune it to a dispatch shape that the next step is meant to remove, so the order is reversed: step 2 first, then, if its update time leaves a gap to 23 ms, the same derivation with the measured cost of the new dispatch.
+The two measured ratios needed per solve are available to the tracer: b/a from the spread between consecutive solves of the same pair (or their counts and second moments), c/d from the solve's own phase times.
