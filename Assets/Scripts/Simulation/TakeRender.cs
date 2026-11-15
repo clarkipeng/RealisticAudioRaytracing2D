@@ -104,12 +104,8 @@ public static partial class TakeRender
         public float pathBinSeconds=.00025f;
         [Min(1),Tooltip("Path method: number of fine bins; after them each bin is 1/pathFineBins of its start time (constant relative resolution).")]
         public int pathFineBins=64;
-        [Min(1),Tooltip("Path method: cap on the geometric trials that measure the share of a detection region following a specular chain (expected 1/share; a capped detection is counted and biased low).")]
-        public int pathMaxTrials=64;
         [Min(0),Tooltip("Path method: survival in time. A path is alive at time t with probability min(1, this / t), weight-compensated (unbiased), so each histogram bin keeps about as many contributing paths while late work falls sharply. Zero: every path lives to the horizon (roulette on energy only).")]
         public float pathSurvivalSeconds=.1f;
-        [Tooltip("Path method: score specular segments with a normalised Gaussian beam kernel at the listener (width that of the narrowest Gaussian beam spanning the unfolded path, per band) instead of the exact chain connection.")]
-        public bool pathBeams;
         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
         public string pathHistogramExport="";
         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]
@@ -320,7 +316,7 @@ public static partial class TakeRender
             if(settings.method==Method.Path)
             {
                 report.method=report.provenance.solverContract="path-histogram-v1";
-                report.transportDescription="Synthesis="+settings.synthesis+". Path method (MethodPath.hlsl): one energy path tracer with "+settings.methodRays+" rays per solve and a new seed every solve; next-event connections at the source and scattering points (straight, through walls, and through edges), UTD edge rays from the source, and specular chains connected by exact image retrace over a "+settings.specularDetectionRadius+" m detection region whose probability is measured by geometric trials (unbiased). Output: one histogram per solve (six head-frame directions, eight octave bands, "+settings.pathBinSeconds*1000+" ms bins up to "+settings.pathFineBins+" of them, then 1/"+settings.pathFineBins+" relative resolution, to "+settings.maximumDelaySeconds+" s). Audio: the exact direct arrival as a delayed path with Doppler; everything else from the histogram as fixed random-sign impulses per fine slot with amplitude sqrt(energy), band-filtered, with diffuse-field equalised ear band energies and interaural coherence, crossfaded per update (PathReverb, CPU). Not a validated wave reference.";
+                report.transportDescription="Synthesis="+settings.synthesis+". Path method (MethodPath.hlsl): one energy path tracer with "+settings.methodRays+" rays per solve and a new seed every solve; next-event connections at the source and scattering points (straight, through walls, and through edges), UTD edge rays from the source, and after a specular reflection every ray segment scored at the listener by a normalised Gaussian beam kernel of its distance from the listener image (per band, the width of the narrowest Gaussian beam spanning the unfolded path, w^2 = lambda L / pi), truncated at the listener's clearance and renormalised (exact in smooth fields, Fresnel-scale smoothing at beam and shadow boundaries). Output: one histogram per solve (six head-frame directions, eight octave bands, "+settings.pathBinSeconds*1000+" ms bins up to "+settings.pathFineBins+" of them, then 1/"+settings.pathFineBins+" relative resolution, to "+settings.maximumDelaySeconds+" s). Audio: the exact direct arrival as a delayed path with Doppler; everything else from the histogram as fixed random-sign impulses per fine slot with amplitude sqrt(energy), band-filtered, with diffuse-field equalised ear band energies and interaural coherence, crossfaded per update (PathReverb, CPU). Not a validated wave reference.";
             }
             if(settings.method==Method.Energy)
             {
@@ -793,7 +789,7 @@ public static partial class TakeRender
         if(settings.synthesis!=Synthesis.Spectral && settings.synthesis!=Synthesis.ImpulseResponse)throw new ArgumentException("Unknown synthesis method.");
         if(settings.transport!=Transport.Direct && settings.transport!=Transport.Raytraced)throw new ArgumentException("Unknown transport model.");
         if(settings.method!=Method.Hybrid && settings.method!=Method.Pressure && settings.method!=Method.Energy && settings.method!=Method.Path)throw new ArgumentException("Unknown acoustic method.");
-        if(settings.method==Method.Path && (!PositiveFinite(settings.pathBinSeconds) || settings.pathFineBins<1 || settings.pathMaxTrials<1 || !(settings.pathSurvivalSeconds>=0)))throw new ArgumentException("Invalid path method settings.");
+        if(settings.method==Method.Path && (!PositiveFinite(settings.pathBinSeconds) || settings.pathFineBins<1 || !(settings.pathSurvivalSeconds>=0)))throw new ArgumentException("Invalid path method settings.");
         if(settings.method!=Method.Hybrid && (settings.methodRays<1 || !PositiveFinite(settings.specularDetectionRadius) || !(settings.methodEdgeProbability>=0 && settings.methodEdgeProbability<1) || settings.methodMaxEvents<1 || !(settings.methodRouletteFloor>0 && settings.methodRouletteFloor<=1) ||
             settings.methodArrivalOrder<0 || settings.methodArrivalOrder>2 || settings.methodArrivalSlots<1 || settings.methodNearPlanes<0))
             throw new ArgumentException("Invalid single-loop method settings.");

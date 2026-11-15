@@ -73,8 +73,8 @@ public partial class TakeChecks
     // field diffuse; s = 0.5 leaves half of every reflection specular (the field is then only
     // approximately diffuse, and its specular part leaks through chains of reflections).
     // Opt-in (ACOUSTIC_BOUNDARY=1): a finite rigid plate (2 m x 2 m) under the source; listeners on a line
-    // across the plate's reflection boundary (at x = 2 m). Exact connection against beam mode, both with UTD
-    // edge diffraction: an excess of the beam mode near the boundary would be its smoothing counted again by UTD.
+    // across the plate's reflection boundary (at x = 2 m), with and without UTD edge diffraction. README
+    // part 8 compares these with the exact connection that the beams replaced.
     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void MeasureReflectionBoundary()
     {
@@ -86,16 +86,15 @@ public partial class TakeChecks
         foreach (float x in new[] {1f, 1.5f, 1.8f, 1.9f, 2f, 2.1f, 2.2f, 2.5f, 3f})
         {
             var line = new System.Text.StringBuilder(FormattableString.Invariant($"x {x:F1}:"));
-            foreach (bool beams in new[] {false, true})
                 foreach (float diffraction in new[] {0f, 1f})
                 {
                     var state = States(2); state[0].position = new Vector3(0, 1, 0); state[1].position = new Vector3(x, 1, 0);
                     state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
-                    var settings = ControlSettings(TakeRender.Method.Path, 1 << 18, .1f); settings.useBvh = false; settings.pathBeams = beams;
+                    var settings = ControlSettings(TakeRender.Method.Path, 1 << 18, .1f); settings.useBvh = false;
                     settings.diffractionFactor = diffraction;
                     using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
                     solver.Solve(state, new TakeRender.DirectPath[1]);
-                    line.Append($" {(beams ? "beam" : "exact")}{(diffraction > 0 ? "+UTD" : "")}");
+                    line.Append(diffraction > 0 ? " beam+UTD" : " beam");
                     foreach (int band in new[] {1, 3, 5}) line.Append(FormattableString.Invariant($" {Window(ControlEnergy(solver, band), 0, int.MaxValue) - 1 / (x * x):G4}"));
                     line.Append(";");
                 }
@@ -299,7 +298,8 @@ public partial class TakeChecks
         return reverberant + source;
     }
     // Diffuse room (s = 1): the porch listener's energy against the image reference. Measured over 128
-    // seeds (README part 7): energy method 1.050 +- 0.013, path method 1.089 +- 0.016 times the
+    // seeds (README part 7): energy method 1.050 +- 0.013, path method 1.089 +- 0.016 (exact connection;
+    // 1.040 with the beams of part 8) times the
     // reference, whose radiance factor kappa is taken in one direction only (it is 1.15 on the hole's
     // axis and 1.04 at the porch's 38 degrees), so the reference itself is good to about 5%.
     [TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Energy), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
@@ -318,21 +318,6 @@ public partial class TakeChecks
         double reference = PorchReference(PorchListener, kappa * inside / (4 * Math.PI), out _, out double source, out double reflections);
         TestContext.WriteLine($"{method}: porch {outside:G4}, image reference {reference:G4} (kappa {kappa:F3}, source paths {source:G3}, {reflections:F2} reflections on average), ratio {outside / reference:F3}");
         Assert.That(outside / reference, Is.EqualTo(1).Within(.2));
-    }
-    // Specular room (s = 0.12): no reference, but the Path method's estimate must not depend on its
-    // detection region (it only sets the variance), which is what decides between the two methods
-    // here (README part 7: the energy method's sphere average falls from 0.0095 at 0.25 m to 0.0071 at 1 m).
-    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void PathPorchEstimateIsIndependentOfTheRegion()
-    {
-        double small = 0, large = 0; const int seeds = 16;
-        for (int seed = 0; seed < seeds; seed++)
-        {
-            small += ApertureTotal(TakeRender.Method.Path, false, false, PorchListener, seed, radius: .25f, porch: true, roomScattering: .12f) / seeds;
-            large += ApertureTotal(TakeRender.Method.Path, false, false, PorchListener, seed, radius: 1, porch: true, roomScattering: .12f) / seeds;
-        }
-        TestContext.WriteLine($"specular room, porch listener: path method {small:G4} with a 0.25 m region, {large:G4} with 1 m, ratio {large / small:F3}");
-        Assert.That(large / small, Is.EqualTo(1).Within(.2));
     }
     // Opt-in (ACOUSTIC_PORCH=1): per method and seed, the inside reverberant energy and the porch listener's
     // total, and the calibration in view of the bare hole; ACOUSTIC_PORCH_SEEDS (default 16), _RAYS, _RADIUS.
@@ -415,49 +400,6 @@ public partial class TakeChecks
         }
         TestContext.WriteLine($"behind the screen, scattering ground: energy method {energy:G4}, path method {path:G4}, ratio {path / energy:F3}");
         Assert.That(path / energy, Is.EqualTo(1).Within(.3));
-    }
-
-    // A specular image whose detection region straddles a visibility boundary: a rigid floor and
-    // an absorbing panel that clips about half of the region but not the exact image path. The
-    // retrace-and-divide-by-the-region estimator is low by the clipped share; dividing by the
-    // share that follows the chain, measured by geometric trials, makes it unbiased. With one
-    // trial (pathMaxTrials = 1) the trials degenerate to the plain estimator, which is reported.
-    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void PathDetectionIsUnbiasedAtVisibilityBoundaries()
-    {
-        var scene = Scene(2); scene.listeners = new[] {1};
-        scene.materials = new[] {RigidControl(), new AcousticTake.MaterialDefinition {name = "absorber", frequencies = new[] {0f}, absorption = new[] {1f}, scattering = new[] {0f}, transmission = new[] {0f}}};
-        var list = new List<AcousticTake.Primitive>();
-        void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, int material)
-        {
-            list.Add(new AcousticTake.Primitive {objectIndex = 2, materialIndex = material, a = a, b = c, c = b});
-            list.Add(new AcousticTake.Primitive {objectIndex = 2, materialIndex = material, a = a, b = d, c = c});
-        }
-        Quad(new Vector3(-50, 0, -50), new Vector3(50, 0, -50), new Vector3(50, 0, 50), new Vector3(-50, 0, 50), 0);
-        // Downward leg of the image path: (0, 1.5, 0) -> (2.222, 0, 0.278); at x = 1.1 it passes z = 0.138. The
-        // panel's edge is 4 cm beside it: rays of the region that hit the panel first never reflect off
-        // the floor, so they cannot detect this image (blocking the last leg would not matter: a ray
-        // detects at its reflection, and the exact last leg is retraced).
-        Quad(new Vector3(1.1f, .01f, .178f), new Vector3(1.1f, 3, .178f), new Vector3(1.1f, 3, 3), new Vector3(1.1f, .01f, 3), 1);
-        var geometry = list.ToArray(); scene.objects[2].primitiveCount = geometry.Length;
-        var state = States(2); state[0].position = new Vector3(0, 1.5f, 0); state[1].position = new Vector3(4, 1.2f, .5f);
-        state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
-        double ri = (state[1].position - new Vector3(0, -1.5f, 0)).magnitude;
-        int bin = (int)Math.Floor(ri / 343 / .001);
-        double Image(int trials)
-        {
-            var settings = ControlSettings(TakeRender.Method.Path, 1 << 18, .05f); settings.specularDetectionRadius = .5f; settings.pathMaxTrials = trials;
-            settings.useBvh = false; // four triangles
-            using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-            solver.Solve(state, new TakeRender.DirectPath[1]);
-            double held = Window(ControlEnergy(solver, 2), bin, bin + 1) * ri * ri;
-            TestContext.WriteLine($"trial cap {trials}: image {held:F4} x 1/ri^2; detections {solver.Method.Counter(7)}, scored {solver.Method.Counter(8)}, " +
-                                  $"trials {solver.Method.Counter(15)}, capped {solver.Method.Counter(13)}");
-            return held;
-        }
-        double plain = Image(1), corrected = Image(64);
-        Assert.That(corrected, Is.EqualTo(1).Within(.1), "Detection with the measured share is unbiased.");
-        Assert.That(plain, Is.LessThan(.9), "The plain region estimator is low where the region is clipped (this fixture's purpose).");
     }
 
     // The audio synthesis reproduces the histogram: one fine-bin arrival becomes one band-shaped

@@ -1,4 +1,6 @@
-"""Beam mode of the Path method against its exact specular connection on the wave-ground-truth suite.
+"""Beam mode of the Path method against its exact specular connection on the wave-ground-truth suite
+(README part 8). The comparison was made at commit c23782a, where both existed (settings.pathBeams);
+since then the beams are the method, the switch is gone, and `render` simply renders the method.
 
     PY=.context/fdtd-teacher/venv/bin/python
     B=docs/benchmarks/path-denoise-2026-11-12

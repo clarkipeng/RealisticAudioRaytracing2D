@@ -10,9 +10,9 @@ using UnityEngine;
 //   ACOUSTIC_PATH_PROFILE_SCENES=a.json,b.json method-compare scene specs (tools/method_runs.py), first 4 receivers
 //   ACOUSTIC_PATH_PROFILE_TAKE=/abs/job.json  optional TakeBatch job (method Path): the take at a few samples
 //   ACOUSTIC_PATH_PROFILE_RAYS=2048           rays per solve
-// For each scene, three variants with a fence after every phase: as rendered, without the histogram
-// writes (bit 0) and without the connection trials (bit 1). Phases: edge distribution, walk,
-// connections (retrace + trials), readback; the differences give the writes' and the trials' share.
+// For each scene, variants (ACOUSTIC_PATH_PROFILE_FLAGS, ProfileFlags) with a fence after every phase:
+// edge distribution and clearance, walk, readback. The "connect" field is zero since the beams replaced
+// the chain connections.
 public partial class TakeChecks
 {
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
@@ -35,7 +35,7 @@ public partial class TakeChecks
             place(0); solver.Solve(state, new TakeRender.DirectPath[1]); // warm-up
             json.Append((first ? "" : ",") + "{\"scene\":\"" + name + "\",\"rays\":" + rays + ",\"bins\":" + m.TimeBins.Count + ",\"variants\":[");
             first = false;
-            var flagList = Array.ConvertAll((Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_FLAGS") ?? "0,1,2").Split(','), int.Parse);
+            var flagList = Array.ConvertAll((Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_FLAGS") ?? "0,1").Split(','), int.Parse);
             foreach (int flags in flagList)
             {
                 m.ProfileFlags = flags; Array.Clear(m.PhaseSeconds, 0, 4);
@@ -72,7 +72,6 @@ public partial class TakeChecks
                         survival = value;
                         var settings = MethodSettings(TakeRender.Method.Path, job, rays, 0, spec.speedOfSound);
                         if (value >= 0) settings.pathSurvivalSeconds = value;
-                        settings.pathBeams = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS") == "1";
                         var state = (AcousticTake.State[])baked.states.Clone();
                         using var solver = new TransportSolver(baked.scene, baked.geometry, settings, shader, sampleRate: 8000);
                         Record(spec.sceneId, solver, state, p => state[1].position = WaveVector(spec.points, 3 * p), Math.Min(4, spec.points.Length / 3));
@@ -91,7 +90,6 @@ public partial class TakeChecks
                 survival = value; rays = rayCount;
                 var settings = job.settings; settings.methodRays = rays;
                 if (value >= 0) settings.pathSurvivalSeconds = value;
-                settings.pathBeams = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS") == "1";
                 var state = new AcousticTake.State[take.Metadata.scene.objects.Length];
                 using var solver = new TransportSolver(take.Metadata.scene, take.Geometry, settings, shader, sampleRate: take.Metadata.sampleRate);
                 long[] samples = {44100, 4 * 44100, 7 * 44100, 9 * 44100};
