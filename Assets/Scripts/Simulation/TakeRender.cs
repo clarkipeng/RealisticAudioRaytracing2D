@@ -108,6 +108,8 @@ public static partial class TakeRender
         public int pathMaxTrials=64;
         [Min(0),Tooltip("Path method: survival in time. A path is alive at time t with probability min(1, this / t), weight-compensated (unbiased), so each histogram bin keeps about as many contributing paths while late work falls sharply. Zero: every path lives to the horizon (roulette on energy only).")]
         public float pathSurvivalSeconds=.1f;
+        [Tooltip("Path method: score specular segments with a normalised Gaussian beam kernel at the listener (width that of the narrowest Gaussian beam spanning the unfolded path, per band) instead of the exact chain connection.")]
+        public bool pathBeams;
         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
         public string pathHistogramExport="";
         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]

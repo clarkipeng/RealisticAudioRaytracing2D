@@ -40,6 +40,32 @@ uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 1 connec
 // contributing paths as a fine early bin, while the work over a horizon T falls from T to
 // T0 (1 + ln(T / T0)). Zero disables it.
 float PathSurvivalSeconds;
+// Beam mode (PathBeams != 0; docs/benchmarks/path-denoise-2026-11-12, part 8): instead of connecting
+// specular chains exactly (detection regions, trials, PathConnect), every ray segment after at least
+// one specular reflection scores at the listener with a normalised Gaussian kernel of its distance rho
+// from the listener (the ray's unfolded line against the listener image), K(rho) = 2 / (pi w^2)
+// exp(-2 rho^2 / w^2), whose width per band is that of the narrowest Gaussian beam that spans the
+// unfolded path length Lu: w^2 = lambda Lu / pi (waist sqrt(lambda Lu / 2 pi) at mid-path). The first
+// segment after a source, a scattering point or an edge is not scored: the exact direct sound and the
+// next-event connections count it.
+uint PathBeams;
+// The listener's clearance R (distance to the nearest surface, from 256 rays; PathClearance, once per
+// solve). Within R of the listener every ray that passes a listener image has traversed that image's
+// cell (the room's copy in the unfolded space), so the kernel is truncated at R and renormalised: wider,
+// it would lose the mass of rays that belong to a neighbouring image.
+RWStructuredBuffer<uint> PathClearanceOut;
+groupshared uint PathClearanceMin;
+void PathClearance(uint thread)
+{
+    if (thread == 0) PathClearanceMin = asuint(1e4f);
+    GroupMemoryBarrierWithGroupSync();
+    float z = 1 - (2 * thread + 1) / 256.0, r = sqrt(max(0, 1 - z * z)), a = thread * 2.399963229728653;
+    float3 d = float3(r * cos(a), z, r * sin(a)), L = States[MethodState + MethodListenerObject].position.xyz;
+    uint hit; float distance; float3 normal;
+    if (NearestHit(MethodState, L, d, 1e4, false, hit, distance, normal)) InterlockedMin(PathClearanceMin, asuint(distance));
+    GroupMemoryBarrierWithGroupSync();
+    if (thread == 0) PathClearanceOut[0] = PathClearanceMin;
+}
 float PathSurvival(float time) { return PathSurvivalSeconds > 0 ? min(1, PathSurvivalSeconds / max(time, 1e-6)) : 1; }
 RWStructuredBuffer<uint> PathCounts; // contributions per [solve][bin]
 static const uint CounterTrialCap = 13, CounterTrials = 15;
@@ -631,6 +657,7 @@ void TracePath(uint index)
     PathChain chain = PathStart(S, 0, 0, 0, 0, false), branch = chain;
     float branchSum = 0, branchTau = 0, branchSurvival = 1, survival = 1; float3 branchP = 0, branchD = 0; float branchF[8];
     uint branchMedium = 0;
+    float3 beamNormal = 0, branchBeamNormal = 0; // beam mode: outgoing side of the latest event's plane
     [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) branchF[k1] = 0;
     float edgeExtent = 1, edgeAngle = 1, edgeM = 1, edgeSinBeta = 1, edgePhiIn = 0, edgeD = 1;
     [loop] for (;;)
@@ -668,14 +695,14 @@ void TracePath(uint index)
             float keep = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
             if (RandomRay(rng) >= keep) break;
             [unroll] for (uint k2 = 0; k2 < MethodBands; k2++) { Phi0[k2] = branchF[k2] * branchSum / keep; C[k2] = 1; }
-            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival;
+            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival; beamNormal = branchBeamNormal;
             chain = branch;
             fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true;
             MethodCount(CounterBranches);
             // The branch's chain ends with its transmission: connect it here, as the walk connects a chain
             // after each of its events (without this, sound that reflects and then crosses a wall to the
             // listener was never connected: the diffuse-field leak check lost exactly the specular share).
-            if (chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, S, L))
+            if (PathBeams == 0 && chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, S, L))
             {
                 bool anyBranch = false;
                 [unroll] for (uint k22 = 0; k22 < MethodBands; k22++)
@@ -756,6 +783,42 @@ void TracePath(uint index)
             }
             chain.edgeLow = float4(Phi0[0], Phi0[1], Phi0[2], Phi0[3]); chain.edgeHigh = float4(Phi0[4], Phi0[5], Phi0[6], Phi0[7]);
         }
+        if (PathBeams != 0 && chain.reflections >= 1 && medium == AirMedium && airListener && dot(L - p, beamNormal) > 0)
+        {
+            // Beam kernel at the listener of the ray's unfolded line (this segment extended): each prefix of the
+            // chain (one listener image) is scored once, by its own segment, whether or not the closest approach
+            // falls inside the segment; the listener must be in front of the latest plane and visible from the
+            // segment. Width and time use the unfolded distance from the chain's origin to the listener image.
+            float along = dot(L - p, d), segment = found ? distance : limit;
+            float3 offset = L - p - d * along;
+            float rho2 = dot(offset, offset), lc = chain.travelled + along;
+            float lu = sqrt(max(lc * lc + rho2, RayEpsilon * RayEpsilon));
+            float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PathClearanceOut[0]);
+            // A point of the segment nearest the listener, kept 4 RayEpsilon (perpendicular) off the walls at both
+            // ends, so that the visibility test cannot start inside a wall's tolerance and see through it.
+            float startInset = 4 * RayEpsilon / max(abs(dot(d, beamNormal)), 1e-3);
+            float endInset = found ? 4 * RayEpsilon / max(abs(dot(d, normal)), 1e-3) : 0;
+            float3 qb = p + d * clamp(along, min(startInset, .5 * segment), max(segment - endInset, .5 * segment));
+            bool seen = lc > 0 && rho2 < clearance * clearance && Visible(MethodState, qb, L, false);
+            if (seen)
+            {
+                float4 sumLow = 0, sumHigh = 0;
+                float extra = lu - chain.travelled; // unfolded distance from this segment's start to the listener image
+                [unroll] for (uint kb = 0; kb < MethodBands; kb++)
+                {
+                    float4 lane = float4((kb & 3) == uint4(0, 1, 2, 3));
+                    float w2 = w20 / (float)(1u << kb);
+                    float value = Phi0[kb] * C[kb] / Q * 2 / (RayPi * w2) * exp(-2 * rho2 / w2) / (1 - exp(-2 * clearance * clearance / w2)) *
+                                  exp(-2 * MethodLoss(AirMedium, kb) * extra);
+                    if (kb < 4) sumLow += value * lane; else sumHigh += value * lane;
+                }
+                if (dot(sumLow + sumHigh, 1) > 0)
+                {
+                    hasPending = true; pendingLow = sumLow; pendingHigh = sumHigh;
+                    pendingTime = chain.time + lu * MethodSlowness(AirMedium); pendingFrom = -d;
+                }
+            }
+        }
         if (!found) { MethodCount(CounterEscapes); done = true; continue; }
         p += d * distance; tau += distance * MethodSlowness(medium); chain.travelled += distance;
         [unroll] for (uint k7 = 0; k7 < MethodBands; k7++) C[k7] *= exp(-2 * MethodLoss(medium, k7) * distance);
@@ -825,6 +888,7 @@ void TracePath(uint index)
                 if (refracted && !(medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); partWeight = 1e30; }
             }
             [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
+            branchBeamNormal = dot(branchD, n) > 0 ? n : -n;
         }
         if (pick < mD)
         {
@@ -870,8 +934,9 @@ void TracePath(uint index)
             PathEvent(chain, plane, false, n, p);
             d = reflect(d, n);
         }
+        beamNormal = dot(d, n) > 0 ? n : -n;
         // Connect the chain to the listener (PathConnect), with the flux before roulette.
-        if (chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, S, L))
+        if (PathBeams == 0 && chain.detectable && (chain.kind == 2 ? chain.hits >= 1 : chain.reflections >= 1) && PathCandidate(chain, S, L))
         {
             bool any = false;
             [unroll] for (uint k15 = 0; k15 < MethodBands; k15++)

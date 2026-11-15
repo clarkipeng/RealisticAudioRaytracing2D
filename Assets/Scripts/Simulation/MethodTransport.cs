@@ -64,11 +64,11 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly RayTransport.Layout layout;
     readonly ComputeShader shader;
     readonly Action bind;
-    readonly int connectKernel = -1, resetKernel = -1;
+    readonly int connectKernel = -1, resetKernel = -1, clearanceKernel = -1;
     // Path: queued specular-chain connections of one chunk of rays (MethodPath.hlsl PathConnect).
     // Requests are about 0.5 per ray in a closed specular room; overflow is counted (counter 9).
     public const int RequestsPerRay = 8, RequestStride = 160, CandidatesPerGroup = 8;
-    readonly ComputeBuffer requests, requestCount;
+    readonly ComputeBuffer requests, requestCount, clearance;
     readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
     // Late-field accumulation across solves (settings.lateAccumulationSeconds, audio only):
     // every solve draws a new walk seed and the late histogram is the exponential moving
@@ -148,6 +148,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         {
             edgeWeightKernel = shader.FindKernel("PathEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("PathEdgeScan");
             connectKernel = shader.FindKernel("PathConnect3D" + suffix); resetKernel = shader.FindKernel("PathResetRequestsKernel");
+            clearanceKernel = shader.FindKernel("PathClearance3D" + suffix);
             if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
         }
         else if (energy)
@@ -279,6 +280,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             countCells = path ? checked(Frames * Pairs * TimeBins.Count) : 1;
             requests = new ComputeBuffer(path ? ChunkRays * RequestsPerRay : 1, RequestStride);
             requestCount = new ComputeBuffer(1, 4);
+            clearance = new ComputeBuffer(1, 4);
             counts = new ComputeBuffer(countCells, 4);
             Counts = new uint[path ? countCells : 0];
             statsCount = Bands * Depths * StatStride + Counters;
@@ -294,7 +296,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             bool anyTransmission = transmissive || volumeData.Length > 0;
             var kernels = new List<int> {traceKernel, clearKernel};
             if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
-            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, connectKernel, resetKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); }
+            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, connectKernel, resetKernel, clearanceKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); }
             if (accumulate) kernels.Add(accumulateKernel);
             bind = () =>
             {
@@ -314,6 +316,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                     shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
                     shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
                     shader.SetBuffer(kernel, "PathRequests", requests); shader.SetBuffer(kernel, "PathRequestCount", requestCount);
+                    shader.SetBuffer(kernel, "PathClearanceOut", clearance);
                 }
                 if (energy)
                 {
@@ -373,6 +376,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetInt("PathRequestCapacity", ChunkRays * RequestsPerRay);
                 shader.SetInt("PathProfileFlags", 0);
                 shader.SetFloat("PathSurvivalSeconds", settings.pathSurvivalSeconds);
+                shader.SetInt("PathBeams", settings.pathBeams ? 1 : 0);
                 return;
             }
             if (!energy) return;
@@ -464,6 +468,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // Path: the source's edge-ray distribution of the current solve (read by the trace that follows).
     void DispatchEdgeDistribution()
     {
+        if (path && settings.pathBeams) shader.Dispatch(clearanceKernel, 1, 1, 1); // the listener's clearance for the beam kernel (once per solve)
         if (EdgeCount == 0 || settings.diffractionFactor <= 0) return;
         shader.Dispatch(edgeWeightKernel, (EdgeCount + 63) / 64, 1, 1);
         shader.Dispatch(edgeScanKernel, 1, 1, 1);
@@ -476,7 +481,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         long start = Stopwatch.GetTimestamp();
         shader.Dispatch(traceKernel, (count + 63) / 64, 1, 1);
         if (Profile) { Fence(); PhaseSeconds[1] += TakeRender.Elapsed(start); start = Stopwatch.GetTimestamp(); }
-        shader.Dispatch(connectKernel, ChunkRays * RequestsPerRay / CandidatesPerGroup, 1, 1); // groups past the queued count idle
+        if (!settings.pathBeams) shader.Dispatch(connectKernel, ChunkRays * RequestsPerRay / CandidatesPerGroup, 1, 1); // groups past the queued count idle
         if (Profile) { Fence(); PhaseSeconds[2] += TakeRender.Elapsed(start); }
     }
     void Fence() => AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion();
@@ -741,7 +746,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
         counts?.Dispose(); requests?.Dispose(); requestCount?.Dispose();
-        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose();
+        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose();
         nearList?.Dispose(); nearMask?.Dispose();
     }
 }

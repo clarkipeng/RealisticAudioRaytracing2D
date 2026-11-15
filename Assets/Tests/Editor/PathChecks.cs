@@ -72,6 +72,54 @@ public partial class TakeChecks
     // subtracted from the outside total, and the direct sound from the inside one. s = 1 makes the
     // field diffuse; s = 0.5 leaves half of every reflection specular (the field is then only
     // approximately diffuse, and its specular part leaks through chains of reflections).
+    // Opt-in (ACOUSTIC_BOUNDARY=1): a finite rigid plate (2 m x 2 m) under the source; listeners on a line
+    // across the plate's reflection boundary (at x = 2 m). Exact connection against beam mode, both with UTD
+    // edge diffraction: an excess of the beam mode near the boundary would be its smoothing counted again by UTD.
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MeasureReflectionBoundary()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ACOUSTIC_BOUNDARY"))) Assert.Ignore("Set ACOUSTIC_BOUNDARY.");
+        var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
+        var a = new Vector3(-1, 0, -1); var b = new Vector3(1, 0, -1); var c = new Vector3(1, 0, 1); var d = new Vector3(-1, 0, 1);
+        var geometry = new[] {new AcousticTake.Primitive {objectIndex = 2, a = a, b = c, c = b}, new AcousticTake.Primitive {objectIndex = 2, a = a, b = d, c = c}};
+        scene.objects[2].primitiveCount = geometry.Length;
+        foreach (float x in new[] {1f, 1.5f, 1.8f, 1.9f, 2f, 2.1f, 2.2f, 2.5f, 3f})
+        {
+            var line = new System.Text.StringBuilder(FormattableString.Invariant($"x {x:F1}:"));
+            foreach (bool beams in new[] {false, true})
+                foreach (float diffraction in new[] {0f, 1f})
+                {
+                    var state = States(2); state[0].position = new Vector3(0, 1, 0); state[1].position = new Vector3(x, 1, 0);
+                    state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
+                    var settings = ControlSettings(TakeRender.Method.Path, 1 << 18, .1f); settings.useBvh = false; settings.pathBeams = beams;
+                    settings.diffractionFactor = diffraction;
+                    using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+                    solver.Solve(state, new TakeRender.DirectPath[1]);
+                    line.Append($" {(beams ? "beam" : "exact")}{(diffraction > 0 ? "+UTD" : "")}");
+                    foreach (int band in new[] {1, 3, 5}) line.Append(FormattableString.Invariant($" {Window(ControlEnergy(solver, band), 0, int.MaxValue) - 1 / (x * x):G4}"));
+                    line.Append(";");
+                }
+            TestContext.WriteLine(line.ToString()); Debug.Log("Boundary " + line);
+        }
+    }
+    // Opt-in (ACOUSTIC_LEAK_SCAN=1): the leak fixture's outside energy (direct removed) for wall transmissions 1e-3, 1e-5, 0.
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MeasureLeakScan()
+    {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ACOUSTIC_LEAK_SCAN"))) Assert.Ignore("Set ACOUSTIC_LEAK_SCAN.");
+        var size = new Vector3(6, 5, 4); var source = new Vector3(-1.5f, .5f, .4f); var outside = new Vector3(3.8f, -.3f, .2f);
+        foreach (float t in new[] {1e-3f, 1e-5f, 0f})
+            foreach (float s in new[] {1f, .5f, 0f})
+            {
+                LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(.1f, s, t), source, outside, out var scene, out var geometry, out var state);
+                var settings = ControlSettings(TakeRender.Method.Path, 1 << 16, 1.5f); settings.specularDetectionRadius = .5f;
+                using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+                solver.Solve(state, new TakeRender.DirectPath[1]);
+                double total = Window(ControlEnergy(solver, 2), 0, int.MaxValue) - (1 - .1) * t / (outside - source).sqrMagnitude;
+                Debug.Log($"Leak scan t {t} s {s}: outside {total:G4}, escapes {solver.Method.Counter(2)}, events {solver.Method.Counter(1)}");
+                TestContext.WriteLine($"t {t} s {s}: outside {total:G4}, escapes {solver.Method.Counter(2)}, events {solver.Method.Counter(1)}");
+            }
+    }
     [TestCase(TakeRender.Method.Path, 1f), TestCase(TakeRender.Method.Path, .5f), TestCase(TakeRender.Method.Energy, 1f), TestCase(TakeRender.Method.Energy, .5f),
      Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void MethodsLeakAsTheDiffuseFieldPredicts(TakeRender.Method method, float scattering)

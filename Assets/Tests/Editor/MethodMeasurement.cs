@@ -149,6 +149,7 @@ public partial class TakeChecks
         public bool seedPerReceiver, airAbsorption;
         public int pathMaxTrials = 0; // 0: the settings' default
         public float pathSurvivalSeconds = -1; // < 0: the settings' default
+        public bool pathBeams;
     }
     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
     [Serializable] sealed class MethodRunRecord
@@ -204,6 +205,7 @@ public partial class TakeChecks
         settings.methodEdgeProbability = job.edgeProbability; settings.methodRouletteFloor = job.rouletteFloor;
         if (job.pathMaxTrials > 0) settings.pathMaxTrials = job.pathMaxTrials;
         if (job.pathSurvivalSeconds >= 0) settings.pathSurvivalSeconds = job.pathSurvivalSeconds;
+        settings.pathBeams = job.pathBeams;
         return settings;
     }
     static void MethodWrite(string path, float[] values)

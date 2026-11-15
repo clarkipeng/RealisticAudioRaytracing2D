@@ -72,6 +72,7 @@ public partial class TakeChecks
                         survival = value;
                         var settings = MethodSettings(TakeRender.Method.Path, job, rays, 0, spec.speedOfSound);
                         if (value >= 0) settings.pathSurvivalSeconds = value;
+                        settings.pathBeams = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS") == "1";
                         var state = (AcousticTake.State[])baked.states.Clone();
                         using var solver = new TransportSolver(baked.scene, baked.geometry, settings, shader, sampleRate: 8000);
                         Record(spec.sceneId, solver, state, p => state[1].position = WaveVector(spec.points, 3 * p), Math.Min(4, spec.points.Length / 3));
@@ -90,6 +91,7 @@ public partial class TakeChecks
                 survival = value; rays = rayCount;
                 var settings = job.settings; settings.methodRays = rays;
                 if (value >= 0) settings.pathSurvivalSeconds = value;
+                settings.pathBeams = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS") == "1";
                 var state = new AcousticTake.State[take.Metadata.scene.objects.Length];
                 using var solver = new TransportSolver(take.Metadata.scene, take.Geometry, settings, shader, sampleRate: take.Metadata.sampleRate);
                 long[] samples = {44100, 4 * 44100, 7 * 44100, 9 * 44100};
