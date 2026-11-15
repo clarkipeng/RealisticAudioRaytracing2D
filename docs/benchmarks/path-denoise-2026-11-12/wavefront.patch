@@ -1,0 +1,559 @@
+diff --git a/Assets/Resources/Acoustics/PathMethod.compute b/Assets/Resources/Acoustics/PathMethod.compute
+index 0a7b3e9..3287ef5 100644
+--- a/Assets/Resources/Acoustics/PathMethod.compute
++++ b/Assets/Resources/Acoustics/PathMethod.compute
+@@ -11,6 +11,8 @@
+ #pragma kernel PathExpandDirect
+ #pragma kernel PathClear
+ #pragma kernel PathClearance3D
++#pragma kernel PathPrepareNextPassKernel
++#pragma kernel PathResetPassesKernel
+ #pragma kernel PathClearance3DBvh USE_BVH
+ 
+ #include "../../Shaders/Geometry.hlsl"
+@@ -24,6 +26,8 @@
+ [numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
+ [numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
+ [numthreads(256,1,1)] void PathEdgeScan(uint3 t:SV_GroupThreadID) { EnergyEdgeScan(t.x); }
++[numthreads(1,1,1)] void PathPrepareNextPassKernel(uint3 id:SV_DispatchThreadID) { PathPrepareNextPass(); }
++[numthreads(1,1,1)] void PathResetPassesKernel(uint3 id:SV_DispatchThreadID) { PathResetPasses(); }
+ [numthreads(256,1,1)] void PathClearance3D(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
+ [numthreads(256,1,1)] void PathClearance3DBvh(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
+ [numthreads(64,1,1)] void PathExpandDirect(uint3 id:SV_DispatchThreadID) { PathExpand(id.x); }
+diff --git a/Assets/Scripts/Simulation/MethodTransport.cs b/Assets/Scripts/Simulation/MethodTransport.cs
+index f725c87..215cb8e 100644
+--- a/Assets/Scripts/Simulation/MethodTransport.cs
++++ b/Assets/Scripts/Simulation/MethodTransport.cs
+@@ -64,10 +64,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
+     readonly RayTransport.Layout layout;
+     readonly ComputeShader shader;
+     readonly Action bind;
+-    readonly int clearanceKernel = -1;
++    readonly int clearanceKernel = -1, prepareKernel = -1, resetPassesKernel = -1;
++    // Wavefront passes of the walk (MethodPath.hlsl PathRayState): iterations of the loop per pass, and the state's size.
++    public static int PassIterations = 32; public const int RayStateWords = 133;
+     // Path: queued specular-chain connections of one chunk of rays (MethodPath.hlsl PathConnect).
+     // Requests are about 0.5 per ray in a closed specular room; overflow is counted (counter 9).
+-    readonly ComputeBuffer clearance, mirrorCdf;
++    readonly ComputeBuffer clearance, mirrorCdf, rayStates, alive, passCounts;
++    readonly uint[] passCountData = new uint[5];
++    public int LastPasses;
+     readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
+     // Late-field accumulation across solves (settings.lateAccumulationSeconds, audio only):
+     // every solve draws a new walk seed and the late histogram is the exponential moving
+@@ -147,6 +151,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+         {
+             edgeWeightKernel = shader.FindKernel("PathEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("PathEdgeScan");
+             clearanceKernel = shader.FindKernel("PathClearance3D" + suffix);
++            prepareKernel = shader.FindKernel("PathPrepareNextPassKernel"); resetPassesKernel = shader.FindKernel("PathResetPassesKernel");
+             if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
+         }
+         else if (energy)
+@@ -286,6 +291,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
+                         : energy ? 2 * Directions * Bands * Bins : 2 * 2 * TrainBase * ((1 << Bands) - 1);
+             countCells = path ? checked(Frames * Pairs * TimeBins.Count) : 1;
+             clearance = new ComputeBuffer(1, 4);
++            rayStates = new ComputeBuffer(path ? ChunkRays * RayStateWords : 1, 4);
++            alive = new ComputeBuffer(path ? 2 * ChunkRays : 1, 4);
++            passCounts = new ComputeBuffer(5, 4);
+             counts = new ComputeBuffer(countCells, 4);
+             Counts = new uint[path ? countCells : 0];
+             statsCount = Bands * Depths * StatStride + Counters;
+@@ -301,7 +309,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+             bool anyTransmission = transmissive || volumeData.Length > 0;
+             var kernels = new List<int> {traceKernel, clearKernel};
+             if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
+-            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, clearanceKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); }
++            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, clearanceKernel, prepareKernel, resetPassesKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); }
+             if (accumulate) kernels.Add(accumulateKernel);
+             bind = () =>
+             {
+@@ -321,6 +329,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+                     shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
+                     shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
+                     shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
++                    shader.SetBuffer(kernel, "PathStateWords", rayStates); shader.SetBuffer(kernel, "PathAlive", alive); shader.SetBuffer(kernel, "PathPassCounts", passCounts);
+                 }
+                 if (energy)
+                 {
+@@ -377,6 +386,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+                 shader.SetInt("PathCountCells", countCells);
+                 shader.SetInt("PathAudio", audio ? 1 : 0);
+                 shader.SetInt("PathProfileFlags", 0);
++                shader.SetInt("PathPassIterations", PassIterations); shader.SetInt("PathChunkCapacity", ChunkRays); shader.SetInt("PathPass", 0);
+                 shader.SetFloat("PathSurvivalSeconds", settings.pathSurvivalSeconds);
+                 return;
+             }
+@@ -475,11 +485,32 @@ internal sealed class MethodTransport : IDisposable, ILateField
+         shader.Dispatch(edgeScanKernel, 1, 1, 1);
+     }
+ 
+-    // Path: one chunk of rays.
++    // Path: one chunk of rays in wavefront passes. Pass 0 starts every ray; each later pass runs only the
++    // rays still alive (compacted, PathAlive: its first threads hold them, so the work stays in few groups).
++    // The list length is read back every few passes to stop.
+     void TraceChunk(int count)
+     {
+         long start = Stopwatch.GetTimestamp();
++        shader.SetInt("PathPass", 0);
++        shader.Dispatch(resetPassesKernel, 1, 1, 1);
+         shader.Dispatch(traceKernel, (count + 63) / 64, 1, 1);
++        int pass = 0;
++        for (int check = 8; pass < 1 << 14; )
++        {
++            shader.SetInt("PathPass", pass); shader.Dispatch(prepareKernel, 1, 1, 1);
++            pass++;
++            // A fixed dispatch of the chunk's size: threads past the list's length return at once (an
++            // indirect dispatch read its arguments before the previous pass's count was visible on Metal).
++            shader.SetInt("PathPass", pass); shader.Dispatch(traceKernel, (count + 63) / 64, 1, 1);
++            if (pass == check)
++            {
++                check += 8;
++                passCounts.GetData(passCountData);
++                if (passCountData[pass & 1] == 0) break;
++            }
++        }
++        LastPasses = pass;
++        shader.SetInt("PathPass", 0);
+         if (Profile) { Fence(); PhaseSeconds[1] += TakeRender.Elapsed(start); }
+     }
+     void Fence() => AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion();
+@@ -744,7 +775,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
+         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
+         counts?.Dispose();
+-        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); mirrorCdf?.Dispose();
++        arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); mirrorCdf?.Dispose(); rayStates?.Dispose(); alive?.Dispose(); passCounts?.Dispose();
+         nearList?.Dispose(); nearMask?.Dispose();
+     }
+ }
+diff --git a/Assets/Shaders/MethodPath.hlsl b/Assets/Shaders/MethodPath.hlsl
+index c8d3de9..c6d3d3d 100644
+--- a/Assets/Shaders/MethodPath.hlsl
++++ b/Assets/Shaders/MethodPath.hlsl
+@@ -379,18 +379,45 @@ void PathDirectArrival(float3 S, float3 L, float4 low, float4 high, float scale,
+ 
+ // One flat loop; every heavy helper has a single call site. Each iteration either deposits the
+ // pending contribution, makes one connection, or traces one segment.
++// Wavefront passes (PathPassIterations iterations of the walk's loop per pass): a ray that is still
++// alive at the end of a pass saves its whole state here and joins the next pass's compacted list, so a
++// long-lived ray no longer keeps its SIMD group busy while the others are done. Same loop, same random
++// numbers: the result is identical to an uninterrupted walk.
++static const uint PathStateStride = 133; // words per ray (MethodTransport.RayStateWords)
++RWStructuredBuffer<uint> PathStateWords;       // [chunk ray][PathStateStride]: the state, as raw words
++RWStructuredBuffer<uint> PathAlive;            // [2][chunk ray]: the rays of the current and the next pass
++RWStructuredBuffer<uint> PathPassCounts;       // [0], [1]: list lengths; [2..4]: indirect dispatch arguments
++uint PathPass, PathPassIterations, PathChunkCapacity;
++// After pass PathPass: the next pass's dispatch size from the list just written, and an empty list for it to write.
++void PathPrepareNextPass()
++{
++    uint written = PathPassCounts[PathPass & 1];
++    PathPassCounts[2] = (written + 63) / 64; PathPassCounts[3] = 1; PathPassCounts[4] = 1;
++    PathPassCounts[(PathPass + 1) & 1] = 0;
++}
++void PathResetPasses() { PathPassCounts[0] = 0; PathPassCounts[1] = 0; }
++
+ void TracePath(uint index)
+ {
+-    if (index >= MethodRayCount) return;
+-    uint ray = MethodRayOffset + index;
+-    MethodCount(CounterRays);
++    uint slot = index;
++    if (PathPass == 0)
++    {
++        if (index >= MethodRayCount) return;
++    }
++    else
++    {
++        if (index >= PathPassCounts[(PathPass + 1) & 1]) return;
++        slot = PathAlive[((PathPass + 1) & 1) * PathChunkCapacity + index];
++    }
++    uint ray = MethodRayOffset + slot;
++    if (PathPass == 0) MethodCount(CounterRays);
+     float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
+     uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
+     MethodAnchor v;
+     v.position = S; v.normal = 0; v.previous = S; v.kind = 0; v.edge = 0; v.primitive = 0xffffffff; v.time = 0;
+     bool airListener = true;
+     v.medium = AirMedium;
+-    [loop] for (uint end = 0; end < 2; end++)
++    [loop] for (uint end = 0; end < 2 && PathPass == 0; end++)
+     {
+         uint here = MediumAt(MethodState, end == 0 ? S : L, false);
+         if (end == 0) v.medium = here; else airListener = here == AirMedium;
+@@ -415,8 +442,156 @@ void TracePath(uint index)
+     float3 beamNormal = 0, branchBeamNormal = 0; // outgoing side of the latest event's plane (beams)
+     [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) branchF[k1] = 0;
+     float edgeExtent = 1, edgeAngle = 1, edgeM = 1, edgeSinBeta = 1, edgePhiIn = 0, edgeD = 1;
++    if (PathPass != 0)
++    {
++        uint base = slot * PathStateStride;
++        ray = PathStateWords[base + 0];
++        rng = PathStateWords[base + 1];
++        v.position.x = asfloat(PathStateWords[base + 2]);
++        v.position.y = asfloat(PathStateWords[base + 3]);
++        v.position.z = asfloat(PathStateWords[base + 4]);
++        v.normal.x = asfloat(PathStateWords[base + 5]);
++        v.normal.y = asfloat(PathStateWords[base + 6]);
++        v.normal.z = asfloat(PathStateWords[base + 7]);
++        v.previous.x = asfloat(PathStateWords[base + 8]);
++        v.previous.y = asfloat(PathStateWords[base + 9]);
++        v.previous.z = asfloat(PathStateWords[base + 10]);
++        v.kind = PathStateWords[base + 11];
++        v.edge = PathStateWords[base + 12];
++        v.primitive = PathStateWords[base + 13];
++        v.medium = PathStateWords[base + 14];
++        v.time = asfloat(PathStateWords[base + 15]);
++        c.position.x = asfloat(PathStateWords[base + 16]);
++        c.position.y = asfloat(PathStateWords[base + 17]);
++        c.position.z = asfloat(PathStateWords[base + 18]);
++        c.normal.x = asfloat(PathStateWords[base + 19]);
++        c.normal.y = asfloat(PathStateWords[base + 20]);
++        c.normal.z = asfloat(PathStateWords[base + 21]);
++        c.previous.x = asfloat(PathStateWords[base + 22]);
++        c.previous.y = asfloat(PathStateWords[base + 23]);
++        c.previous.z = asfloat(PathStateWords[base + 24]);
++        c.kind = PathStateWords[base + 25];
++        c.edge = PathStateWords[base + 26];
++        c.primitive = PathStateWords[base + 27];
++        c.medium = PathStateWords[base + 28];
++        c.time = asfloat(PathStateWords[base + 29]);
++        I[0] = asfloat(PathStateWords[base + 30]);
++        I[1] = asfloat(PathStateWords[base + 31]);
++        I[2] = asfloat(PathStateWords[base + 32]);
++        I[3] = asfloat(PathStateWords[base + 33]);
++        I[4] = asfloat(PathStateWords[base + 34]);
++        I[5] = asfloat(PathStateWords[base + 35]);
++        I[6] = asfloat(PathStateWords[base + 36]);
++        I[7] = asfloat(PathStateWords[base + 37]);
++        cI[0] = asfloat(PathStateWords[base + 38]);
++        cI[1] = asfloat(PathStateWords[base + 39]);
++        cI[2] = asfloat(PathStateWords[base + 40]);
++        cI[3] = asfloat(PathStateWords[base + 41]);
++        cI[4] = asfloat(PathStateWords[base + 42]);
++        cI[5] = asfloat(PathStateWords[base + 43]);
++        cI[6] = asfloat(PathStateWords[base + 44]);
++        cI[7] = asfloat(PathStateWords[base + 45]);
++        Phi0[0] = asfloat(PathStateWords[base + 46]);
++        Phi0[1] = asfloat(PathStateWords[base + 47]);
++        Phi0[2] = asfloat(PathStateWords[base + 48]);
++        Phi0[3] = asfloat(PathStateWords[base + 49]);
++        Phi0[4] = asfloat(PathStateWords[base + 50]);
++        Phi0[5] = asfloat(PathStateWords[base + 51]);
++        Phi0[6] = asfloat(PathStateWords[base + 52]);
++        Phi0[7] = asfloat(PathStateWords[base + 53]);
++        C[0] = asfloat(PathStateWords[base + 54]);
++        C[1] = asfloat(PathStateWords[base + 55]);
++        C[2] = asfloat(PathStateWords[base + 56]);
++        C[3] = asfloat(PathStateWords[base + 57]);
++        C[4] = asfloat(PathStateWords[base + 58]);
++        C[5] = asfloat(PathStateWords[base + 59]);
++        C[6] = asfloat(PathStateWords[base + 60]);
++        C[7] = asfloat(PathStateWords[base + 61]);
++        pendingLow.x = asfloat(PathStateWords[base + 62]);
++        pendingLow.y = asfloat(PathStateWords[base + 63]);
++        pendingLow.z = asfloat(PathStateWords[base + 64]);
++        pendingLow.w = asfloat(PathStateWords[base + 65]);
++        pendingHigh.x = asfloat(PathStateWords[base + 66]);
++        pendingHigh.y = asfloat(PathStateWords[base + 67]);
++        pendingHigh.z = asfloat(PathStateWords[base + 68]);
++        pendingHigh.w = asfloat(PathStateWords[base + 69]);
++        listenerScale = asfloat(PathStateWords[base + 70]);
++        pendingTime = asfloat(PathStateWords[base + 71]);
++        pendingFrom.x = asfloat(PathStateWords[base + 72]);
++        pendingFrom.y = asfloat(PathStateWords[base + 73]);
++        pendingFrom.z = asfloat(PathStateWords[base + 74]);
++        events = PathStateWords[base + 75];
++        p.x = asfloat(PathStateWords[base + 76]);
++        p.y = asfloat(PathStateWords[base + 77]);
++        p.z = asfloat(PathStateWords[base + 78]);
++        d.x = asfloat(PathStateWords[base + 79]);
++        d.y = asfloat(PathStateWords[base + 80]);
++        d.z = asfloat(PathStateWords[base + 81]);
++        Q = asfloat(PathStateWords[base + 82]);
++        tau = asfloat(PathStateWords[base + 83]);
++        medium = PathStateWords[base + 84];
++        chain.kind = PathStateWords[base + 85];
++        chain.edge = PathStateWords[base + 86];
++        chain.edgePhi = asfloat(PathStateWords[base + 87]);
++        chain.edgePick = asfloat(PathStateWords[base + 88]);
++        chain.hits = PathStateWords[base + 89];
++        chain.reflections = PathStateWords[base + 90];
++        chain.travelled = asfloat(PathStateWords[base + 91]);
++        chain.time = asfloat(PathStateWords[base + 92]);
++        branch.kind = PathStateWords[base + 93];
++        branch.edge = PathStateWords[base + 94];
++        branch.edgePhi = asfloat(PathStateWords[base + 95]);
++        branch.edgePick = asfloat(PathStateWords[base + 96]);
++        branch.hits = PathStateWords[base + 97];
++        branch.reflections = PathStateWords[base + 98];
++        branch.travelled = asfloat(PathStateWords[base + 99]);
++        branch.time = asfloat(PathStateWords[base + 100]);
++        branchSum = asfloat(PathStateWords[base + 101]);
++        branchTau = asfloat(PathStateWords[base + 102]);
++        branchSurvival = asfloat(PathStateWords[base + 103]);
++        survival = asfloat(PathStateWords[base + 104]);
++        branchP.x = asfloat(PathStateWords[base + 105]);
++        branchP.y = asfloat(PathStateWords[base + 106]);
++        branchP.z = asfloat(PathStateWords[base + 107]);
++        branchD.x = asfloat(PathStateWords[base + 108]);
++        branchD.y = asfloat(PathStateWords[base + 109]);
++        branchD.z = asfloat(PathStateWords[base + 110]);
++        branchF[0] = asfloat(PathStateWords[base + 111]);
++        branchF[1] = asfloat(PathStateWords[base + 112]);
++        branchF[2] = asfloat(PathStateWords[base + 113]);
++        branchF[3] = asfloat(PathStateWords[base + 114]);
++        branchF[4] = asfloat(PathStateWords[base + 115]);
++        branchF[5] = asfloat(PathStateWords[base + 116]);
++        branchF[6] = asfloat(PathStateWords[base + 117]);
++        branchF[7] = asfloat(PathStateWords[base + 118]);
++        branchMedium = PathStateWords[base + 119];
++        beamNormal.x = asfloat(PathStateWords[base + 120]);
++        beamNormal.y = asfloat(PathStateWords[base + 121]);
++        beamNormal.z = asfloat(PathStateWords[base + 122]);
++        branchBeamNormal.x = asfloat(PathStateWords[base + 123]);
++        branchBeamNormal.y = asfloat(PathStateWords[base + 124]);
++        branchBeamNormal.z = asfloat(PathStateWords[base + 125]);
++        edgeExtent = asfloat(PathStateWords[base + 126]);
++        edgeAngle = asfloat(PathStateWords[base + 127]);
++        edgeM = asfloat(PathStateWords[base + 128]);
++        edgeSinBeta = asfloat(PathStateWords[base + 129]);
++        edgePhiIn = asfloat(PathStateWords[base + 130]);
++        edgeD = asfloat(PathStateWords[base + 131]);
++        uint flags = PathStateWords[base + 132];
++        airListener = (flags & 1u) != 0;
++        connectListener = (flags & 2u) != 0;
++        connectEdge = (flags & 4u) != 0;
++        hasPending = (flags & 8u) != 0;
++        travelling = (flags & 16u) != 0;
++        done = (flags & 32u) != 0;
++        fluxPending = (flags & 64u) != 0;
++        inBranch = (flags & 128u) != 0;
++    }
++    uint iterations = 0;
++    bool suspend = false;
+     [loop] for (;;)
+     {
++        if (++iterations > PathPassIterations) { suspend = true; break; } // end of this pass (state saved after the loop)
+         if (hasPending)
+         {
+             hasPending = false;
+@@ -689,6 +864,148 @@ void TracePath(uint index)
+             Q *= survive;
+         }
+     }
++    if (suspend)
++    {
++        // End of this pass: save the state and join the next pass's list (after the loop: writes made
++        // inside the [loop] before a return were dropped on Metal).
++        uint base = slot * PathStateStride;
++        PathStateWords[base + 0] = ray;
++        PathStateWords[base + 1] = rng;
++        PathStateWords[base + 2] = asuint(v.position.x);
++        PathStateWords[base + 3] = asuint(v.position.y);
++        PathStateWords[base + 4] = asuint(v.position.z);
++        PathStateWords[base + 5] = asuint(v.normal.x);
++        PathStateWords[base + 6] = asuint(v.normal.y);
++        PathStateWords[base + 7] = asuint(v.normal.z);
++        PathStateWords[base + 8] = asuint(v.previous.x);
++        PathStateWords[base + 9] = asuint(v.previous.y);
++        PathStateWords[base + 10] = asuint(v.previous.z);
++        PathStateWords[base + 11] = v.kind;
++        PathStateWords[base + 12] = v.edge;
++        PathStateWords[base + 13] = v.primitive;
++        PathStateWords[base + 14] = v.medium;
++        PathStateWords[base + 15] = asuint(v.time);
++        PathStateWords[base + 16] = asuint(c.position.x);
++        PathStateWords[base + 17] = asuint(c.position.y);
++        PathStateWords[base + 18] = asuint(c.position.z);
++        PathStateWords[base + 19] = asuint(c.normal.x);
++        PathStateWords[base + 20] = asuint(c.normal.y);
++        PathStateWords[base + 21] = asuint(c.normal.z);
++        PathStateWords[base + 22] = asuint(c.previous.x);
++        PathStateWords[base + 23] = asuint(c.previous.y);
++        PathStateWords[base + 24] = asuint(c.previous.z);
++        PathStateWords[base + 25] = c.kind;
++        PathStateWords[base + 26] = c.edge;
++        PathStateWords[base + 27] = c.primitive;
++        PathStateWords[base + 28] = c.medium;
++        PathStateWords[base + 29] = asuint(c.time);
++        PathStateWords[base + 30] = asuint(I[0]);
++        PathStateWords[base + 31] = asuint(I[1]);
++        PathStateWords[base + 32] = asuint(I[2]);
++        PathStateWords[base + 33] = asuint(I[3]);
++        PathStateWords[base + 34] = asuint(I[4]);
++        PathStateWords[base + 35] = asuint(I[5]);
++        PathStateWords[base + 36] = asuint(I[6]);
++        PathStateWords[base + 37] = asuint(I[7]);
++        PathStateWords[base + 38] = asuint(cI[0]);
++        PathStateWords[base + 39] = asuint(cI[1]);
++        PathStateWords[base + 40] = asuint(cI[2]);
++        PathStateWords[base + 41] = asuint(cI[3]);
++        PathStateWords[base + 42] = asuint(cI[4]);
++        PathStateWords[base + 43] = asuint(cI[5]);
++        PathStateWords[base + 44] = asuint(cI[6]);
++        PathStateWords[base + 45] = asuint(cI[7]);
++        PathStateWords[base + 46] = asuint(Phi0[0]);
++        PathStateWords[base + 47] = asuint(Phi0[1]);
++        PathStateWords[base + 48] = asuint(Phi0[2]);
++        PathStateWords[base + 49] = asuint(Phi0[3]);
++        PathStateWords[base + 50] = asuint(Phi0[4]);
++        PathStateWords[base + 51] = asuint(Phi0[5]);
++        PathStateWords[base + 52] = asuint(Phi0[6]);
++        PathStateWords[base + 53] = asuint(Phi0[7]);
++        PathStateWords[base + 54] = asuint(C[0]);
++        PathStateWords[base + 55] = asuint(C[1]);
++        PathStateWords[base + 56] = asuint(C[2]);
++        PathStateWords[base + 57] = asuint(C[3]);
++        PathStateWords[base + 58] = asuint(C[4]);
++        PathStateWords[base + 59] = asuint(C[5]);
++        PathStateWords[base + 60] = asuint(C[6]);
++        PathStateWords[base + 61] = asuint(C[7]);
++        PathStateWords[base + 62] = asuint(pendingLow.x);
++        PathStateWords[base + 63] = asuint(pendingLow.y);
++        PathStateWords[base + 64] = asuint(pendingLow.z);
++        PathStateWords[base + 65] = asuint(pendingLow.w);
++        PathStateWords[base + 66] = asuint(pendingHigh.x);
++        PathStateWords[base + 67] = asuint(pendingHigh.y);
++        PathStateWords[base + 68] = asuint(pendingHigh.z);
++        PathStateWords[base + 69] = asuint(pendingHigh.w);
++        PathStateWords[base + 70] = asuint(listenerScale);
++        PathStateWords[base + 71] = asuint(pendingTime);
++        PathStateWords[base + 72] = asuint(pendingFrom.x);
++        PathStateWords[base + 73] = asuint(pendingFrom.y);
++        PathStateWords[base + 74] = asuint(pendingFrom.z);
++        PathStateWords[base + 75] = events;
++        PathStateWords[base + 76] = asuint(p.x);
++        PathStateWords[base + 77] = asuint(p.y);
++        PathStateWords[base + 78] = asuint(p.z);
++        PathStateWords[base + 79] = asuint(d.x);
++        PathStateWords[base + 80] = asuint(d.y);
++        PathStateWords[base + 81] = asuint(d.z);
++        PathStateWords[base + 82] = asuint(Q);
++        PathStateWords[base + 83] = asuint(tau);
++        PathStateWords[base + 84] = medium;
++        PathStateWords[base + 85] = chain.kind;
++        PathStateWords[base + 86] = chain.edge;
++        PathStateWords[base + 87] = asuint(chain.edgePhi);
++        PathStateWords[base + 88] = asuint(chain.edgePick);
++        PathStateWords[base + 89] = chain.hits;
++        PathStateWords[base + 90] = chain.reflections;
++        PathStateWords[base + 91] = asuint(chain.travelled);
++        PathStateWords[base + 92] = asuint(chain.time);
++        PathStateWords[base + 93] = branch.kind;
++        PathStateWords[base + 94] = branch.edge;
++        PathStateWords[base + 95] = asuint(branch.edgePhi);
++        PathStateWords[base + 96] = asuint(branch.edgePick);
++        PathStateWords[base + 97] = branch.hits;
++        PathStateWords[base + 98] = branch.reflections;
++        PathStateWords[base + 99] = asuint(branch.travelled);
++        PathStateWords[base + 100] = asuint(branch.time);
++        PathStateWords[base + 101] = asuint(branchSum);
++        PathStateWords[base + 102] = asuint(branchTau);
++        PathStateWords[base + 103] = asuint(branchSurvival);
++        PathStateWords[base + 104] = asuint(survival);
++        PathStateWords[base + 105] = asuint(branchP.x);
++        PathStateWords[base + 106] = asuint(branchP.y);
++        PathStateWords[base + 107] = asuint(branchP.z);
++        PathStateWords[base + 108] = asuint(branchD.x);
++        PathStateWords[base + 109] = asuint(branchD.y);
++        PathStateWords[base + 110] = asuint(branchD.z);
++        PathStateWords[base + 111] = asuint(branchF[0]);
++        PathStateWords[base + 112] = asuint(branchF[1]);
++        PathStateWords[base + 113] = asuint(branchF[2]);
++        PathStateWords[base + 114] = asuint(branchF[3]);
++        PathStateWords[base + 115] = asuint(branchF[4]);
++        PathStateWords[base + 116] = asuint(branchF[5]);
++        PathStateWords[base + 117] = asuint(branchF[6]);
++        PathStateWords[base + 118] = asuint(branchF[7]);
++        PathStateWords[base + 119] = branchMedium;
++        PathStateWords[base + 120] = asuint(beamNormal.x);
++        PathStateWords[base + 121] = asuint(beamNormal.y);
++        PathStateWords[base + 122] = asuint(beamNormal.z);
++        PathStateWords[base + 123] = asuint(branchBeamNormal.x);
++        PathStateWords[base + 124] = asuint(branchBeamNormal.y);
++        PathStateWords[base + 125] = asuint(branchBeamNormal.z);
++        PathStateWords[base + 126] = asuint(edgeExtent);
++        PathStateWords[base + 127] = asuint(edgeAngle);
++        PathStateWords[base + 128] = asuint(edgeM);
++        PathStateWords[base + 129] = asuint(edgeSinBeta);
++        PathStateWords[base + 130] = asuint(edgePhiIn);
++        PathStateWords[base + 131] = asuint(edgeD);
++        PathStateWords[base + 132] = (airListener ? 1u : 0u) | (connectListener ? 2u : 0u) | (connectEdge ? 4u : 0u) | (hasPending ? 8u : 0u) | (travelling ? 16u : 0u) | (done ? 32u : 0u) | (fluxPending ? 64u : 0u) | (inBranch ? 128u : 0u);
++        uint at;
++        InterlockedAdd(PathPassCounts[PathPass & 1], 1, at);
++        PathAlive[(PathPass & 1) * PathChunkCapacity + at] = slot;
++    }
+ }
+ 
+ // Audio: the direct arrival as one path per FFT bin (gain sqrt of the band-interpolated energy).
+diff --git a/Assets/Tests/Editor/PathChecks.cs b/Assets/Tests/Editor/PathChecks.cs
+index 6b240e5..aaa3aff 100644
+--- a/Assets/Tests/Editor/PathChecks.cs
++++ b/Assets/Tests/Editor/PathChecks.cs
+@@ -157,6 +157,34 @@ public partial class TakeChecks
+     }
+     static long Sum(uint[] values) { long s = 0; foreach (var v in values) s += v; return s; }
+ 
++    // Wavefront passes (MethodTransport.PassIterations): the walk interrupted every few iterations, its
++    // state saved and the survivors compacted, gives the same histogram as one uninterrupted pass (same
++    // random numbers; the histogram's fixed-point sums do not depend on order).
++    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
++    public void PathWavefrontPassesAreExact()
++    {
++        double[] Run(int iterations, out int passes)
++        {
++            int saved = MethodTransport.PassIterations; MethodTransport.PassIterations = iterations;
++            try
++            {
++                ApertureRoom(true, false, ApertureOutside, out var scene, out var geometry, out var state, .01f, 1, 0, true, .12f);
++                var settings = ControlSettings(TakeRender.Method.Path, 1 << 14, 1.5f); settings.diffractionFactor = 1;
++                using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
++                solver.Solve(state, new TakeRender.DirectPath[1]);
++                passes = solver.Method.LastPasses;
++                var all = new List<double>();
++                for (int b = 0; b < 8; b++) all.AddRange(ControlEnergy(solver, b));
++                return all.ToArray();
++            }
++            finally { MethodTransport.PassIterations = saved; }
++        }
++        var one = Run(1 << 30, out int onePasses); var many = Run(8, out int manyPasses);
++        double total = 0, difference = 0;
++        for (int i = 0; i < one.Length; i++) { total += Math.Abs(one[i]); difference += Math.Abs(one[i] - many[i]); }
++        TestContext.WriteLine($"one pass ({onePasses} later passes) against passes of 8 iterations ({manyPasses} passes): total {total:G6}, sum of differences {difference:G3}");
++        Assert.That(difference, Is.LessThanOrEqualTo(1e-9 * total), "Splitting the walk does not change the histogram.");
++    }
+     // The tau = 1 limit of the leak check: an open hole. The room (6 x 5 x 4 m, open sheets, a = 0.1,
+     // s = 1) has a 1.2 m x 1.0 m hole in its +x wall, centred at (y, z) = (-0.3, 0.2); outside, the
+     // hole shows the listener the inside radiance E_in / (4 pi) over its solid angle, so the reverberant
+diff --git a/Assets/Tests/Editor/PathProfileMeasurement.cs b/Assets/Tests/Editor/PathProfileMeasurement.cs
+index c73f7ae..4661658 100644
+--- a/Assets/Tests/Editor/PathProfileMeasurement.cs
++++ b/Assets/Tests/Editor/PathProfileMeasurement.cs
+@@ -25,6 +25,9 @@ public partial class TakeChecks
+         var json = new StringBuilder("{\"rays\":" + rays + ",\"supportsInlineRayTracing\":" + (SystemInfo.supportsInlineRayTracing ? "true" : "false") +
+                                      ",\"supportsRayTracing\":" + (SystemInfo.supportsRayTracing ? "true" : "false") + ",\"scenes\":[");
+         var shader = RequireGpu(); bool first = true;
++        string passEnv = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_PASS"); // iterations per wavefront pass
++        int savedPass = MethodTransport.PassIterations;
++        if (!string.IsNullOrEmpty(passEnv)) MethodTransport.PassIterations = int.Parse(passEnv);
+         var survivals = Array.ConvertAll((Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_SURVIVAL") ?? "-1").Split(','),
+                                          v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture));
+         float survival = -1;
+@@ -46,7 +49,7 @@ public partial class TakeChecks
+                     events += m.Counter(1); detections += m.Counter(7); chains += m.Counter(8); trials += m.Counter(15);
+                 }
+                 json.Append((flags == flagList[0] ? "" : ",") + FormattableString.Invariant($"{{\"flags\":{flags},\"edge\":{m.PhaseSeconds[0] / poses:R},\"walk\":{m.PhaseSeconds[1] / poses:R},\"connect\":{m.PhaseSeconds[2] / poses:R},\"readback\":{m.PhaseSeconds[3] / poses:R},\"events\":{events / poses},\"candidates\":{detections / poses},\"chains\":{chains / poses},\"trials\":{trials / poses}}}"));
+-                Debug.Log($"Path profile {name} flags {flags}: walk {m.PhaseSeconds[1] / poses * 1000:F1} ms, connect {m.PhaseSeconds[2] / poses * 1000:F1} ms, edge {m.PhaseSeconds[0] / poses * 1000:F1} ms, readback {m.PhaseSeconds[3] / poses * 1000:F1} ms");
++                Debug.Log($"Path profile {name} flags {flags}: passes {m.LastPasses}, walk {m.PhaseSeconds[1] / poses * 1000:F1} ms, connect {m.PhaseSeconds[2] / poses * 1000:F1} ms, edge {m.PhaseSeconds[0] / poses * 1000:F1} ms, readback {m.PhaseSeconds[3] / poses * 1000:F1} ms");
+             }
+             m.ProfileFlags = 0; m.Profile = false;
+             json.Append("]}");
+@@ -97,6 +100,7 @@ public partial class TakeChecks
+             }
+         }
+         json.Append("]}");
++        MethodTransport.PassIterations = savedPass;
+         File.WriteAllText(output, json.ToString());
+     }
+ }

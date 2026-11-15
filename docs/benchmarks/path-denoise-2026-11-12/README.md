@@ -718,3 +718,30 @@ The ratio c/d is a property of the dispatch, not of the room: it is large becaus
 Step 2 (wavefront passes with compaction) removes exactly that, and with it d changes from "longest ray in the group" to "average work per ray"; with the work model (cost proportional to the total path time, ∫S(t)L(t) dt) and the histogram's own per-bin relative error (one count per distinct path, bins in constant relative width), the same minimisation has no interior optimum at all: T0* is the path lifetime, i.e. no time roulette (computed for lifetimes from 0.5 to 6 s; the optimum is within 10% of the lifetime in every case).
 Building the rule now would tune it to a dispatch shape that the next step is meant to remove, so the order is reversed: step 2 first, then, if its update time leaves a gap to 23 ms, the same derivation with the measured cost of the new dispatch.
 The two measured ratios needed per solve are available to the tracer: b/a from the spread between consecutive solves of the same pair (or their counts and second moments), c/d from the solve's own phase times.
+
+## 14. Wavefront passes: exact, and slower
+
+**What was built** (`wavefront.patch` beside this file, not applied).
+The walk ran in passes of K iterations of its loop; a ray still alive at the end of a pass saved its whole state (133 words: the ray, its connection vertex, its chain and branch, the band vectors, the pending deposit) and appended itself to a compacted list, and the next pass ran only the listed rays, from the first threads of the dispatch.
+The result was identical to the uninterrupted walk (same random numbers, order-independent fixed-point sums): a new check gave a sum of differences of exactly 0 over all bands for K = 8 against one pass.
+On the way: on Metal, buffer writes made inside a `[loop]` just before a `return` were silently dropped (the state was never saved and the rays vanished, 85% of the energy at K = 8); the save now happens after the loop.
+
+**Time per update**, the walk's GPU time, one listener, fences included:
+
+| Scene | rays | one pass | K = 32 | K = 8 |
+|---|---:|---:|---:|---:|
+| stone shoebox | 256 / 512 | 5.2 / 5.6 ms | 6.0 / 6.2 ms | 8.6 / 6.9 ms |
+| furnished room | 256 / 512 | 46 / 48 ms | 61 / 63 ms | 61 / 66 ms |
+| Church | 256 / 512 | 221 / 240 ms | 450 / 613 ms | 484 / 645 ms |
+
+**Why.**
+In the Church at 512 rays, K = 32 took 80 passes and K = 256 took 16; the time per pass was about K times 0.14–0.28 ms, i.e. a pass lasts as long as K iterations of its slowest ray, however few rays remain.
+So the update time is not idle lanes waiting for the longest ray: it is the longest ray's own chain of iterations (about 2,500 here), each a BVH traversal or a connection, run one after another on one thread; compaction cannot shorten a single ray's serial chain, and its passes add a dispatch and a state round-trip each.
+The shader with the state code also raised the test runner's peak footprint to 3.39 GiB.
+The patch is therefore not applied.
+
+**What would split a path across threads.**
+Two things shorten the serial chain:
+- doing each event's connections (the straight and edge connections, more than half of an iteration's cost: part 12 measured 247 → 108 ms with both switched off) in parallel by other threads, from a queue filled by the walk and drained between its passes, which is what the wavefront machinery above makes possible;
+- making the longest paths shorter, which is the survival time of part 13, with the cost model now confirmed: the update time is the longest path's length, so c/d in T0* = sqrt((b/a)(c/d)) is a property of the room's path lifetime and does not go away.
+Neither is done here; with the connections deferred the Church's walk would be about 108 ms at the default survival time and about 30 ms at T0 = 10 ms (part 12's "neither connection" column), so reaching 23 ms needs both.
