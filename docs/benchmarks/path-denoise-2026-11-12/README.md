@@ -566,3 +566,38 @@ With the band-wise mixing `PathReverbReproducesTheHistogram` passes: through the
 | St Paul's 9.5 m / York 24 m / St Paul's 32 m (measured) | 0.79 / 0.91 / 0.89 | 41 / 35 / 35 ms | |
 
 The echo density is now within 0.02–0.15 of the measured halls and the energy method; it takes 66–72 ms to reach 0.9 against 35–50 ms for them, because the early part of the histogram is sparse (single arrivals) for longer.
+
+## 10. The Church walk again, with the beams and the new synthesis
+
+**Renders** (`church.py`; same settings as part 4: 512 rays realtime with histogram export, 8,192 rays clean, 6 s horizon):
+level in dBFS per part of the walk, with part 4's renders (exact connection, impulse synthesis) in brackets.
+
+| Render | standing and turning | walking | doors open, outside |
+|---|---:|---:|---:|
+| energy method | −43.8 | −43.4 | −51.9 |
+| path, 512 rays | −44.2 (−45.1) | −46.4 (−46.6) | −62.2 (−60.9) |
+| path, 8,192 rays | −44.4 (−45.4) | −44.5 (−45.3) | −60.9 (−60.5) |
+| path, 512 rays denoised | −43.8 | −46.9 | −63.2 |
+
+Inside the church the clean render is now 0.6–1.1 dB below the energy method (1.6–1.9 dB before).
+Outside it is still 9 dB below: these renders run with diffraction, and part 8 measured that with the source's edge rays the outside late field is heavy-tailed (one solve's median a tenth of its mean); a render plays something close to the median.
+That is step 3(b), below.
+The realtime solves took 249 ms per update on average (257 s for 1,034, under 50% pacing), the clean 2.6 s.
+
+**Denoiser.**
+`tools/path_dataset.py --name path-v3`: the v2 recipe with half the scenes (four per family, 24 generated scenes plus the Church, 312 poses), rendered with the beams; `verify` checks 875 payload hashes.
+The same model and training as part 5 (`tools/path_denoise.py`, now reading the dataset named by `PATH_DENOISE_DATASET`, default `path-v3`), on the held-out families:
+
+| Rays | four-frame mean | four frames at equal compute | denoised |
+|---|---|---|---|
+| 256 | 6.33 / 1.52 / 4.72 | 5.93 / 1.55 / 4.33 | **5.24 / 1.52 / 3.38** |
+| 512 | 5.30 / 1.24 / 3.44 | 4.96 / 1.33 / 3.41 | **4.42 / 1.24 / 2.73** |
+| 2,048 | 3.71 / 0.98 / 2.28 | 3.44 / 0.97 / 2.10 | 3.61 / 0.98 / 2.17 |
+
+(window dB / band level dB / decay curve dB.)
+It still beats more rays at equal compute at 256 and 512 rays and still loses at 2,048; the Church family again improves in window error (7.99 → 7.42 at 512 rays) and loses in decay curve (3.29 → 3.99).
+So the walk was rendered denoised; as in part 5, the frame-to-frame change of the 500 Hz band (4.4 → 0.7 dB in 50–200 ms, 3.4 → 0.6 dB later) is the plain four-frame average's, not the network's.
+
+**Published.**
+The listening page `.context/energy-audio/listen/path.html` and the live view (`build.py` rerun) have the three new path renders; the stale denoised track of part 5 was removed.
+The scoreboard (`scoreboard.py`) now shows the beams on the wave suite (`beams.py publish` replaced the suite's path runs at 2,048 rays: level 3.27 dB, EDT 226%, T30 65.7%, ETC 13.9 dB against 3.52 / 435 / 72.0 / 18.3) and the new Church responses with their echo densities (part 9's table).

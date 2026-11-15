@@ -34,6 +34,8 @@ import dlss_scenes as ds  # noqa: E402
 RECIPES = {
     'path-pilot-v1': dict(work='.context/path-dataset', low=[1024], seeds=[0, 1], perFamily=2),
     'path-v2': dict(work='.context/path-dataset-v2', low=[256, 512, 1024, 2048], seeds=[0, 1, 2, 3], perFamily=8),
+    # 15 November: the Path method with the beams (part 8); half the scenes of v2, to retrain cheaply.
+    'path-v3': dict(work='.context/path-dataset-v3', low=[256, 512, 1024, 2048], seeds=[0, 1, 2, 3], perFamily=4),
 }
 HIGH = dict(rays=8192, seeds=[100, 101])        # target budget, independent seeds
 STATIC, FRAMES = 4, 8                           # receivers per scene: static poses, frames of one walk
@@ -352,7 +354,7 @@ def main(argv=None):
     c = sub.add_parser('church'); c.add_argument('--work-fraction', type=float, default=.5)
     a = sub.add_parser('render-all'); a.add_argument('--work-fraction', type=float, default=.5)
     sub.add_parser('pack'); sub.add_parser('verify')
-    parser.add_argument('--name', default='path-v2', choices=sorted(RECIPES))
+    parser.add_argument('--name', default='path-v3', choices=sorted(RECIPES))
     args = parser.parse_args(argv)
     use(args.name)
     if args.command == 'plan':

@@ -45,8 +45,10 @@ import time
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / '.context/path-dataset-v2/datasets/path-v2'
-WORK = ROOT / '.context/path-denoise'
+import os
+DATASET = os.environ.get('PATH_DENOISE_DATASET', 'path-v3')   # tools/path_dataset.py recipe
+DATA = ROOT / f'.context/path-dataset-{DATASET[5:]}/datasets/{DATASET}'
+WORK = ROOT / '.context/path-denoise' / DATASET
 K = 4
 CH = 48
 

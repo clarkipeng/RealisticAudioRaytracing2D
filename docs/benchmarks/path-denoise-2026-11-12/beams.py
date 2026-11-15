@@ -6,6 +6,7 @@ since then the beams are the method, the switch is gone, and `render` simply ren
     B=docs/benchmarks/path-denoise-2026-11-12
     nice -n 19 $PY $B/beams.py render 2048 4096    # guarded Unity runs of every suite scene, beam mode, two seeds
     $PY $B/beams.py score                          # both modes beside each other, same scorer as the scoreboard
+    $PY $B/beams.py publish                        # the beam runs (2,048 rays) become the suite's "path" (scoreboard.py)
 
 Beam runs go to .context/methods-2026-11-06/raw-path-beam (same layout as tools/method_runs.py); the
 exact connection's runs are the suite's own (raw/<scene>/path). Scoring packs each variant under its
@@ -90,11 +91,22 @@ def score():
             shutil.rmtree(d, ignore_errors=True)
 
 
+def publish():
+    """Replace the comparison root's path runs (the exact connection's) by the beam runs at 2,048 rays; the exact
+    runs stay in raw/<scene>/path and can be packed back with tools/method_runs.py."""
+    for s in scenes():
+        if (BEAM / s / 'path' / 'r02048').exists():
+            variants.pack('path', BEAM / s / 'path', 'r02048', s)
+            print(s)
+
+
 if __name__ == '__main__':
     command = sys.argv[1] if len(sys.argv) > 1 else ''
     if command == 'render':
         render([int(b) for b in sys.argv[2:]] or [2048])
     elif command == 'score':
         score()
+    elif command == 'publish':
+        publish()
     else:
         raise SystemExit(__doc__)
