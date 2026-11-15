@@ -745,3 +745,24 @@ Two things shorten the serial chain:
 - doing each event's connections (the straight and edge connections, more than half of an iteration's cost: part 12 measured 247 → 108 ms with both switched off) in parallel by other threads, from a queue filled by the walk and drained between its passes, which is what the wavefront machinery above makes possible;
 - making the longest paths shorter, which is the survival time of part 13, with the cost model now confirmed: the update time is the longest path's length, so c/d in T0* = sqrt((b/a)(c/d)) is a property of the room's path lifetime and does not go away.
 Neither is done here; with the connections deferred the Church's walk would be about 108 ms at the default survival time and about 30 ms at T0 = 10 ms (part 12's "neither connection" column), so reaching 23 ms needs both.
+
+## 15. The diffracted tail outside the Church: located, not fixed
+
+The brief's hypothesis was scattering points right next to an edge, where the D connection's 1/m would blow up.
+Measured at the walk's outside position (no edge rays, so only connections are in play; 64 seeds of 8,192 rays; median over mean at 125 / 500 / 2,000 Hz):
+
+| Change (diagnostic, then reverted) | late level 125 Hz | median / mean |
+|---|---:|---|
+| as committed (part 11) | 2.48e-4 | 0.19 / 0.19 / 0.18 |
+| connections from within 0.1 m of the edge dropped | 2.48e-4 | 0.19 / 0.19 / 0.18 (identical) |
+| mirror-and-edge (RD) connections dropped | 2.48e-4 | 0.19 / 0.19 / 0.18 (identical) |
+| double-edge (DD) connections dropped | 2.38e-4 | 0.20 / 0.19 / 0.17 |
+| edges drawn from a listener-side distribution (angle × ∫1/m² from the listener × visibility) | 2.80e-4 | 0.18 / 0.18 / 0.18 |
+| all edge connections dropped (part 11) | 2.55e-4 | 0.47 / 0.66 / 0.52 |
+
+Near-edge points contribute nothing measurable: UTD's transition functions already regularise the 1/m (the transition argument kLa is proportional to the distance, and |D|² falls with it), so there is nothing to fix there.
+Mirror-and-edge and double-edge connections are not it either, and a third edge distribution did not change the tail.
+What remains is the single-edge connection itself, from points far from the edge: the listener sees no surface inside the church, so all interior sound reaches it diffracted by the porch's edges, and |D|² is largest for the few interior points whose line to the listener grazes an edge (its shadow boundary); the walk visits such points rarely and scores them with the full boundary energy.
+Variance there is set by where the walk's vertices fall, which no choice of edge changes.
+The principled remedy is to sample from the listener's side as well (edge rays from the listener through the porch's edges, joined to the walk's vertices by reciprocity, with the two techniques weighted by multiple importance sampling); it is a bidirectional technique and is not built.
+The level outside agrees with the energy method within its noise (2.5e-4 against 2.54e-4 without diffraction, part 8), so the remaining problem is noise per update, not level.
