@@ -430,3 +430,112 @@ In the porch case technique 3 alone would score every listener ray that leaves t
 - MIS weights: each technique's density must be evaluated for paths found by the others, which needs the forward region probability for listener-found chains (one cone test) and the listener-subpath density for forward-found ones (stored per vertex), a few percent.
 In total about 1.4–1.6 times today's update, or the same cost at about 350 forward rays plus 160 listener rays.
 The gain cannot be estimated without building it; the porch and Church fixtures are the tests it would have to pass (unchanged means in the porch, a stable median at the Church listener).
+
+## 8. Wide beams instead of the exact specular connection
+
+### The rule
+
+Geometric acoustics cannot resolve the field more finely than the width of a sound beam, so the Path method now gives every ray a physical width instead of connecting its specular chains exactly.
+After a ray's first specular reflection, every segment of it scores at the listener with a normalised two-dimensional Gaussian kernel of its distance ρ from the listener:
+
+K(ρ) = 2 / (π w²) · exp(−2 ρ² / w²), with ∫ K dA = 1.
+
+ρ is measured from the segment's line (extended) to the listener, which in the unfolded space of the chain is the distance from the straight ray to the listener's image; each image is scored once, by the segment that belongs to it, whether or not the closest approach falls inside that segment.
+The deposit's time is the image's: the chain's origin time plus sqrt(L_c² + ρ²)/c, L_c the unfolded length to the closest approach.
+Every band applies its own kernel to the same geometric ray.
+The direct sound stays exact; scattering points and the source keep their next-event connections (straight, through walls, and through edges); UTD edge rays and edge connections are unchanged.
+The kernel does not score the first segment after the source, a scattering point or an edge, which those connections already count, so each path is counted once.
+Detection regions, the geometric trials and their cap, the image retrace and its parallel connection pass (`PathConnect`) are deleted.
+
+**Width.**
+A Gaussian beam of waist w₀ has radius w(z) = w₀ sqrt(1 + (z/z_R)²), z_R = π w₀²/λ.
+The narrowest beam that spans a path of length L is the one whose largest radius over the path is smallest: its waist sits at mid-path, and minimising w(L/2)² = w₀² + (λL / 2πw₀)² over w₀ gives w₀² = λL / 2π and an end radius w² = λL / π.
+With the waist at one end instead (a beam leaving a source), the end radius would be sqrt(2λL/π); for comparison, the first Fresnel zone at mid-path has radius sqrt(λL/4) = 0.89 sqrt(λL/π).
+So the brief's derivation is right for a beam that connects two regions of equal size (the source's and the listener's), and this is the width used: w² = λ L / π with the band-centre wavelength and L the unfolded path length from the chain's origin (source, scattering point or edge) to the listener's image.
+No constant was tuned: K's 1/e² radius is w.
+At 1 kHz, w is 0.8 m after 6 m and 1.5 m after 20 m; at 125 Hz, 2.3 m and 4.2 m.
+
+**Two rules the first version needed, both from geometry.**
+- *Truncation at the listener's clearance.* In the unfolded space a room is a lattice of copies, one per image; a ray that passes an image closer than the listener's distance R to its nearest surface has necessarily crossed that image's copy, but a ray farther out may belong to a neighbouring image and is never scored for this one. A kernel wider than R therefore lost energy: the shoebox image lattice fell to 0.33 of the reference by 120 ms. The kernel is now truncated at R and renormalised (divided by 1 − exp(−2R²/w²)); R is measured once per solve by 256 rays from the listener (`PathClearance`). With it the lattice is within 1.5% in every 20 ms window.
+- *Visibility from the segment.* A kernel reaches through walls; each scored segment needs the listener visible from its point nearest the listener. That point is kept 4 RayEpsilon off the walls at both ends of the segment, measured perpendicular to them: a point within the wall's tolerance saw through it, and the leak check read 5.7 times its prediction until this was fixed.
+
+### 1. Wave-ground-truth suite (the deciding test)
+
+11 scenes, two seeds, RMS errors against the wave solution (`beams.py`; same scorer as the scoreboard).
+Seconds per run are the guarded measurement's busy time for all receivers of a scene.
+
+| Variant | s/run | level dB | EDT % | T30 % | C80 dB | ETC dB |
+|---|---:|---:|---:|---:|---:|---:|
+| exact connection, 2,048 rays | 2.67 | 3.52 | 435 | 72.0 | 2019 | 18.3 |
+| beams, 2,048 rays | 2.12 | **3.27** | **226** | **65.7** | **1763** | **13.9** |
+| beams, 8,192 rays | 8.04 | 3.09 | 217 | 67.5 | 1654 | 12.8 |
+
+| Group | exact, 2,048: level / EDT / T30 / ETC | beams, 2,048: level / EDT / T30 / ETC |
+|---|---|---|
+| in shadow | 5.05 / 223 / 74.4 / 19.3 | 4.68 / 72 / 73.3 / 16.0 |
+| closed rooms | 1.97 / 37.3 / 38.3 / 20.5 | 2.02 / 19.0 / 53.5 / 6.2 |
+
+The beams are cheaper than the exact connection at equal rays (2.12 against 2.67 s), so the equal-rays comparison is also an equal-or-better-time comparison for them; at both they are more accurate on level, EDT, T30 and ETC overall and in shadow.
+By scene the largest gains are the corridor (level 4.00 → 1.94 dB, EDT 431 → 32%) and the doorway (EDT 264 → 48%, ETC 22.1 → 13.8 dB); the energy-time curve improves in every scene, most in the closed rooms (20.5 → 6.2 dB), where the exact connection's late field was a few large spikes.
+Worse: T30 in the closed rooms (38 → 54%) and in three scenes (furnished room 60 → 88%, the two barrier scenes 63 → 79% and 61 → 66%), and the level in one shoebox (2.12 → 2.34 dB); at 8,192 rays the closed-room T30 is 42%, so most of it is noise in the late decay at 2,048 rays, not bias.
+C80 stays meaningless on this suite (thousands of dB where a receiver's early energy is nearly zero), for every method.
+
+### 2. Analytic checks
+
+With the beams every Path check of the Methods category passes: free field, rigid plane (image 1.013, total 1.005), shoebox image lattice (within 1.5%), half-plane (+0.30 dB), far side of a solid, Eyring (T60 0.606 s against 0.585 s), the diffuse-field leak checks (0.994 and 1.058), the aperture (1.151, as before) and the porch (1.040), and `MethodsAgreeOnSoundScatteredOutsideAHole`.
+`PathDetectionIsUnbiasedAtVisibilityBoundaries` tested the trials and is deleted with them; in its fixture (a panel clipping half of a specular image's neighbourhood) the beams give 0.63 of the geometric image, which is their smoothing across the panel's edge, as intended.
+`PathPorchEstimateIsIndependentOfTheRegion` is deleted too: there is no region.
+
+### 3. Porch
+
+Diffuse room: 1.040 times the image reference (exact connection 1.089, energy method 1.040), inside the reference's 5%.
+Specular room: 0.00685 against the exact connection's 0.0093 (−26%), close to the energy method's 1 m sphere (0.00705).
+That is Fresnel smoothing and plausibly the physical answer: the "beams" behind the porch are images of a 1.2 × 1.0 m opening seen through a 1.2 × 1.0 m mouth 4–7 m away, a Fresnel number a²/λd of about 0.1 at 500 Hz, so at that frequency the geometric beams do not exist and the wave field is smooth across them.
+
+### 4. The Church outside
+
+The walk's outside position at 16.5 s, 125 Hz, 0.2–2 s, 64 seeds of 8,192 rays (`MeasureChurchLevels`):
+
+| | without diffraction | with diffraction |
+|---|---|---|
+| energy method (2 m sphere) | 2.54e-4 ± 0.19e-4 | 9.1e-4 ± 3.8e-4 (8 seeds) |
+| exact connection | 8.8e-5 ± 1.2e-5 (512 seeds), median 1.2e-5 | 2.0e-4 ± 1.3e-4 (16 seeds), median 2.8e-5 |
+| beams | **2.55e-4 ± 0.43e-4**, median 1.20e-4 (0.47 of the mean) | 4.3e-4 ± 1.1e-4, median 3.9e-5 (0.09 of the mean) |
+
+Without diffraction the beams agree with the energy method, and one solve's median is now half the mean instead of a seventh: the 4.6 dB gap of parts 6 and 7 is closed, and it was the exact connection's.
+With diffraction the noise is back (median a tenth of the mean): the source's edge rays take half of its rays (`methodEdgeProbability` 0.5) and their outside contributions are heavy-tailed; the level is between the energy method's (whose own estimate is just as noisy at 8 seeds) and the exact connection's.
+So the walk's outside sound is resolved for the specular part and not yet for the diffracted part.
+
+### 5. Beams and UTD at a reflection boundary
+
+A 2 m × 2 m rigid plate under the source and listeners on a line across its reflection boundary at x = 2 m (`MeasureReflectionBoundary`; energy without the direct sound, at 250 Hz / 1 kHz / 4 kHz):
+
+| x | exact | exact + UTD | beams | beams + UTD |
+|---:|---|---|---|---|
+| 1.5 m (lit) | 0.171 / 0.171 / 0.171 | 0.213 / 0.179 / 0.163 | 0.125 / 0.147 / 0.163 | 0.183 / 0.168 / 0.165 |
+| 1.9 m | 0.127 / 0.127 / 0.127 | 0.194 / 0.168 / 0.156 | 0.075 / 0.079 / 0.093 | 0.139 / 0.116 / 0.110 |
+| 2.1 m (beyond) | 0 | 0.018 / 0.019 / 0.017 | 0.055 / 0.047 / 0.036 | 0.073 / 0.065 / 0.051 |
+| 2.5 m | 0 | 0.009 / 0.007 / 0.003 | 0.028 / 0.011 / 0.001 | 0.037 / 0.018 / 0.004 |
+| 3.0 m | 0 | 0.005 / 0.003 / 0.001 | 0.011 / 0.001 / 0.000 | 0.016 / 0.003 / 0.001 |
+
+Summed over the line, beams + UTD carry 3% less energy than exact + UTD at 250 Hz: no net double counting.
+Locally there is: just beyond the boundary the beams' smoothing and UTD's diffracted field add, 3–4 times exact + UTD at 250 Hz from 2.1 to 3 m (+5 to +6 dB, on a level 10–20 dB below the lit side), and 25–30% too little just inside it.
+UTD already models the boundary's transition and the kernel smooths it again, over the beam's width; a principled fix would weight UTD's reflection-boundary term down where the kernel is wide, or narrow the kernel near edges; neither is done.
+
+### 6. Cost per update
+
+GPU time per update (walk and connections, one listener, fences included; `MeasurePathProfile`, the Church at the realtime render's settings):
+
+| Scene | exact, 512 rays | beams, 512 | exact, 2,048 | beams, 2,048 |
+|---|---:|---:|---:|---:|
+| shoebox (0020) | 9.3 ms | 5.9 ms | 14.1 ms | 11.3 ms |
+| shoebox (0010) | 11.9 ms | 10.5 ms | 25.6 ms | 26.2 ms |
+| furnished room | 60 ms | 46 ms | 173 ms | 100 ms |
+| Church (6 s horizon) | 248 ms | 270 ms | 609 ms | 658 ms |
+
+The beams cost one visibility ray per scored segment and save the whole connection pass: cheaper in the furnished room (where the connections dominated) and the shoeboxes, 8–9% dearer in the Church, whose cost is the walk itself (rays that live for 6 s).
+
+### Decision
+
+The beams are at least as accurate as the exact connection on the wave ground truth, better on level, EDT, T30 and ETC overall and in shadow, and cheaper in rooms, so they are the Path method now; the exact connection's machinery is removed.
+Open: the late decay's noise in closed rooms at 2,048 rays, the double counting next to reflection boundaries (section 5), and the heavy-tailed diffracted field outside the Church.
