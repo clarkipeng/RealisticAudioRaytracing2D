@@ -42,6 +42,7 @@ def render(budgets):
     jobs = json.loads(path.read_text())['jobs']
     for job in jobs:
         job['output'] = str(BEAM); job['pathBeams'] = True
+        if os.environ.get('PATH_SURVIVAL'): job['pathSurvivalSeconds'] = float(os.environ['PATH_SURVIVAL'])
         scene = json.loads(Path(job['sceneFile']).read_text())['sceneId']
         if all((BEAM / scene / 'path' / f'r{b:05d}' / str(s) / 'run.json').exists() for b in budgets for s in SEEDS):
             continue

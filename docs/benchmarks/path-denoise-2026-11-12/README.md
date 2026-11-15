@@ -644,3 +644,49 @@ The tail comes from the edge connections of scattering points and from the sourc
 Two unbiased changes are kept: scattering points draw their edge half the time from the solve's listener-aware edge distribution (the other half local or uniform, weighted by the mixture's probability), and the mirror of an RD connection is drawn in proportion to its area instead of uniformly among 17,345 triangles (`PathMirrorCdf`); drawing edge-ray azimuths in proportion to |D|² made the 125 Hz tail worse and was reverted.
 With 64 seeds the medians themselves are uncertain to perhaps 30%, so the kept changes are justified by construction (each makes the probability of a sample closer to its contribution) more than by these numbers, and the tail is not fixed: the outside of the walk still plays about 9 dB below its mean in a single update.
 What remains is the 1/(m l (m + l)) geometry of a D connection from a scattering point close to an edge (the door frame's own faces), which no edge distribution changes; sampling the edge point by that geometry, or splitting the edge's energy over the walk's next segments, is the next thing to try.
+
+## 12. Speed in the Church
+
+### Profile
+
+`MeasurePathProfile` on the Church at the realtime render's settings (512 rays, 6 s horizon, four poses of the walk), GPU time of the walk per update with parts switched off and at three survival times T0 (survival in time S(t) = min(1, T0/t), part 2):
+
+| T0 | as rendered | no histogram writes | no straight connections | no edge connections | neither connection |
+|---:|---:|---:|---:|---:|---:|
+| 100 ms (default) | 247 ms | 246 ms | 299 ms | 510 ms | 108 ms |
+| 30 ms | 60 ms | 60 ms | 256 ms | 91 ms | 68 ms |
+| 10 ms | 40 ms | 40 ms | 166 ms | 72 ms | 29 ms |
+
+Switching parts off does not reliably make a solve faster: the time of a dispatch is the time of its slowest group, which is set by the few rays that live longest, and which rays those are changes with every switch and seed (the same configuration varied by 2× between runs in part 2).
+The histogram writes cost nothing measurable.
+The one dependable lever is how long rays live: from T0 = 100 ms to 30 ms the walk falls from 247 to 60 ms per update, and to 40 ms at 10 ms.
+
+### Efficiency of the survival time
+
+Survival in time is unbiased, so T0 trades variance for time.
+Per-solve spread of the late field (0.2–2 s) at 512 rays, 32 seeds, standing inside the Church (the walk at 3 s), standard deviation over mean at 125 / 500 / 2,000 Hz, and the efficiency 1 / (relative variance × time) at 500 Hz:
+
+| T0 | sd / mean | time | efficiency (relative) |
+|---:|---|---:|---:|
+| 100 ms | 1.39 / 0.77 / 0.70 | 247 ms | 1 |
+| 30 ms | 1.14 / 1.07 / 1.27 | 60 ms | 2.1 |
+| 10 ms | 1.65 / 1.59 / 1.56 | 40 ms | 1.4 |
+
+At 125 Hz the gain of 30 ms is 6×, at 2 kHz 1.2×; outside the Church every setting is dominated by the edge tail of part 11 and the comparison says nothing.
+On the wave suite, T0 = 30 ms (2,048 rays, two seeds) is cheaper (1.86 against 2.23 s per run) but not better: level 3.38 against 3.17 dB, T30 76 against 66% (shadow 92 against 74%), EDT 153 against 213%, ETC 14.7 against 13.9 dB (`beams-s03.json`); the suite's rooms decay in a fraction of a second, where 100 ms already cuts little.
+So the default stays 100 ms; for the Church at a realtime budget 30 ms is the efficient choice (60 ms per update instead of 247), which is a property of the room's long decay, not a constant to change for every scene.
+A rule that scales T0 with the room (for instance with the decay measured by the previous update) would make that choice automatically; it is not built.
+
+### Splitting long paths across threads
+
+Not done.
+The walk is one loop per ray with about forty live variables (the ray, its chain, its branch reservoir, the pending deposit and connection state); splitting it into slices of a few events with compaction of the surviving rays between dispatches means writing and reading that state to a buffer at every slice, and restructuring the loop around it.
+The profile says what it would buy: the latency is the longest-lived rays', so with T0 = 30 ms (60 ms per update, against a total of rays × mean events that a fully occupied GPU would do in a fraction of that) it is the remaining factor between the Church and the 23 ms target, and it is the next step.
+
+### Before and after, per update at 512 rays
+
+| | before | after (T0 = 30 ms) |
+|---|---:|---:|
+| Church | 247 ms | 60 ms |
+| furnished room | 46 ms | (default unchanged) |
+| stone shoebox | 6 ms | (default unchanged) |
