@@ -766,3 +766,44 @@ What remains is the single-edge connection itself, from points far from the edge
 Variance there is set by where the walk's vertices fall, which no choice of edge changes.
 The principled remedy is to sample from the listener's side as well (edge rays from the listener through the porch's edges, joined to the walk's vertices by reciprocity, with the two techniques weighted by multiple importance sampling); it is a bidirectional technique and is not built.
 The level outside agrees with the energy method within its noise (2.5e-4 against 2.54e-4 without diffraction, part 8), so the remaining problem is noise per update, not level.
+
+## 16. The Church walk with part 11's edges
+
+Parts 13–15 changed no code, so there is no new speed to render at; what changed since part 10's renders is part 11 (UTD weighted by the beam width, the mixed edge pick at scattering points, mirrors drawn by area).
+The walk was re-rendered with that code, realtime and denoised, with part 10's settings (`church.py render path-realtime`, `path_denoise.py church`, `church.py render path-denoised`).
+The denoiser was not retrained: path-v3 was rendered before part 11, and part 11 changes only the edge terms.
+The clean render (8,192 rays) is still part 10's.
+
+**Levels** (dBFS per part of the walk, part 10's renders in brackets):
+
+| Render | standing and turning | walking | doors open, outside |
+|---|---:|---:|---:|
+| energy method | −43.8 | −43.4 | −51.9 |
+| path, 512 rays | −44.8 (−44.2) | −46.0 (−46.4) | −64.8 (−62.2) |
+| path, 8,192 rays (part 10) | −44.4 | −44.5 | −60.9 |
+| path, 512 rays denoised | −45.1 (−43.8) | −44.6 (−46.9) | −64.4 (−63.2) |
+
+Inside, the realtime render moved by 0.4–0.6 dB and the denoised one by 1.3–2.3 dB in opposite directions in the two parts, which is the size of one render's noise at 512 rays rather than an effect of part 11.
+Outside, both are 1–3 dB lower than in part 10 and 13 dB below the energy method: a single update still plays close to the median of the heavy-tailed diffracted field (part 15), and part 11 did not change that.
+
+**Speed.**
+The realtime solves took 274 ms per update on average (284 s for 1,034 updates, 6.1 s worst), against 249 ms in part 10, under the same 50% pacing; peak memory 3.17 GiB for the realtime render, 2.68 GiB for the denoised one, 0.40 GiB for the denoiser.
+The 10% rise is not separated from load on the machine; the target is still 23 ms (parts 12–14).
+
+**Static responses and scoreboard.**
+The realism page's two static responses (8,192 rays, doors closed; `church.py irs`, `realism.py page`) were re-rendered with part 11's code; the part-10 responses are kept in `.context/energy-audio/realism/renders/before-utd`.
+
+| Response | T30 / EDT / C80 at 500 Hz | T30 at 125 Hz | echo density / mixing time |
+|---|---|---:|---|
+| path, near, part 10 | 6.5 / 5.1 / +0.6 | 7.2 s | 0.76 / 66 ms |
+| path, near, now | 5.5 / 5.4 / −0.5 | 4.7 s | 0.79 / 39 ms |
+| path, far, part 10 | 5.0 / 5.4 / −5.0 | 5.0 s | 0.77 / 72 ms |
+| path, far, now | 5.9 / 4.8 / −3.4 | 7.3 s | 0.76 / 38 ms |
+| energy method, near / far | 6.2 / 5.2 / −2.2 and 5.0 / 7.5 / −9.1 | 6.8 / 5.0 s | 0.78 / 41 and 0.85 / 50 ms |
+
+These are single solves: the 125 Hz T30 moved by 2.3–2.5 s in opposite directions at the two points, which is solve-to-solve noise in the low band, not a trend.
+The mixing time fell from 66–72 ms to 38–39 ms at both points, now within the measured halls' 35–41 ms; this coincides with part 11's denser edge and mirror sampling, but one solve per point does not establish the cause.
+The scoreboard's wave suite now uses part 11's runs (`PATH_BEAMS_RAW=raw-path-beam-utd beams.py publish`): level 3.17 dB, EDT 213%, T30 65.8%, ETC 13.9 dB (part 10: 3.27 / 226 / 65.7 / 13.9).
+
+**Published.**
+The listening page `.context/energy-audio/listen/path.html` (`church.py page`) and the live view (`build.py`) play the new realtime and denoised renders; the scoreboard has the new suite rows and Church responses.
