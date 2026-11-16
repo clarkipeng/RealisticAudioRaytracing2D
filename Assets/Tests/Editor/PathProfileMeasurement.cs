@@ -10,6 +10,9 @@ using UnityEngine;
 //   ACOUSTIC_PATH_PROFILE_SCENES=a.json,b.json method-compare scene specs (tools/method_runs.py), first 4 receivers
 //   ACOUSTIC_PATH_PROFILE_TAKE=/abs/job.json  optional TakeBatch job (method Path): the take at a few samples
 //   ACOUSTIC_PATH_PROFILE_RAYS=2048           rays per solve
+//   ACOUSTIC_PATH_PROFILE_PERSISTENT=1        persistent rays (settings.pathPersistent): updates of about 23.2 ms
+//                                             (1,024 samples at 44.1 kHz), the time of one update after a horizon of
+//                                             them; also the rays in flight and the ray state's memory
 // For each scene, variants (ACOUSTIC_PATH_PROFILE_FLAGS, ProfileFlags) with a fence after every phase:
 // edge distribution and clearance, walk, readback. The "connect" field is zero since the beams replaced
 // the chain connections.
@@ -28,24 +31,33 @@ public partial class TakeChecks
         var survivals = Array.ConvertAll((Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_SURVIVAL") ?? "-1").Split(','),
                                          v => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture));
         float survival = -1;
+        bool persistent = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_PERSISTENT") == "1";
+        void Persist(TakeRender.Settings settings, int rate)
+        {
+            if (!persistent) return;
+            settings.pathPersistent = true;
+            settings.responseStepSamples = Math.Max(1, (int)Math.Round(1024.0 / 44100 * rate / settings.spectralHop)) * settings.spectralHop;
+        }
         void Record(string name, TransportSolver solver, AcousticTake.State[] state, Action<int> place, int poses)
         {
             var m = solver.Method; m.Profile = true;
             name += FormattableString.Invariant($"|survival {survival}|rays {rays}");
             place(0); solver.Solve(state, new TakeRender.DirectPath[1]); // warm-up
-            json.Append((first ? "" : ",") + "{\"scene\":\"" + name + "\",\"rays\":" + rays + ",\"bins\":" + m.TimeBins.Count + ",\"variants\":[");
+            json.Append((first ? "" : ",") + "{\"scene\":\"" + name + "\",\"rays\":" + rays + ",\"bins\":" + m.TimeBins.Count +
+                        FormattableString.Invariant($",\"persistent\":{(persistent ? 1 : 0)},\"step\":{m.PersistentStep:R},\"capacity\":{m.PersistentCapacity},\"stateBytes\":{m.PersistentBytes}") + ",\"variants\":[");
             first = false;
             var flagList = Array.ConvertAll((Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_FLAGS") ?? "0,1").Split(','), int.Parse);
             foreach (int flags in flagList)
             {
                 m.ProfileFlags = flags; Array.Clear(m.PhaseSeconds, 0, 4);
-                long events = 0, chains = 0, trials = 0, detections = 0;
+                long events = 0, chains = 0, trials = 0, detections = 0, inFlight = 0;
                 for (int p = 0; p < poses; p++)
                 {
                     place(p); solver.Solve(state, new TakeRender.DirectPath[1]);
-                    events += m.Counter(1); detections += m.Counter(7); chains += m.Counter(8); trials += m.Counter(15);
+                    events += m.Counter(1); detections += m.Counter(7); chains += m.Counter(8); trials += m.Counter(15); inFlight += m.RaysInFlight();
+                    if (m.Counter(9) > 0) Debug.LogWarning($"Path profile {name}: {m.Counter(9)} persistent rays overflowed");
                 }
-                json.Append((flags == flagList[0] ? "" : ",") + FormattableString.Invariant($"{{\"flags\":{flags},\"edge\":{m.PhaseSeconds[0] / poses:R},\"walk\":{m.PhaseSeconds[1] / poses:R},\"connect\":{m.PhaseSeconds[2] / poses:R},\"readback\":{m.PhaseSeconds[3] / poses:R},\"events\":{events / poses},\"candidates\":{detections / poses},\"chains\":{chains / poses},\"trials\":{trials / poses}}}"));
+                json.Append((flags == flagList[0] ? "" : ",") + FormattableString.Invariant($"{{\"flags\":{flags},\"inFlight\":{inFlight / poses},\"edge\":{m.PhaseSeconds[0] / poses:R},\"walk\":{m.PhaseSeconds[1] / poses:R},\"connect\":{m.PhaseSeconds[2] / poses:R},\"readback\":{m.PhaseSeconds[3] / poses:R},\"events\":{events / poses},\"candidates\":{detections / poses},\"chains\":{chains / poses},\"trials\":{trials / poses}}}"));
                 Debug.Log($"Path profile {name} flags {flags}: walk {m.PhaseSeconds[1] / poses * 1000:F1} ms, connect {m.PhaseSeconds[2] / poses * 1000:F1} ms, edge {m.PhaseSeconds[0] / poses * 1000:F1} ms, readback {m.PhaseSeconds[3] / poses * 1000:F1} ms");
             }
             m.ProfileFlags = 0; m.Profile = false;
@@ -72,6 +84,7 @@ public partial class TakeChecks
                         survival = value;
                         var settings = MethodSettings(TakeRender.Method.Path, job, rays, 0, spec.speedOfSound);
                         if (value >= 0) settings.pathSurvivalSeconds = value;
+                        Persist(settings, 8000);
                         var state = (AcousticTake.State[])baked.states.Clone();
                         using var solver = new TransportSolver(baked.scene, baked.geometry, settings, shader, sampleRate: 8000);
                         Record(spec.sceneId, solver, state, p => state[1].position = WaveVector(spec.points, 3 * p), Math.Min(4, spec.points.Length / 3));
@@ -90,6 +103,7 @@ public partial class TakeChecks
                 survival = value; rays = rayCount;
                 var settings = job.settings; settings.methodRays = rays;
                 if (value >= 0) settings.pathSurvivalSeconds = value;
+                Persist(settings, take.Metadata.sampleRate);
                 var state = new AcousticTake.State[take.Metadata.scene.objects.Length];
                 using var solver = new TransportSolver(take.Metadata.scene, take.Geometry, settings, shader, sampleRate: take.Metadata.sampleRate);
                 long[] samples = {44100, 4 * 44100, 7 * 44100, 9 * 44100};

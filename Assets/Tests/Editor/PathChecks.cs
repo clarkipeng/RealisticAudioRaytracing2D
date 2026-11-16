@@ -10,15 +10,15 @@ using UnityEngine;
 public partial class TakeChecks
 {
     // Fully diffusing shoebox: the path tracer decays at the Eyring rate.
-    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void PathMethodDecaysAtTheEyringRate()
+    [TestCase(false), TestCase(true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void PathMethodDecaysAtTheEyringRate(bool persistent)
     {
         var size = new Vector3(6, 5, 4); const float absorption = .2f;
         LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(absorption, 1), new Vector3(-1.5f, .5f, .4f), new Vector3(1.4f, -.7f, -.3f),
                  out var scene, out var geometry, out var state);
-        var settings = ControlSettings(TakeRender.Method.Path, 8192, 1);
+        var settings = ControlSettings(TakeRender.Method.Path, 8192, 1); PersistentControl(settings, persistent, 12);
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-        solver.Solve(state, new TakeRender.DirectPath[1]);
+        solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
         var e = ControlEnergy(solver, 0);
         var curve = new double[e.Length]; double tail = 0;
         for (int k = e.Length - 1; k >= 0; k--) { tail += e[k]; curve[k] = tail; }
@@ -131,8 +131,8 @@ public partial class TakeChecks
             }
     }
     [TestCase(TakeRender.Method.Path, 1f), TestCase(TakeRender.Method.Path, .5f), TestCase(TakeRender.Method.Energy, 1f), TestCase(TakeRender.Method.Energy, .5f),
-     Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsLeakAsTheDiffuseFieldPredicts(TakeRender.Method method, float scattering)
+     TestCase(TakeRender.Method.Path, 1f, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsLeakAsTheDiffuseFieldPredicts(TakeRender.Method method, float scattering, bool persistent = false)
     {
         var size = new Vector3(6, 5, 4); const float a = .1f, t = 1e-3f;
         var source = new Vector3(-1.5f, .5f, .4f); var inside = new Vector3(2.2f, -.3f, .2f); var outside = new Vector3(3.8f, -.3f, .2f);
@@ -140,8 +140,10 @@ public partial class TakeChecks
         {
             LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(a, scattering, t), source, listener, out var scene, out var geometry, out var state);
             var settings = ControlSettings(method, 1 << 16, 1.5f); settings.seed = seed; settings.specularDetectionRadius = .5f;
+            // Persistent: three updates of 0.75 s (a static measurement costs a full solve per update of its warm-up).
+            PersistentControl(settings, persistent, 0); if (persistent) settings.responseStepSamples = 6016;
             using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-            solver.Solve(state, new TakeRender.DirectPath[1]);
+            solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
             return Window(ControlEnergy(solver, 2), 0, int.MaxValue);
         }
         double tau = (1 - a) * t;

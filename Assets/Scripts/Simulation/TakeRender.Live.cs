@@ -180,6 +180,8 @@ public static partial class TakeRender
                 long sample=settings.ResponseSample(batchFirst+(long)f*settings.responseStepSamples);
                 EvaluateObserved(sample,evaluated);
                 Array.Copy(evaluated,0,batchStates,f*evaluated.Length,evaluated.Length);
+                int cut=cuts.BinarySearch(sample);if(cut<0)cut=~cut-1;
+                if(cut>=0 && cuts[cut]>settings.ResponseSample(batchFirst+(long)(f-1)*settings.responseStepSamples))solver.FlushRays(f); // persistent rays: a cut empties them
             }
             if(batchCount>0)
             {

@@ -55,6 +55,8 @@ public sealed class TransportSolver : IDisposable
     readonly MethodTransport method;
     // The Pressure/Energy measurement kernels of the last Solve (null for Hybrid).
     internal MethodTransport Method => method;
+    // Path method, persistent rays: empty the rays in flight before frame `frame` of the next solve (a scene cut).
+    public void FlushRays(int frame) => method?.FlushBefore(frame);
     // Audio paths and late field of the hybrid (RayTransport) or of the energy method
     // (MethodTransport in audio mode), in the same layouts.
     internal RayTransport.Path[] RayPaths => transport?.Paths ?? (method != null && method.Audio ? method.Paths : null);

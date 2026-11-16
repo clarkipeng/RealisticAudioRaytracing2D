@@ -807,3 +807,44 @@ The scoreboard's wave suite now uses part 11's runs (`PATH_BEAMS_RAW=raw-path-be
 
 **Published.**
 The listening page `.context/energy-audio/listen/path.html` (`church.py page`) and the live view (`build.py`) play the new realtime and denoised renders; the scoreboard has the new suite rows and Church responses.
+
+## 17. Persistent rays
+
+**What changed** (`settings.pathPersistent`; `MethodPath.hlsl`, "Persistent rays"; `MethodTransport.cs`).
+The rays are now the sound in flight.
+Their state (160 bytes per ray: position and path time, direction and the cohort's age, the chain's flux and attenuation per band, the latest event's plane, survival, the chain's unfolded length and origin time, flags) stays in GPU buffers across updates.
+Every update advances each live ray by one update period of path time (it stops in mid-segment and resumes there), launches the update's new rays from the source's current position, and writes the survivors compactly to a second pool.
+What a ray meets during the update is scored against the listener's current position, with the full solve's estimators unchanged: next-event connections at scattering points, edge connections, and the beam kernel, which is scored in the update during which the ray passes the segment's point nearest the listener image.
+The direct sound stays exact.
+The full solve is the same loop with an infinite period, and stays the default.
+
+Three details decide whether this is right:
+- **When a contribution is heard.** A connection made now is heard after its travel time, so each contribution goes to the histogram of the update in which it is heard: a ring of future histograms per pair (one per update of the horizon, 44 MB for the Church), whose current slot becomes the update's histogram. The coordinator's brief put connections into the current update; through a door that has just opened that would be heard before the sound could get there.
+- **Where an update sits in time.** New rays advance half a period in their first update, so update n covers, for every cohort, the path times that are heard within half a period of the time of update n's state. The response is centred on that time instead of lagging by half a period.
+- **Transmitted branches.** The full solve keeps one reservoir of transmitted shares per ray and traces it when the ray ends, which can be seconds after the transmission. Here the reservoir is per update: a ray that stops while holding one queues it as a ray of its own (after the full solve's roulette), so a branch starts at most one update late. A ray that ends continues as its branch, as before.
+
+Pools are sized from the rays that survival in time can keep (at most N Σ S(t) over the cohorts, plus a quarter, plus a cohort), or by `pathRaysInFlight`.
+Overflow drops rays and is counted (`MethodTransport.RaysOverflowed`); every check asserts that there is none.
+A scene cut in the take empties the pools and the ring (`TransportSolver.FlushRays`).
+On Metal the state is written after the walk's loop (part 14's dropped writes).
+A ray is never stopped within 4 RayEpsilon of its hit: the resumed trace starts RayEpsilon out and would miss the wall.
+The per-ray medium lookup at the start of the walk is kept: reading the source's and listener's media from a buffer filled by the clearance kernel made the compiler fail to build the walk ("can't unroll loops marked with loop attribute").
+`run.json` now describes the path method's synthesis as it is (noise per slot, part 9) instead of impulses, and names the persistent variant (`path-histogram-persistent-v1`).
+
+**Checks** (`PathPersistentChecks.cs`; all pass, as does the full tier).
+
+| Check | Result |
+|---|---|
+| Full solve cut into updates: the aperture room with ground, half-specular walls and diffraction, 2,048 rays, 16 ms updates, the same seed for every update's new rays | sum of differences 0.9–2.0e-6 of the total per band, against the full solve |
+| Same room with transmitting walls (t = 0.05, branches), independent seeds, 40 seeds per mode | windows 0–20 / 20–60 / 60–500 ms within 1.4%, within one standard error, equal standard errors |
+| Source at 100 m/s past a rigid plane, listener still, 4 ms updates | direct path 39.2908 ms (retarded 39.2908 ms); image heard at 40.88 ms against a retarded 41.05 ms and a frozen 30.00 ms; level 1.011 × 1/(cτ)² |
+| A door filling the aperture room's hole opens after a horizon closed; listener outside, 8 ms updates | closed: 0; per update after the opening, relative to the open room's full solve: 0, 0, 0, 0, 0, 0.71, 1.03, 1.02, 1.04, 1.00, … ; last 10 updates 1.001 |
+| Free field, rigid plane image, shoebox image lattice, half-plane (BTM), far side of a solid, Eyring decay, leak through walls (s = 1), in persistent mode | pass with their usual tolerances (the leak check with 0.75 s updates) |
+
+The first check is the strongest: with the seed fixed, every update's cohort is the full solve's rays, and the persistent response after the warm-up is the full solve's to rounding, so the machinery (stopping and resuming, the beam's scoring point, the ring, the compaction) loses and duplicates nothing.
+In the second check the 0–20 ms window first looked 23% high with six seeds; with 40 it agrees to 0.9%: the early field outside is heavy-tailed in both modes.
+That 40-seed run reached 3.59 GiB, over the 3.5 GiB limit; the checks as committed (six seeds) peak at 3.13 GiB in the full tier.
+In the door check nothing is heard until the first sound through the hole can arrive: the direct sound, at 42 ms, since the only surfaces the listener sees through the hole are on the far wall, 16 m from it.
+After that the level overshoots the open room's by 2–4% for about a horizon: the room rang with the door closed, so the first sound out is that of the closed room, which is louder.
+A connection is checked against the scene at the time it is made, not when the sound passes each point of it; through a door that moves during a connection's flight (at most a few tens of milliseconds) this is the remaining approximation.
+A static measurement in persistent mode costs one full solve per update of its warm-up (one horizon of updates), because each update advances every cohort by one period; the checks use 16–750 ms updates for that reason.

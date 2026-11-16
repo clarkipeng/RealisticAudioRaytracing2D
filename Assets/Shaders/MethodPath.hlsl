@@ -19,6 +19,8 @@
 //       unfolded line against the listener image), whose width is that of the narrowest
 //       Gaussian beam spanning the unfolded path, per band (see "Beams" below). The first
 //       segment after the source, a scattering point or an edge is counted by the connections.
+//   persistent (PathPersistent, see "Persistent rays" below): the same loop, stopped after one update
+//     period of path time and resumed at the next update, with new rays launched every update.
 //
 // Uses MethodCommon.hlsl and the UTD and edge-sampling helpers of MethodEnergy.hlsl.
 #ifndef ACOUSTIC_METHOD_PATH
@@ -37,6 +39,10 @@ uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 2 straig
 // contributing paths as a fine early bin, while the work over a horizon T falls from T to
 // T0 (1 + ln(T / T0)). Zero disables it.
 float PathSurvivalSeconds;
+static const uint CounterResumed = 15; // persistent rays continued from the previous update
+// Persistent rays (see "Persistent rays" below): on/off, pool capacity and offsets, the update period.
+uint PathPersistent, PathCapacity, PathReadBase, PathWriteBase, PathReadCount, PathWriteCount, PathOverflowCount, PathFlush;
+float PathStep;
 // Beams (docs/benchmarks/path-denoise-2026-11-12, part 8; they replaced an exact connection of
 // specular chains by detection regions, geometric trials and image retrace): every ray segment after
 // at least one specular reflection scores at the listener with a normalised Gaussian kernel of its distance rho
@@ -72,10 +78,16 @@ uint PathBinOf(float time)
     if (time < fine) return (uint)floor(time / PathBin0);
     return PathFineBins + (uint)floor(log(time / fine) / log(1 + PathRatio));
 }
-// Adds band energies arriving from `from` (listener towards the arrival) at `time`. Directions
-// split the energy over the six axes by the squared positive components (they sum to one), so a
-// moving arrival never jumps between direction bins. 32.32 fixed point with an unbiased dither.
-void PathDeposit(float3 from, float4 low, float4 high, float time, uint key)
+// Persistent rays: deposits go to a ring of PathRingSlots future histograms per pair, stored after the
+// frames' histograms in MethodOutput (cells) and PathCounts; a contribution heard `ahead` updates after the
+// current one goes to slot (PathRingSlot + ahead), and after each update its slot becomes the update's
+// histogram (PathRing, mode 0). Mode 1 empties a pair's ring (a flush).
+uint PathRingSlots, PathRingBase, PathRingCountBase, PathRingSlot, PathRingCells, PathRingMode, PathRingOffset;
+// Adds band energies arriving from `from` (listener towards the arrival) at `time`, `ahead` updates from now
+// (persistent rays; 0 otherwise). Directions split the energy over the six axes by the squared positive
+// components (they sum to one), so a moving arrival never jumps between direction bins. 32.32 fixed point
+// with an unbiased dither.
+void PathDeposit(float3 from, float4 low, float4 high, float time, uint key, uint ahead)
 {
     if ((PathProfileFlags & 1) != 0) return;
     if (!(time >= 0) || time > MethodHorizon) { MethodCount(CounterNonFinite); return; }
@@ -88,7 +100,9 @@ void PathDeposit(float3 from, float4 low, float4 high, float time, uint key)
     }
     float norm = length(from);
     float3 u = norm > 0 ? from / norm : float3(0, 0, 1);
-    InterlockedAdd(PathCounts[PathCountBase + bin], 1u);
+    uint slot = (PathRingSlot + ahead) % max(PathRingSlots, 1u);
+    uint cellBase = PathPersistent != 0 ? PathRingBase + slot * PathRingCells : MethodCellBase;
+    InterlockedAdd(PathCounts[(PathPersistent != 0 ? PathRingCountBase + slot * PathBins : PathCountBase) + bin], 1u);
     [loop] for (uint axis = 0; axis < 6; axis++)
     {
         float component = (axis & 1) != 0 ? -u[axis >> 1] : u[axis >> 1];
@@ -98,7 +112,7 @@ void PathDeposit(float3 from, float4 low, float4 high, float time, uint key)
             float4 lane = float4((k & 3) == uint4(0, 1, 2, 3));
             float share = dot(k < 4 ? low : high, lane) * component * component;
             if (!(share > 0) || !isfinite(share)) { if (!isfinite(share)) MethodCount(CounterNonFinite); continue; }
-            uint cell = MethodCellBase + (axis * MethodBands + k) * PathBins + bin;
+            uint cell = cellBase + (axis * MethodBands + k) * PathBins + bin;
             float whole = floor(share), part = (share - whole) * 4294967296.0 + (HashRay(key ^ HashRay(cell)) >> 8) * (1.0 / 16777216.0);
             if (part >= 4294967296.0) { whole += 1; part -= 4294967296.0; }
             uint low = (uint)part, high = (uint)min(whole, 4294967295.0), old;
@@ -377,13 +391,91 @@ void PathDirectArrival(float3 S, float3 L, float4 low, float4 high, float scale,
     MethodArrivalCounts[MethodCountIndex] = 1;
 }
 
+// Persistent rays (docs/benchmarks/path-denoise-2026-11-12, part 17): the rays are the sound in flight.
+// Their state stays in PathRays across updates; every update advances each live ray by one update
+// period of path time (PathStep; it stops mid-segment and resumes there), launches MethodRayCount new
+// rays from the source's current position, and scores what the rays meet during the update against the
+// listener's current position, at delay = path time (+ the connection's travel time). A contribution is
+// added to the response of the update in which it is heard (the ring below): a next-event connection made
+// now through a door that just opened reaches the listener after its travel time, as the sound would. A cohort launched
+// at t0 is an unbiased estimate from the source at t0, so the update's response at delay tau comes from
+// the cohort launched about tau earlier: the retarded-time response of a moving scene, with doors met in
+// their state when the sound reaches them. A static scene's response after one horizon of updates equals
+// the full solve's in expectation (each contribution of a ray is made once, in the update during which
+// the ray gets there). Branch reservoirs (transmitted shares) are kept per update: a ray still holding one
+// when it stops queues it as a ray of its own (after the same roulette the full solve applies), so the
+// branch's contributions come at most one update late; at the ray's end the branch continues in its place,
+// as in the full solve. PathPersistent = 0 is the full solve (every ray traced to its end in one update).
+struct PathRay // float4 fields only (160 bytes), so that every backend lays it out alike
+{
+    float4 position;              // xyz, w path time
+    float4 direction;             // xyz, w the cohort's age at the end of the latest update
+    float4 phiLow, phiHigh;       // Phi0: the flux of the current chain's origin
+    float4 wLow, wHigh;           // C / Q: attenuation since then over the roulette's survival
+    float4 plane;                 // the latest event's plane, outgoing side (beams): normal, offset
+    float4 scalars;               // survival, chain's unfolded length, chain's origin time, distance since the segment's start
+    uint4 meta;                   // reflections | flags << 24 (1 in a branch, 2 the segment's beam is scored), medium, rng, events
+};
+RWStructuredBuffer<PathRay> PathRays;  // [pair][pool 2][PathCapacity]
+RWStructuredBuffer<uint> PathLive;     // [pair][pool 2]: rays in each pool; then [pair]: rays dropped by overflow, ever
+// Before an update: the pool it writes starts empty (and with PathFlush, e.g. at a scene cut, so does the one it reads).
+void PathPersistentBegin()
+{
+    PathLive[PathWriteCount] = 0;
+    if (PathFlush != 0) PathLive[PathReadCount] = 0;
+}
+// Appends a ray to the pool being written (overflow is counted and the ray dropped: a bias, reported).
+void PathKeep(PathRay r)
+{
+    uint slot;
+    InterlockedAdd(PathLive[PathWriteCount], 1u, slot);
+    if (slot < PathCapacity) PathRays[PathWriteBase + slot] = r;
+    else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount], 1u); }
+}
+
+// Mode 0: the current slot of the pair's ring becomes the update's histogram (MethodCellBase, PathCountBase)
+// and is emptied for reuse; mode 1: every slot of the pair's ring is emptied.
+void PathRing(uint index)
+{
+    uint i = index + PathRingOffset;
+    if (PathRingMode == 0)
+    {
+        if (i >= PathRingCells) return;
+        uint from = PathRingBase + PathRingSlot * PathRingCells + i, to = MethodCellBase + i;
+        MethodOutput[2 * to] = MethodOutput[2 * from]; MethodOutput[2 * to + 1] = MethodOutput[2 * from + 1];
+        MethodOutput[2 * from] = 0; MethodOutput[2 * from + 1] = 0;
+        if (i < PathBins)
+        {
+            uint count = PathRingCountBase + PathRingSlot * PathBins + i;
+            PathCounts[PathCountBase + i] = PathCounts[count]; PathCounts[count] = 0;
+        }
+        return;
+    }
+    if (i >= PathRingSlots * PathRingCells) return;
+    MethodOutput[2 * (PathRingBase + i)] = 0; MethodOutput[2 * (PathRingBase + i) + 1] = 0;
+    if (i < PathRingSlots * PathBins) PathCounts[PathRingCountBase + i] = 0;
+}
+
 // One flat loop; every heavy helper has a single call site. Each iteration either deposits the
-// pending contribution, makes one connection, or traces one segment.
+// pending contribution, makes one connection, or traces one segment (or, persistent, the part of it
+// that fits in the update).
 void TracePath(uint index)
 {
-    if (index >= MethodRayCount) return;
-    uint ray = MethodRayOffset + index;
-    MethodCount(CounterRays);
+    uint ray = 0, slot = 0;
+    bool resumed = false;
+    if (PathPersistent != 0)
+    {
+        uint thread = MethodRayOffset + index, live = min(PathLive[PathReadCount], PathCapacity);
+        if (thread < live) { resumed = true; slot = thread; }
+        else if (thread - live < MethodRayCount) ray = thread - live;
+        else return;
+    }
+    else
+    {
+        if (index >= MethodRayCount) return;
+        ray = MethodRayOffset + index;
+    }
+    MethodCount(resumed ? CounterResumed : CounterRays);
     float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
     uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
     MethodAnchor v;
@@ -412,16 +504,40 @@ void TracePath(uint index)
     PathChain chain = PathStart(0, 0), branch = chain;
     float branchSum = 0, branchTau = 0, branchSurvival = 1, survival = 1; float3 branchP = 0, branchD = 0; float branchF[8];
     uint branchMedium = 0;
-    float3 beamNormal = 0, branchBeamNormal = 0; // outgoing side of the latest event's plane (beams)
+    float4 plane = 0, branchPlane = 0; // the latest event's plane, outgoing side (beams)
     [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) branchF[k1] = 0;
     float edgeExtent = 1, edgeAngle = 1, edgeM = 1, edgeSinBeta = 1, edgePhiIn = 0, edgeD = 1;
+    // Persistent: the path time this update reaches, whether the current segment's beam is scored, and
+    // how far the ray has come since the segment's start (it may resume in mid-air).
+    // New rays reach half a period in their first update, so that update n covers the path times of every cohort
+    // that are heard within half a period of its state's time (the response is centred on it).
+    float age = 0, target = PathPersistent != 0 ? .5 * PathStep : 1e30, sinceStart = 0;
+    bool scored = false, suspending = false;
+    if (resumed)
+    {
+        PathRay r = PathRays[PathReadBase + slot];
+        p = r.position.xyz; tau = r.position.w; d = r.direction.xyz; age = r.direction.w; target = age + PathStep;
+        [unroll] for (uint kr = 0; kr < MethodBands; kr++)
+        {
+            float4 lane = float4((kr & 3) == uint4(0, 1, 2, 3));
+            Phi0[kr] = dot(kr < 4 ? r.phiLow : r.phiHigh, lane); C[kr] = dot(kr < 4 ? r.wLow : r.wHigh, lane);
+        }
+        plane = r.plane; survival = r.scalars.x; sinceStart = r.scalars.w;
+        chain.travelled = r.scalars.y; chain.time = r.scalars.z; chain.reflections = r.meta.x & 0xffffff; chain.kind = 1;
+        medium = r.meta.y; rng = r.meta.z; events = r.meta.w;
+        inBranch = (r.meta.x & (1u << 24)) != 0; scored = (r.meta.x & (2u << 24)) != 0;
+        connectListener = false; connectEdge = false; travelling = true;
+    }
     [loop] for (;;)
     {
         if (hasPending)
         {
             hasPending = false;
-            PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)));
+            // Persistent: heard ceil((time - target) / step) updates from now (this update's rays reach path time `target`).
+            uint ahead = PathPersistent != 0 ? (uint)clamp(ceil((pendingTime - target) / PathStep), 0, (float)PathRingSlots - 1) : 0;
+            PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead);
         }
+        if (suspending) break;
         if (connectListener)
         {
             connectListener = false;
@@ -450,9 +566,9 @@ void TracePath(uint index)
             float keep = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
             if (RandomRay(rng) >= keep) break;
             [unroll] for (uint k2 = 0; k2 < MethodBands; k2++) { Phi0[k2] = branchF[k2] * branchSum / keep; C[k2] = 1; }
-            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival; beamNormal = branchBeamNormal;
+            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival; plane = branchPlane;
             chain = branch;
-            fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true;
+            fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true; scored = false; sinceStart = 0;
             MethodCount(CounterBranches);
         }
         if (!travelling)
@@ -462,6 +578,7 @@ void TracePath(uint index)
             bool viaEdge = edgeRays && RandomRay(rng) < MethodEdgeProbability;
             [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) C[k3] = 1;
             medium = v.medium;
+            scored = false; sinceStart = 0;
             if (viaEdge)
             {
                 float3 a, u, f, nn; float extent, angle, z0, r, edgePick;
@@ -522,27 +639,34 @@ void TracePath(uint index)
                            exp(-2 * MethodLoss(AirMedium, k6) * edgeM) / (edgeM * edgeM) * edgeExtent * edgeAngle / (chain.edgePick * MethodEdgeProbability);
             }
         }
-        if (chain.reflections >= 1 && medium == AirMedium && airListener && dot(L - p, beamNormal) > 0)
+        // The part of the segment this update covers (all of it in the full solve); an escaping segment ends here.
+        float segment = found ? distance : limit;
+        float advance = found ? min(distance, max(0, (target - tau) / MethodSlowness(medium))) : segment;
+        // (Never stop within a few RayEpsilon of the hit: the resumed trace starts RayEpsilon out and would miss it.)
+        bool ends = advance >= segment - 4 * RayEpsilon;
+        float along = dot(L - p, d);
+        if (!scored && (along < advance || ends) && chain.reflections >= 1 && medium == AirMedium && airListener && dot(L, plane.xyz) > plane.w)
         {
             // Beam kernel at the listener of the ray's unfolded line (this segment extended): each prefix of the
             // chain (one listener image) is scored once, by its own segment, whether or not the closest approach
-            // falls inside the segment; the listener must be in front of the latest plane and visible from the
+            // falls inside the segment (persistent: in the update during which the ray passes the closest point,
+            // or at the segment's end); the listener must be in front of the latest plane and visible from the
             // segment. Width and time use the unfolded distance from the chain's origin to the listener image.
-            float along = dot(L - p, d), segment = found ? distance : limit;
+            scored = true;
             float3 offset = L - p - d * along;
             float rho2 = dot(offset, offset), lc = chain.travelled + along;
             float lu = sqrt(max(lc * lc + rho2, RayEpsilon * RayEpsilon));
             float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PathClearanceOut[0]);
             // A point of the segment nearest the listener, kept 4 RayEpsilon (perpendicular) off the walls at both
             // ends, so that the visibility test cannot start inside a wall's tolerance and see through it.
-            float startInset = 4 * RayEpsilon / max(abs(dot(d, beamNormal)), 1e-3);
+            float startInset = max(0, 4 * RayEpsilon / max(abs(dot(d, plane.xyz)), 1e-3) - sinceStart);
             float endInset = found ? 4 * RayEpsilon / max(abs(dot(d, normal)), 1e-3) : 0;
             float3 qb = p + d * clamp(along, min(startInset, .5 * segment), max(segment - endInset, .5 * segment));
             bool seen = lc > 0 && rho2 < clearance * clearance && Visible(MethodState, qb, L, false);
             if (seen)
             {
                 float4 sumLow = 0, sumHigh = 0;
-                float extra = lu - chain.travelled; // unfolded distance from this segment's start to the listener image
+                float extra = lu - chain.travelled; // unfolded distance from here to the listener image
                 [unroll] for (uint kb = 0; kb < MethodBands; kb++)
                 {
                     float4 lane = float4((kb & 3) == uint4(0, 1, 2, 3));
@@ -559,6 +683,14 @@ void TracePath(uint index)
             }
         }
         if (!found) { MethodCount(CounterEscapes); done = true; continue; }
+        if (!ends)
+        {
+            // Persistent: stop in mid-air at the update's path time; the next update resumes here.
+            p += d * advance; tau += advance * MethodSlowness(medium); chain.travelled += advance;
+            [unroll] for (uint ka = 0; ka < MethodBands; ka++) C[ka] *= exp(-2 * MethodLoss(medium, ka) * advance);
+            sinceStart += advance; suspending = true;
+            continue;
+        }
         p += d * distance; tau += distance * MethodSlowness(medium); chain.travelled += distance;
         [unroll] for (uint k7 = 0; k7 < MethodBands; k7++) C[k7] *= exp(-2 * MethodLoss(medium, k7) * distance);
         float3 n = dot(d, normal) < 0 ? normal : -normal;
@@ -626,7 +758,8 @@ void TracePath(uint index)
                 if (refracted && !(medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); partWeight = 1e30; }
             }
             [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
-            branchBeamNormal = dot(branchD, n) > 0 ? n : -n;
+            float3 bn = dot(branchD, n) > 0 ? n : -n;
+            branchPlane = float4(bn, dot(bn, branchP));
         }
         if (pick < mD)
         {
@@ -670,7 +803,9 @@ void TracePath(uint index)
             PathEvent(chain, false);
             d = reflect(d, n);
         }
-        beamNormal = dot(d, n) > 0 ? n : -n;
+        float3 beamNormal = dot(d, n) > 0 ? n : -n;
+        plane = float4(beamNormal, dot(beamNormal, p));
+        scored = false; sinceStart = 0;
         float weight = 0;
         [unroll] for (uint k16 = 0; k16 < MethodBands; k16++) weight = max(weight, C[k16]);
         float survive = min(1, weight / (Q * MethodRouletteFloor));
@@ -687,6 +822,30 @@ void TracePath(uint index)
         {
             if (RandomRay(rng) >= survive) { MethodCount(CounterRoulette); done = true; continue; }
             Q *= survive;
+        }
+    }
+    // Persistent: keep the stopped ray, and queue its branch reservoir as a ray of its own (writes after the
+    // loop: on Metal, buffer writes inside a [loop] just before a return were dropped, part 14).
+    if (suspending)
+    {
+        PathRay r;
+        r.position = float4(p, tau); r.direction = float4(d, target);
+        r.phiLow = float4(Phi0[0], Phi0[1], Phi0[2], Phi0[3]); r.phiHigh = float4(Phi0[4], Phi0[5], Phi0[6], Phi0[7]);
+        r.wLow = float4(C[0], C[1], C[2], C[3]) / Q; r.wHigh = float4(C[4], C[5], C[6], C[7]) / Q;
+        r.plane = plane; r.scalars = float4(survival, chain.travelled, chain.time, sinceStart);
+        r.meta = uint4(chain.reflections | (inBranch ? 1u << 24 : 0u) | (scored ? 2u << 24 : 0u), medium, rng, events);
+        PathKeep(r);
+        float keepBranchRay = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+        if (branchSum > 0 && RandomRay(rng) < keepBranchRay)
+        {
+            MethodCount(CounterBranches);
+            r.position = float4(branchP, branchTau); r.direction = float4(branchD, target);
+            r.phiLow = float4(branchF[0], branchF[1], branchF[2], branchF[3]) * (branchSum / keepBranchRay);
+            r.phiHigh = float4(branchF[4], branchF[5], branchF[6], branchF[7]) * (branchSum / keepBranchRay);
+            r.wLow = 1; r.wHigh = 1;
+            r.plane = branchPlane; r.scalars = float4(branchSurvival, branch.travelled, branch.time, 0);
+            r.meta = uint4(branch.reflections | 1u << 24, branchMedium, HashRay(rng ^ 0x68e31da4u), events);
+            PathKeep(r);
         }
     }
 }

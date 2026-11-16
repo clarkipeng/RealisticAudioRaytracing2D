@@ -53,14 +53,14 @@ public partial class TakeChecks
     // Free field: the direct sound arrives at r/c with energy 1/r^2 in every band.
     // Slow like every method check: compiling the two method shaders costs the shared
     // runner about 0.6 GiB of shader-compiler memory, which the quick tier cannot spare.
-    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsMatchTheFreeField(TakeRender.Method method)
+    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Path, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsMatchTheFreeField(TakeRender.Method method, bool persistent = false)
     {
         var scene = Scene(); scene.materials = new[] {RigidControl()};
         var state = States(); state[0].position = Vector3.zero; state[1].position = new Vector3(3, .4f, -1.2f);
-        var settings = ControlSettings(method, 256, .1f); settings.useBvh = false;
+        var settings = ControlSettings(method, 256, .1f); settings.useBvh = false; PersistentControl(settings, persistent, 2);
         using var solver = new TransportSolver(scene, new AcousticTake.Primitive[0], settings, RequireGpu(), sampleRate: 8000);
-        solver.Solve(state, new TakeRender.DirectPath[1]);
+        solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
         double r = state[1].position.magnitude; int bin = (int)Math.Floor(r / 343 / .001);
         for (int b = 0; b < 8; b++)
         {
@@ -74,8 +74,8 @@ public partial class TakeChecks
     }
 
     // One rigid plane: direct sound plus its image, nothing else (diffraction off).
-    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsReproduceARigidPlaneImage(TakeRender.Method method)
+    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Path, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsReproduceARigidPlaneImage(TakeRender.Method method, bool persistent = false)
     {
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
         var a = new Vector3(-100, 0, -100); var b = new Vector3(100, 0, -100); var c = new Vector3(100, 0, 100); var d = new Vector3(-100, 0, 100);
@@ -85,8 +85,9 @@ public partial class TakeChecks
         state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
         var settings = ControlSettings(method, 1 << 18, .1f);
         if (method == TakeRender.Method.Path) settings.useBvh = false; // two triangles; spares the BVH kernel's compile
+        PersistentControl(settings, persistent, 1);
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-        solver.Solve(state, new TakeRender.DirectPath[1]);
+        solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
         var image = new Vector3(0, -1.5f, 0);
         if (method == TakeRender.Method.Path)
         {
@@ -118,17 +119,17 @@ public partial class TakeChecks
 
     // Rigid-walled shoebox (alpha = 0.1, no scattering): the energy histogram is the
     // image lattice; the pressure trains, band-filtered, match the lattice's arrivals.
-    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsReproduceTheShoeboxImageLattice(TakeRender.Method method)
+    [TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Path, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsReproduceTheShoeboxImageLattice(TakeRender.Method method, bool persistent = false)
     {
         var size = new Vector3(5, 4, 3); var source = new Vector3(-1.1f, .4f, .3f); var listener = new Vector3(1.3f, -.6f, -.2f);
         LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(.1f, 0), source, listener, out var scene, out var geometry, out var state);
         var settings = ControlSettings(method, 1 << 16, .2f);
         // Path: every path lives to the horizon here, so the 20 ms windows test the connections at the
         // energy method's sampling density (survival in time is checked by PathMethodLeaksThroughWalls...).
-        settings.pathSurvivalSeconds = 0;
+        settings.pathSurvivalSeconds = 0; PersistentControl(settings, persistent, 8);
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-        solver.Solve(state, new TakeRender.DirectPath[1]);
+        solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
         var corner = size * .5f; int bins = solver.Method.Bins;
         if (method != TakeRender.Method.Pressure)
         {
@@ -283,13 +284,13 @@ public partial class TakeChecks
     // Rigid half-plane, listener in the shadow: the pressure method's band response
     // matches the independent signed half-plane quadrature (TunedRoutesMatchIndependentHalfPlane),
     // and the energy method's UTD band energy matches the BTM band energy within 1.5 dB.
-    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsMatchTheHalfPlaneReference(TakeRender.Method method)
+    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Path, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsMatchTheHalfPlaneReference(TakeRender.Method method, bool persistent = false)
     {
         KnifeEdgeFixture(false, out var scene, out var geometry, out var state);
-        var settings = ControlSettings(method, 1 << 16, .3f); settings.diffractionFactor = 1;
+        var settings = ControlSettings(method, 1 << 16, .3f); settings.diffractionFactor = 1; PersistentControl(settings, persistent, 2);
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-        solver.Solve(state, new TakeRender.DirectPath[1]);
+        solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
         if (method == TakeRender.Method.Pressure)
         {
             double[] hz = {250, 500}, re = {.004442267995, -.066639430815}, im = {.083451251431, -.016598353630};
@@ -317,17 +318,17 @@ public partial class TakeChecks
     // (DD over parallel edges) and longer chains reach the listener. Pressure matches
     // the independent EDtoolbox second-order field of TunedRoutesReachTheFarSideOfASolid;
     // energy (UTD, DD connections) is checked on single walls against btm_reference.py.
-    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Path), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsReachTheFarSideOfASolid(TakeRender.Method method)
+    [TestCase(TakeRender.Method.Pressure), TestCase(TakeRender.Method.Energy), TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Path, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsReachTheFarSideOfASolid(TakeRender.Method method, bool persistent = false)
     {
         KnifeEdgeFixture(false, out var scene, out _, out var state);
         var geometry = TransportBox(scene.dimension, 2, 0, 1); scene.objects[2].primitiveCount = geometry.Length;
         state[0].position = Vector3.left * 3; state[1].position = Vector3.right * 3;
-        var settings = ControlSettings(method, 1 << 17, .3f); settings.diffractionFactor = 1;
+        var settings = ControlSettings(method, 1 << 17, .3f); settings.diffractionFactor = 1; PersistentControl(settings, persistent, 2);
         var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         try
         {
-            solver.Solve(state, new TakeRender.DirectPath[1]);
+            solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
             TestContext.WriteLine($"edges {solver.Method.EdgeCount}, edge connections {solver.Method.Counter(10)}, edge events {solver.Method.Counter(12)}");
             for (int depth = 1; depth < 6; depth++)
             {
