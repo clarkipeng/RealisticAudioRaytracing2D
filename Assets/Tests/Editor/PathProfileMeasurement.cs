@@ -15,7 +15,9 @@ using UnityEngine;
 //                                             them; also the rays in flight and the ray state's memory
 // For each scene, variants (ACOUSTIC_PATH_PROFILE_FLAGS, ProfileFlags) with a fence after every phase:
 // edge distribution and clearance, walk, readback. The "connect" field is zero since the beams replaced
-// the chain connections.
+// the chain connections. "candidates" is the most loop iterations of one thread in one dispatch (the walk's
+// serial chain; persistent: the largest over the warm-up's updates), "chains" all iterations (persistent: of
+// the whole warm-up), per pose.
 public partial class TakeChecks
 {
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]

@@ -40,6 +40,20 @@ uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 2 straig
 // T0 (1 + ln(T / T0)). Zero disables it.
 float PathSurvivalSeconds;
 static const uint CounterResumed = 15; // persistent rays continued from the previous update
+// The path method's use of counters 7 and 8 (the energy method's detections and chains): the most loop
+// iterations of one thread in a dispatch, and their total (the walk's serial chain and its work).
+static const uint CounterLongestChain = 7, CounterIterations = 8;
+// Counter 13 (the energy method's arrival overflow): rays ended because they were inside a closed solid in
+// air, or in a slit (below).
+static const uint CounterInsideSolid = 13;
+// The orientation sign of the closed object `owner` (Volumes are sorted by owner; as ConsiderMedium uses it:
+// a ray leaving the object meets a face with dot(normal, direction) * sign > 0), or 0 for an open object.
+float PathVolumeSide(uint owner)
+{
+    uint lo = 0, hi = VolumeCount;
+    [loop] while (lo < hi) { uint mid = lo + (hi - lo) / 2; if (Volumes[mid].ids.z < owner) lo = mid + 1; else hi = mid; }
+    return lo < VolumeCount && Volumes[lo].ids.z == owner ? Volumes[lo].minimum.w : 0;
+}
 // Persistent rays (see "Persistent rays" below): on/off, pool capacity and offsets, the update period.
 uint PathPersistent, PathCapacity, PathReadBase, PathWriteBase, PathReadCount, PathWriteCount, PathOverflowCount, PathFlush;
 float PathStep;
@@ -153,8 +167,16 @@ void PathEvent(inout PathChain c, bool transmitted)
 // path is still sampled (unbiased); the weight only steers samples to edges between the two ends.
 // EnergyEdgeWeights (energy method) weighted by the source alone, which left the edges of an open
 // doorway between the organ and a listener outside almost never drawn.
-void PathEdgeWeights(uint edge)
+// Persistent rays keep each pair's weights (PathEdgeWeight) and refresh a slice of them per update
+// (PathEdgeOffset); PathEdgeCopy then makes the update's distribution from them. Any positive weights
+// give an unbiased walk (a sample's probability is read from the same distribution it was drawn from),
+// so weights a few updates old only steer a little less well.
+RWStructuredBuffer<float> PathEdgeWeight; // persistent: [pair][edge]
+uint PathEdgeOffset, PathEdgeWeightBase;
+void PathEdgeCopy(uint edge) { if (edge < MethodEdgeCount) MethodEdgeCdf[edge] = PathEdgeWeight[PathEdgeWeightBase + edge]; }
+void PathEdgeWeights(uint index)
 {
+    uint edge = index + PathEdgeOffset;
     if (edge >= MethodEdgeCount) return;
     float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
     float3 a, u, f, nn; float extent, angle, z0, r;
@@ -170,7 +192,7 @@ void PathEdgeWeights(uint edge)
         [loop] for (uint i = 0; i < 2 && !seen; i++) seen = Visible(MethodState, x, i == 0 ? nearest : mid, false);
         weight *= seen ? 1 : MethodEdgeHidden;
     }
-    MethodEdgeCdf[edge] = weight;
+    if (PathPersistent != 0) PathEdgeWeight[PathEdgeWeightBase + edge] = weight; else MethodEdgeCdf[edge] = weight;
 }
 
 // Straight connection of a non-delta vertex to the listener (through transmitting walls).
@@ -414,7 +436,7 @@ struct PathRay // float4 fields only (160 bytes), so that every backend lays it 
     float4 wLow, wHigh;           // C / Q: attenuation since then over the roulette's survival
     float4 plane;                 // the latest event's plane, outgoing side (beams): normal, offset
     float4 scalars;               // survival, chain's unfolded length, chain's origin time, distance since the segment's start
-    uint4 meta;                   // reflections | flags << 24 (1 in a branch, 2 the segment's beam is scored), medium, rng, events
+    uint4 meta;                   // reflections | flags << 24 (1 in a branch, 2 the segment's beam is scored, 4 at a surface: trace from zero distance), medium, rng, events
 };
 RWStructuredBuffer<PathRay> PathRays;  // [pair][pool 2][PathCapacity]
 RWStructuredBuffer<uint> PathLive;     // [pair][pool 2]: rays in each pool; then [pair]: rays dropped by overflow, ever
@@ -431,6 +453,31 @@ void PathKeep(PathRay r)
     InterlockedAdd(PathLive[PathWriteCount], 1u, slot);
     if (slot < PathCapacity) PathRays[PathWriteBase + slot] = r;
     else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount], 1u); }
+}
+
+// PartitionExit for the walk, where overlapping solids are one: the crossing ends at the partition's far
+// face only once every other object entered on the way has been left too (an even number of their faces
+// crossed). The Church's door frame runs 8 mm into the floor slab and its stone mullions through the window
+// panes; ending at the frame's far face put transmitted rays inside the floor slab, in air, where they
+// bounced between faces 8 mm apart for hundreds of events per update (README part 18).
+bool PathPartitionExit(uint hit, float3 position, float3 direction, bool medium, out float depth)
+{
+    uint owner = Primitives[hit].indices.x, foreign = 0;
+    float travelled = 2 * RayEpsilon;
+    bool left = false;
+    depth = 0;
+    if (medium) return false;
+    [loop] for (uint i = 0; i < 8; i++)
+    {
+        uint next; float distance; float3 normal;
+        if (!NearestHit(MethodState, position + direction * travelled, direction, PartitionDepth - travelled, false, next, distance, normal)) return false;
+        travelled += distance;
+        if (Primitives[next].indices.x == owner) left = true; else foreign++;
+        if (left && (foreign & 1) == 0) { depth = travelled; return true; }
+        travelled += 2 * RayEpsilon;
+        if (travelled >= PartitionDepth) return false;
+    }
+    return false;
 }
 
 // Mode 0: the current slot of the pair's ring becomes the update's histogram (MethodCellBase, PathCountBase)
@@ -512,7 +559,7 @@ void TracePath(uint index)
     // New rays reach half a period in their first update, so that update n covers the path times of every cohort
     // that are heard within half a period of its state's time (the response is centred on it).
     float age = 0, target = PathPersistent != 0 ? .5 * PathStep : 1e30, sinceStart = 0;
-    bool scored = false, suspending = false;
+    bool scored = false, suspending = false, offSurface = false;
     if (resumed)
     {
         PathRay r = PathRays[PathReadBase + slot];
@@ -526,10 +573,13 @@ void TracePath(uint index)
         chain.travelled = r.scalars.y; chain.time = r.scalars.z; chain.reflections = r.meta.x & 0xffffff; chain.kind = 1;
         medium = r.meta.y; rng = r.meta.z; events = r.meta.w;
         inBranch = (r.meta.x & (1u << 24)) != 0; scored = (r.meta.x & (2u << 24)) != 0;
+        offSurface = (r.meta.x & (4u << 24)) != 0;
         connectListener = false; connectEdge = false; travelling = true;
     }
+    uint iterations = 0;
     [loop] for (;;)
     {
+        iterations++;
         if (hasPending)
         {
             hasPending = false;
@@ -566,7 +616,8 @@ void TracePath(uint index)
             float keep = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
             if (RandomRay(rng) >= keep) break;
             [unroll] for (uint k2 = 0; k2 < MethodBands; k2++) { Phi0[k2] = branchF[k2] * branchSum / keep; C[k2] = 1; }
-            p = branchP; d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival; plane = branchPlane;
+            p = branchP + branchPlane.xyz * RayEpsilon; offSurface = true;
+            d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival; plane = branchPlane;
             chain = branch;
             fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true; scored = false; sinceStart = 0;
             MethodCount(CounterBranches);
@@ -617,6 +668,7 @@ void TracePath(uint index)
                 [unroll] for (uint k5 = 0; k5 < MethodBands; k5++) Phi0[k5] = I[k5] * D / pdf;
                 Q = edgeRays ? 1 - MethodEdgeProbability : 1;
                 p = v.position; d = w0; tau = v.time;
+                if (v.kind == 1) { plane = float4(v.normal, dot(v.normal, p)); p += v.normal * RayEpsilon; offSurface = true; }
                 chain = PathStart(v.kind, v.time);
             }
             travelling = true;
@@ -625,7 +677,13 @@ void TracePath(uint index)
         float limit = (MethodHorizon - tau) / MethodSlowness(medium);
         uint hit; float distance; float3 normal;
         if (limit <= 0) { MethodCount(CounterHorizon); done = true; continue; }
-        bool found = NearestHit(MethodState, p, d, limit, false, hit, distance, normal);
+        // A segment that leaves a surface starts RayEpsilon out along that surface's outgoing normal and is traced
+        // from zero distance: a fixed minimum distance would skip another object's surface within RayEpsilon of the
+        // start (a mullion's face meeting a window pane let rays into the pane, where they bounced for hundreds of events).
+        bool found = TraceScene(MethodState, p, d, offSurface ? 0 : RayEpsilon, limit, false, false, 0xffffffff, hit, distance, normal);
+        // A ray in air cannot meet a closed solid's face from inside: it got there through a leak (README part 18)
+        // and carries energy that is not in the room, so it ends before scoring anything more.
+        if (found && medium == AirMedium && dot(normal, d) * PathVolumeSide(Primitives[hit].indices.x) > 0) { MethodCount(CounterInsideSolid); done = true; continue; }
         if (fluxPending && found)
         {
             // UTD energy flux per unit edge length and azimuth, over the sampling densities.
@@ -689,12 +747,20 @@ void TracePath(uint index)
             p += d * advance; tau += advance * MethodSlowness(medium); chain.travelled += advance;
             [unroll] for (uint ka = 0; ka < MethodBands; ka++) C[ka] *= exp(-2 * MethodLoss(medium, ka) * advance);
             sinceStart += advance; suspending = true;
+            offSurface = offSurface && advance <= 0; // still at the surface if it has not moved
             continue;
         }
         p += d * distance; tau += distance * MethodSlowness(medium); chain.travelled += distance;
         [unroll] for (uint k7 = 0; k7 < MethodBands; k7++) C[k7] *= exp(-2 * MethodLoss(medium, k7) * distance);
         float3 n = dot(d, normal) < 0 ? normal : -normal;
         float cosI = max(0, -dot(d, n));
+        // A slit: this face and the previous event's face (plane) are parallel, face each other, and are closer than
+        // half the shortest band's wavelength, so no band has a transverse mode across the gap and a ray bouncing
+        // across it models nothing (the field there is a plane wave along the slit). Such gaps are mesh defects in the
+        // Church (an open door-frame mesh whose threshold top lies 8 mm above the floor; rays entered from its open
+        // ends and bounced every centimetre for hundreds of events per update, README part 18). The ray ends.
+        if (dot(n, plane.xyz) < -.99 && dot(plane.xyz, p) - plane.w < .5 * SpeedOfSound / MethodBandHz(MethodBands - 1))
+        { MethodCount(CounterInsideSolid); done = true; continue; }
         MethodCount(CounterEvents);
         float eT[8], eD[8], eS[8], mT = 0, mD = 0, mS = 0;
         [unroll] for (uint k8 = 0; k8 < MethodBands; k8++)
@@ -734,7 +800,7 @@ void TracePath(uint index)
         float wall = 0; bool partition = false; uint next = medium;
         if (keepBranch || transmit)
         {
-            partition = PartitionExit(MethodState, hit, p, d, false, MethodRefracts(hit), wall);
+            partition = PathPartitionExit(hit, p, d, MethodRefracts(hit), wall);
             next = MediumAt(MethodState, p + d * ((partition ? wall : 0) + 2 * RayEpsilon), false);
         }
         if (keepBranch)
@@ -805,6 +871,7 @@ void TracePath(uint index)
         }
         float3 beamNormal = dot(d, n) > 0 ? n : -n;
         plane = float4(beamNormal, dot(beamNormal, p));
+        p += beamNormal * RayEpsilon; offSurface = true;
         scored = false; sinceStart = 0;
         float weight = 0;
         [unroll] for (uint k16 = 0; k16 < MethodBands; k16++) weight = max(weight, C[k16]);
@@ -824,6 +891,8 @@ void TracePath(uint index)
             Q *= survive;
         }
     }
+    InterlockedMax(MethodStats[MethodBands * MethodDepths * MethodStatStride + CounterLongestChain], iterations);
+    MethodCount(CounterIterations, iterations);
     // Persistent: keep the stopped ray, and queue its branch reservoir as a ray of its own (writes after the
     // loop: on Metal, buffer writes inside a [loop] just before a return were dropped, part 14).
     if (suspending)
@@ -833,18 +902,18 @@ void TracePath(uint index)
         r.phiLow = float4(Phi0[0], Phi0[1], Phi0[2], Phi0[3]); r.phiHigh = float4(Phi0[4], Phi0[5], Phi0[6], Phi0[7]);
         r.wLow = float4(C[0], C[1], C[2], C[3]) / Q; r.wHigh = float4(C[4], C[5], C[6], C[7]) / Q;
         r.plane = plane; r.scalars = float4(survival, chain.travelled, chain.time, sinceStart);
-        r.meta = uint4(chain.reflections | (inBranch ? 1u << 24 : 0u) | (scored ? 2u << 24 : 0u), medium, rng, events);
+        r.meta = uint4(chain.reflections | (inBranch ? 1u << 24 : 0u) | (scored ? 2u << 24 : 0u) | (offSurface ? 4u << 24 : 0u), medium, rng, events);
         PathKeep(r);
         float keepBranchRay = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
         if (branchSum > 0 && RandomRay(rng) < keepBranchRay)
         {
             MethodCount(CounterBranches);
-            r.position = float4(branchP, branchTau); r.direction = float4(branchD, target);
+            r.position = float4(branchP + branchPlane.xyz * RayEpsilon, branchTau); r.direction = float4(branchD, target);
             r.phiLow = float4(branchF[0], branchF[1], branchF[2], branchF[3]) * (branchSum / keepBranchRay);
             r.phiHigh = float4(branchF[4], branchF[5], branchF[6], branchF[7]) * (branchSum / keepBranchRay);
             r.wLow = 1; r.wHigh = 1;
             r.plane = branchPlane; r.scalars = float4(branchSurvival, branch.travelled, branch.time, 0);
-            r.meta = uint4(branch.reflections | 1u << 24, branchMedium, HashRay(rng ^ 0x68e31da4u), events);
+            r.meta = uint4(branch.reflections | 1u << 24 | 4u << 24, branchMedium, HashRay(rng ^ 0x68e31da4u), events);
             PathKeep(r);
         }
     }

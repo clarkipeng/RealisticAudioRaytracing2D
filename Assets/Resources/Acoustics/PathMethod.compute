@@ -15,6 +15,7 @@
 #pragma kernel PathClearance3DBvh USE_BVH
 #pragma kernel PathPersistentBeginKernel
 #pragma kernel PathRingKernel
+#pragma kernel PathEdgeCopyKernel
 
 #include "../../Shaders/Geometry.hlsl"
 #include "../../Shaders/Transport.hlsl"
@@ -30,6 +31,7 @@
 [numthreads(256,1,1)] void PathClearance3D(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
 [numthreads(256,1,1)] void PathClearance3DBvh(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
 [numthreads(1,1,1)] void PathPersistentBeginKernel(uint3 id:SV_DispatchThreadID) { PathPersistentBegin(); }
+[numthreads(64,1,1)] void PathEdgeCopyKernel(uint3 id:SV_DispatchThreadID) { PathEdgeCopy(id.x); }
 [numthreads(64,1,1)] void PathRingKernel(uint3 id:SV_DispatchThreadID) { PathRing(id.x); }
 [numthreads(64,1,1)] void PathExpandDirect(uint3 id:SV_DispatchThreadID) { PathExpand(id.x); }
 [numthreads(64,1,1)] void PathClear(uint3 id:SV_DispatchThreadID)

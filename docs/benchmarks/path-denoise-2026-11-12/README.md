@@ -848,3 +848,47 @@ In the door check nothing is heard until the first sound through the hole can ar
 After that the level overshoots the open room's by 2–4% for about a horizon: the room rang with the door closed, so the first sound out is that of the closed room, which is louder.
 A connection is checked against the scene at the time it is made, not when the sound passes each point of it; through a door that moves during a connection's flight (at most a few tens of milliseconds) this is the remaining approximation.
 A static measurement in persistent mode costs one full solve per update of its warm-up (one horizon of updates), because each update advances every cohort by one period; the checks use 16–750 ms updates for that reason.
+
+## 18. Rays trapped in the Church's geometry, and the time per update
+
+With persistent rays (part 17) an update in the Church took 36 ms at 256 rays and 46 ms at 512, and hardly depended on the number of rays or on the connections: the update waits for its slowest ray, which ran 1,166 iterations of the walk's loop in one update, against an average of 4.
+New counters record the longest chain of iterations in a dispatch and their total (counters 7 and 8 of the path method).
+
+**What the long chains were.**
+A temporary probe recorded the rays that passed 400 iterations in an update.
+They were not in clutter: they bounced between two parallel faces a few millimetres or centimetres apart, in air, every centimetre or so, for hundreds of events.
+Three mechanisms put them there, each a meeting of the model's geometry with a fixed tolerance:
+
+| Where | Gap | How rays got in | Fix |
+|---|---|---|---|
+| window panes (closed glass boxes, crossed by stone mullions) | 3.5 cm | a ray leaving a mullion's face where it meets the glass started its next segment within RayEpsilon (0.1 mm) of the pane's face, and the trace skips anything nearer than RayEpsilon | a segment that leaves a surface now starts RayEpsilon out along that surface's outgoing normal and is traced from zero distance |
+| the floor slab under the front door frame | 8 mm | a transmitted branch crossing the door frame (a partition) left it at its far face, which lies inside the floor slab: the crossing skipped the other object's faces on the way | a partition crossing ends only once every other object entered on the way has been left too: overlapping solids are crossed as one |
+| the door frame's threshold, whose top face lies 8 mm above the floor in an open mesh (48 boundary edges) | 8 mm | through the mesh's open ends | a ray that bounces between two facing parallel faces closer than half the shortest band's wavelength (1.07 cm) ends |
+
+A gap tolerance in the ray–triangle test changed nothing (the same rays, at the same places), and so did switching edge rays off for the window and slit cases, so neither seams between triangles nor edge rays were the cause.
+The slit rule is the only one that removes energy.
+It is the physical limit of the ray model: a gap narrower than half the shortest wavelength has no transverse mode in any band (the first cuts on at c / 2g, above 16 kHz), so the field in it is a plane wave along the slit, which rays bouncing across it do not represent; here the slits are defects of the mesh, and the energy that enters one is that of the slit's mouth (8 mm high).
+A fourth rule guards the others: a ray in air cannot meet a closed solid's face from inside, so if one does it got there through a leak and ends.
+These ends are counted (counter 13 of the path method).
+
+**What remains.**
+After the fixes the slowest ray in an update runs about 250 iterations (236 at 256 rays, 260 at 512).
+A probe of those found no more pockets: they are rays inside solid media (glass, stone, wood), where sound travels 6–16 times faster than in air, so a ray covers up to 125 m of path inside a 0.5 m slab in one 23 ms update, and rays among the pews' and organ's small parts.
+Both are what the model describes, not defects, and their energy is small (a stone wall transmits 1e-4); the population control of part 20 (weight windows) is the principled way to stop spending the update on them, so there is no iteration cap.
+
+**Edge distribution.**
+Persistent rays keep each pair's edge weights (part 11) and refresh 2,048 of them per update, the whole set after a flush; every update rebuilds its distribution from the kept weights.
+The walk stays unbiased with any positive weights, because a sample's probability is read from the same distribution it was drawn from; weights a few updates old only steer less well.
+In the Church (14,075 edges, refreshed every 7 updates, 0.16 s) the edge phase fell from 3.6 to about 2 ms per update.
+
+**Time per update now** (persistent, 23–24 ms updates, GPU time with fences, `MeasurePathProfile`; part 17's in brackets):
+
+| Scene | rays per update | rays in flight | time per update | slowest ray (iterations) | ray and histogram state |
+|---|---:|---:|---:|---:|---:|
+| stone shoebox | 256 / 512 | 2,152 / 4,291 | 0.9 / 0.8 ms (3.1 / 1.6) | 8 / 8 | 14 / 16 MB |
+| furnished room | 256 / 512 | 2,970 / 5,944 | 3.5 / 4.3 ms (8.9 / 6.5) | 35 / 36 | 14 / 16 MB |
+| Church | 256 / 512 | 5,141 / 10,304 | 20.8 / 28.7 ms (35.6 / 45.7) | 236 / 260 (1,166 at 512) | 46 / 48 MB |
+
+The Church is inside the 23 ms budget at 256 rays and not yet at 512.
+Most of its state is the ring of future histograms (44 MB), which part 19 resizes.
+The full tier passes; its quick part peaked once at 3.75 GiB, over the 3.5 GiB limit, and at 3.07 GiB when run again with the same tests.
