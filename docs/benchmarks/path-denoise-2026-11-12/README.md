@@ -1047,3 +1047,40 @@ Per receiver and band the eight-seed mean energies agree: the median |z| of thei
 The suite's path rows now come from the current code (`raw-path-shortcut`, 2,048 rays, seeds 0 and 1 like every method there): level 3.37 dB, EDT 199%, T30 74%, ETC 13.8 dB (in view 1.78 dB; shadow 4.91 dB; closed rooms 1.93 dB), against part 11's 3.17 / 213 / 66 / 13.9.
 The extra seeds of the two scenes are kept in `raw-path-shortcut-extra-seeds` and not published, so every scene is scored with the same two seeds.
 Two seeds are too few for the diffraction-dominated scenes: their level error moves by half a decibel between seed sets.
+
+## 23. Listener-side sampling for the outside tail: built, measured, not kept
+
+**What was built** (`listener-side.patch` beside this file, not applied).
+Path space was partitioned by the events next to the listener, in one loop and without weights:
+- the listener side counted the paths whose last event before the listener is one edge, preceded by a surface event or by the source itself: edge rays launched from the listener (the source's edge rays mirrored, by reciprocity), traced by the same walk with source and listener swapped, which then connects to the source as usual, and at launch makes only the single-edge connection to the source;
+- the source side counted everything else, so its edge connections were only the double-edge ones (a listener edge ray cannot diffract twice in a row);
+- the listener side's deposits arrived from its rays' first leg, and its rays were traced to their end within the update, in the update's scene (reciprocity per update: the listener side is not retarded, it uses the scene and both positions as they are at the update).
+
+**The partition is not exact against the method's own path set.**
+The walk draws edge rays only at its start, and connects through an edge only from a scattering point (with at most one mirror before the edge).
+So the source side covers "edge, then any number of mirrors, then a scattering point" at the source's end but only "at most one mirror, then the edge" at the listener's end; swapping the sides for the class above swaps these limits.
+The partitioned estimator therefore counts a different set of paths: more mirrors after the last edge, fewer after a first edge.
+Making it exact needs either edge diffraction as an event anywhere in the walk (so both ends can diffract after any number of mirrors) or restricting the listener side to "at most one mirror after the edge", which needs a cap the walk does not have.
+
+**Measured** (Church outside at 16.5 s, late field 0.2–2 s, 125 / 500 / 2,000 Hz; 1,024 listener rays per update):
+
+| Measurement | current method | with the listener side |
+|---|---|---|
+| persistent, N = 11,000, 64 updates: median / mean | 0.03 / 0.05 / 0.12 | 0.16 / 0.28 / 0.32 |
+| same: mean level at 125 Hz | 5.1e-4 | 1.3e-4 |
+| full solves, 8,192 rays, 16 seeds: median / mean | 0.12 / 0.16 / 0.22 | 0.07 / 0.08 / 0.14 |
+| same: mean at 125 Hz | 6.6e-4 ± 4.9e-4 | 4.5e-4 ± 1.9e-4 |
+| Church, time per update at N = 11,000 | 23 ms (part 20) | 78 ms (walk 38 ms, listener side 38 ms) |
+
+The outside field stays heavy-tailed: per update the median over the mean rose, over full solves it fell, and neither comes near the 0.5–0.7 seen inside.
+The tail moved rather than went: the listener's edge rays carry the same UTD peak near their shadow and reflection boundaries as the source's (part 11 found drawing their azimuth by |D|² made the tail worse).
+The cost tripled: the listener side's rays run to their end in every update (their longest chain alone is 30–37 ms), and the source side's edge connections, now all double-edge, are dearer.
+
+On the wave suite (full solves, 2,048 source and 1,024 listener rays, two seeds) the open scenes improved (barriers 5.24 → 4.46 and 5.31 → 4.56 dB, canopy-bem 3.93 → 3.60, the canopies 2.60 → 1.77 and 2.54 → 1.89; shadow 4.91 → 4.60 dB) and the rooms got much worse (doorway 3.07 → 4.87, corridor 1.91 → 3.35, furnished 2.07 → 3.32; in view 1.78 → 2.08 dB; overall 3.37 → 3.31).
+That is the different path set at work: after the listener's edge the walk follows any number of reflections, which the method never counted before, and in a closed room UTD energy added that way is counted on top of the reflected field.
+The analytic checks pass with it (half-plane 0.29 against 0.30 dB, double diffraction 0.23 dB closer to BTM).
+
+**Decision.**
+Not kept: it is three times the cost, does not bring the outside tail near the target, and changes the method's path set in a way that costs the rooms more than it gains outdoors.
+The code is reverted and the persistent Church walk is not re-rendered (the method is unchanged).
+What the measurements point to instead is the one mechanism both problems share: edge diffraction as an event of the walk, where a ray whose beam reaches an edge diffracts a share of its energy, so that diffraction is sampled where the energy is, at either end of a path, and the single-edge connections (the tail's source, part 15) are no longer needed; that is part 20's open step, now with a second reason.

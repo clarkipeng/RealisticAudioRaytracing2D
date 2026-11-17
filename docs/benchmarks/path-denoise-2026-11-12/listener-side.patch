@@ -1,0 +1,308 @@
+diff --git a/Assets/Scripts/Simulation/MethodTransport.cs b/Assets/Scripts/Simulation/MethodTransport.cs
+index f8df394..fc8b970 100644
+--- a/Assets/Scripts/Simulation/MethodTransport.cs
++++ b/Assets/Scripts/Simulation/MethodTransport.cs
+@@ -458,6 +458,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+                 shader.SetFloat("PathCohortTarget", Rays); shader.SetFloat("PathFineEnd", settings.pathFineBins * settings.pathBinSeconds);
+                 shader.SetInt("PathPersistent", persistent ? 1 : 0);
+                 shader.SetInt("PathBeamsOnly", settings.pathBeamsOnly ? 1 : 0);
++                shader.SetInt("PathSide", 0); shader.SetInt("PathPartition", settings.pathListenerRays > 0 && EdgeCount > 0 && settings.diffractionFactor > 0 ? 1 : 0);
+                 shader.SetInt("PathCapacity", PersistentCapacity);
+                 shader.SetFloat("PathStep", PersistentStep);
+                 shader.SetInt("PathFlush", 0);
+@@ -614,12 +615,37 @@ internal sealed class MethodTransport : IDisposable, ILateField
+             }
+         }
+         Ring(0, ringCells);
++        TraceListenerSide();
+         ringSlot[pair] = (ringSlot[pair] + 1) % RingSlots;
+         if (!population) parity[pair] = 1 - p;
+         persistentUpdates++;
+         if (Profile) { Fence(); lastWalkSeconds = TakeRender.Elapsed(start); }
+     }
+     double lastWalkSeconds;
++    bool skipListenerSide; // (a static measurement's warm-up updates: their histograms are not read)
++    // Listener side (settings.pathListenerRays, MethodPath.hlsl "Listener side"): after the update's source side
++    // (and its ring slot, persistent), pathListenerRays edge rays from the listener, each traced to its end now and
++    // added to the update's histogram (cell and count bases of SetSolve).
++    void TraceListenerSide()
++    {
++        int rays = settings.pathListenerRays;
++        if (rays <= 0 || EdgeCount == 0 || settings.diffractionFactor <= 0 || skipListenerSide) return;
++        long start = Stopwatch.GetTimestamp();
++        shader.SetInt("PathSide", 1); shader.SetInt("PathPersistent", 0);
++        shader.SetFloat("PathSideScale", Rays / (float)rays); // the histogram is divided by the source side's rays
++        // (Population control disables survival in time in the walk; the listener side applies its profile itself.)
++        if (population) shader.SetFloat("PathSurvivalSeconds", settings.pathFineBins * settings.pathBinSeconds);
++        shader.Dispatch(clearanceKernel, 1, 1, 1); // (the clearance at the source, where this side scores its beams)
++        for (int first = 0; first < rays; first += ChunkRays)
++        {
++            shader.SetInt("MethodRayOffset", first);
++            shader.SetInt("MethodRayCount", Math.Min(ChunkRays, rays - first));
++            shader.Dispatch(traceKernel, (Math.Min(ChunkRays, rays - first) + 63) / 64, 1, 1);
++        }
++        shader.SetInt("PathSide", 0); shader.SetInt("PathPersistent", persistent ? 1 : 0);
++        shader.SetFloat("PathSurvivalSeconds", population ? 0 : settings.pathSurvivalSeconds);
++        if (Profile) { Fence(); PhaseSeconds[2] += TakeRender.Elapsed(start); }
++    }
+     void Ring(int mode, long cells)
+     {
+         shader.SetInt("PathRingMode", mode);
+@@ -737,6 +763,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+             GpuSeconds += busy;
+             if (WorkFraction < 1) System.Threading.Thread.Sleep((int)Math.Ceiling(busy * 1000 * (1 / WorkFraction - 1)));
+         }
++        if (path) { TraceListenerSide(); AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion(); }
+         long read = Stopwatch.GetTimestamp();
+         output.GetData(Output);
+         stats.GetData(Stats);
+@@ -761,7 +788,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
+             flushMask = 0;
+             DispatchEdgeDistribution(0, flush);
+             if (Profile) { Fence(); if (last) PhaseSeconds[0] += TakeRender.Elapsed(start); }
++            skipListenerSide = !last;
+             PersistentUpdate(0, flush);
++            skipListenerSide = false;
+             if (Profile && last) PhaseSeconds[1] += lastWalkSeconds;
+             AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion(); // fence: this update is done
+             GpuSeconds += TakeRender.Elapsed(start);
+@@ -809,6 +838,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+                         shader.SetInt("MethodRayCount", Math.Min(ChunkRays, Rays - first));
+                         TraceChunk(Math.Min(ChunkRays, Rays - first));
+                     }
++                    TraceListenerSide();
+                     shader.Dispatch(expandKernel, (frequencyBins + 63) / 64, 1, 1);
+                     continue;
+                 }
+diff --git a/Assets/Scripts/Simulation/TakeRender.cs b/Assets/Scripts/Simulation/TakeRender.cs
+index 42ca8a2..dcb7599 100644
+--- a/Assets/Scripts/Simulation/TakeRender.cs
++++ b/Assets/Scripts/Simulation/TakeRender.cs
+@@ -114,6 +114,8 @@ public static partial class TakeRender
+         public bool pathBeamsOnly;
+         [Min(0),Tooltip("Path method, persistent rays: population control. Hold this many rays in flight per source/listener pair, cohort by cohort (rays of age a: a share min(1, T_f / a), T_f the end of the fine bins), by splitting and weight lottery; the new rays per update follow from it and replace methodRays. Zero: off (survival in time and methodRays new rays).")]
+         public int pathPopulation;
++        [Min(0),Tooltip("Path method: listener side. Paths whose last event before the listener is one edge diffraction are counted from the listener: this many edge rays per update launched from the listener and traced to the source (reciprocity), the rest of path space from the source. Zero: off (every path from the source).")]
++        public int pathListenerRays;
+         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
+         public string pathHistogramExport="";
+         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]
+diff --git a/Assets/Shaders/MethodPath.hlsl b/Assets/Shaders/MethodPath.hlsl
+index 56a8911..c45bb01 100644
+--- a/Assets/Shaders/MethodPath.hlsl
++++ b/Assets/Shaders/MethodPath.hlsl
+@@ -61,6 +61,17 @@ float PathVolumeSide(uint owner)
+ // the unfolded length from it: a diffuse reflection keeps no phase relation with the path before it, so the
+ // scattering point is the new source of the Gaussian beam argument (w^2 = lambda L / pi, L from the chain's origin).
+ uint PathBeamsOnly;
++// Listener side (settings.pathListenerRays, README part 23): path space is partitioned by the events next to
++// the listener. Paths whose last event before the listener is one edge, preceded by a surface event or by the
++// source itself, are counted only from the listener side: rays launched from the listener as edge rays (the
++// source's edge rays mirrored, by reciprocity) and traced by this same walk with source and listener swapped
++// (PathSide = 1), which then connects to the source as usual; at their launch they make only the single-edge
++// connection to the source. Every other path stays on the source side (PathPartition = 1), whose edge
++// connections are then only the double-edge ones. A partition counts each path once, so no weights are needed.
++// The listener side's deposits arrive from its rays' first leg (PathSideFrom); its rays are traced to their end
++// within the update, in the update's scene (by reciprocity per update; not retarded), and scaled by PathSideScale.
++uint PathSide, PathPartition;
++float PathSideScale;
+ // Persistent rays (see "Persistent rays" below): on/off, pool capacity and offsets, the update period.
+ uint PathPersistent, PathCapacity, PathReadBase, PathWriteBase, PathReadCount, PathWriteCount, PathOverflowCount, PathFlush;
+ float PathStep;
+@@ -84,7 +95,7 @@ void PathClearance(uint thread)
+     if (thread == 0) PathClearanceMin = asuint(1e4f);
+     GroupMemoryBarrierWithGroupSync();
+     float z = 1 - (2 * thread + 1) / 256.0, r = sqrt(max(0, 1 - z * z)), a = thread * 2.399963229728653;
+-    float3 d = float3(r * cos(a), z, r * sin(a)), L = States[MethodState + MethodListenerObject].position.xyz;
++    float3 d = float3(r * cos(a), z, r * sin(a)), L = States[MethodState + (PathSide != 0 ? MethodSourceObject : MethodListenerObject)].position.xyz; // (listener side: at the source)
+     uint hit; float distance; float3 normal;
+     if (NearestHit(MethodState, L, d, 1e4, false, hit, distance, normal)) InterlockedMin(PathClearanceMin, asuint(distance));
+     GroupMemoryBarrierWithGroupSync();
+@@ -299,7 +310,8 @@ float PathUtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k,
+ }
+ // Listener connection through one edge (D), one mirror and one edge (RD), or two parallel
+ // edges (DD): EnergyEdgeConnection's kernels, with one UtdEnergy body per edge (bands in a loop).
+-bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, inout uint rng, out float4 low, out float4 high, out float time, out float3 fromOut)
++// forced: 0 any variant, 1 the single edge (D) only, 2 the double edge (DD) only (partition, see PathSide).
++bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, uint forced, inout uint rng, out float4 low, out float4 high, out float time, out float3 fromOut, out float3 firstOut)
+ {
+     low = 0; high = 0;
+     time = 0; fromOut = 0;
+@@ -333,8 +345,8 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
+     edge2 = edge;
+     float r = RandomRay(rng);
+     bool mirrors = PrimitiveCount > 0;
+-    bool image = mirrors && r < 1.0 / 3, pair = r >= (mirrors ? 2.0 / 3 : .5);
+-    float variant = mirrors ? 1.0 / 3 : .5;
++    bool image = forced == 0 && mirrors && r < 1.0 / 3, pair = forced == 2 || (forced == 0 && r >= (mirrors ? 2.0 / 3 : .5));
++    float variant = forced != 0 ? 1 : mirrors ? 1.0 / 3 : .5;
+     uint mirror = 0;
+     if (image)
+     {
+@@ -392,7 +404,7 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
+         if (k < 4) sumLow += share * lane; else sumHigh += share * lane;
+     }
+     low = sumLow; high = sumHigh;
+-    fromOut = normalize(last - L);
++    fromOut = normalize(last - L); firstOut = first;
+     return true;
+ }
+ 
+@@ -566,7 +578,9 @@ void TracePath(uint index)
+     }
+     MethodCount(resumed ? CounterResumed : CounterRays);
+     float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
+-    uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
++    if (PathSide != 0) { float3 swap = S; S = L; L = swap; } // listener side: the walk starts at the listener and ends at the source
++    float3 sideFrom = 0; // listener side: the direction from the listener of the ray's first leg (its arrival direction)
++    uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + (PathSide != 0 ? 0x68bc21ebu : 0x2545f491u))); // (listener side: its own streams)
+     MethodAnchor v;
+     v.position = S; v.normal = 0; v.previous = S; v.kind = 0; v.edge = 0; v.primitive = 0xffffffff; v.time = 0;
+     bool airListener = true;
+@@ -579,10 +593,10 @@ void TracePath(uint index)
+     float I[8], cI[8], Phi0[8], C[8];
+     float4 pendingLow = 0, pendingHigh = 0; // bands of the pending contribution (no arrays across function boundaries)
+     [unroll] for (uint k = 0; k < MethodBands; k++)
+-    { I[k] = ReferenceDistance * ReferenceDistance; cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; }
++    { I[k] = ReferenceDistance * ReferenceDistance * (PathSide != 0 ? PathSideScale : 1); cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; }
+     MethodAnchor c = v;
+     // Ray 0 makes the source's straight connection for every ray (it is deterministic).
+-    bool connectListener = ray == 0, connectEdge = PathBeamsOnly == 0, hasPending = false;
++    bool connectListener = ray == 0 && PathSide == 0, connectEdge = PathBeamsOnly == 0, hasPending = false;
+     float listenerScale = MethodTotalRays, pendingTime = 0;
+     float3 pendingFrom = 0;
+     uint events = 0;
+@@ -631,7 +645,7 @@ void TracePath(uint index)
+             float aheadUpdates = PathPersistent != 0 ? max(0, ceil((pendingTime - target) / PathStep)) : 0;
+             if (aheadUpdates > (float)PathRingSlots - 1 && pendingTime <= MethodHorizon) InterlockedAdd(PathLive[PathRingFar], 1u); // (later than the horizon: dropped)
+             uint ahead = (uint)min(aheadUpdates, (float)PathRingSlots - 1);
+-            PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead);
++            PathDeposit(PathSide != 0 && dot(sideFrom, sideFrom) > 0 ? sideFrom : pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead);
+         }
+         if (suspending) break;
+         if (connectListener)
+@@ -651,7 +665,11 @@ void TracePath(uint index)
+         {
+             connectEdge = false;
+             if ((PathProfileFlags & 8) != 0) continue;
+-            hasPending = PathEdgeConnection(c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, rng, pendingLow, pendingHigh, pendingTime, pendingFrom);
++            // Partition: the source side keeps only double-edge connections; the listener side's launch only the single edge.
++            uint forced = PathSide != 0 ? (c.kind == 0 ? 1u : 0u) : (PathPartition != 0 ? 2u : 0u);
++            float3 firstPoint;
++            hasPending = PathEdgeConnection(c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, forced, rng, pendingLow, pendingHigh, pendingTime, pendingFrom, firstPoint);
++            if (PathSide != 0 && c.kind == 0) pendingFrom = normalize(firstPoint - c.position); // (from the listener, at the swapped source)
+             continue;
+         }
+         if (done)
+@@ -672,7 +690,8 @@ void TracePath(uint index)
+         {
+             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
+             bool edgeRays = edges && v.kind == 0 && MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0;
+-            bool viaEdge = edgeRays && RandomRay(rng) < MethodEdgeProbability;
++            bool viaEdge = edgeRays && (PathSide != 0 || RandomRay(rng) < MethodEdgeProbability); // (listener side: always an edge ray)
++            if (PathSide != 0 && !viaEdge) { done = true; continue; }
+             [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) C[k3] = 1;
+             medium = v.medium;
+             scored = false; sinceStart = 0;
+@@ -684,6 +703,7 @@ void TracePath(uint index)
+                 float span = EnergyEdgeSpan(a, u, extent, v.position, z0, r);
+                 float z = clamp(z0 + r * tan(atan(-z0 / r) + RandomRay(rng) * span), 0, extent);
+                 float3 e = a + z * u, w = e - v.position;
++                if (PathSide != 0) sideFrom = normalize(w);
+                 float m = length(w);
+                 edgeExtent = (r * r + (z - z0) * (z - z0)) * span / r; // 1 / (density of the point on the edge)
+                 if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle || !Visible(MethodState, v.position, e, false)) { done = true; continue; }
+@@ -741,7 +761,7 @@ void TracePath(uint index)
+                 float opacity = MethodEdgeOpacity(chain.edge, k6);
+                 Phi0[k6] = UtdEnergy(edgeAngle / RayPi, edgePhiIn, chain.edgePhi, edgeSinBeta, MethodWavenumber(k6), spread * edgeSinBeta * edgeSinBeta) *
+                            edgeSinBeta * edgeSinBeta * Phi0[k6] * edgeD * opacity * opacity * DiffractionFactor * DiffractionFactor *
+-                           exp(-2 * MethodLoss(AirMedium, k6) * edgeM) / (edgeM * edgeM) * edgeExtent * edgeAngle / (chain.edgePick * MethodEdgeProbability);
++                           exp(-2 * MethodLoss(AirMedium, k6) * edgeM) / (edgeM * edgeM) * edgeExtent * edgeAngle / (chain.edgePick * (PathSide != 0 ? 1 : MethodEdgeProbability));
+             }
+         }
+         // The part of the segment this update covers (all of it in the full solve); an escaping segment ends here.
+diff --git a/Assets/Tests/Editor/ChurchLevelMeasurement.cs b/Assets/Tests/Editor/ChurchLevelMeasurement.cs
+index 1df5353..061086a 100644
+--- a/Assets/Tests/Editor/ChurchLevelMeasurement.cs
++++ b/Assets/Tests/Editor/ChurchLevelMeasurement.cs
+@@ -17,6 +17,7 @@ using UnityEngine;
+ //   ACOUSTIC_CHURCH_LEVELS_POPULATION=N        Path: persistent rays, N in flight (1,024-sample updates); per point a warm-up,
+ //                                              then ACOUSTIC_CHURCH_LEVELS_UPDATES (default 32) updates, each one entry of the point
+ //   ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY=1        Path: beams only (settings.pathBeamsOnly)
++//   ACOUSTIC_CHURCH_LEVELS_LISTENER_RAYS=n     Path: the listener side's rays per update (settings.pathListenerRays)
+ // Each method solves with 8,192 rays and a 2 s horizon, air absorption on; the energy method with its
+ // listening settings (2 m receiver sphere, arrivals, 96 near planes), the path method with its defaults.
+ // Output per method, point and band: energy in [0, 50 ms), [50, 200 ms), [200 ms, 2 s) after emission.
+@@ -79,6 +80,7 @@ public partial class TakeChecks
+             if (method == TakeRender.Method.Path)
+             {
+                 settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY") == "1";
++                settings.pathListenerRays = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_LISTENER_RAYS") ?? "0");
+                 if (population > 0) { settings.pathPersistent = true; settings.pathPopulation = population; settings.responseStepSamples = 1024; }
+             }
+             using var solver = new TransportSolver(scene, take.Geometry, settings, RequireGpu(), sampleRate: take.Metadata.sampleRate);
+diff --git a/Assets/Tests/Editor/MethodChecks.cs b/Assets/Tests/Editor/MethodChecks.cs
+index b2b57d0..1b77deb 100644
+--- a/Assets/Tests/Editor/MethodChecks.cs
++++ b/Assets/Tests/Editor/MethodChecks.cs
+@@ -16,6 +16,8 @@ public partial class TakeChecks
+         settings.seed = 11;
+         // Opt-in: the Path method's beams-only mode in every check (README part 20 runs them so).
+         settings.pathBeamsOnly = method == TakeRender.Method.Path && Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BEAMS_ONLY") == "1";
++        // Opt-in: the listener side (README part 23) with this many rays in every Path check.
++        if (method == TakeRender.Method.Path) settings.pathListenerRays = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PATH_LISTENER_RAYS") ?? "0");
+         return settings;
+     }
+     // Band energies per 1 ms bin of the latest solve, direction-summed (Energy) or
+diff --git a/Assets/Tests/Editor/MethodMeasurement.cs b/Assets/Tests/Editor/MethodMeasurement.cs
+index 1d5daaa..99eab2c 100644
+--- a/Assets/Tests/Editor/MethodMeasurement.cs
++++ b/Assets/Tests/Editor/MethodMeasurement.cs
+@@ -149,6 +149,7 @@ public partial class TakeChecks
+         public bool seedPerReceiver, airAbsorption;
+         public float pathSurvivalSeconds = -1; // < 0: the settings' default
+         public bool pathBeamsOnly;
++        public int pathListenerRays;
+     }
+     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
+     [Serializable] sealed class MethodRunRecord
+@@ -204,6 +205,7 @@ public partial class TakeChecks
+         settings.methodEdgeProbability = job.edgeProbability; settings.methodRouletteFloor = job.rouletteFloor;
+         if (job.pathSurvivalSeconds >= 0) settings.pathSurvivalSeconds = job.pathSurvivalSeconds;
+         settings.pathBeamsOnly = job.pathBeamsOnly;
++        if (settings.method == TakeRender.Method.Path) settings.pathListenerRays = job.pathListenerRays;
+         return settings;
+     }
+     static void MethodWrite(string path, float[] values)
+diff --git a/Assets/Tests/Editor/PathProfileMeasurement.cs b/Assets/Tests/Editor/PathProfileMeasurement.cs
+index e0ac0c4..520e290 100644
+--- a/Assets/Tests/Editor/PathProfileMeasurement.cs
++++ b/Assets/Tests/Editor/PathProfileMeasurement.cs
+@@ -15,6 +15,7 @@ using UnityEngine;
+ //                                             them; also the rays in flight and the ray state's memory
+ //   ACOUSTIC_PATH_PROFILE_BEAMS_ONLY=1        with persistent rays: the beams-only mode (settings.pathBeamsOnly)
+ //   ACOUSTIC_PATH_PROFILE_POPULATION=1          with persistent rays: the RAYS list is the rays in flight N (settings.pathPopulation)
++//   ACOUSTIC_PATH_PROFILE_LISTENER_RAYS=n       the listener side's rays per update (settings.pathListenerRays); its time is "connect"
+ // For each scene, variants (ACOUSTIC_PATH_PROFILE_FLAGS, ProfileFlags) with a fence after every phase:
+ // edge distribution and clearance, walk, readback. The "connect" field is zero since the beams replaced
+ // the chain connections. "candidates" is the most loop iterations of one thread in one dispatch (the walk's
+@@ -42,6 +43,7 @@ public partial class TakeChecks
+             settings.pathPersistent = true;
+             if (Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_POPULATION") == "1") settings.pathPopulation = rays;
+             settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS_ONLY") == "1";
++            settings.pathListenerRays = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_LISTENER_RAYS") ?? "0");
+             settings.responseStepSamples = Math.Max(1, (int)Math.Round(1024.0 / 44100 * rate / settings.spectralHop)) * settings.spectralHop;
+         }
+         void Record(string name, TransportSolver solver, AcousticTake.State[] state, Action<int> place, int poses)
+diff --git a/docs/benchmarks/path-denoise-2026-11-12/beams.py b/docs/benchmarks/path-denoise-2026-11-12/beams.py
+index 2251110..901a71f 100644
+--- a/docs/benchmarks/path-denoise-2026-11-12/beams.py
++++ b/docs/benchmarks/path-denoise-2026-11-12/beams.py
+@@ -45,6 +45,7 @@ def render(budgets):
+         job['output'] = str(BEAM); job['pathBeams'] = True
+         if os.environ.get('PATH_SURVIVAL'): job['pathSurvivalSeconds'] = float(os.environ['PATH_SURVIVAL'])
+         if os.environ.get('PATH_BEAMS_ONLY') == '1': job['pathBeamsOnly'] = True   # README part 20
++        if os.environ.get('PATH_LISTENER_RAYS'): job['pathListenerRays'] = int(os.environ['PATH_LISTENER_RAYS'])   # README part 23
+         scene = json.loads(Path(job['sceneFile']).read_text())['sceneId']
+         if all((BEAM / scene / 'path' / f'r{b:05d}' / str(s) / 'run.json').exists() for b in budgets for s in SEEDS):
+             continue
