@@ -892,3 +892,21 @@ In the Church (14,075 edges, refreshed every 7 updates, 0.16 s) the edge phase f
 The Church is inside the 23 ms budget at 256 rays and not yet at 512.
 Most of its state is the ring of future histograms (44 MB), which part 19 resizes.
 The full tier passes; its quick part peaked once at 3.75 GiB, over the 3.5 GiB limit, and at 3.07 GiB when run again with the same tests.
+
+## 19. The depth of the ring of future histograms
+
+Part 17's ring held a histogram for every update of the horizon (262 in the Church, 44 MB), but a contribution is heard at most one connection's travel time after the update that makes it.
+The ring is now sized when the first update's state is known (`MethodTransport.EnsureRing`): RingSlots = ceil(3 D n / (c Δt)) + 1, with D the diagonal of the scene's bounding box at that state (every triangle, source and listener), n the largest acoustic index of any material (1: no medium is slower than air), and never more than the horizon needs.
+The factor 3 is the longest connection: a straight connection or a beam's offset is one line of sight, but an edge connection is two (vertex, edge, listener) and a mirror-and-edge or double-edge connection three, each no longer than D.
+A contribution heard later than the ring reaches is clamped to its last slot and counted (`ConnectionsBeyondRing`); every persistent check asserts that there is none, and none occurred.
+(Contributions later than the horizon are dropped as before and not counted.)
+Timing is unchanged: the ring only loses slots that no contribution can reach.
+
+| Scene | diagonal | ring slots | ray and histogram state |
+|---|---:|---:|---:|
+| stone shoebox (256 / 512 rays) | small | 2–3 | 13.8 / 15.6 MB → 2.5 / 4.3 MB |
+| furnished room (256 / 512 rays) | small | 2–3 | 13.8 / 15.6 MB → 2.5 / 4.3 MB |
+| Church | 1,247 m | 262 (unchanged) | 45.5 / 47.8 MB (unchanged) |
+
+The Church does not shrink: its scene includes a meadow 1.2 km across (128 m without it), and a connection from the meadow's far end is heard up to 3.6 s later, inside the 6 s horizon.
+A ring of 13 slots (one line of sight across the church itself, as the brief estimated) would need those contributions clamped, i.e. heard early, so the exact ring stays; in the Church its 44 MB is about 1% of the memory limit.

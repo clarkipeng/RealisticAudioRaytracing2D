@@ -81,7 +81,12 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly ComputeBuffer edgeWeights;
     int[] edgeCursor;
     readonly ComputeBuffer pathRays, pathLive;
-    public readonly int PersistentCapacity, WarmUpdates, RingSlots;
+    public readonly int PersistentCapacity, WarmUpdates;
+    public int RingSlots { get; private set; }
+    public double RingSceneDiagonal { get; private set; }
+    bool ringReady;
+    readonly AcousticTake.Primitive[] geometry;
+    float maximumIor = 1;
     public readonly float PersistentStep;
     readonly int[] parity, ringSlot;
     int ringCells;
@@ -95,8 +100,10 @@ internal sealed class MethodTransport : IDisposable, ILateField
     readonly ComputeBuffer accumulator;
     readonly bool accumulate;
     long accumulatedSolves;
-    readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, output, stats, emptyCapture;
-    readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf, counts;
+    readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, stats, emptyCapture;
+    ComputeBuffer output; // persistent: reallocated with the ring at the first dispatch (EnsureRing)
+    readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf;
+    ComputeBuffer counts;
     // Path method: its histogram bins, the contribution counts (measurement readback) and solves so far (seeds).
     readonly bool path;
     public readonly PathBins TimeBins;
@@ -144,6 +151,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (!audio && settings.method == TakeRender.Method.Pressure && settings.maximumDelaySeconds > TrainSeconds - LeadSeconds - .05f)
             throw new ArgumentOutOfRangeException(nameof(settings.maximumDelaySeconds), "The method horizon must stay inside the band trains.");
         Kind = settings.method; Audio = audio; this.scene = scene; this.settings = settings; rate = sampleRate;
+        this.geometry = geometry;
         Frames = audio ? maximumFrames : 1;
         Pairs = scene.sources.Length * scene.listeners.Length;
         // One compute shader per method (Resources/Acoustics/PressureMethod.compute,
@@ -198,6 +206,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                         medium = new Vector4(RayTransport.Sample(material, material.damping, hz, 0), RayTransport.Sample(material, material.admittanceReal, hz, 0),
                                              RayTransport.Sample(material, material.admittanceImag, hz, 0, true), material.HasAdmittance ? 1 : 0) };
                     transmissive |= !material.HasAdmittance && bands[m * Bands + b].surface.z > 0;
+                    if (b == 3) maximumIor = Math.Max(maximumIor, bands[m * Bands + b].surface.w);
                 }
             materials = new ComputeBuffer(bands.Length, 32); materials.SetData(bands);
             var volumeData = RayTransport.Volumes(scene, geometry, bands, Bands, false);
@@ -317,7 +326,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 // within the horizon before it, so a flush is forgotten after WarmUpdates updates.
                 PersistentStep = (float)(settings.responseStepSamples / (double)sampleRate);
                 WarmUpdates = (int)Math.Ceiling(settings.maximumDelaySeconds / PersistentStep + .5) + 1;
-                RingSlots = WarmUpdates + 1;
+
                 double expected = 1;
                 for (int k = 1; k <= WarmUpdates; k++) expected += settings.pathSurvivalSeconds > 0 ? Math.Min(1, settings.pathSurvivalSeconds / ((k - .5) * PersistentStep)) : 1;
                 long capacity = ((settings.pathRaysInFlight > 0 ? settings.pathRaysInFlight : (long)Math.Ceiling(Rays * (1.25 * expected + 1))) + 63) / 64 * 64;
@@ -325,14 +334,14 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 PersistentCapacity = (int)capacity;
             }
             pathRays = new ComputeBuffer(persistent ? 2 * Pairs * PersistentCapacity : 1, RayStride);
-            pathLive = new ComputeBuffer(3 * Pairs, 4); pathLive.SetData(new uint[3 * Pairs]);
+            pathLive = new ComputeBuffer(4 * Pairs, 4); pathLive.SetData(new uint[4 * Pairs]);
             parity = new int[Pairs]; ringSlot = new int[Pairs]; edgeCursor = new int[Pairs];
             edgeWeights = new ComputeBuffer(persistent ? Math.Max(1, Pairs * EdgeCount) : 1, 4);
             flushMask = persistent ? 1UL : 0; // the first update empties the pools and the ring (buffers start undefined)
-            counts = new ComputeBuffer(checked(countCells + (persistent ? Pairs * RingSlots * TimeBins.Count : 0)), 4);
+            counts = new ComputeBuffer(countCells, 4);
             Counts = new uint[path ? countCells : 0];
             statsCount = Bands * Depths * StatStride + Counters;
-            output = new ComputeBuffer(checked(outputCount + (persistent ? 2 * Pairs * RingSlots * ringCells : 0)), 4); stats = new ComputeBuffer(statsCount, 4);
+            output = new ComputeBuffer(outputCount, 4); stats = new ComputeBuffer(statsCount, 4);
             accumulator = new ComputeBuffer(accumulate ? Math.Max(1, Pairs * (Directions + 1) * Bands * Bins) : 1, 4);
             emptyCapture = new ComputeBuffer(2, 16);
             Output = new uint[audio ? 0 : outputCount]; Stats = new uint[statsCount];
@@ -554,7 +563,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         long start = Stopwatch.GetTimestamp();
         int p = parity[pair];
         shader.SetInt("PathReadBase", (pair * 2 + p) * PersistentCapacity); shader.SetInt("PathWriteBase", (pair * 2 + 1 - p) * PersistentCapacity);
-        shader.SetInt("PathReadCount", pair * 2 + p); shader.SetInt("PathWriteCount", pair * 2 + 1 - p); shader.SetInt("PathOverflowCount", 2 * Pairs + pair);
+        shader.SetInt("PathReadCount", pair * 2 + p); shader.SetInt("PathWriteCount", pair * 2 + 1 - p); shader.SetInt("PathOverflowCount", 2 * Pairs + pair); shader.SetInt("PathRingFar", 3 * Pairs + pair);
         shader.SetInt("PathFlush", flush ? 1 : 0);
         shader.Dispatch(beginKernel, 1, 1, 1);
         shader.SetInt("PathRingSlots", RingSlots); shader.SetInt("PathRingCells", ringCells);
@@ -604,13 +613,45 @@ internal sealed class MethodTransport : IDisposable, ILateField
         pathLive.GetData(live);
         return (int)Math.Min(live[pair * 2 + parity[pair]], (uint)PersistentCapacity);
     }
-    public long RaysOverflowed()
+    public long RaysOverflowed() => PersistentCount(2);
+    // Contributions heard later than the ring reaches (clamped to its last slot); none, by the ring's bound.
+    public long ConnectionsBeyondRing() => PersistentCount(3);
+    long PersistentCount(int block)
     {
         if (!persistent) return 0;
-        var live = new uint[3 * Pairs]; long sum = 0;
+        var live = new uint[4 * Pairs]; long sum = 0;
         pathLive.GetData(live);
-        for (int pair = 0; pair < Pairs; pair++) sum += live[2 * Pairs + pair];
+        for (int pair = 0; pair < Pairs; pair++) sum += live[block * Pairs + pair];
         return sum;
+    }
+    // Persistent: size the ring of future histograms before the first dispatch, from the scene's extent at
+    // `states` (frame 0): a contribution is heard at most one connection's travel time after the update that
+    // makes it, and a connection is at most three lines of sight (a mirror, an edge and the listener: RD; two
+    // edges: DD), each no longer than the scene's bounding-box diagonal D, travelled at most maximumIor times
+    // slower than in air. So RingSlots = ceil(3 D maximumIor / (c dt)) + 1 (the current slot); never more than
+    // the horizon needs. Objects that later move outside the box are caught by ConnectionsBeyondRing.
+    void EnsureRing(AcousticTake.State[] states)
+    {
+        if (!persistent || ringReady) return;
+        Vector3 low = Vector3.positiveInfinity, high = Vector3.negativeInfinity;
+        void Add(Vector3 p) { low = Vector3.Min(low, p); high = Vector3.Max(high, p); }
+        if (states != null)
+        {
+            foreach (var g in geometry)
+            {
+                var pose = states[g.objectIndex];
+                foreach (var v in new[] {g.a, g.b, g.c}) Add(pose.position + pose.rotation * v);
+            }
+            foreach (var source in scene.sources) Add(states[source.objectIndex].position);
+            foreach (int listener in scene.listeners) Add(states[listener].position);
+        }
+        RingSceneDiagonal = states != null && high.x >= low.x ? (high - low).magnitude : double.PositiveInfinity;
+        double reach = 3 * RingSceneDiagonal * maximumIor / (settings.speedOfSound * PersistentStep);
+        RingSlots = (int)Math.Min(WarmUpdates + 1, Math.Ceiling(reach) + 1);
+        output.Dispose(); counts.Dispose();
+        output = new ComputeBuffer(checked(outputCount + 2 * Pairs * RingSlots * ringCells), 4);
+        counts = new ComputeBuffer(checked(countCells + Pairs * RingSlots * TimeBins.Count), 4);
+        ringReady = true;
     }
     void Fence() => AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion();
     // Profiling (measurement only): a fence after every phase, and seconds per phase
@@ -625,6 +666,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     public void Dispatch(int bvhNodeCount, ComputeBuffer capture = null, int captureRays = 0, int captureEvents = 0)
     {
         if (Audio) throw new InvalidOperationException("Audio method transports dispatch with DispatchAudio.");
+        EnsureRing(null); // (no states given: a ring for the whole horizon)
         bind();
         shader.SetInt("BvhNodeCount", bvhNodeCount);
         shader.SetBuffer(traceKernel, "MethodCapture", capture ?? emptyCapture);
@@ -702,6 +744,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (!Audio) throw new InvalidOperationException("Measurement method transports dispatch with Dispatch.");
         if (pending) throw new InvalidOperationException("Method responses are still in flight.");
         if (frames < 1 || frames > Frames) throw new ArgumentOutOfRangeException(nameof(frames));
+        EnsureRing(null);
         bind();
         shader.SetInt("BvhNodeCount", bvhNodeCount);
         long start = Stopwatch.GetTimestamp();
@@ -824,6 +867,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // frames' states (object poses move the planes). Called by TransportSolver before each dispatch.
     public void SelectNearPlanes(AcousticTake.State[] states, int frames)
     {
+        EnsureRing(states);
         if (NearPlanes == 0 || path) return;
         int objects = scene.objects.Length;
         var score = new float[PlaneCount]; var order = new int[PlaneCount];

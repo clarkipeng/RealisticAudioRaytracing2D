@@ -96,7 +96,7 @@ uint PathBinOf(float time)
 // frames' histograms in MethodOutput (cells) and PathCounts; a contribution heard `ahead` updates after the
 // current one goes to slot (PathRingSlot + ahead), and after each update its slot becomes the update's
 // histogram (PathRing, mode 0). Mode 1 empties a pair's ring (a flush).
-uint PathRingSlots, PathRingBase, PathRingCountBase, PathRingSlot, PathRingCells, PathRingMode, PathRingOffset;
+uint PathRingSlots, PathRingBase, PathRingCountBase, PathRingSlot, PathRingCells, PathRingMode, PathRingOffset, PathRingFar;
 // Adds band energies arriving from `from` (listener towards the arrival) at `time`, `ahead` updates from now
 // (persistent rays; 0 otherwise). Directions split the energy over the six axes by the squared positive
 // components (they sum to one), so a moving arrival never jumps between direction bins. 32.32 fixed point
@@ -584,7 +584,11 @@ void TracePath(uint index)
         {
             hasPending = false;
             // Persistent: heard ceil((time - target) / step) updates from now (this update's rays reach path time `target`).
-            uint ahead = PathPersistent != 0 ? (uint)clamp(ceil((pendingTime - target) / PathStep), 0, (float)PathRingSlots - 1) : 0;
+            // The ring is deep enough for any connection in the scene (MethodTransport.RingSlots); one heard later
+            // still is counted (PathLive[PathRingFar]) and asserted absent by the checks.
+            float aheadUpdates = PathPersistent != 0 ? max(0, ceil((pendingTime - target) / PathStep)) : 0;
+            if (aheadUpdates > (float)PathRingSlots - 1 && pendingTime <= MethodHorizon) InterlockedAdd(PathLive[PathRingFar], 1u); // (later than the horizon: dropped)
+            uint ahead = (uint)min(aheadUpdates, (float)PathRingSlots - 1);
             PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead);
         }
         if (suspending) break;

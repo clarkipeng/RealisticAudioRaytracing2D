@@ -20,8 +20,10 @@ public partial class TakeChecks
     static void AssertNoOverflow(TransportSolver solver)
     {
         if (!solver.Method.IsPath || solver.Method.PersistentCapacity == 0) return;
-        TestContext.WriteLine($"persistent: {solver.Method.RaysInFlight()} rays in flight of {solver.Method.PersistentCapacity}, {solver.Method.Counter(15)} continued, {solver.Method.Counter(14)} branches");
+        TestContext.WriteLine($"persistent: {solver.Method.RaysInFlight()} rays in flight of {solver.Method.PersistentCapacity}, {solver.Method.Counter(15)} continued, {solver.Method.Counter(14)} branches; " +
+                              $"ring {solver.Method.RingSlots} slots (scene diagonal {solver.Method.RingSceneDiagonal:F1} m), {solver.Method.PersistentBytes / 1048576.0:F1} MB");
         Assert.That(solver.Method.RaysOverflowed(), Is.EqualTo(0), "persistent rays overflowed their pool");
+        Assert.That(solver.Method.ConnectionsBeyondRing(), Is.EqualTo(0), "a contribution was heard later than the ring of future histograms reaches");
     }
 
     // A static scene with every kind of contribution (the aperture room with a ground outside, half-specular
