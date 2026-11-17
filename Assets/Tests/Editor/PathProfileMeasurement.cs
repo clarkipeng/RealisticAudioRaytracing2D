@@ -13,6 +13,8 @@ using UnityEngine;
 //   ACOUSTIC_PATH_PROFILE_PERSISTENT=1        persistent rays (settings.pathPersistent): updates of about 23.2 ms
 //                                             (1,024 samples at 44.1 kHz), the time of one update after a horizon of
 //                                             them; also the rays in flight and the ray state's memory
+//   ACOUSTIC_PATH_PROFILE_BEAMS_ONLY=1        with persistent rays: the beams-only mode (settings.pathBeamsOnly)
+//   ACOUSTIC_PATH_PROFILE_POPULATION=1          with persistent rays: the RAYS list is the rays in flight N (settings.pathPopulation)
 // For each scene, variants (ACOUSTIC_PATH_PROFILE_FLAGS, ProfileFlags) with a fence after every phase:
 // edge distribution and clearance, walk, readback. The "connect" field is zero since the beams replaced
 // the chain connections. "candidates" is the most loop iterations of one thread in one dispatch (the walk's
@@ -38,6 +40,8 @@ public partial class TakeChecks
         {
             if (!persistent) return;
             settings.pathPersistent = true;
+            if (Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_POPULATION") == "1") settings.pathPopulation = rays;
+            settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS_ONLY") == "1";
             settings.responseStepSamples = Math.Max(1, (int)Math.Round(1024.0 / 44100 * rate / settings.spectralHop)) * settings.spectralHop;
         }
         void Record(string name, TransportSolver solver, AcousticTake.State[] state, Action<int> place, int poses)
@@ -46,7 +50,7 @@ public partial class TakeChecks
             name += FormattableString.Invariant($"|survival {survival}|rays {rays}");
             place(0); solver.Solve(state, new TakeRender.DirectPath[1]); // warm-up
             json.Append((first ? "" : ",") + "{\"scene\":\"" + name + "\",\"rays\":" + rays + ",\"bins\":" + m.TimeBins.Count +
-                        FormattableString.Invariant($",\"persistent\":{(persistent ? 1 : 0)},\"step\":{m.PersistentStep:R},\"capacity\":{m.PersistentCapacity},\"stateBytes\":{m.PersistentBytes}") + ",\"variants\":[");
+                        FormattableString.Invariant($",\"persistent\":{(persistent ? 1 : 0)},\"newRays\":{m.Rays},\"population\":{solver.Method.RaysInFlight()},\"step\":{m.PersistentStep:R},\"capacity\":{m.PersistentCapacity},\"stateBytes\":{m.PersistentBytes}") + ",\"variants\":[");
             first = false;
             var flagList = Array.ConvertAll((Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_FLAGS") ?? "0,1").Split(','), int.Parse);
             foreach (int flags in flagList)

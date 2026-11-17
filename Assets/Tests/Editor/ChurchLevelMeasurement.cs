@@ -14,6 +14,9 @@ using UnityEngine;
 //   ACOUSTIC_CHURCH_LEVELS_DIFFRACTION=f       diffraction factor (default 1)
 //   ACOUSTIC_CHURCH_LEVELS_EDGE_PROBABILITY=p  share of the source's rays that are edge rays (default the settings')
 //   ACOUSTIC_CHURCH_LEVELS_FLAGS=n             Path profile flags (MethodPath.hlsl PathProfileFlags)
+//   ACOUSTIC_CHURCH_LEVELS_POPULATION=N        Path: persistent rays, N in flight (1,024-sample updates); per point a warm-up,
+//                                              then ACOUSTIC_CHURCH_LEVELS_UPDATES (default 32) updates, each one entry of the point
+//   ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY=1        Path: beams only (settings.pathBeamsOnly)
 // Each method solves with 8,192 rays and a 2 s horizon, air absorption on; the energy method with its
 // listening settings (2 m receiver sphere, arrivals, 96 near planes), the path method with its defaults.
 // Output per method, point and band: energy in [0, 50 ms), [50, 200 ms), [200 ms, 2 s) after emission.
@@ -48,6 +51,7 @@ public partial class TakeChecks
         var variants = new System.Collections.Generic.List<(TakeRender.Method method, float radius, int seed, string key)>();
         foreach (string v in (Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_ENERGY") ?? "2").Split(';'))
         {
+            if (v == "") continue; // (empty: no energy solves)
             var rs = v.Split(':'); float radius = float.Parse(rs[0], System.Globalization.CultureInfo.InvariantCulture); int seed = rs.Length > 1 ? int.Parse(rs[1]) : 0;
             variants.Add((TakeRender.Method.Energy, radius, seed, v == "2" ? "Energy" : FormattableString.Invariant($"Energy r{radius} s{seed}")));
         }
@@ -70,6 +74,13 @@ public partial class TakeChecks
             string survival = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_SURVIVAL");
             if (!string.IsNullOrEmpty(survival)) settings.pathSurvivalSeconds = float.Parse(survival, System.Globalization.CultureInfo.InvariantCulture);
             if (method == TakeRender.Method.Energy) { settings.methodArrivalSlots = 96; settings.methodNearPlanes = 96; }
+            int population = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_POPULATION") ?? "0");
+            int updates = method == TakeRender.Method.Path && population > 0 ? int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_UPDATES") ?? "32") : 1;
+            if (method == TakeRender.Method.Path)
+            {
+                settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY") == "1";
+                if (population > 0) { settings.pathPersistent = true; settings.pathPopulation = population; settings.responseStepSamples = 1024; }
+            }
             using var solver = new TransportSolver(scene, take.Geometry, settings, RequireGpu(), sampleRate: take.Metadata.sampleRate);
             if (method == TakeRender.Method.Path) solver.Method.ProfileFlags = flags;
             json.Append((key == variants[0].key ? "" : ",") + "\"" + key + "\":[");
@@ -82,15 +93,20 @@ public partial class TakeChecks
                     state[listener].position = new Vector3(xyz[0], xyz[1], xyz[2]);
                 }
                 state[listener].velocity = Vector3.zero; state[listener].flags &= ~AcousticTake.StateFlags.VelocityValid;
-                solver.Solve(state, new TakeRender.DirectPath[1]);
-                json.Append((i == 0 ? "" : ",") + "[");
-                for (int b = 0; b < 8; b++)
+                if (updates > 1) { solver.Method.PersistentSingleUpdate = false; solver.Method.Flush(); }
+                for (int u = 0; u < updates; u++)
                 {
-                    var e = ControlEnergy(solver, b);
-                    json.Append(FormattableString.Invariant($"{(b == 0 ? "" : ",")}[{Window(e, 0, 50):R},{Window(e, 50, 200):R},{Window(e, 200, e.Length):R}]"));
+                    solver.Solve(state, new TakeRender.DirectPath[1]);
+                    if (updates > 1) solver.Method.PersistentSingleUpdate = true; // after the warm-up: one update per entry
+                    json.Append((i == 0 && u == 0 ? "" : ",") + "[");
+                    for (int b = 0; b < 8; b++)
+                    {
+                        var e = ControlEnergy(solver, b);
+                        json.Append(FormattableString.Invariant($"{(b == 0 ? "" : ",")}[{Window(e, 0, 50):R},{Window(e, 50, 200):R},{Window(e, 200, e.Length):R}]"));
+                    }
+                    json.Append("]");
                 }
                 var m = solver.Method;
-                json.Append("]");
                 var names = MethodTransport.CounterNames; var parts = new System.Text.StringBuilder();
                 for (int c = 0; c < MethodTransport.Counters; c++) parts.Append($"{names[c]} {m.Counter(c)}, ");
                 Debug.Log($"Church levels {key} point {i} at {state[listener].position}: {parts}");

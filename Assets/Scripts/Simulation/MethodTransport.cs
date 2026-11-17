@@ -57,7 +57,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
     }
     public readonly TakeRender.Method Kind;
     public readonly bool Audio;
-    public readonly int Rays, Bins, TrainBase, EdgeCount, DroppedEdges, PlaneCount, ArrivalOrder, ArrivalFamilies, Frames, Pairs, ArrivalSlots, PathsPerFrame;
+    // New rays per solve or update (population control: derived from settings.pathPopulation).
+    public int Rays { get; private set; }
+    public readonly int Bins, TrainBase, EdgeCount, DroppedEdges, PlaneCount, ArrivalOrder, ArrivalFamilies, Frames, Pairs, ArrivalSlots, PathsPerFrame;
     public readonly long[] FamilyCandidates = new long[7]; // direct, order 1, order 2, D, DD, RD, DR
     readonly AcousticTake.Scene scene;
     readonly TakeRender.Settings settings;
@@ -75,7 +77,13 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // A contribution is added to the histogram of the update in which it is heard: per pair a ring of RingSlots
     // future histograms, stored after the frames' histograms in the output and count buffers.
     readonly bool persistent;
-    readonly int beginKernel = -1, ringKernel = -1, edgeCopyKernel = -1;
+    readonly int beginKernel = -1, ringKernel = -1, edgeCopyKernel = -1, controlBeginKernel = -1, controlKernel = -1;
+    // Population control (settings.pathPopulation, MethodPath.hlsl): N rays in flight per pair, PopulationNew of them
+    // new each update; cohort counts per pair.
+    readonly bool population;
+    public readonly double PopulationShares; // 1 + sum over cohorts of min(1, T_f / age): N / new rays
+    readonly ComputeBuffer cohortCounts;
+    int cohorts;
     // Persistent: each pair's edge weights, refreshed EdgeSlice edges per update (MethodPath.hlsl PathEdgeWeights).
     public const int EdgeSlice = 2048;
     readonly ComputeBuffer edgeWeights;
@@ -162,6 +170,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (asset == null) throw new InvalidOperationException(name + ".compute is missing.");
         shader = asset;
         Rays = settings.methodRays;
+        population = settings.method == TakeRender.Method.Path && settings.pathPersistent && settings.pathPopulation > 0;
         path = Kind == TakeRender.Method.Path;
         TimeBins = path ? new PathBins(settings) : null;
         Bins = audio && !path ? settings.LateBins(sampleRate) : (int)Math.Ceiling(settings.maximumDelaySeconds / BinSeconds - 1e-6);
@@ -176,6 +185,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             clearanceKernel = shader.FindKernel("PathClearance3D" + suffix);
             persistent = settings.pathPersistent;
             if (persistent) { beginKernel = shader.FindKernel("PathPersistentBeginKernel"); ringKernel = shader.FindKernel("PathRingKernel"); edgeCopyKernel = shader.FindKernel("PathEdgeCopyKernel"); }
+            if (population) { controlBeginKernel = shader.FindKernel("PathControlBeginKernel"); controlKernel = shader.FindKernel("PathControlKernel"); }
             if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
         }
         else if (energy)
@@ -186,7 +196,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             accumulate = audio && settings.lateAccumulationSeconds > 0;
             if (accumulate) accumulateKernel = shader.FindKernel("EnergyAccumulateLate");
         }
-        foreach (int kernel in new[] {traceKernel, clearKernel, arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel, accumulateKernel, beginKernel, ringKernel, edgeCopyKernel})
+        foreach (int kernel in new[] {traceKernel, clearKernel, arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel, accumulateKernel, beginKernel, ringKernel, edgeCopyKernel, controlBeginKernel, controlKernel})
             if (kernel >= 0 && !shader.IsSupported(kernel)) throw new NotSupportedException("Method kernels are unavailable on this GPU.");
         frequencyBins = settings.FrequencyBins;
         ArrivalSlots = audio ? settings.ArrivalSlots : 0;
@@ -327,9 +337,20 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 PersistentStep = (float)(settings.responseStepSamples / (double)sampleRate);
                 WarmUpdates = (int)Math.Ceiling(settings.maximumDelaySeconds / PersistentStep + .5) + 1;
 
+                if (population)
+                {
+                    // Cohort k is (k - 1/2) periods old after its k-th update and kept at a share min(1, T_f / age) of the
+                    // new rays; the update traces the new rays and every cohort, N in all.
+                    double fineEnd = settings.pathFineBins * (double)settings.pathBinSeconds;
+                    PopulationShares = 1;
+                    for (int k = 1; k <= WarmUpdates; k++) PopulationShares += Math.Min(1, fineEnd / ((k - .5) * PersistentStep));
+                    Rays = Math.Max(1, (int)Math.Round(settings.pathPopulation / PopulationShares));
+                    cohorts = WarmUpdates + 2;
+                }
                 double expected = 1;
                 for (int k = 1; k <= WarmUpdates; k++) expected += settings.pathSurvivalSeconds > 0 ? Math.Min(1, settings.pathSurvivalSeconds / ((k - .5) * PersistentStep)) : 1;
-                long capacity = ((settings.pathRaysInFlight > 0 ? settings.pathRaysInFlight : (long)Math.Ceiling(Rays * (1.25 * expected + 1))) + 63) / 64 * 64;
+                long capacity = ((settings.pathRaysInFlight > 0 ? settings.pathRaysInFlight : population ? (long)Math.Ceiling(1.5 * settings.pathPopulation) + Rays
+                                  : (long)Math.Ceiling(Rays * (1.25 * expected + 1))) + 63) / 64 * 64;
                 if (capacity * Pairs * 2 * RayStride > 1L << 30) throw new NotSupportedException("Persistent rays would need more than 1 GiB of ray state.");
                 PersistentCapacity = (int)capacity;
             }
@@ -337,6 +358,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             pathLive = new ComputeBuffer(4 * Pairs, 4); pathLive.SetData(new uint[4 * Pairs]);
             parity = new int[Pairs]; ringSlot = new int[Pairs]; edgeCursor = new int[Pairs];
             edgeWeights = new ComputeBuffer(persistent ? Math.Max(1, Pairs * EdgeCount) : 1, 4);
+            cohortCounts = new ComputeBuffer(Math.Max(1, Pairs * cohorts), 4);
             flushMask = persistent ? 1UL : 0; // the first update empties the pools and the ring (buffers start undefined)
             counts = new ComputeBuffer(countCells, 4);
             Counts = new uint[path ? countCells : 0];
@@ -353,7 +375,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             bool anyTransmission = transmissive || volumeData.Length > 0;
             var kernels = new List<int> {traceKernel, clearKernel};
             if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
-            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, clearanceKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); if (persistent) kernels.AddRange(new[] {beginKernel, ringKernel, edgeCopyKernel}); }
+            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, clearanceKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); if (persistent) kernels.AddRange(new[] {beginKernel, ringKernel, edgeCopyKernel}); if (population) kernels.AddRange(new[] {controlBeginKernel, controlKernel}); }
             if (accumulate) kernels.Add(accumulateKernel);
             bind = () =>
             {
@@ -373,7 +395,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                     shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
                     shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
                     shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
-                    shader.SetBuffer(kernel, "PathEdgeWeight", edgeWeights);
+                    shader.SetBuffer(kernel, "PathEdgeWeight", edgeWeights); shader.SetBuffer(kernel, "PathCohortCount", cohortCounts);
                     shader.SetBuffer(kernel, "PathRays", pathRays); shader.SetBuffer(kernel, "PathLive", pathLive);
                 }
                 if (energy)
@@ -431,8 +453,11 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetInt("PathCountCells", countCells);
                 shader.SetInt("PathAudio", audio ? 1 : 0);
                 shader.SetInt("PathProfileFlags", 0);
-                shader.SetFloat("PathSurvivalSeconds", settings.pathSurvivalSeconds);
+                shader.SetFloat("PathSurvivalSeconds", population ? 0 : settings.pathSurvivalSeconds); // (population control applies the age profile itself)
+                shader.SetInt("PathPopulation", population ? 1 : 0); shader.SetInt("PathCohorts", Math.Max(1, cohorts));
+                shader.SetFloat("PathCohortTarget", Rays); shader.SetFloat("PathFineEnd", settings.pathFineBins * settings.pathBinSeconds);
                 shader.SetInt("PathPersistent", persistent ? 1 : 0);
+                shader.SetInt("PathBeamsOnly", settings.pathBeamsOnly ? 1 : 0);
                 shader.SetInt("PathCapacity", PersistentCapacity);
                 shader.SetFloat("PathStep", PersistentStep);
                 shader.SetInt("PathFlush", 0);
@@ -561,7 +586,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
     void PersistentUpdate(int pair, bool flush)
     {
         long start = Stopwatch.GetTimestamp();
-        int p = parity[pair];
+        int p = parity[pair]; // (population control: always 0, the control writes the rays back)
+        shader.SetInt("PathCohortBase", pair * Math.Max(1, cohorts));
         shader.SetInt("PathReadBase", (pair * 2 + p) * PersistentCapacity); shader.SetInt("PathWriteBase", (pair * 2 + 1 - p) * PersistentCapacity);
         shader.SetInt("PathReadCount", pair * 2 + p); shader.SetInt("PathWriteCount", pair * 2 + 1 - p); shader.SetInt("PathOverflowCount", 2 * Pairs + pair); shader.SetInt("PathRingFar", 3 * Pairs + pair);
         shader.SetInt("PathFlush", flush ? 1 : 0);
@@ -578,9 +604,18 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.Dispatch(traceKernel, (int)((Math.Min(65535L * 64, threads - first) + 63) / 64), 1, 1);
         }
         shader.SetInt("PathFlush", 0);
+        if (population)
+        {
+            shader.Dispatch(controlBeginKernel, 1, 1, 1);
+            for (long first = 0; first < PersistentCapacity; first += 65535L * 64)
+            {
+                shader.SetInt("MethodRayOffset", (int)first);
+                shader.Dispatch(controlKernel, (int)((Math.Min(65535L * 64, PersistentCapacity - first) + 63) / 64), 1, 1);
+            }
+        }
         Ring(0, ringCells);
         ringSlot[pair] = (ringSlot[pair] + 1) % RingSlots;
-        parity[pair] = 1 - p;
+        if (!population) parity[pair] = 1 - p;
         persistentUpdates++;
         if (Profile) { Fence(); lastWalkSeconds = TakeRender.Elapsed(start); }
     }
@@ -646,7 +681,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
             foreach (int listener in scene.listeners) Add(states[listener].position);
         }
         RingSceneDiagonal = states != null && high.x >= low.x ? (high - low).magnitude : double.PositiveInfinity;
-        double reach = 3 * RingSceneDiagonal * maximumIor / (settings.speedOfSound * PersistentStep);
+        // (Beams only: no connections; a beam is heard at most one line of sight after its update.)
+        double reach = (settings.pathBeamsOnly ? 1 : 3) * RingSceneDiagonal * maximumIor / (settings.speedOfSound * PersistentStep);
         RingSlots = (int)Math.Min(WarmUpdates + 1, Math.Ceiling(reach) + 1);
         output.Dispose(); counts.Dispose();
         output = new ComputeBuffer(checked(outputCount + 2 * Pairs * RingSlots * ringCells), 4);
@@ -963,7 +999,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
         counts?.Dispose();
         arrivals?.Dispose(); arrivalCounts?.Dispose(); selected?.Dispose(); primitivePlanes?.Dispose(); planePrimitives?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); mirrorCdf?.Dispose();
-        pathRays?.Dispose(); pathLive?.Dispose(); edgeWeights?.Dispose();
+        pathRays?.Dispose(); pathLive?.Dispose(); edgeWeights?.Dispose(); cohortCounts?.Dispose();
         nearList?.Dispose(); nearMask?.Dispose();
     }
 }

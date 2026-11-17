@@ -14,6 +14,8 @@ public partial class TakeChecks
         settings.method = method; settings.methodRays = rays; settings.speedOfSound = 343; settings.minimumDistance = .01f;
         settings.maximumDelaySeconds = horizon; settings.diffractionFactor = 0; settings.airAbsorption = false; settings.useBvh = true;
         settings.seed = 11;
+        // Opt-in: the Path method's beams-only mode in every check (README part 20 runs them so).
+        settings.pathBeamsOnly = method == TakeRender.Method.Path && Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BEAMS_ONLY") == "1";
         return settings;
     }
     // Band energies per 1 ms bin of the latest solve, direction-summed (Energy) or

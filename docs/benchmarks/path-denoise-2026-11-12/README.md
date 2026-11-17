@@ -910,3 +910,80 @@ Timing is unchanged: the ring only loses slots that no contribution can reach.
 
 The Church does not shrink: its scene includes a meadow 1.2 km across (128 m without it), and a connection from the meadow's far end is heard up to 3.6 s later, inside the 6 s horizon.
 A ring of 13 slots (one line of sight across the church itself, as the brief estimated) would need those contributions clamped, i.e. heard early, so the exact ring stays; in the Church its 44 MB is about 1% of the memory limit.
+
+## 20. Beams only against shortcuts, and a fixed population of rays
+
+### Population control (both modes)
+
+**Rule.**
+Persistent rays can be held at a fixed number N in flight (`settings.pathPopulation`).
+Every cohort (the rays launched in one update) is brought, after each update's walk, to its share of N: cohort k, of age a = (k − ½)Δt, to n̄ S(a) rays with S(a) = min(1, T_f / a), T_f the end of the histogram's fine bins (64 × 0.25 ms = 16 ms).
+A cohort of A rays is brought to its target by splitting each ray into ⌊ρ⌋ or ⌊ρ⌋ + 1 copies (ρ = n̄ S(a) / A, the extra copy with probability ρ − ⌊ρ⌋) or, for ρ < 1, by keeping it with probability ρ; every kept copy's weight is divided by ρ.
+The walk itself then applies no survival in time.
+n̄ = N / (1 + Σ_k S(a_k)) new rays are launched every update; in the Church (23 ms updates, 6 s horizon) that is 17% of N.
+
+**Why this profile: survival in time and the share of new rays are one rule.**
+A histogram bin at delay τ has width b(τ) (0.25 ms in the fine region, τ / 64 after it) and receives contributions from the rays of age τ at a rate proportional to their number n(τ); with a constant relative variance per contribution its relative variance is proportional to 1 / (n(τ) b(τ)).
+The cost of an update is the number of rays in flight, N = ∫ n(τ) dτ / Δt.
+Minimising the sum of the bins' relative variances, ∫ dτ / (n(τ) b(τ)²) (bins per unit delay 1 / b), at fixed N gives n(τ) ∝ 1 / b(τ) (Cauchy–Schwarz), i.e. S(τ) = min(1, T_f / τ): every bin then gets as many contributions as a fine bin.
+The new rays are the age-0 end of the same profile, so their share follows; neither T0 nor the share is chosen by hand.
+Part 13's T0* = sqrt((b/a)(c/d)) weighed variance against a dispatch whose time was its longest ray; with the cost now proportional to the rays in flight, the per-bin argument above replaces it, and T0 becomes T_f.
+If the relative variance per contribution varied with delay as κ(τ), the same argument gives S ∝ sqrt(κ) / b; measuring κ per update is not done.
+
+**Unbiasedness.**
+Splitting and the weight lottery leave each ray's expected weight unchanged for any ρ fixed before the ray's own future is drawn, and ρ depends only on the cohort's count after the walk, i.e. on the past.
+Conditioned on the counts every cohort is unbiased, so the response is unbiased; at most 16 copies per ray (a cost guard; any limit keeps the weights exact).
+The launch count n̄ is fixed by the rule, so the cohort-size argument (a cohort's rays sharing the source power by their actual number) is trivial here: a cohort's rays each carry 1 / n̄ of it.
+(A launch count of N minus the rays alive would depend on past randomness; conditioned on it a cohort is still unbiased, as long as it is at least one ray, but holding each cohort at its share already keeps N in expectation.)
+Check: in the aperture room with transmitting walls, a population of 13,000 (4,060 new rays per update) matches the full solve in every window (ratios 0.96–1.17 with six seeds, within three standard errors; the persistent and full solves differ as much from each other there, part 17).
+
+### Beams only
+
+`settings.pathBeamsOnly` removes the next-event connections at scattering points and every edge connection (the ring keeps one line of sight); every arrival but the exact direct sound is a ray segment passing the listener, scored by the beam kernel, now also the first segment after a scattering point or an edge.
+After a scattering point the beam's width uses the unfolded length from that point: a diffuse reflection keeps no phase relation with the path before it, so it is the new source of the Gaussian beam argument (w² = λL/π); after an edge ray, from the edge.
+An edge ray that escapes takes the horizon as its UTD distance.
+
+**What is lost without the connections** (analytic checks with the switch on): free field, rigid plane, shoebox lattice, Eyring decay, leak through walls, the hole and the porch pass; the half-plane fails at 250 Hz (+1.90 dB against BTM, tolerance 1.5 dB) and the far side of a solid (double diffraction) at 500 Hz (−5.7 dB; only the source's edge rays diffract, once).
+
+**Cost.** Time per update against the rays in flight, population control, 23–24 ms updates:
+
+| Scene | N in flight | shortcuts | beams only |
+|---|---:|---:|---:|
+| stone shoebox | 2k / 8k / 33k / 131k | 0.9 / 1.6 / 2.3 / 7.0 ms | 0.8 / 1.0 / 2.3 / 7.0 ms |
+| furnished room | 2k / 8k / 33k / 131k | 2.6 / 4.4 / 11.7 / 41.9 ms | 2.7 / 4.3 / 11.5 / 42.2 ms |
+| Church | 2k / 8k / 33k / 131k | 11.8 / 19.2 / 51.4 / 173 ms | 9.3 / 13.3 / 39.1 / 118 ms |
+
+At 23 ms: the Church holds about 11,000 rays with shortcuts (1,900 new per update) and 17,000 beams only (2,900 new); the furnished room about 70,000 in both modes; the stone shoebox more than 300,000.
+State and ring at N = 131k: 69 MB in the rooms, 93–110 MB in the Church.
+Beams only is cheaper only in the Church (by 1.3–1.5×, the connections it skips are its edge connections through 14,075 edges); in the rooms the walk's own tracing dominates.
+
+**Accuracy on the wave suite** (full solves, which persistent rays equal in expectation, part 17; 2,048 rays, two seeds, current code; RMS errors as on the scoreboard; level dB / EDT % / T30 % / C80 / ETC dB):
+
+| Mode | time per run | all | in view | shadow | closed |
+|---|---:|---|---|---|---|
+| shortcuts, 2,048 rays | 2.36 s | 3.37 / 199 / 74 / – / 13.8 | 1.78 / 250 / 63 | 4.91 / 66 / 88 | 1.93 / 19 / 40 |
+| beams only, 2,048 rays | 1.89 s | 5.47 / 346 / 63 / – / 15.0 | 1.99 / 430 / 58 | 8.75 / 60 / 72 | 1.95 / 18 / 23 |
+| beams only, 8,192 rays | 11.7 s | 5.31 / 176 / 95 / – / 13.8 | 1.97 / 217 / 100 | 8.40 / 63 / 71 | 1.96 / 18 / 21 |
+
+(C80's RMS error runs to thousands of dB on this suite for every method, part 5.)
+In the shadow beams only is 3.5–3.8 dB worse in level and four times the rays do not recover it: the lost energy is diffraction, not noise.
+In view it is 0.2 dB worse at 20% less time and its EDT error is 1.7 times larger; in closed rooms its T30 is better (23 against 40%).
+
+**Church, per update, at equal time** (persistent, population control, N at 23 ms: 11,000 shortcuts, 17,000 beams only; 64 updates after a horizon of warm-up; late field 0.2–2 s; 125 / 500 / 2,000 Hz):
+
+| Point | Mode | level (125 Hz) | sd / mean | median / mean |
+|---|---|---:|---|---|
+| outside (16.5 s) | shortcuts | 5.1e-4 | 5.2 / 5.5 / 5.2 | 0.03 / 0.05 / 0.12 |
+| outside | beams only | 1.9e-4 | 7.0 / 7.8 / 7.8 | 0.00 / 0.00 / 0.00 |
+| inside (3 s) | shortcuts | 6.1e-2 | 1.40 / 0.94 / 0.94 | 0.53 / 0.68 / 0.73 |
+| inside | beams only | 5.1e-2 | 1.00 / 0.85 / 1.25 | 0.68 / 0.73 / 0.67 |
+
+Outside, both are heavy-tailed per update (part 15's tail, now with about 1,900 new rays per update instead of 8,192), and beams only more so, at less than half the level (the diffracted sound it no longer connects).
+Inside, the late field's noise per update is alike; between 50 and 200 ms beams only holds 2.6 times less energy at 125 Hz.
+The denoiser's error at 256 and 512 rays was not measured for beams only: the denoiser was trained on the shortcut mode's histograms, and a fair number needs a dataset rendered beams only.
+
+**Decision.**
+Shortcuts stay: they are more accurate per unit of compute in level everywhere, by 3.5 dB in the shadow, and beams only is cheaper only in the Church and only by 1.3–1.5×.
+Diffraction as an event of the walk (a ray whose beam reaches an edge diffracting a share of its energy by UTD) was not built: it could recover the shadow, but beams only already loses in view, where diffraction plays no part (EDT error 1.7 times larger at 20% less time), and with a cost advantage of at most 1.6× in rays there is no room for it to win overall; it is the next step if beams only is to be pursued.
+The switch stays (a few conditions in the walk), so the comparison can be repeated.
+Population control is kept for both: at 23 ms it gives the Church 1,900 new rays per update with shortcuts, against 256–512 with survival in time (part 18).
