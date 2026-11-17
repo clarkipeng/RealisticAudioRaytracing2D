@@ -4,6 +4,7 @@
     B=docs/benchmarks/path-denoise-2026-11-12
     nice -n 19 $PY $B/church.py render path-realtime     # guarded Unity renders of the walk
     nice -n 19 $PY $B/church.py render path-clean
+    nice -n 19 $PY $B/church.py render path-persistent   # persistent rays (README parts 17-20)
     nice -n 19 $PY $B/church.py irs                      # static impulse responses near/far for T30/EDT/C80 (realism.py)
     $PY $B/church.py metrics                             # T30 / EDT / C80 / level of the static IRs
     $PY $B/church.py levels                              # level of each walk render per segment
@@ -29,13 +30,17 @@ import listen  # noqa: E402
 
 WORK = ROOT / '.context/energy-audio/listen'
 LIVE = Path('/Users/clarkpeng/conductor/workspaces/realisticaudioraytracing2d/tyler/.context/live-view')
-REALTIME_RAYS, CLEAN_RAYS = 512, 8192
+REALTIME_RAYS, CLEAN_RAYS, PERSISTENT_POPULATION = 512, 8192, 11000
 COMMON = dict(listen.COMMON, maximumResponsesPerBatch=4, maximumDelaySeconds=6.0, tailSamples=6 * 44100, audioBackend=1, method=3,
               methodRouletteFloor=1e-6, methodEdgeProbability=.5, specularDetectionRadius=2.0)  # see README part 3
 RENDERS = {'path-realtime': dict(COMMON, methodRays=REALTIME_RAYS, pathHistogramExport=str(WORK / 'path-realtime-histograms')),
            'path-clean': dict(COMMON, methodRays=CLEAN_RAYS),
            # the realtime render's histograms through the denoiser (tools/path_denoise.py church)
            'path-denoised': dict(COMMON, methodRays=REALTIME_RAYS, pathHistogramImport=str(WORK / 'path-denoised-histograms')),
+           # persistent rays (README parts 17-20): 11,000 in flight under population control, the most that fits 23 ms
+           # per update in the Church with shortcuts (part 20), about 1,900 new rays per update
+           'path-persistent': dict(COMMON, methodRays=REALTIME_RAYS, pathPersistent=True, pathPopulation=PERSISTENT_POPULATION,
+                                   pathHistogramExport=str(WORK / 'path-persistent-histograms')),
            # one second of the walk at 256 rays: the first end-to-end run of the method's audio
            'path-smoke': dict(COMMON, methodRays=256, renderSeconds=1.0, tailSamples=44100)}
 
@@ -86,7 +91,7 @@ SEGMENTS = (('standing and turning', 0, 5), ('walking to the organ and back', 5,
 def levels():
     """Level (dBFS, both ears, raw render gain) of each walk render per segment of the walk."""
     out = {}
-    for name in ('energy', 'path-realtime', 'path-clean', 'path-denoised'):
+    for name in ('energy', 'path-realtime', 'path-clean', 'path-denoised', 'path-persistent'):
         folder = WORK / name
         if not (folder / 'run.json').exists() or not json.loads((folder / 'run.json').read_text()).get('complete'):
             continue
@@ -100,7 +105,9 @@ def levels():
 def page():
     tracks, rate = {}, None
     names = [('path-realtime', f'path, {REALTIME_RAYS} rays (realtime budget, raw)'), ('path-clean', f'path, {CLEAN_RAYS} rays (clean)'),
-             ('path-denoised', f'path, {REALTIME_RAYS} rays through the denoiser'), ('energy', 'energy method (11 November)')]
+             ('path-denoised', f'path, {REALTIME_RAYS} rays through the denoiser'),
+             ('path-persistent', f'path, persistent rays ({PERSISTENT_POPULATION:,} in flight, about 1,900 new per update: the realtime budget)'),
+             ('energy', 'energy method (11 November)')]
     for name, _ in names:
         folder = WORK / name
         if not (folder / 'listener-0.wav').exists() or not json.loads((folder / 'run.json').read_text()).get('complete'):
@@ -135,7 +142,8 @@ def page():
 <p>The organ plays synthetic speech; the listener stands, turns the head, walks to the organ and back, opens the doors and walks outside. Binaural: use headphones.</p>
 <p>The renders share the playback gain of the earlier listening page ({20 * math.log10(gain):+.1f} dB) so their levels compare; the baseline is the York Minster response used as a static reverb, loudness-matched as on the realism page.
 <b>path, {REALTIME_RAYS} rays</b> is the raw estimate at a realtime budget, a new seed every 23 ms: its noise is expected (the denoiser's job).
-<b>path, {CLEAN_RAYS} rays</b> is the same code with {CLEAN_RAYS // REALTIME_RAYS} times the rays.</p>
+<b>path, {CLEAN_RAYS} rays</b> is the same code with {CLEAN_RAYS // REALTIME_RAYS} times the rays.
+<b>path, persistent rays</b> keeps the rays in flight between updates, so each update hears the sound emitted before it (a moving source and doors at the time the sound reaches them), with {PERSISTENT_POPULATION:,} rays in flight, which fits the same 23 ms per update.</p>
 {''.join(players)}
 <table><tr><th>render</th><th>wall time</th></tr>{rows}</table>
 <p>Results and method: <code>docs/benchmarks/path-denoise-2026-11-12/README.md</code>.</p>"""

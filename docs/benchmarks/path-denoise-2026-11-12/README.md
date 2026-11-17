@@ -987,3 +987,29 @@ Shortcuts stay: they are more accurate per unit of compute in level everywhere, 
 Diffraction as an event of the walk (a ray whose beam reaches an edge diffracting a share of its energy by UTD) was not built: it could recover the shadow, but beams only already loses in view, where diffraction plays no part (EDT error 1.7 times larger at 20% less time), and with a cost advantage of at most 1.6× in rays there is no room for it to win overall; it is the next step if beams only is to be pursued.
 The switch stays (a few conditions in the walk), so the comparison can be repeated.
 Population control is kept for both: at 23 ms it gives the Church 1,900 new rays per update with shortcuts, against 256–512 with survival in time (part 18).
+
+## 21. The Church walk with persistent rays
+
+`church.py render path-persistent`: the walk with shortcuts and persistent rays, 11,000 in flight under population control (part 20's 23 ms point; about 1,900 new rays per update), 1,024-sample updates, the other settings as the realtime render.
+It is on the listening page (`.context/energy-audio/listen/path.html`), in the live view as "Path (persistent)", and in a new section of the scoreboard that lists every walk render's level per part of the walk and its solve time per update.
+
+| Render | standing and turning | walking | doors open, outside | solve per update |
+|---|---:|---:|---:|---:|
+| energy method | −43.8 | −43.4 | −51.9 | 4 ms |
+| path, 512 rays per update | −44.8 | −46.0 | −64.8 | 274 ms |
+| path, 8,192 rays per update (clean) | −44.4 | −44.5 | −60.9 | 2,574 ms |
+| path, persistent, 11,000 in flight | −44.7 | −46.4 | −61.7 | 32 ms |
+
+(dBFS; solve time per update in the render, 50% pacing, upload and readback included: the GPU's own time per update is part 20's 23 ms.)
+The persistent render is 8.6 times faster than the per-update solve at 512 rays and, outside, 3 dB closer to the clean render: a single update's outside estimate is still heavy-tailed (part 20), but the new rays per update are almost four times as many.
+Inside, its levels match the other path renders within their noise.
+The walk starts with no rays in flight, as the sound does: the speech starts at the take's start, so nothing is missing.
+
+The denoised persistent render was not made.
+The denoiser was trained on independent solves; persistent updates are not independent (consecutive updates share the rays in flight, and population control splits rays), so whether it still beats averaging at equal compute needs a reference set of persistent histograms, which this round did not build.
+
+**Open: the suite's level since part 11.**
+The current code (shortcuts, full solves, 2,048 rays, two seeds) scores 3.37 dB in level on the wave suite against 3.17 dB at part 11 (in view 1.78 against 1.81, shadow 4.91 against 4.57).
+The change is concentrated in the diffraction-dominated open scenes (barriers +0.6 dB in both material variants, canopy-bem +0.5 dB), while rooms improved slightly (furnished −0.14, shoebox −0.14, canopy-0009-rigid −0.33).
+An ablation of part 18's three rules on the barrier and canopy scenes was inconclusive: with any of them switched off the outputs were identical to one another and differed from the run with all three on, yet scored the same to two decimals, so the switches' effect is not established.
+These scenes' shadow fields are heavy-tailed per solve (part 15), so a 0.5 dB shift between random sequences is plausible, but it is not shown; the scoreboard keeps part 11's published suite runs until it is.

@@ -72,3 +72,16 @@ T30 (s) / EDT (s) / C80 (dB) per octave band; echo density: mean over the first 
 | baseline-near | 9.0 / 6.9 / -5.3 | 10.4 / 8.4 / -4.5 | 10.7 / 6.9 / -1.6 | 9.1 / 5.5 / +0.7 | 7.0 / 3.7 / +5.7 | 4.0 / 2.2 / +7.1 | 2.0 / 0.2 / +13.6 | 0.78 / 41 |
 | baseline-far | 9.5 / 8.9 / -4.7 | 10.8 / 9.5 / -7.8 | 10.7 / 10.0 / -8.5 | 9.1 / 8.8 / -6.5 | 6.9 / 6.3 / -3.3 | 4.2 / 3.7 / -1.5 | 2.3 / 2.1 / +4.2 | 0.89 / 35 |
 
+## Church walk renders
+
+Level per part of the walk (dBFS, raw render gain, both ears) and the transport's solve time per update (wall time, 50% pacing, upload and readback included).
+The path rows of the suite above are also the persistent rays' response in expectation (README part 17 of docs/benchmarks/path-denoise-2026-11-12).
+
+| render | method | standing and turning | walking to the organ and back | doors open, outside | solve per update |
+|---|---|---|---|---|---|
+| energy | energy-arrivals-diffuse-v1 | -43.8 | -43.4 | -51.9 | 4 ms |
+| path-realtime | path-histogram-v1 | -44.8 | -46.0 | -64.8 | 274 ms |
+| path-clean | path-histogram-v1 | -44.4 | -44.5 | -60.9 | 2574 ms |
+| path-denoised | path-histogram-v1 | -45.1 | -44.6 | -64.4 | 299 ms |
+| path-persistent | path-histogram-persistent-v1 | -44.7 | -46.4 | -61.7 | 32 ms |
+

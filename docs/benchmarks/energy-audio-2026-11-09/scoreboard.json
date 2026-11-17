@@ -758,5 +758,52 @@
     "mixingMs": 35.0
    }
   }
+ },
+ "walk": {
+  "energy": {
+   "levels": {
+    "standing and turning": -43.75161575837108,
+    "walking to the organ and back": -43.376772309596845,
+    "doors open, outside": -51.93192559761799
+   },
+   "method": "energy-arrivals-diffuse-v1",
+   "updateMs": 3.86807185686654
+  },
+  "path-realtime": {
+   "levels": {
+    "standing and turning": -44.80121901072462,
+    "walking to the organ and back": -45.979133271706274,
+    "doors open, outside": -64.79232124756847
+   },
+   "method": "path-histogram-v1",
+   "updateMs": 274.279751934236
+  },
+  "path-clean": {
+   "levels": {
+    "standing and turning": -44.412285408956045,
+    "walking to the organ and back": -44.53342112037194,
+    "doors open, outside": -60.918637675278966
+   },
+   "method": "path-histogram-v1",
+   "updateMs": 2574.360758317217
+  },
+  "path-denoised": {
+   "levels": {
+    "standing and turning": -45.07072765795985,
+    "walking to the organ and back": -44.60726516793703,
+    "doors open, outside": -64.43575606693106
+   },
+   "method": "path-histogram-v1",
+   "updateMs": 298.90126344294
+  },
+  "path-persistent": {
+   "levels": {
+    "standing and turning": -44.71895439060845,
+    "walking to the organ and back": -46.36454980017976,
+    "doors open, outside": -61.68035791692894
+   },
+   "method": "path-histogram-persistent-v1",
+   "updateMs": 31.79846005802707
+  }
  }
 }
