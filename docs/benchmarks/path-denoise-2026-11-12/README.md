@@ -1013,3 +1013,37 @@ The current code (shortcuts, full solves, 2,048 rays, two seeds) scores 3.37 dB 
 The change is concentrated in the diffraction-dominated open scenes (barriers +0.6 dB in both material variants, canopy-bem +0.5 dB), while rooms improved slightly (furnished −0.14, shoebox −0.14, canopy-0009-rigid −0.33).
 An ablation of part 18's three rules on the barrier and canopy scenes was inconclusive: with any of them switched off the outputs were identical to one another and differed from the run with all three on, yet scored the same to two decimals, so the switches' effect is not established.
 These scenes' shadow fields are heavy-tailed per solve (part 15), so a 0.5 dB shift between random sequences is plausible, but it is not shown; the scoreboard keeps part 11's published suite runs until it is.
+
+## 22. The suite's level since part 11: a measurement artefact and seed noise
+
+Part 21 left open why the current code scores 3.37 dB in level on the wave suite against part 11's 3.17 dB, mostly in two scenes (barriers-0020-rigid +0.6 dB, canopy-bem +0.5 dB).
+`beams.py` now takes `PATH_SCENES` (a subset of scenes) and `PATH_SEEDS` (other seeds) so that such probes are cheap.
+
+**Bisection.**
+The two scenes were re-rendered with the code of each commit since part 11 (657b36b, 09f1044, 798432c; full solves, 2,048 rays, seeds 0 and 1, as the scoreboard):
+
+| Code | canopy-bem | barriers-0020-rigid |
+|---|---:|---:|
+| part 11's published runs | 3.40 | 4.64 |
+| 657b36b (part 11's commit) | 3.93 | 5.24 |
+| 09f1044, 798432c, HEAD | 3.93 | 5.24 |
+
+Part 11's own commit already scores like HEAD, so no later commit moved these scenes.
+The published runs came from part 11's step (a) alone (UTD weighted by the beam width): 657b36b with step (b) taken out (scattering points drawing edges from the listener-aware mixture, mirrors drawn by area) reproduces them bit for bit.
+Part 11 measured the suite after (a), then added (b), which was justified as unbiased, without measuring the suite again.
+
+**Seed noise or a real change.**
+Both parts of (b) are unbiased by construction (the mixture's probability is the one `MethodPickEdge` draws with, and a mirror's is its share of the area), so the question is whether eight seeds instead of two still show a difference:
+
+| Code, 8 seeds | canopy-bem | barriers-0020-rigid | shadow (both scenes) |
+|---|---:|---:|---:|
+| (a) only | 4.39 | 4.40 | 5.71 |
+| (a) and (b) (HEAD) | 3.96 | 4.75 | 5.55 |
+
+With eight seeds (b) is better in one scene and worse in the other, and better in the shadow over both; the two seeds of the scoreboard had happened to favour (a) in both.
+Per receiver and band the eight-seed mean energies agree: the median |z| of their difference is 0.65 (0.67 for pure noise), with no more large deviations than noise gives (none and 0.8% beyond |z| = 3), so (b) changed the variance of these diffraction-dominated shadow fields, not their expectation.
+
+**Scoreboard.**
+The suite's path rows now come from the current code (`raw-path-shortcut`, 2,048 rays, seeds 0 and 1 like every method there): level 3.37 dB, EDT 199%, T30 74%, ETC 13.8 dB (in view 1.78 dB; shadow 4.91 dB; closed rooms 1.93 dB), against part 11's 3.17 / 213 / 66 / 13.9.
+The extra seeds of the two scenes are kept in `raw-path-shortcut-extra-seeds` and not published, so every scene is scored with the same two seeds.
+Two seeds are too few for the diffraction-dominated scenes: their level error moves by half a decibel between seed sets.

@@ -15,7 +15,7 @@ A ✓ marks where the energy or path method beats the baseline.
 | baseline-static-ir | 8.85 | 420.40 | 38.02 | 5.90 | 5.87 | 10.05 |
 | energy | 3.04 ✓ | 269.21 ✓ | 78.69 | 1410.39 | 1924.76 | 15.06 |
 | hybrid | 5.68 | 383.90 | 68.48 | 18.38 | 22.20 | 13.64 |
-| path | 3.17 ✓ | 213.46 ✓ | 65.75 | 1324.89 | 1767.49 | 13.85 |
+| path | 3.37 ✓ | 199.25 ✓ | 73.99 | 1346.42 | 1769.61 | 13.80 |
 
 ### in view
 
@@ -24,7 +24,7 @@ A ✓ marks where the energy or path method beats the baseline.
 | baseline-static-ir | 3.69 | 113.05 | 41.21 | 5.38 | 4.90 | 7.40 |
 | energy | 1.97 ✓ | 307.39 | 70.82 | 1171.82 | 1754.15 | 13.29 |
 | hybrid | 3.46 | 488.23 | 71.43 | 15.25 | 20.73 | 12.29 |
-| path | 1.81 ✓ | 266.08 | 60.29 | 1014.93 | 1499.89 | 12.19 |
+| path | 1.78 ✓ | 249.98 | 63.04 | 1015.03 | 1468.75 | 12.06 |
 
 ### shadow
 
@@ -33,7 +33,7 @@ A ✓ marks where the energy or path method beats the baseline.
 | baseline-static-ir | 13.36 | 656.75 | 34.70 | 6.63 | 7.12 | 13.14 |
 | energy | 4.18 ✓ | 195.71 ✓ | 88.92 | 1716.16 | 2163.04 | 17.46 |
 | hybrid | 7.99 | 77.85 | 64.42 | 22.40 | 24.30 | 15.51 |
-| path | 4.57 ✓ | 72.60 ✓ | 73.67 | 1706.84 | 2126.04 | 16.00 |
+| path | 4.91 ✓ | 65.88 ✓ | 88.15 | 1739.90 | 2154.87 | 16.14 |
 
 ### open scenes
 
@@ -42,7 +42,7 @@ A ✓ marks where the energy or path method beats the baseline.
 | baseline-static-ir | 9.77 | 466.16 | 40.70 | 6.48 | 6.47 | 10.89 |
 | energy | 3.23 ✓ | 298.42 ✓ | 83.89 | 1564.10 | 2134.53 | 16.50 |
 | hybrid | 6.02 | 425.48 | 72.67 | 20.25 | 24.52 | 14.87 |
-| path | 3.39 ✓ | 236.85 ✓ | 67.41 | 1471.16 | 1962.63 | 15.08 |
+| path | 3.62 ✓ | 220.79 ✓ | 77.82 | 1493.16 | 1962.47 | 15.04 |
 
 ### closed scenes
 
@@ -51,7 +51,7 @@ A ✓ marks where the energy or path method beats the baseline.
 | baseline-static-ir | 1.73 | 15.44 | 6.13 | 1.95 | 1.60 | 4.89 |
 | energy | 1.99 | 18.40 | 23.94 | 1.86 ✓ | 1.70 | 5.47 |
 | hybrid | 3.89 | 31.05 | 27.55 | 4.97 | 4.48 | 5.76 |
-| path | 2.01 | 19.00 | 53.61 | 1.88 ✓ | 1.71 | 6.22 |
+| path | 1.93 | 18.78 | 40.20 | 1.89 ✓ | 1.73 | 5.90 |
 
 ## Church (no ground truth; measured cathedrals as the reference)
 

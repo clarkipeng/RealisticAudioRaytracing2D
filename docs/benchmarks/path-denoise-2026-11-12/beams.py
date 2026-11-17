@@ -29,12 +29,13 @@ import variants  # noqa: E402
 
 import os
 BEAM = mr.WORK / os.environ.get('PATH_BEAMS_RAW', 'raw-path-beam')   # another folder for a variant of the method
-SEEDS = [0, 1]
+SEEDS = [int(s) for s in os.environ.get('PATH_SEEDS', '0,1').split(',')]  # PATH_SEEDS: other seeds
 
 
 def scenes():
     root = mc.DEFAULT_ROOT
-    return [e['id'] for e in json.loads((root / 'suite.json').read_text())['scenes'] if (root / e['id'] / 'gt' / 'ref' / '0').exists()]
+    ids = [e['id'] for e in json.loads((root / 'suite.json').read_text())['scenes'] if (root / e['id'] / 'gt' / 'ref' / '0').exists()]
+    return [i for i in ids if not os.environ.get('PATH_SCENES') or i in os.environ['PATH_SCENES'].split(',')]  # PATH_SCENES: a subset
 
 
 def render(budgets):
