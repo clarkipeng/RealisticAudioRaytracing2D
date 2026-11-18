@@ -1084,3 +1084,38 @@ The analytic checks pass with it (half-plane 0.29 against 0.30 dB, double diffra
 Not kept: it is three times the cost, does not bring the outside tail near the target, and changes the method's path set in a way that costs the rooms more than it gains outdoors.
 The code is reverted and the persistent Church walk is not re-rendered (the method is unchanged).
 What the measurements point to instead is the one mechanism both problems share: edge diffraction as an event of the walk, where a ray whose beam reaches an edge diffracts a share of its energy, so that diffraction is sampled where the energy is, at either end of a path, and the single-edge connections (the tail's source, part 15) are no longer needed; that is part 20's open step, now with a second reason.
+
+## 24. Diffraction as a walk event: a prototype that does not yet pass the analytic checks
+
+**Test tiers first.**
+The quick tier had reached 3.55–3.75 GiB in one Unity process and a slow batch the 4 GiB guard: each GPU case leaves its compiled kernels behind in the process.
+`tools/unity_tests.py` now runs the quick tier in three processes (test names A–L, M–P, Q–Z) and the slow renderer and method batches in two each; every batch peaked at or under 2.9 GiB (commit 3d77c93).
+The next full tier, run after the shaders had been changed and changed back, peaked higher in two batches (3.56 GiB for A–L, 3.47 GiB for the slow renderer cases M–Z) with the same tests; the first process after a shader change re-imports and compiles every shader, so the limit is met in steady state but not yet after a shader change, and that is not solved.
+
+**What was built** (`walk-diffraction.patch` beside this file, not applied; `settings.pathWalkDiffraction`).
+A ray segment deposits its beam on a nearby edge as it does on the listener: the edge receives the energy per unit length Φ K1(ρ) / sin γ, with K1 the one-dimensional marginal of the beam kernel (w² = λL/π), ρ the segment's closest offset from the edge line and γ their angle; summed over rays this is the incident intensity integrated along the edge.
+One candidate edge per segment piece is chosen in proportion to that deposit, and the ray turns, with probability q, into a diffracted ray leaving the edge's closest point on Keller's cone with the UTD energy flux the source's edge rays use (weight 1/q), or goes on undiffracted (weight 1/(1 − q) after the edge).
+The diffracted ray's own first segment is scored at the listener by the beam kernel; the source's edge rays and every edge connection are off.
+UTD's transition terms get part 11's beam weight 1 − exp(−2X s′/s): the reflection-boundary pair always, the incident-boundary pair when the incident field is a reflected beam.
+The candidate search tests every edge against every segment, which is enough for the analytic scenes and the suite (at most a few dozen edges) and not for the Church (14,075 edges, which would need a spatial index of the edges).
+
+**What was found on the analytic checks** (configuration (a): shortcuts with walk diffraction; dB against BTM):
+
+| Variant | half-plane, 250 / 500 Hz | far side of a solid (double diffraction), 125 / 250 / 500 / 1,000 Hz |
+|---|---|---|
+| current method (edge rays and connections) | +0.30 / +0.29 | +1.79 / +1.50 / +1.19 / +0.91 |
+| q from the expected diffracted share (about 2.6%) | −11.9 / – | no energy |
+| q = ½, UTD's distance to the first hit | +2.87 / – | +1.49 / +0.51 / −2.45 / – |
+| q = ½, UTD's distance to the listener for the first segment, incident weight only for reflected beams | +1.50 / +1.84 | −0.10 / −0.98 / −4.01 / – |
+| same, incidence taken from the chain's origin instead of the passing ray | +4.68 / – | +3.76 / +3.27 / 0.00 / −7.78 |
+
+(A dash: the check stopped at its first failing band.)
+- With q set by the expected diffracted share, about 1/k of the incident energy, only 656 of 131,072 rays diffracted and 17 twice, too few to reach the listener's kernel; any q is unbiased, and q = ½ fixed the starvation.
+- Taking UTD's distance to the diffracted ray's first hit (or the horizon for a ray that escapes) instead of to the listener overweights |D|² near the shadow boundary: +2.9 dB.
+- With both corrected the half-plane is within 2 dB at every band shown, but 1.5–1.8 dB high, and double diffraction falls with frequency to −4 dB at 500 Hz: a diffracted ray that grazes the top face toward the second edge is blocked before its closest approach, so the second edge sees only the half of its incident field that passes above it.
+- Taking the incidence from the chain's origin, which is exact for UTD, made both worse (+4.7 dB, −7.8 dB). So the near-passing variant above was right by compensating errors, and the event's normalisation, the UTD edge-ray flux per unit length and azimuth scored at the listener by a beam kernel, has never been checked against the stationary-point formula of the edge connections. It needs a derivation of its own before anything else is measured.
+- A Metal compiler finding on the way: atomic counter increments made just before a `continue` in the walk's loop were dropped once the loop grew (the escape and edge-event counters read zero while the events happened), the same pattern as part 14's dropped writes before a `return`. Deposits and ray state are unaffected; counters placed so are not to be trusted.
+
+**Not measured:** the wave suite with four seeds, the Church's outside tail, and the time per update. The analytic checks fail, and the Church needs the edge index first.
+**Decision:** the current method stays; the prototype is kept as a patch.
+What it needs next, in order: a derivation of the walk event's normalisation, checked on the half-plane at every band (the beam-kernel scoring of a line source's rays against UTD's stationary-point formula); grazing incidence handled (the reflected half of the field at the second edge); then an edge index for the Church; then configurations (a) and (b) on the suite and the Church at equal time.

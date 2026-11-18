@@ -1,0 +1,308 @@
+diff --git a/Assets/Scripts/Simulation/MethodTransport.cs b/Assets/Scripts/Simulation/MethodTransport.cs
+index f8df394..f42cc8f 100644
+--- a/Assets/Scripts/Simulation/MethodTransport.cs
++++ b/Assets/Scripts/Simulation/MethodTransport.cs
+@@ -458,6 +458,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
+                 shader.SetFloat("PathCohortTarget", Rays); shader.SetFloat("PathFineEnd", settings.pathFineBins * settings.pathBinSeconds);
+                 shader.SetInt("PathPersistent", persistent ? 1 : 0);
+                 shader.SetInt("PathBeamsOnly", settings.pathBeamsOnly ? 1 : 0);
++                shader.SetInt("PathWalkDiffraction", settings.pathWalkDiffraction ? 1 : 0);
+                 shader.SetInt("PathCapacity", PersistentCapacity);
+                 shader.SetFloat("PathStep", PersistentStep);
+                 shader.SetInt("PathFlush", 0);
+diff --git a/Assets/Scripts/Simulation/TakeRender.cs b/Assets/Scripts/Simulation/TakeRender.cs
+index 42ca8a2..7124d45 100644
+--- a/Assets/Scripts/Simulation/TakeRender.cs
++++ b/Assets/Scripts/Simulation/TakeRender.cs
+@@ -114,6 +114,8 @@ public static partial class TakeRender
+         public bool pathBeamsOnly;
+         [Min(0),Tooltip("Path method, persistent rays: population control. Hold this many rays in flight per source/listener pair, cohort by cohort (rays of age a: a share min(1, T_f / a), T_f the end of the fine bins), by splitting and weight lottery; the new rays per update follow from it and replace methodRays. Zero: off (survival in time and methodRays new rays).")]
+         public int pathPopulation;
++        [Tooltip("Path method: diffraction as an event of the walk (a ray whose beam passes an edge diffracts by UTD) instead of the source's edge rays and the edge connections (README part 24 of docs/benchmarks/path-denoise-2026-11-12).")]
++        public bool pathWalkDiffraction;
+         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
+         public string pathHistogramExport="";
+         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]
+diff --git a/Assets/Shaders/MethodPath.hlsl b/Assets/Shaders/MethodPath.hlsl
+index 56a8911..2da4cd2 100644
+--- a/Assets/Shaders/MethodPath.hlsl
++++ b/Assets/Shaders/MethodPath.hlsl
+@@ -61,6 +61,16 @@ float PathVolumeSide(uint owner)
+ // the unfolded length from it: a diffuse reflection keeps no phase relation with the path before it, so the
+ // scattering point is the new source of the Gaussian beam argument (w^2 = lambda L / pi, L from the chain's origin).
+ uint PathBeamsOnly;
++// Walk diffraction (settings.pathWalkDiffraction, README part 24): diffraction as an event of the walk. A ray
++// segment deposits its beam on a nearby edge as it would on the listener: the edge receives the energy per unit
++// length Phi K1(rho) / sin(gamma), K1 the one-dimensional marginal of the beam kernel (width w^2 = lambda L / pi, L
++// the chain's unfolded length to the edge), rho the segment's closest offset from the edge and gamma their angle.
++// From the edge's closest point a diffracted ray leaves on Keller's cone with UTD's energy flux, as the source's
++// edge rays did, its transition terms weighted by the beam (part 11's rule, at both boundaries when the incident
++// field is a beam). One edge is chosen per segment piece in proportion to its deposit, and the ray turns into
++// the diffracted ray with probability q (weight 1/q) or goes on (weight 1/(1 - q) after the edge); diffraction is
++// added to the geometric field, as UTD's is. The source's edge rays and every edge connection are then off.
++uint PathWalkDiffraction;
+ // Persistent rays (see "Persistent rays" below): on/off, pool capacity and offsets, the update period.
+ uint PathPersistent, PathCapacity, PathReadBase, PathWriteBase, PathReadCount, PathWriteCount, PathOverflowCount, PathFlush;
+ float PathStep;
+@@ -283,7 +293,8 @@ bool PathMirror(uint primitive, float3 start, float3 end, out float3 hit, out fl
+ // 2 x^2 / w^2 = 2 X s'/s, so the weight is one minus the beam kernel at that offset: where the beam
+ // reaches past the boundary UTD's transition is not added again, far beyond it UTD is unchanged.
+ // The incident-boundary terms (phiOut - phiIn) stay: the direct sound is exact, not a beam.
+-float PathUtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k, float distance, float ratio)
++// incidentRatio: the same weight for the incident-boundary terms (walk diffraction of a beam); 0 leaves them.
++float PathUtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k, float distance, float ratio, float incidentRatio = 0)
+ {
+     float2 sum = 0;
+     [unroll] for (uint i = 0; i < 4; i++)
+@@ -292,7 +303,8 @@ float PathUtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k,
+         float argument = (RayPi + sign * x) / (2 * n);
+         if (abs(sin(argument)) < 1e-5) { x += sign * 4e-5 * n; argument = (RayPi + sign * x) / (2 * n); }
+         float N = round((x + sign * RayPi) / (2 * RayPi * n)), c = cos(n * RayPi * N - .5 * x), X = k * distance * 2 * c * c;
+-        float weight = i < 2 || ratio <= 0 ? 1 : 1 - exp(-2 * X * ratio); // ratio 0: no beam to compare with
++        float boundary = i < 2 ? incidentRatio : ratio;
++        float weight = boundary <= 0 ? 1 : 1 - exp(-2 * X * boundary); // 0: no beam to compare with
+         sum += weight * (cos(argument) / sin(argument)) * UtdTransition(X);
+     }
+     return dot(sum, sum) / (8 * RayPi * k * n * n * sinBeta * sinBeta);
+@@ -582,7 +594,12 @@ void TracePath(uint index)
+     { I[k] = ReferenceDistance * ReferenceDistance; cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; }
+     MethodAnchor c = v;
+     // Ray 0 makes the source's straight connection for every ray (it is deterministic).
+-    bool connectListener = ray == 0, connectEdge = PathBeamsOnly == 0, hasPending = false;
++    bool connectListener = ray == 0, connectEdge = PathBeamsOnly == 0 && PathWalkDiffraction == 0, hasPending = false;
++    bool walkEdge = false, incidentBeam = false; // the current edge ray came from walk diffraction; its incident field was a reflected beam
++    // Walk diffraction: the diffracted ray's flux with UTD's distance taken to the listener's closest approach, for
++    // scoring its own first segment there (its flux for what follows uses the distance to its first hit).
++    float scoreFlux[8]; bool scoreFirst = false;
++    [unroll] for (uint ks = 0; ks < MethodBands; ks++) scoreFlux[ks] = 0;
+     float listenerScale = MethodTotalRays, pendingTime = 0;
+     float3 pendingFrom = 0;
+     uint events = 0;
+@@ -671,7 +688,7 @@ void TracePath(uint index)
+         if (!travelling)
+         {
+             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
+-            bool edgeRays = edges && v.kind == 0 && MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0;
++            bool edgeRays = edges && v.kind == 0 && MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0 && PathWalkDiffraction == 0;
+             bool viaEdge = edgeRays && RandomRay(rng) < MethodEdgeProbability;
+             [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) C[k3] = 1;
+             medium = v.medium;
+@@ -700,6 +717,7 @@ void TracePath(uint index)
+                 p = e; Q = 1; fluxPending = true;
+                 chain = PathStart(2, tau);
+                 chain.edge = edge; chain.edgePhi = phi; chain.edgePick = edgePick;
++                walkEdge = false;
+                 plane = float4(d, -1e30); // (beams only: no plane to stand in front of; the normal sets the start inset)
+                 MethodCount(CounterEdgeEvents);
+                 // Edge rays and source edge connections share the edge's energy kernel; a pending
+@@ -739,6 +757,19 @@ void TracePath(uint index)
+             [loop] for (uint k6 = 0; k6 < MethodBands; k6++)
+             {
+                 float opacity = MethodEdgeOpacity(chain.edge, k6);
++                if (walkEdge)
++                {
++                    // Phi0 holds the edge's incident energy per unit length (over the choice's probabilities).
++                    float toListener = max(dot(L - p, d), RayEpsilon), ratioL = toListener / edgeM;
++                    scoreFlux[k6] = PathUtdEnergy(edgeAngle / RayPi, edgePhiIn, chain.edgePhi, edgeSinBeta, MethodWavenumber(k6),
++                                                  edgeM * toListener / (edgeM + toListener) * edgeSinBeta * edgeSinBeta, ratioL, incidentBeam ? ratioL : 0) *
++                                    edgeSinBeta * edgeSinBeta * Phi0[k6] * opacity * opacity * DiffractionFactor * DiffractionFactor * edgeAngle;
++                    scoreFirst = true;
++                    float ratio = (found ? distance : limit) / edgeM;
++                    Phi0[k6] = PathUtdEnergy(edgeAngle / RayPi, edgePhiIn, chain.edgePhi, edgeSinBeta, MethodWavenumber(k6), spread * edgeSinBeta * edgeSinBeta, ratio, incidentBeam ? ratio : 0) *
++                               edgeSinBeta * edgeSinBeta * Phi0[k6] * opacity * opacity * DiffractionFactor * DiffractionFactor * edgeAngle;
++                    continue;
++                }
+                 Phi0[k6] = UtdEnergy(edgeAngle / RayPi, edgePhiIn, chain.edgePhi, edgeSinBeta, MethodWavenumber(k6), spread * edgeSinBeta * edgeSinBeta) *
+                            edgeSinBeta * edgeSinBeta * Phi0[k6] * edgeD * opacity * opacity * DiffractionFactor * DiffractionFactor *
+                            exp(-2 * MethodLoss(AirMedium, k6) * edgeM) / (edgeM * edgeM) * edgeExtent * edgeAngle / (chain.edgePick * MethodEdgeProbability);
+@@ -750,7 +781,44 @@ void TracePath(uint index)
+         // (Never stop within a few RayEpsilon of the hit: the resumed trace starts RayEpsilon out and would miss it.)
+         bool ends = advance >= segment - 4 * RayEpsilon;
+         float along = dot(L - p, d);
+-        if (!scored && (along < advance || ends) && (chain.reflections >= 1 || (PathBeamsOnly != 0 && chain.kind != 0)) && medium == AirMedium && airListener && dot(L, plane.xyz) > plane.w)
++        // Walk diffraction: one edge whose closest approach falls in this piece, in proportion to its deposit.
++        bool diffract = false; float splitAt = 1e30, keepShare = 1;
++        uint chosen = 0; float chosenT = 0, chosenRho = 0, chosenSin = 1, chosenPick = 1, chosenQ = 1; float3 chosenPoint = 0;
++        if (PathWalkDiffraction != 0 && edges && medium == AirMedium)
++        {
++            float reach = ends ? segment : advance, wSum = 0, flux = 0, lambda0 = SpeedOfSound / MethodBandHz(0);
++            [unroll] for (uint kf = 0; kf < MethodBands; kf++) flux = max(flux, Phi0[kf] * C[kf] / Q);
++            [loop] for (uint ei = 0; ei < MethodEdgeCount; ei++)
++            {
++                float3 a, u, f, nn; float extent, angle;
++                EdgeFrame(ei, MethodState, false, a, u, f, nn, extent, angle);
++                float b = dot(d, u), sin2 = 1 - b * b;
++                if (sin2 < 1e-6) continue;
++                float3 w0 = p - a; float dd = dot(w0, d), ee = dot(w0, u);
++                float t = (b * ee - dd) / sin2, s = (ee - b * dd) / sin2;
++                if (t < 0 || t >= reach || s < 0 || s > extent) continue;
++                float3 e = a + u * s; float3 gap = p + d * t - e; float rho2 = dot(gap, gap);
++                float w2 = lambda0 * max(chain.travelled + t, RayEpsilon) / RayPi; // the widest band's
++                if (rho2 > 4.5 * w2) continue; // beyond three widths the kernel is below exp(-18)
++                if (TunedEdgeAngle(-d, f, nn, angle) > angle) continue; // the incident ray must come from the wedge's exterior
++                float weight = flux * sqrt(2 / (RayPi * w2)) * exp(-2 * rho2 / w2) / sqrt(sin2);
++                wSum += weight;
++                if (RandomRay(rng) * wSum < weight) { chosen = ei; chosenT = t; chosenRho = sqrt(rho2); chosenSin = sqrt(sin2); chosenPoint = e; chosenPick = weight; }
++            }
++            if (wSum > 0)
++            {
++                chosenPick /= wSum;
++                // q: the share of the diffracted against the undiffracted energy (UTD's diffracted power per unit length
++                // is of order 1 / k of the incident intensity); any q in (0, 1) is unbiased, this one only balances them.
++                // Any q in (0, 1) keeps the estimate unbiased; one half samples the diffracted and the undiffracted
++                // continuations alike (a q set by the expected diffracted share, about 1 / k of the incident, starved the shadow).
++                chosenQ = .5;
++                splitAt = chosenT;
++                if (RandomRay(rng) < chosenQ) diffract = Visible(MethodState, p + d * chosenT, chosenPoint, false);
++                else keepShare = 1 / (1 - chosenQ);
++            }
++        }
++        if (!scored && (along < advance || ends) && (chain.reflections >= 1 || (PathBeamsOnly != 0 && chain.kind != 0) || (PathWalkDiffraction != 0 && chain.kind == 2)) && medium == AirMedium && airListener && dot(L, plane.xyz) > plane.w)
+         {
+             // Beam kernel at the listener of the ray's unfolded line (this segment extended): each prefix of the
+             // chain (one listener image) is scored once, by its own segment, whether or not the closest approach
+@@ -766,7 +834,10 @@ void TracePath(uint index)
+             // ends, so that the visibility test cannot start inside a wall's tolerance and see through it.
+             float startInset = max(0, 4 * RayEpsilon / max(abs(dot(d, plane.xyz)), 1e-3) - sinceStart);
+             float endInset = found ? 4 * RayEpsilon / max(abs(dot(d, normal)), 1e-3) : 0;
+-            float3 qb = p + d * clamp(along, min(startInset, .5 * segment), max(segment - endInset, .5 * segment));
++            float scoredAt = clamp(along, min(startInset, .5 * segment), max(segment - endInset, .5 * segment));
++            float3 qb = p + d * scoredAt;
++            // (Walk diffraction: before the chosen edge both outcomes share the beam; after it only the undiffracted one.)
++            float beamShare = scoredAt < splitAt ? 1 : diffract ? 0 : keepShare;
+             bool seen = lc > 0 && rho2 < clearance * clearance && Visible(MethodState, qb, L, false);
+             if (seen)
+             {
+@@ -776,8 +847,8 @@ void TracePath(uint index)
+                 {
+                     float4 lane = float4((kb & 3) == uint4(0, 1, 2, 3));
+                     float w2 = w20 / (float)(1u << kb);
+-                    float value = Phi0[kb] * C[kb] / Q * 2 / (RayPi * w2) * exp(-2 * rho2 / w2) / (1 - exp(-2 * clearance * clearance / w2)) *
+-                                  exp(-2 * MethodLoss(AirMedium, kb) * extra);
++                    float value = (scoreFirst ? scoreFlux[kb] : Phi0[kb]) * C[kb] / Q * 2 / (RayPi * w2) * exp(-2 * rho2 / w2) / (1 - exp(-2 * clearance * clearance / w2)) *
++                                  exp(-2 * MethodLoss(AirMedium, kb) * extra) * beamShare;
+                     if (kb < 4) sumLow += value * lane; else sumHigh += value * lane;
+                 }
+                 if (dot(sumLow + sumHigh, 1) > 0)
+@@ -787,6 +858,42 @@ void TracePath(uint index)
+                 }
+             }
+         }
++        scoreFirst = false; // (only the diffracted ray's first segment uses it)
++        if (diffract)
++        {
++            // Turn into the diffracted ray at the edge's closest point; its UTD flux is completed at its first hit.
++            float3 a, u, f, nn; float extent, angle;
++            EdgeFrame(chosen, MethodState, false, a, u, f, nn, extent, angle);
++            // The incidence at the edge is that of the chain's origin (the source, a scattering point or an edge, or their
++            // image in this room's unfolded copy: p - d * travelled), not the passing ray's own direction: the ray
++            // passes rho off the edge, and UTD's coefficient taken along it would be smoothed over the beam width.
++            float3 origin = p - d * chain.travelled, incident = chosenPoint - origin;
++            float lambda0 = SpeedOfSound / MethodBandHz(0), lengthToEdge = max(length(incident), RayEpsilon);
++            incident /= lengthToEdge;
++            [unroll] for (uint kd = 0; kd < MethodBands; kd++)
++            {
++                float w2 = lambda0 * lengthToEdge / RayPi / (float)(1u << kd);
++                Phi0[kd] = Phi0[kd] * C[kd] / Q * exp(-2 * MethodLoss(medium, kd) * chosenT) *
++                           sqrt(2 / (RayPi * w2)) * exp(-2 * chosenRho * chosenRho / w2) / chosenSin / (chosenPick * chosenQ);
++                C[kd] = 1;
++            }
++            Q = 1;
++            incidentBeam = chain.reflections >= 1; // (a reflected beam smooths its boundary; the source's field and a diffracted one do not)
++            float cosBeta = dot(incident, u);
++            edgeSinBeta = sqrt(max(0, 1 - cosBeta * cosBeta));
++            edgePhiIn = TunedEdgeAngle(-incident, f, nn, angle);
++            float phi = RandomRay(rng) * angle;
++            tau += chosenT * MethodSlowness(medium);
++            chain = PathStart(2, tau);
++            chain.edge = chosen; chain.edgePhi = phi; chain.edgePick = 1;
++            d = normalize(u * cosBeta + edgeSinBeta * (f * cos(phi) + nn * sin(phi)));
++            p = chosenPoint; edgeAngle = angle; edgeM = lengthToEdge; edgeD = 1; edgeExtent = 1;
++            walkEdge = true; fluxPending = true; scored = false; sinceStart = 0; offSurface = false;
++            plane = float4(d, -1e30);
++            MethodCount(CounterEdgeEvents);
++            continue;
++        }
++        if (keepShare != 1) { [unroll] for (uint kk = 0; kk < MethodBands; kk++) C[kk] *= keepShare; } // the undiffracted remainder
+         if (!found) { MethodCount(CounterEscapes); done = true; continue; }
+         if (!ends)
+         {
+@@ -825,7 +932,7 @@ void TracePath(uint index)
+         {
+             [unroll] for (uint k9 = 0; k9 < MethodBands; k9++) cI[k9] = Phi0[k9] * C[k9] / Q * eD[k9] / RayPi;
+             c = x; listenerScale = 1;
+-            connectListener = connectEdge = PathBeamsOnly == 0;
++            connectListener = PathBeamsOnly == 0; connectEdge = PathBeamsOnly == 0 && PathWalkDiffraction == 0;
+         }
+         float total = mT + mD + mS;
+         if (!(total > 0)) { done = true; continue; }
+diff --git a/Assets/Tests/Editor/ChurchLevelMeasurement.cs b/Assets/Tests/Editor/ChurchLevelMeasurement.cs
+index 1df5353..81bd520 100644
+--- a/Assets/Tests/Editor/ChurchLevelMeasurement.cs
++++ b/Assets/Tests/Editor/ChurchLevelMeasurement.cs
+@@ -79,6 +79,7 @@ public partial class TakeChecks
+             if (method == TakeRender.Method.Path)
+             {
+                 settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY") == "1";
++                settings.pathWalkDiffraction = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_WALK_DIFFRACTION") == "1";
+                 if (population > 0) { settings.pathPersistent = true; settings.pathPopulation = population; settings.responseStepSamples = 1024; }
+             }
+             using var solver = new TransportSolver(scene, take.Geometry, settings, RequireGpu(), sampleRate: take.Metadata.sampleRate);
+diff --git a/Assets/Tests/Editor/MethodChecks.cs b/Assets/Tests/Editor/MethodChecks.cs
+index b2b57d0..b2a49a0 100644
+--- a/Assets/Tests/Editor/MethodChecks.cs
++++ b/Assets/Tests/Editor/MethodChecks.cs
+@@ -16,6 +16,7 @@ public partial class TakeChecks
+         settings.seed = 11;
+         // Opt-in: the Path method's beams-only mode in every check (README part 20 runs them so).
+         settings.pathBeamsOnly = method == TakeRender.Method.Path && Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BEAMS_ONLY") == "1";
++        settings.pathWalkDiffraction = method == TakeRender.Method.Path && Environment.GetEnvironmentVariable("ACOUSTIC_PATH_WALK_DIFFRACTION") == "1";
+         return settings;
+     }
+     // Band energies per 1 ms bin of the latest solve, direction-summed (Energy) or
+diff --git a/Assets/Tests/Editor/MethodMeasurement.cs b/Assets/Tests/Editor/MethodMeasurement.cs
+index 1d5daaa..57bef04 100644
+--- a/Assets/Tests/Editor/MethodMeasurement.cs
++++ b/Assets/Tests/Editor/MethodMeasurement.cs
+@@ -148,7 +148,7 @@ public partial class TakeChecks
+         // get independent noise, as live solves do), and air absorption.
+         public bool seedPerReceiver, airAbsorption;
+         public float pathSurvivalSeconds = -1; // < 0: the settings' default
+-        public bool pathBeamsOnly;
++        public bool pathBeamsOnly, pathWalkDiffraction;
+     }
+     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
+     [Serializable] sealed class MethodRunRecord
+@@ -203,7 +203,7 @@ public partial class TakeChecks
+         settings.methodRays = budget; settings.specularDetectionRadius = job.detectionRadius;
+         settings.methodEdgeProbability = job.edgeProbability; settings.methodRouletteFloor = job.rouletteFloor;
+         if (job.pathSurvivalSeconds >= 0) settings.pathSurvivalSeconds = job.pathSurvivalSeconds;
+-        settings.pathBeamsOnly = job.pathBeamsOnly;
++        settings.pathBeamsOnly = job.pathBeamsOnly; settings.pathWalkDiffraction = job.pathWalkDiffraction;
+         return settings;
+     }
+     static void MethodWrite(string path, float[] values)
+diff --git a/Assets/Tests/Editor/PathProfileMeasurement.cs b/Assets/Tests/Editor/PathProfileMeasurement.cs
+index e0ac0c4..2ccb15a 100644
+--- a/Assets/Tests/Editor/PathProfileMeasurement.cs
++++ b/Assets/Tests/Editor/PathProfileMeasurement.cs
+@@ -42,6 +42,7 @@ public partial class TakeChecks
+             settings.pathPersistent = true;
+             if (Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_POPULATION") == "1") settings.pathPopulation = rays;
+             settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS_ONLY") == "1";
++            settings.pathWalkDiffraction = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_WALK_DIFFRACTION") == "1";
+             settings.responseStepSamples = Math.Max(1, (int)Math.Round(1024.0 / 44100 * rate / settings.spectralHop)) * settings.spectralHop;
+         }
+         void Record(string name, TransportSolver solver, AcousticTake.State[] state, Action<int> place, int poses)
+diff --git a/docs/benchmarks/path-denoise-2026-11-12/beams.py b/docs/benchmarks/path-denoise-2026-11-12/beams.py
+index 2251110..bd53735 100644
+--- a/docs/benchmarks/path-denoise-2026-11-12/beams.py
++++ b/docs/benchmarks/path-denoise-2026-11-12/beams.py
+@@ -45,6 +45,7 @@ def render(budgets):
+         job['output'] = str(BEAM); job['pathBeams'] = True
+         if os.environ.get('PATH_SURVIVAL'): job['pathSurvivalSeconds'] = float(os.environ['PATH_SURVIVAL'])
+         if os.environ.get('PATH_BEAMS_ONLY') == '1': job['pathBeamsOnly'] = True   # README part 20
++        if os.environ.get('PATH_WALK_DIFFRACTION') == '1': job['pathWalkDiffraction'] = True   # README part 24
+         scene = json.loads(Path(job['sceneFile']).read_text())['sceneId']
+         if all((BEAM / scene / 'path' / f'r{b:05d}' / str(s) / 'run.json').exists() for b in budgets for s in SEEDS):
+             continue
