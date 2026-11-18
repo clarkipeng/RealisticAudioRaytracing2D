@@ -1,0 +1,262 @@
+// The persistent-ray denoiser (tools/path_persistent_denoise.py; docs/benchmarks/path-denoise-2026-11-12,
+// part 25) as compute kernels: one update's histogram [direction 6][band 8][bin] in, the denoised one out.
+// PathDenoiser.cs dispatches them in order; every kernel mirrors one step of the Python model, which is the
+// reference (PathDenoiseChecks compares the two on an exported fixture).
+#pragma kernel Convert
+#pragma kernel Ingest
+#pragma kernel Scale
+#pragma kernel Features
+#pragma kernel Smooth
+#pragma kernel CellMean
+#pragma kernel Normaliser
+#pragma kernel Convolve
+#pragma kernel Predict
+#pragma kernel Totals
+#pragma kernel Conserve
+
+#define CH 48
+#define DIRECTIONS 6
+#define BANDS 8
+#define SEGMENTS 3
+
+uint Bins, K, Slot, UpdateAverages;   // Slot: the history slot of this update (update mod K); the first update also fills
+                                      // the other slots, without updating the averages again
+float Decay0, Decay1, Weight0, Weight1;   // decays and bias corrections 1 - decay^(updates)
+
+// Convert: the method's fixed-point histogram (two uints per cell, / Rays) and counts into Current.
+StructuredBuffer<uint> Fixed;
+StructuredBuffer<uint> FixedCounts;
+uint FixedBase, CountBase;
+float Rays;
+
+RWStructuredBuffer<float> Current;       // [48][B]
+RWStructuredBuffer<float> CurrentCounts; // [B]
+RWStructuredBuffer<float> History;       // [K][48][B]
+RWStructuredBuffer<float> CountHistory;  // [K][B]
+RWStructuredBuffer<float> Ema;           // [2][48][B], unnormalised
+RWStructuredBuffer<float> Sums;          // [0] scale, [1] mean cell of the normaliser's input, [2..25] Den totals, [26..49] target totals
+RWStructuredBuffer<float> X;             // network input [CIN][B]
+RWStructuredBuffer<float> Ms;            // [3][48][B]: the K-update mean and the two averages, scaled
+RWStructuredBuffer<float> Norm;          // [48][B]
+RWStructuredBuffer<float> Smoothed;      // [48][B]
+RWStructuredBuffer<float> BinMean;       // [B]
+RWStructuredBuffer<float> Den;           // [48][B]
+RWStructuredBuffer<float> Out;           // [48][B] from OutBase, energy units
+uint OutBase;
+StructuredBuffer<uint> Segment;          // [B]: 0-50 ms, 50-200 ms, later
+
+[numthreads(64, 1, 1)]
+void Convert(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i < CH * Bins)
+    {
+        uint cell = FixedBase + i;
+        Current[i] = ((float)Fixed[2 * cell + 1] + (float)Fixed[2 * cell] / 4294967296.0) / Rays;
+    }
+    if (i < Bins) CurrentCounts[i] = (float)FixedCounts[CountBase + i];
+}
+
+[numthreads(64, 1, 1)]
+void Ingest(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i < CH * Bins)
+    {
+        float h = Current[i];
+        History[Slot * CH * Bins + i] = h;
+        if (UpdateAverages)
+        {
+            Ema[i] = Decay0 * Ema[i] + (1 - Decay0) * h;
+            Ema[CH * Bins + i] = Decay1 * Ema[CH * Bins + i] + (1 - Decay1) * h;
+        }
+    }
+    if (i < Bins) CountHistory[Slot * Bins + i] = CurrentCounts[i];
+}
+
+float KMean(uint i)
+{
+    float s = 0;
+    for (uint f = 0; f < K; f++) s += History[f * CH * Bins + i];
+    return s / K;
+}
+
+groupshared float partial[256];
+groupshared float partial2[256];
+
+// One group: the scale (the K-update mean's total, else the slow average's).
+[numthreads(256, 1, 1)]
+void Scale(uint3 id : SV_GroupThreadID)
+{
+    float a = 0, b = 0;
+    for (uint i = id.x; i < CH * Bins; i += 256) { a += KMean(i); b += Ema[CH * Bins + i] / Weight1; }
+    partial[id.x] = a; partial2[id.x] = b;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint s = 128; s > 0; s >>= 1)
+    {
+        if (id.x < s) { partial[id.x] += partial[id.x + s]; partial2[id.x] += partial2[id.x + s]; }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (id.x == 0) Sums[0] = partial[0] > 0 ? partial[0] : partial2[0];
+}
+
+uint Frame(uint f) { return (Slot + 1 + f) % K; }   // f = 0: the oldest of the last K updates
+
+[numthreads(64, 1, 1)]
+void Features(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    float scale = max(Sums[0], 1e-30);
+    if (i < CH * Bins)
+    {
+        uint c = i / Bins, k = i % Bins;
+        for (uint f = 0; f < K; f++)
+            X[(f * (CH + 1) + c) * Bins + k] = log10(History[Frame(f) * CH * Bins + i] / scale + 1e-9);
+        float e0 = Ema[i] / Weight0 / scale, e1 = Ema[CH * Bins + i] / Weight1 / scale;
+        X[(K * (CH + 1) + c) * Bins + k] = log10(e0 + 1e-9);
+        X[(K * (CH + 1) + CH + c) * Bins + k] = log10(e1 + 1e-9);
+        float m = KMean(i) / scale;
+        Ms[i] = m; Ms[CH * Bins + i] = e0; Ms[2 * CH * Bins + i] = e1;
+        Norm[i] = .5 * (m + e1);   // the normaliser's input
+    }
+    if (i < Bins)
+        for (uint f = 0; f < K; f++)
+            X[(f * (CH + 1) + CH) * Bins + i] = log(1 + CountHistory[Frame(f) * Bins + i]) / 10;
+}
+
+// numpy.convolve(v, ones(w) / w, 'same') for odd w: the centred box, zero outside.
+[numthreads(64, 1, 1)]
+void Smooth(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= CH * Bins) return;
+    uint c = i / Bins; int k = (int)(i % Bins);
+    float s = 0;
+    for (int j = -2; j <= 2; j++) if (k + j >= 0 && k + j < (int)Bins) s += Norm[c * Bins + k + j];
+    Smoothed[i] = s / 5;
+}
+
+// Per bin: the mean over the 48 cells of the smoothed input. Group 0, thread 0 also sums the input for its mean.
+[numthreads(256, 1, 1)]
+void CellMean(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupThreadID, uint3 group : SV_GroupID)
+{
+    uint k = id.x;
+    if (k < Bins)
+    {
+        float s = 0;
+        for (uint c = 0; c < CH; c++) s += Smoothed[c * Bins + k];
+        BinMean[k] = s / CH;
+    }
+    if (group.x != 0) return;
+    float a = 0;
+    for (uint i = gid.x; i < CH * Bins; i += 256) a += Norm[i];
+    partial[gid.x] = a;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint s2 = 128; s2 > 0; s2 >>= 1)
+    {
+        if (gid.x < s2) partial[gid.x] += partial[gid.x + s2];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (gid.x == 0) Sums[1] = partial[0] / (CH * Bins);
+}
+
+[numthreads(64, 1, 1)]
+void Normaliser(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= CH * Bins) return;
+    int k = (int)(i % Bins);
+    float s = 0;
+    for (int j = -15; j <= 15; j++) if (k + j >= 0 && k + j < (int)Bins) s += BinMean[k + j];
+    Norm[i] = Smoothed[i] + s / 31 + .01 * Sums[1];
+}
+
+// One Conv1d (zero padding = dilation, three taps, or one tap) with an optional exact GELU.
+StructuredBuffer<float> Weights;
+StructuredBuffer<float> Input;
+RWStructuredBuffer<float> Output;
+uint InChannels, OutChannels, Taps, Dilation, WeightBase, BiasBase, Gelu;
+
+float Erf(float x)
+{
+    // Abramowitz and Stegun 7.1.26 (|error| < 1.5e-7).
+    float t = 1 / (1 + .3275911 * abs(x));
+    float y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - .284496736) * t + .254829592) * t * exp(-x * x);
+    return x < 0 ? -y : y;
+}
+
+[numthreads(64, 1, 1)]
+void Convolve(uint3 id : SV_DispatchThreadID)
+{
+    uint k = id.x, o = id.y;
+    if (k >= Bins || o >= OutChannels) return;
+    float s = Weights[BiasBase + o];
+    int half = (int)(Taps / 2);
+    for (uint t = 0; t < Taps; t++)
+    {
+        int at = (int)k + ((int)t - half) * (int)Dilation;
+        if (at < 0 || at >= (int)Bins) continue;
+        uint w = WeightBase + (o * InChannels) * Taps + t;
+        for (uint i = 0; i < InChannels; i++) s += Weights[w + i * Taps] * Input[i * Bins + at];
+    }
+    Output[o * Bins + k] = Gelu ? .5 * s * (1 + Erf(s * .70710678)) : s;
+}
+
+StructuredBuffer<float> Raw;   // the head's output [4 * 48 + 24][B]
+
+[numthreads(64, 1, 1)]
+void Predict(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= CH * Bins) return;
+    float d = 0;
+    for (uint j = 0; j < 3; j++) d += exp(4 * tanh(Raw[j * CH * Bins + i] / 4)) * Ms[j * CH * Bins + i];
+    float b = Raw[3 * CH * Bins + i] - 4;
+    b = b > 20 ? b : log(1 + exp(b));
+    Den[i] = d + b * Norm[i];
+}
+
+// One group per band and segment: the total over directions and the segment's bins of Den, and the target total:
+// the three inputs' totals (the K-update mean, the two averages) mixed by a softmax of the head's last 24
+// channels (band x input) averaged over the segment's bins.
+groupshared float4 partialA[256];
+groupshared float4 partialB[256];
+[numthreads(256, 1, 1)]
+void Totals(uint3 gid : SV_GroupThreadID, uint3 group : SV_GroupID)
+{
+    uint band = group.x / SEGMENTS, segment = group.x % SEGMENTS;
+    float4 a = 0, b = 0;   // a: Den, the three inputs' totals; b: the three logits' sums, the bin count
+    for (uint i = gid.x; i < DIRECTIONS * Bins; i += 256)
+    {
+        uint d = i / Bins, k = i % Bins;
+        if (Segment[k] != segment) continue;
+        uint cell = (d * BANDS + band) * Bins + k;
+        a += float4(Den[cell], Ms[cell], Ms[CH * Bins + cell], Ms[2 * CH * Bins + cell]);
+        if (d == 0) b += float4(Raw[(4 * CH + band * 3) * Bins + k], Raw[(4 * CH + band * 3 + 1) * Bins + k], Raw[(4 * CH + band * 3 + 2) * Bins + k], 1);
+    }
+    partialA[gid.x] = a; partialB[gid.x] = b;
+    GroupMemoryBarrierWithGroupSync();
+    for (uint s = 128; s > 0; s >>= 1)
+    {
+        if (gid.x < s) { partialA[gid.x] += partialA[gid.x + s]; partialB[gid.x] += partialB[gid.x + s]; }
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (gid.x == 0)
+    {
+        float4 t = partialA[0], l = partialB[0];
+        float3 logit = l.xyz / max(l.w, 1);
+        float3 w = exp(logit - max(logit.x, max(logit.y, logit.z)));
+        Sums[2 + group.x] = t.x;
+        Sums[2 + BANDS * SEGMENTS + group.x] = dot(w, t.yzw) / (w.x + w.y + w.z);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void Conserve(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= CH * Bins) return;
+    uint band = (i / Bins) % BANDS, k = i % Bins, j = band * SEGMENTS + Segment[k];
+    float den = Sums[2 + j], mean = Sums[2 + BANDS * SEGMENTS + j];
+    Out[OutBase + i] = den > 0 ? Den[i] * mean / den * Sums[0] : 0;
+}

@@ -1119,3 +1119,65 @@ The candidate search tests every edge against every segment, which is enough for
 **Not measured:** the wave suite with four seeds, the Church's outside tail, and the time per update. The analytic checks fail, and the Church needs the edge index first.
 **Decision:** the current method stays; the prototype is kept as a patch.
 What it needs next, in order: a derivation of the walk event's normalisation, checked on the half-plane at every band (the beam-kernel scoring of a line source's rays against UTD's stationary-point formula); grazing incidence handled (the reflected half of the field at the second edge); then an edge index for the Church; then configurations (a) and (b) on the suite and the Church at equal time.
+
+## 25. A denoiser for persistent rays
+
+**The question.**
+With persistent rays (parts 17–21) every update's histogram is the retarded-time response at the population that fits 23 ms of GPU time, noisy, and consecutive updates share history.
+Can a small network running beside the tracer do better than the best equal-compute temporal filter on the same inputs, an exponential moving average with its decay chosen on validation, with band levels kept unbiased, and run live in Unity?
+
+**Data** (`tools/path_persistent_dataset.py`, Unity side `MeasurePathPersistentSequences` in `Assets/Tests/Editor/PathPersistentDataset.cs`).
+Three scenes per family of `tools/dlss_scenes.py`, 18 in all, chosen so that the families the frozen split rule holds out in part (wide doorways, crowded furnished rooms) contribute one held-out scene each, plus the Church.
+Per generated scene three listener tracks: two static listeners and one walking back and forth at 1.4 m/s along a clear segment; per track a flush, a horizon of warm-up updates (89 at the 2 s horizon), then 64 recorded updates of 1,024 samples at 44.1 kHz.
+The Church contributes its take's own walk in three windows (standing, walking, outside), each after 261 warm-up updates (its 6 s horizon).
+Inputs: persistent rays under population control at each scene's 23 ms population N, calibrated in Unity by three probes (GPU time per update at a guess, then at the estimate), two seeds.
+N came out at 79,000–138,000 in the shoebox and doorway rooms, 46,000–105,000 in the corridors, 22,000–40,000 in the furnished rooms and at the 262,144 cap in the open canopy and barrier scenes (14 ms there); the Church keeps part 20's 11,000.
+Targets: the same tracks at 8 N (at most 2^19 rays, so 2–8 N) with two other seeds, the same retarded-time quantity at every update, so a walking listener's target is right for that update and no frozen full solve is used.
+57 tracks, 1.0 GB packed; the render took 42 minutes in one Unity process, peak footprint 3.03 GiB (the measurement is a `UnityTest` that lets the editor tick between solvers: without the ticks Unity kept every released ray buffer until the process ended and the footprint grew past 4 GiB).
+Splits as before: corridor and the crowded furnished room validation; canopy, the wide doorway and the Church test; the rest train (24 tracks).
+
+**Model** (`tools/path_persistent_denoise.py`).
+The part-10 network, a 1-D dilated convolution along the bins (271,608 parameters), with persistent inputs: the last K = 4 updates' histograms and counts plus two exponential moving averages of the histogram (decays 0.7 and 0.9, bias-corrected), all scaled by the K-update mean's total.
+A persistent update's bin at delay t holds the cohort emitted t earlier, so the same delay in consecutive updates comes from different cohorts and the same rays reappear one update later at t + 23 ms; the convolution's 66-bin receptive field sees both.
+It predicts non-negative weights on the K-update mean and the two averages plus a floor, as before.
+Band levels: each band's energy per time segment (0–50 ms, 50–200 ms, later) is rescaled to a convex combination of the three inputs' totals there, with the mixing weights a softmax of the network's output averaged over the segment.
+Each input's totals are unbiased for a static listener, so the combination is too; the network only chooses how much history to trust.
+Conserving the K-update mean's totals instead, as in part 10, left the denoiser's band levels 0.1 dB worse than the moving average's (0.60 against 0.50 dB over the held-out families), because the moving average averages more updates.
+Noise2Noise L2 loss in perceptual windows, AdamW, 8,000 steps of 16 updates on the GPU (3 minutes); the checkpoint with the lowest sum of window, level and decay-curve errors on validation is kept (step 2,000).
+
+**Baseline.**
+The moving average of the persistent input, bias-corrected, with its decay chosen on the validation tracks from 0 to 0.97: 0.8 (window errors 1.32 dB at 0.8, 1.38 at 0.9, 1.50 at 0.95).
+Every estimate is scored on updates 32–63, so every average has 32 updates of history.
+
+**Results** (errors in dB against the mean of the two high seeds: window / band level / decay curve; "target" is one high seed against that mean, the target's own noise; 2 low seeds × 32 updates per track).
+
+| Held out | noisy input | moving average (0.8) | denoiser | target |
+|---|---|---|---|---|
+| all held out (2,112 updates) | 3.38 / 0.92 / 1.66 | 2.08 / 0.50 / 0.98 | **1.96** / 0.54 / **0.93** | 1.35 / 0.31 / 0.62 |
+| test (canopy, wide doorway, Church) | 4.33 / 1.31 / 2.24 | 2.72 / 0.70 / 1.36 | **2.54** / **0.69** / **1.31** | 1.91 / 0.46 / 0.87 |
+| canopy, static | 2.57 / 0.24 / 1.49 | 1.66 / 0.14 / 1.03 | **1.55** / **0.13** / **0.94** | 1.33 / 0.12 / 0.73 |
+| canopy, walking | 2.46 / 0.16 / 1.65 | 2.31 / 0.28 / 1.23 | **2.04** / **0.22** / 1.24 | 1.29 / 0.06 / 0.72 |
+| wide doorway, static | 1.42 / 0.20 / 0.51 | **0.58** / 0.09 / 0.25 | 0.65 / **0.08** / **0.23** | 0.46 / 0.05 / 0.16 |
+| wide doorway, walking | 5.61 / 0.95 / 2.17 | 2.70 / 0.43 / **1.10** | **2.52** / **0.39** / 1.12 | 2.11 / 0.35 / 0.80 |
+| Church, standing | 10.78 / 5.17 / 4.87 | 7.47 / 2.06 / 3.10 | **6.82** / **1.79** / **2.84** | 4.46 / 1.84 / 1.90 |
+| Church, walking and outside | 13.71 / 6.87 / 7.57 | 8.38 / **3.82** / 4.18 | **7.93** / 4.07 / **4.11** | 6.01 / 2.33 / 2.47 |
+| corridor, static (validation) | 1.50 / 0.39 / 0.72 | 0.80 / 0.17 / 0.38 | **0.72** / **0.15** / **0.34** | 0.47 / 0.09 / 0.22 |
+| corridor, walking (validation) | 4.33 / 1.01 / 1.72 | **2.72** / **0.78** / 0.93 | 2.75 / 1.33 / **0.86** | 1.38 / 0.35 / 0.63 |
+| furnished, crowded (validation) | 1.93 / 0.27 / 0.83 | 1.14 / 0.12 / 0.45 | **1.04** / **0.10** / **0.40** | 0.55 / 0.07 / 0.25 |
+
+- Against the noisy input the denoiser removes 1.4 dB of window error over the held-out families and 1.8 dB on the test families; the moving average removes 1.3 and 1.6 dB.
+- Against the moving average it gains 0.12 dB of window error over all held-out updates and 0.18 dB on the test families, with band levels about equal (0.54 against 0.50 dB, 0.69 against 0.70 dB on test) and decay curves slightly better.
+- It loses in one place: a listener walking along the corridor, where its band levels are 1.33 dB off against the average's 0.78 dB; it trusts the long average there while the level changes with every step. It is told nothing about motion, and the corridor is a validation family, so nothing was tuned on it beyond the checkpoint choice.
+- The Church's errors are large for every estimate because its target is itself noisy (88,000 rays in flight, 4.5–6 dB window error of one seed against the two); the ordering is the same.
+- At equal compute: the kernel takes 1.6 ms per update at the Church's 447 bins (below), 7% of 23 ms, which would buy the moving average 7% more rays, about 3% less noise; that is worth about 0.06 dB of its window error over the held-out families. So the denoiser's margin over the best temporal filter is real but small, about 0.06 dB over all held-out updates and 0.1 dB on the test families.
+
+**Runtime** (`Assets/Scripts/Simulation/PathDenoiser.cs`, `Assets/Resources/Acoustics/PathDenoise.compute`).
+The network is small enough for a hand-written compute kernel: one kernel per step of the Python model (convert the tracer's fixed-point histogram, update the history and the two averages, features, normaliser, eight convolutions with exact GELU, prediction, band totals, rescaling), recorded into the audio's command buffer so it stays ordered between the tracer and the reverb.
+The weights (1.1 MB) ship in `Resources/Acoustics/PathDenoise`, exported with a reference fixture by `path_persistent_denoise.py export`.
+`PathDenoiserKernelMatchesTheModel` replays the fixture (eight updates of a validation walk): the kernel matches the PyTorch model to a worst relative error of 1.9 × 10⁻⁵.
+`PathDenoiserFitsTheUpdateBudget`: 1.2 ms per update at 376 bins (2 s horizon) and 1.6 ms at 447 bins (6 s), including the upload of the test's histogram and the dispatch; its Sentis/ONNX alternative was not needed.
+
+**Not measured:** the wave suite.
+The suite scores single static poses of the generated families at fixed ray budgets against the wave solver; with persistent rays a static pose's answer is the long-run average of the updates, which the moving average and the denoiser both approach, and the table's static rows already measure that against an 8 N target.
+**Decision:** the denoiser is kept and runs live in the playable Church (part 26), switchable at runtime; the moving average is the bar it has to keep clearing.
+What would improve it: telling it the listener's and the sources' speed (the corridor walk), and a target with less noise for the Church.

@@ -1,0 +1,59 @@
+{
+ "K": 4,
+ "channels": 48,
+ "decays": [
+  0.7,
+  0.9
+ ],
+ "layers": [
+  {
+   "input": 292,
+   "output": 96,
+   "taps": 3,
+   "dilation": 1
+  },
+  {
+   "input": 96,
+   "output": 96,
+   "taps": 3,
+   "dilation": 1
+  },
+  {
+   "input": 96,
+   "output": 96,
+   "taps": 3,
+   "dilation": 2
+  },
+  {
+   "input": 96,
+   "output": 96,
+   "taps": 3,
+   "dilation": 4
+  },
+  {
+   "input": 96,
+   "output": 96,
+   "taps": 3,
+   "dilation": 8
+  },
+  {
+   "input": 96,
+   "output": 96,
+   "taps": 3,
+   "dilation": 16
+  },
+  {
+   "input": 96,
+   "output": 96,
+   "taps": 3,
+   "dilation": 1
+  },
+  {
+   "input": 96,
+   "output": 216,
+   "taps": 1,
+   "dilation": 1
+  }
+ ],
+ "floats": 271608
+}
