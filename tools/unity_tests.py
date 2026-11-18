@@ -1,8 +1,8 @@
 """One entry point for Unity EditMode checks, in tiers.
 
     PY=.context/fdtd-teacher/venv/bin/python
-    $PY tools/unity_tests.py quick              # every change: all TakeChecks except category Slow
-    $PY tools/unity_tests.py full               # before a commit: non-Slow, then Slow in a fresh process
+    $PY tools/unity_tests.py quick              # every change: all TakeChecks except category Slow (three processes)
+    $PY tools/unity_tests.py full               # before a commit: non-Slow, then Slow in fresh processes
     $PY tools/unity_tests.py run "TakeChecks.Late"   # one area (NUnit -testFilter)
 
 Runs in the isolated runner (.context/gpu-audio/runner) under tools/heavy_guard: one heavy job
@@ -28,8 +28,15 @@ LOGS = ROOT / '.context/unity-tests'
 # Within one process each GPU case leaves 0.3-0.8 GiB behind (compiled kernels appear to stay
 # cached), so slow cases are split: renderer cases, then the method checks, each in a fresh process.
 # Method checks are selected by category: a name-pattern selection of them left the batch editor idle.
-TIERS = {'quick': [('TakeChecks', '!Slow')],
-         'full': [('TakeChecks', '!Slow'), (r'TakeChecks\.(?!Methods|EnergyMethod|PathMethod|PathDetection)', 'Slow'), ('TakeChecks', 'Methods')]}
+# The non-slow cases run in three batches too (by name; NUnit runs them in name order): in one process they
+# reached 3.55-3.75 GiB, most of it gained between the M and P cases (GPU cases' kernels) and in the recorder case.
+QUICK = [(r'TakeChecks\.[A-L]', '!Slow'), (r'TakeChecks\.[M-P]', '!Slow'), (r'TakeChecks\.[Q-Z]', '!Slow')]
+# The slow cases likewise: renderer cases and method checks, each in two processes (one process of each reached
+# 3.2 and 4.0 GiB).
+SLOW = [(r'TakeChecks\.(?!Methods|EnergyMethod|PathMethod|PathDetection)[A-L]', 'Slow'),
+        (r'TakeChecks\.(?!Methods|EnergyMethod|PathMethod|PathDetection)[M-Z]', 'Slow'),
+        (r'TakeChecks\.[A-M]', 'Methods'), (r'TakeChecks\.[N-Z]', 'Methods')]
+TIERS = {'quick': QUICK, 'full': QUICK + SLOW}
 
 
 def clear_stale_lock():
