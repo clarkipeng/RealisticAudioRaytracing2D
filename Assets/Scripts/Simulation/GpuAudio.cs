@@ -38,14 +38,15 @@ internal sealed partial class GpuAudio : IDisposable
     public long ReadbackBytes {get;private set;}
     public static bool Selected(TakeRender.Settings settings,ComputeShader transport) =>
         transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu &&
-        settings.method!=TakeRender.Method.Path; // the path method's histogram synthesis (PathReverb) runs on the CPU
+        // the offline histogram export and import are CPU features of PathReverb
+        !(settings.method==TakeRender.Method.Path && (!string.IsNullOrEmpty(settings.pathHistogramExport) || !string.IsNullOrEmpty(settings.pathHistogramImport)));
     public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1,bool transported=false)
     {
         Emission.Configure(scene,signals);AudioSourcePlane.ValidateRender(scene,settings);layout=new RayTransport.Layout(scene,settings);slots=layout.MaximumSlots;
         audibleSources=new bool[signals.Length];
         for(int s=0;s<signals.Length;s++)audibleSources[s]=scene.listeners.Length>1 || scene.sources[s].mutedListenerPlusOne!=1;
         this.settings=settings;this.signals=signals;listeners=scene.listeners.Length;channels=settings.ChannelsPerListener;pairs=signals.Length*listeners;
-        capacity=layout.Capacity;maximumBlock=checked(settings.responseStepSamples*maximumResponses);
+        capacity=layout.Capacity;maximumBlock=checked(settings.responseStepSamples*maximumResponses+(settings.method==TakeRender.Method.Path?settings.LatePartition:0)); // the path reverb's input lookahead (InputEnd)
         var hrtf=channels==2?Hrtf.Load(rate):null;int taps=hrtf?.Taps??1;
         fft=1;while(fft<settings.fftSize+taps+settings.spectralHop-2)fft=checked(fft*2);bins=fft/2+1;
         history=checked((int)settings.HistorySamples(rate)+fft+maximumBlock);
@@ -60,7 +61,9 @@ internal sealed partial class GpuAudio : IDisposable
             reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");match=Kernel("AudioMatch");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
             lateEnvelope=Kernel("LateEnvelope");lateExtend=Kernel("LateExtend");lateBuild=Kernel("LateBuild");lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
-            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateExtend,lateBuild,lateInput,lateSum,lateInverse,lateWrite};
+            pathEar=Kernel("PathEar");pathGroups=Kernel("PathGroups");pathBand=Kernel("PathBand");pathPieces=Kernel("PathPieces");pathPowers=Kernel("PathPowers");
+            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateExtend,lateBuild,lateInput,lateSum,lateInverse,lateWrite,
+                pathEar,pathGroups,pathBand,pathPieces,pathPowers};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(slots*2+1);
             Buffer("AudioRanges",pairs,8).SetData(layout.Ranges);Buffer("AudioOwners",capacity,4).SetData(layout.Owners);
@@ -113,7 +116,13 @@ internal sealed partial class GpuAudio : IDisposable
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
             PrepareEars(hrtf);
-            PrepareLate(scene,rate);
+            PrepareLate(scene,rate);PreparePath(settings,rate);
+            if(pathMode && settings.pathDenoise)
+            {
+                var (weights,header)=PathDenoiser.LoadBundled();var denoise=Resources.Load<ComputeShader>(PathDenoiser.ShaderResource);
+                if(weights==null || denoise==null)throw new InvalidOperationException("pathDenoise needs Resources/Acoustics/PathDenoise and "+PathDenoiser.ShaderResource+".");
+                EnablePathDenoiser(denoise,weights,header);
+            }
             Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
             Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
             Set("AudioWorkStride",workStride);
@@ -187,7 +196,7 @@ internal sealed partial class GpuAudio : IDisposable
             }
         }
         commands.EndSample("Acoustics.GPU.Filters");
-        SetLateResponse(sample,cut,late);
+        if(pathMode)SetPathResponse(sample,cut,late);else SetLateResponse(sample,cut,late);
         Submit();initialized=true;responseSample=sample;
     }
     void Dispatch(int kernel,int pair,int which)=>commands.DispatchCompute(shader,kernel,args,(uint)((which*pairs+pair)*3*4));
@@ -203,6 +212,15 @@ internal sealed partial class GpuAudio : IDisposable
         if(count==0)Dispatch(reverse,pair,which);else commands.DispatchCompute(shader,reverse,count,1,1);
         for(int stage=2;;stage=checked(stage*2))
         {Set("AudioStage",stage);if(count==0)Dispatch(butterfly,pair,which);else commands.DispatchCompute(shader,butterfly,count,1,1);if(stage==size)break;}
+    }
+    // The source samples a render to `end` reads. The path reverb reads its input half a partition ahead (its band
+    // filters' delay, inside the DSP latency): the input transform at partition boundary b, which serves the whole
+    // block, needs samples to b + 3P/2 - latency; a render that ends inside that block needs them already.
+    public long InputEnd(long end)
+    {
+        if(!pathMode || end<=0)return end;
+        long last=(end-1)/latePartition*latePartition;
+        return Math.Max(end,last+latePartition+latePartition/2-settings.DspLatencySamples);
     }
     public void PrepareInput(long end)
     {
@@ -235,7 +253,12 @@ internal sealed partial class GpuAudio : IDisposable
         if(disposed || pending || sample!=cursor || count<1 || count>maximumBlock-queued)throw new InvalidOperationException("Invalid GPU audio submission.");
         if(!initialized)throw new InvalidOperationException("GPU audio needs a response before rendering.");
         // Uploaded samples were finalized by PrepareInput and remain owned for this batch.
-        if(uploaded<checked(sample+count))PrepareInput(sample+count);
+        long need=InputEnd(checked(sample+count));
+        if(uploaded<need)
+        {
+            if(queued!=0)throw new InvalidOperationException("Path audio needs its input half a partition ahead; submit whole partitions.");
+            PrepareInput(need);
+        }
         Set("AudioBuildingFilter",0);
         for(int at=0;at<count;)
         {
@@ -243,7 +266,7 @@ internal sealed partial class GpuAudio : IDisposable
             if(now%settings.spectralHop==0)
             {
                 Set("AudioRingAt",(int)(block%history));Set("AudioBlockNegative",block<=int.MaxValue?1:0);
-                Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(sample+count-block)));
+                Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(Math.Max(uploaded,sample+count)-block)));
                 for(int which=0;which<2;which++)
                 {
                     // No sample in this hop can use the previous response after its fade ends.
@@ -316,7 +339,7 @@ internal sealed partial class GpuAudio : IDisposable
     public void Dispose()
     {
         if(disposed)return;if(pending && !completed)request.WaitForCompletion();pending=false;disposed=true;
-        foreach(var buffer in owned)buffer.Dispose();owned.Clear();
+        DisposePath();foreach(var buffer in owned)buffer.Dispose();owned.Clear();
         commands?.Dispose();
         if(shader!=null){if(Application.isPlaying)UnityEngine.Object.Destroy(shader);else UnityEngine.Object.DestroyImmediate(shader);}
     }

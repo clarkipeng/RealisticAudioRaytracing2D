@@ -40,7 +40,7 @@ internal sealed class PathReverb
     readonly float[] alpha,beta;   // per band: sign mixing for the interaural coherence
     readonly Vector2[] filters;    // [band][2P] spectra of the band FIRs (delay P/2)
     // Impulse groups: runs of slots in one partition with the same bin weights.
-    struct Group { public int partition,first,terms; } // terms: entries in groupBins/groupWeights
+    internal struct Group { public int partition,first,terms; } // terms: entries in groupBins/groupWeights
     readonly List<Group>[] groups; // per pair
     readonly List<int>[] groupBins;readonly List<float>[] groupWeights;
     readonly Vector2[][] spectra;  // per pair: [group][slot sequence 2][bin]
@@ -97,7 +97,7 @@ internal sealed class PathReverb
     }
     // Linear-phase FIRs (P + 1 taps, delay P/2, Hann window) of the band weights, as 2P spectra.
     // Windowing keeps their sum an exact delayed unit impulse (the window is one at the centre).
-    static Vector2[] BandFilters(int rate,int partition)
+    internal static Vector2[] BandFilters(int rate,int partition)
     {
         int n=2*partition,half=partition/2;var result=new Vector2[Bands*n];var x=new Vector2[n];
         for(int b=0;b<Bands;b++)
@@ -143,8 +143,22 @@ internal sealed class PathReverb
         double a=Math.Sqrt((1-1.0/m)/e1),b=1/Math.Sqrt(e2);
         for(int n=0;n<m;n++){s1[n]=sign/m+a*s1[n];s2[n]*=b;}
     }
+    // Slot layout of one pair (shared with GpuAudio.Path): impulse groups, their bin weights, the fixed spectra of
+    // their two sequences (CPU convolution only) and per band the exact-energy mix; with `samples`, per sample of
+    // the kernel ([count][P]) its group (-1: none) and the two sequences' values (GPU synthesis).
+    internal sealed class Slots
+    {
+        public List<Group> groups;public List<int> bins;public List<float> weights;public Vector2[] spectra;public float[] mix;
+        public int[] sampleGroup;public float[] s1,s2;
+    }
     void BuildGroups(int pair)
     {
+        var slots=BuildSlots(pair,histogram,rate,partition,count,filters,true,false);
+        groups[pair]=slots.groups;groupBins[pair]=slots.bins;groupWeights[pair]=slots.weights;spectra[pair]=slots.spectra;mixes[pair]=slots.mix;
+    }
+    internal static Slots BuildSlots(int pair,PathBins histogram,int rate,int partition,int count,Vector2[] filters,bool keepSpectra,bool samples)
+    {
+        int bins=partition+1;
         var list=new List<Group>();var gb=new List<int>();var gw=new List<float>();
         var trains=new List<(int partition,int[] at,float[] s1,float[] s2)>();
         double fine=histogram.FineSeconds;int slots=(int)Math.Ceiling(histogram.Horizon/fine);
@@ -219,7 +233,18 @@ internal sealed class PathReverb
                 else if(a>0){mix[o]=(float)Math.Sqrt(target/a);mix[o+1]=0;mix[o+2]=0;}
             }
         }
-        groups[pair]=list;groupBins[pair]=gb;groupWeights[pair]=gw;spectra[pair]=spectrum;mixes[pair]=mix;
+        var result=new Slots{groups=list,bins=gb,weights=gw,spectra=keepSpectra?spectrum:null,mix=mix};
+        if(samples)
+        {
+            result.sampleGroup=new int[checked(count*partition)];Array.Fill(result.sampleGroup,-1);
+            result.s1=new float[result.sampleGroup.Length];result.s2=new float[result.sampleGroup.Length];
+            for(int g=0;g<trains.Count;g++)
+            {
+                var t=trains[g];int origin=t.partition*partition;
+                for(int i=0;i<t.at.Length;i++){result.sampleGroup[origin+t.at[i]]=g;result.s1[origin+t.at[i]]=t.s1[i];result.s2[origin+t.at[i]]=t.s2[i];}
+            }
+        }
+        return result;
     }
 
     // The histogram of one solved frame (MethodTransport), or null.

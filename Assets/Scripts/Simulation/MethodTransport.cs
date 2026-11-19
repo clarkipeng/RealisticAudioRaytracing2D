@@ -649,6 +649,28 @@ internal sealed class MethodTransport : IDisposable, ILateField
         return (int)Math.Min(live[pair * 2 + parity[pair]], (uint)PersistentCapacity);
     }
     public long RaysOverflowed() => PersistentCount(2);
+    // Live diagnostics without a stall: the latest asynchronous read of the rays in flight (pair 0), -1 before one.
+    public const string TraceSample = "Acoustics.GPU.PathTrace";
+    static UnityEngine.Rendering.CommandBuffer traceBegin, traceEnd;
+    static UnityEngine.Rendering.CommandBuffer Marker(bool begin)
+    {
+        var c = new UnityEngine.Rendering.CommandBuffer {name = TraceSample};
+        if (begin) c.BeginSample(TraceSample); else c.EndSample(TraceSample);
+        return c;
+    }
+    public long AudioUpdates { get; private set; }
+    public int LastRaysInFlight { get; private set; } = -1;
+    bool inFlightPending;
+    public void RequestRaysInFlight()
+    {
+        if (!persistent || inFlightPending || pathLive == null) return;
+        inFlightPending = true; int p = parity[0];
+        AsyncGPUReadback.Request(pathLive, 4 * 2, 0, r =>
+        {
+            inFlightPending = false;
+            if (!r.hasError) LastRaysInFlight = (int)Math.Min(r.GetData<uint>()[p], (uint)PersistentCapacity);
+        });
+    }
     // Contributions heard later than the ring reaches (clamped to its last slot); none, by the ring's bound.
     public long ConnectionsBeyondRing() => PersistentCount(3);
     long PersistentCount(int block)
@@ -784,6 +806,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
         bind();
         shader.SetInt("BvhNodeCount", bvhNodeCount);
         long start = Stopwatch.GetTimestamp();
+        // A GPU profiler sample around the updates (the live HUD reads its time with a Recorder).
+        traceBegin ??= Marker(true); traceEnd ??= Marker(false);
+        Graphics.ExecuteCommandBuffer(traceBegin);
         Clear();
         for (int frame = 0; frame < frames; frame++)
             for (int pair = 0; pair < Pairs; pair++)
@@ -831,8 +856,11 @@ internal sealed class MethodTransport : IDisposable, ILateField
         }
         if (path) pathSolves += frames;
         flushMask = 0;
+        Graphics.ExecuteCommandBuffer(traceEnd);
+        AudioUpdates += frames * Pairs;
         GpuSeconds += TakeRender.Elapsed(start);
-        if (Paths.Length == 0 && !path) return;
+        // GPU audio reads paths and histograms on the GPU (no CPU readback: nothing would complete it).
+        if (Paths.Length == 0) return;
         if (asynchronous)
         {
             pending = true; failed = false; pathsDone = lateDone = false;
@@ -892,6 +920,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // ILateField (audio): the diffuse histogram in the hybrid's late format.
     public uint[] Late => late;
     public ComputeBuffer LateBuffer => output;
+    // The path histogram's layout on the GPU (GpuAudio.Path): uints per frame of `output`, and the counts [frame][pair][bin].
+    internal int PathUintsPerFrame => path ? ReadbackUintsPerFrame : 0;
+    internal ComputeBuffer CountsBuffer => counts;
     // The Path method's histogram has its own layout (PathFrame), not the late field's.
     public int LateUintsPerFrame => Audio && !path ? 2 * Pairs * (Directions + 1) * Bands * Bins : 0;
     int ReadbackUintsPerFrame => path ? 2 * Pairs * Directions * Bands * TimeBins.Count : LateUintsPerFrame;

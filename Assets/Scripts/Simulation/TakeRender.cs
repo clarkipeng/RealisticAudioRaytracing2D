@@ -114,6 +114,8 @@ public static partial class TakeRender
         public bool pathBeamsOnly;
         [Min(0),Tooltip("Path method, persistent rays: population control. Hold this many rays in flight per source/listener pair, cohort by cohort (rays of age a: a share min(1, T_f / a), T_f the end of the fine bins), by splitting and weight lottery; the new rays per update follow from it and replace methodRays. Zero: off (survival in time and methodRays new rays).")]
         public int pathPopulation;
+        [Tooltip("Path method, persistent rays, GPU audio: denoise each update's histogram with the bundled persistent-ray denoiser (Resources/Acoustics/PathDenoise; docs/benchmarks/path-denoise-2026-11-12, part 25) before the reverb is built.")]
+        public bool pathDenoise;
         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
         public string pathHistogramExport="";
         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]

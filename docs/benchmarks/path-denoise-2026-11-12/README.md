@@ -1181,3 +1181,52 @@ The weights (1.1 MB) ship in `Resources/Acoustics/PathDenoise`, exported with a 
 The suite scores single static poses of the generated families at fixed ray budgets against the wave solver; with persistent rays a static pose's answer is the long-run average of the updates, which the moving average and the denoiser both approach, and the table's static rows already measure that against an 8 N target.
 **Decision:** the denoiser is kept and runs live in the playable Church (part 26), switchable at runtime; the moving average is the bar it has to keep clearing.
 What would improve it: telling it the listener's and the sources' speed (the corridor walk), and a target with less noise for the Church.
+
+## 26. The path method live: the reverb on the GPU, and a playable Church (in progress)
+
+**Why the reverb moved to the GPU.**
+`MeasurePathReverbCpuCost` (opt-in, `ACOUSTIC_PATH_REVERB_COST=1`) times the CPU reference, `PathReverb`, at the live Church's size: 48 kHz, two ears, eight bands, a 6 s horizon, updates of 1,024 samples.
+It spent 432 ms building one update's kernels and 8.9 ms convolving one 1,024-sample block.
+An update lasts 21.3 ms, so the CPU cannot keep up, by a factor of about 20.
+Smaller partitions do not help the kernel build: it is a weighted sum of fixed slot spectra, about 24,000 slots × 2 sequences × 1,025 bins × 8 bands × 2 ears per update.
+
+**What was built** (`Assets/Scripts/Simulation/GpuAudio.Path.cs`, kernels `PathEar`, `PathGroups`, `PathBand`, `PathPieces` and `PathPowers` in `GpuAudio.compute`).
+`PathReverb` filters the source into eight bands and convolves each band with its own kernel.
+Convolution is linear, so the same output comes from one kernel per ear: the sum over bands of each band's slot sequences convolved with its band filter.
+That kernel is built on the GPU at every update, from the same slot sequences, interaural mix, band filters and ear weights (`PathReverb.BuildSlots` is now shared by both).
+Per partition: one FFT per band of the slot sequences (both ears packed as real and imaginary parts), the product with each band filter, summed over bands, one inverse FFT, then an overlap-add of the filters' tails into the next partition and the partition's transform.
+The convolution, the crossfade and the PCM output are the late field's (`LateInput`, `LateSum`, `LateInverse`, `LateWrite`).
+Two things were added to them: the input is read half a partition ahead (the band filters' delay, inside the DSP latency), and the crossfade gets `PathReverb`'s power correction.
+The persistent-ray denoiser (part 25) is recorded into the same command buffer between the tracer and the kernel build, one per source–listener pair, behind `settings.pathDenoise`.
+Under GPU audio the method no longer reads its histogram back to the CPU.
+The live renderer stops a batch at a partition boundary when the source has not yet got the samples the read-ahead needs (`GpuAudio.InputEnd`).
+
+**Checks.**
+- `GpuPathReverbMatchesTheCpuReference`: against `TakeRender.Mixer` with `PathReverb` on the same persistent-ray solves (14 updates, a moving listener, a cut, partial blocks). The relative error is 3.7 × 10⁻⁵ binaural and 6.3 × 10⁻⁶ mono.
+- `LivePathRendersOnTheGpuWithTheDenoiser`: `TakeRender.Live` with the path method on GPU audio, persistent rays and the denoiser, as the playable Church runs it. Its observations end inside partitions, and the denoiser is switched off half-way.
+- `GpuAudioParity` (the other methods) is unchanged.
+
+**The playable Church** (`Assets/Scripts/Demo/PathLiveChurch.cs`, `Assets/Editor/PathLiveChurchBuild.cs`, `tools/path_live_church.py`; how to run it is in the main README).
+It turns the Church scene's session into the live path method:
+- persistent rays at a population of 8,000;
+- the denoiser;
+- GPU audio, binaural, with a 6 s horizon;
+- one source, the organ, looping;
+- the sliding doors on E;
+- first-person controls as in the authored scene.
+
+A small HUD shows the GPU time per update from profiler samples around the tracer, the reverb and the denoiser. It also shows the rays in flight, read back asynchronously, the denoiser's state (N toggles it) and the audio underruns.
+A macOS player built from the test runner's copy of the project (167 MiB, 11 minutes the first time).
+
+**Found on the way.**
+- With GPU audio the method's CPU readback was never completed, so the second batch threw.
+- The read-ahead failed when a batch ended inside a partition.
+
+Both are fixed and covered by `LivePathRendersOnTheGpuWithTheDenoiser`.
+
+**Not done yet.**
+- The scripted smoke run of the build: the automated walk, output to wav, frame times and underruns. The first attempts ran into the two bugs above, and then into critical memory pressure from other jobs, under which the guard pauses the player. No numbers yet.
+- The CPU cost of the remaining main-thread audio work.
+- The population that fits beside the Church's rendering. 8,000 is a guess below part 20's 11,000 for the offline tracer.
+- The HUD's GPU timings in a release player.
+- The method toggle (path against energy): it needs the session to restart its take, so it was left out.

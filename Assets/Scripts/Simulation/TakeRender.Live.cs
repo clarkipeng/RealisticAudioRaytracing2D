@@ -46,6 +46,10 @@ public static partial class TakeRender
         public Action<long,long,DirectPath[]> ResponseApplied;
         public string Backend => solver.Backend;
         public AudioDiagnostics GpuDiagnostics => gpuAudio?.Diagnostics;
+        // Live path method: the persistent tracer (for diagnostics) and the denoiser switch (GPU audio).
+        internal MethodTransport Method => solver.Method;
+        public bool HasPathDenoiser => gpuAudio?.HasPathDenoiser??false;
+        public bool PathDenoising {get=>gpuAudio!=null && gpuAudio.PathDenoising;set{if(gpuAudio!=null)gpuAudio.PathDenoising=value;}}
         public Live(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,float[][] pcm,int rate,Settings settings,
             AudioManager.PcmQueue queue,int lead,int listener,ComputeShader shader=null,SourceStream[] streams=null)
         {
@@ -166,6 +170,9 @@ public static partial class TakeRender
             batchEnd=Math.Min(knownEnd,checked((Cursor/settings.responseStepSamples+settings.maximumResponsesPerBatch)*settings.responseStepSamples));
             // Bound live submissions by playback lead, retaining batching when catching up.
             if(queue!=null)batchEnd=Math.Min(batchEnd,Cursor+Math.Max(settings.responseStepSamples,lead));
+            // Path GPU audio reads half a partition ahead within a block (GpuAudio.InputEnd): stop at a partition
+            // boundary until the source has the samples.
+            if(gpuAudio!=null && gpuAudio.InputEnd(batchEnd)>ReadyEnd)batchEnd=Math.Max(Cursor,batchEnd/settings.LatePartition*settings.LatePartition);
             batchCount=batchEnd<=batchFirst?0:(int)(1+(batchEnd-1-batchFirst)/settings.responseStepSamples);
             if(batchEnd<=Cursor)return;
             if(!prepared && Cursor==0 && settings.ResponseSample(0)>0)
@@ -237,7 +244,7 @@ public static partial class TakeRender
                 {
                     if(!audioQueued)
                     {
-                        audioFirst=Cursor;gpuAudio.PrepareInput(batchEnd);
+                        audioFirst=Cursor;gpuAudio.PrepareInput(gpuAudio.InputEnd(batchEnd));
                         // Transport and DSP stay ordered on the GPU; diagnostic
                         // readback is not a prerequisite for submitting audio.
                         // Submit every known interval together. A readback per observation

@@ -87,6 +87,7 @@ internal sealed partial class GpuAudio
             commands.DispatchCompute(shader,lateSum,(latePartition+1+63)/64,LateTiles,listeners*channels);
             commands.DispatchCompute(shader,lateInverse,listeners*channels,1,1);
         }
+        if(pathMode && lateBlend && now<lateSwap+settings.responseStepSamples)commands.DispatchCompute(shader,pathPowers,listeners*channels,1,1);
         commands.EndSample("Acoustics.GPU.Late");
     }
 }

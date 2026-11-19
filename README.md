@@ -493,3 +493,14 @@ No new test package: Unity Test Framework handles selection, coroutines and repo
 ## Standalone entry point
 
 Build settings start `Assets/Scenes/TrainStation.unity`. Player recordings go to `Application.persistentDataPath/Recordings`; Editor recordings stay in the project's `Recordings` folder. The Escape controls list completed takes for the current scene in Editor and standalone. Editor tools also provide folder selection and offline comparisons.
+
+## Playable Church (path method, live)
+
+The Church with the path method running live: persistent rays traced every audio update, the persistent-ray denoiser, and the path reverb built and convolved on the GPU.
+One source, the organ, plays in a loop.
+Details and status are in docs/benchmarks/path-denoise-2026-11-12, part 26.
+
+- **Editor:** choose Acoustics > Play Church live (path method). It opens `Assets/Scenes/Church.unity` and enters Play mode with `PathLiveChurch` added.
+- **Build:** run `nice -n 19 .context/fdtd-teacher/venv/bin/python tools/path_live_church.py build` (guarded, built from the test runner's copy), or choose Acoustics > Build playable Church (macOS). Either writes `Builds/ChurchLive/ChurchLive.app`; open it like any app.
+- **Controls:** WASD and the mouse to move and look, E to open and close the doors, N to switch the denoiser, H to show or hide the HUD, Escape to release the cursor (click to capture it again).
+- **Smoke run:** `tools/path_live_church.py smoke` runs a scripted walk, records the output to wav, and writes frame times, GPU times and audio underruns to `.context/path-live/smoke-*/smoke.json`. Not yet passed: see part 26.
