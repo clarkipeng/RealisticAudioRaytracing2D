@@ -1462,3 +1462,41 @@ Candidates, unmeasured:
 - the late kernel rebuilt every second update with the crossfade kept (a stated approximation of 23 ms in the late tail's timing);
 - the denoiser narrowed and retrained;
 - the edge slice refreshed less often (its weights are an importance distribution, so any refresh rate is unbiased).
+
+## 30. The next round: what the convolution costs, and the edge distribution refreshed less often
+
+Interleaved `MeasurePathLiveBudget`, cap 16, population 11,000, no denoiser, 320 updates per variant, load average 12–19:
+
+| Variant | tracer, ms | audio, ms |
+|---|---|---|
+| as committed | 5.00 [4.55–5.56] | 2.06 [1.84–2.21] |
+| the late convolution left out (`GpuAudio.SkipLateConvolution`, a profiling bound) | 4.97 [4.56–5.55] | 1.90 [1.66–2.02] |
+| edge distribution refreshed every 4th update | 4.70 [4.25–5.29] | 2.03 [1.84–2.22] |
+| edge distribution refreshed every 16th update | 4.62 [4.05–5.13] | 2.05 [1.84–2.21] |
+
+**Non-uniform partitioned convolution: not built.**
+- The whole late convolution (input transform, the products over 283 partitions, the inverse and the output) costs about 0.16 ms per update.
+- That bounds what bigger late blocks can save, so the expected 1 ms is not there.
+- The products are memory-bound and small: about 12 MB of kernels and inputs per update.
+- The audio phase's remaining time is the path kernels (part 29: about 0.8 ms), the direct path, the denoiser and the readback with its fence.
+
+**The edge distribution, refreshed every few updates** (`settings.pathEdgeSliceUpdates`; one source–listener pair).
+Each refresh recomputes a slice of 2,048 edge weights and rebuilds the edge-ray distribution with a single-group scan over all 14,075 edges.
+In between, the last distribution stays.
+The walk samples edges from that distribution and divides by its probability, so any refresh rate is unbiased; only the variance can change.
+Noise, Church standing and walking against the 8 N targets (window / level / decay, dB; `route_b.py`):
+
+| Edge distribution refreshed | tracer, ms | noisy input | after the denoiser |
+|---|---|---|---|
+| every update (cap 16) | 5.00 | 10.37 / 5.09 / 4.68 | 6.43 / 2.03 / 2.74 |
+| every 4th | 4.70 | 10.35 / 5.21 / 4.57 | 6.49 / 2.09 / 2.76 |
+| every 16th | 4.62 | 10.38 / 5.13 / 4.84 | 6.53 / 2.11 / 2.89 |
+
+- Every 4th update is within these runs' noise (about ±0.05 dB between configurations of equal noise) and saves 0.3 ms. The playable Church uses it.
+- Every 16th update saves another 0.08 ms but is 0.15 dB worse in the decay curve after denoising. It is not used.
+
+**Not done in this round** (in the order asked; each has a measurement to make first):
+- **Sorting the pool by Morton cell and direction octant, fused with population control.** Part 28 put traversal at about a third of the tracer. Coherence would speed the traversal part and the histogram writes, so the walk can gain at most about 1.7 ms.
+- **Energy-aware selection and systematic resampling.** The first measurement is CV² of the weights per cohort, in the Church, the shoebox and the furnished room.
+- **A 64-channel denoiser retrained across 4k–23k populations.** It needs a dataset rendered at those populations, about 40 minutes.
+- **The auto-budget:** N adjusted each update from the measured GPU time.

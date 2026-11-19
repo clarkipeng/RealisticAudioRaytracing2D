@@ -83,6 +83,7 @@ public sealed class PathLiveChurch : MonoBehaviour
         s.method = TakeRender.Method.Path; s.transport = TakeRender.Transport.Raytraced; s.synthesis = TakeRender.Synthesis.Spectral;
         s.audioBackend = TakeRender.AudioBackend.Gpu; s.listenerOutput = TakeRender.ListenerOutput.Binaural;
         s.pathPersistent = true; s.pathPopulation = population; s.pathDenoise = denoise;
+        s.pathEdgeSliceUpdates = 4;   // the edge distribution refreshed every 4th update (README part 30)
         s.pathIterationCap = 16;   // the long-chain lottery (README part 28): unbiased, about a fifth off the tracer at equal noise
         s.responseStepSamples = 1024; s.fftSize = 1024; s.spectralHop = 256; s.transitionSamples = 512;
         s.maximumDelaySeconds = horizonSeconds; s.tailSamples = (int)(horizonSeconds * manager.sampleRate);

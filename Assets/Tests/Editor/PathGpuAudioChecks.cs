@@ -172,7 +172,7 @@ public partial class TakeChecks
                 settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
                 settings.pathPopulation = 11000; settings.pathDenoise = false; settings.maximumResponsesPerBatch = 1;
                 settings.pathHistogramExport = settings.pathHistogramImport = "";
-                int flags = 0, kernels = 1, spectra = 1;
+                int flags = 0, kernels = 1, spectra = 1, convolution = 1;
                 string options = entry.Contains(":") ? entry.Substring(entry.IndexOf(':') + 1) : "";
                 foreach (string kv in options.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries))
                 {
@@ -184,6 +184,8 @@ public partial class TakeChecks
                         case "flags": flags = v; break;
                         case "kernels": kernels = v; break;
                         case "spectra": spectra = v; break;
+                        case "convolution": convolution = v; break;
+                        case "edgeSlice": settings.pathEdgeSliceUpdates = v; break;
                         case "iterationCap": settings.pathIterationCap = v; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
@@ -191,7 +193,7 @@ public partial class TakeChecks
                 var gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
                 var solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
                 solver.Method.ProfileFlags = flags;
-                gpu.SkipPathKernels = kernels == 0; gpu.PathGroupSpectraOff = spectra == 0;
+                gpu.SkipPathKernels = kernels == 0; gpu.PathGroupSpectraOff = spectra == 0; gpu.SkipLateConvolution = convolution == 0;
                 variants.Add((name, gpu, solver, new AcousticTake.State[scene.objects.Length], 0, new[] {new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>()}));
             }
             var pcm = new float[2048];

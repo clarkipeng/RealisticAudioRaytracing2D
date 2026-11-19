@@ -86,6 +86,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     int cohorts;
     // Persistent: each pair's edge weights, refreshed EdgeSlice edges per update (MethodPath.hlsl PathEdgeWeights).
     public const int EdgeSlice = 2048;
+    int edgeSkipped;
     readonly ComputeBuffer edgeWeights;
     int[] edgeCursor;
     readonly ComputeBuffer pathRays, pathLive;
@@ -566,6 +567,11 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.Dispatch(edgeScanKernel, 1, 1, 1);
             return;
         }
+        // A refresh every pathEdgeSliceUpdates updates: in between, the distribution built last stays (one pair only:
+        // the distribution's buffer is shared by the pairs). Its weights only steer the sampling, which divides by
+        // the same distribution, so any refresh rate is unbiased.
+        if (!all && Pairs == 1 && settings.pathEdgeSliceUpdates > 1 && ++edgeSkipped < settings.pathEdgeSliceUpdates) return;
+        edgeSkipped = 0;
         int first = all ? 0 : edgeCursor[pair], count = all ? EdgeCount : Math.Min(EdgeSlice, EdgeCount - first);
         shader.SetInt("PathEdgeWeightBase", pair * EdgeCount); shader.SetInt("PathEdgeOffset", first);
         shader.Dispatch(edgeWeightKernel, (count + 63) / 64, 1, 1);

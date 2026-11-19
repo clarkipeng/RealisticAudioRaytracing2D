@@ -1,4 +1,4 @@
-"""README parts 28-29. Lottery noise: Church tracks, runs under .context/path-optimise/lottery/<config>/<track>/low-{0,1}, scored against
+"""README parts 28-30. Lottery noise: Church tracks, runs under .context/path-optimise/lottery/<config>/<track>/low-{0,1}, scored against
 the persistent dataset's 8N targets (raw/church/<track>/high-*). plan CONFIGS... | score"""
 import json, sys, copy
 from pathlib import Path
@@ -11,10 +11,10 @@ def plan(configs):
     items = json.loads((D / 'items.json').read_text())['items']
     out = []
     for cfg in configs:                       # name=population,cap
-        name, v = cfg.split('='); n, cap = map(int, v.split(','))
+        name, v = cfg.split('='); vals = list(map(int, v.split(','))); n, cap = vals[0], vals[1]; sl = vals[2] if len(vals) > 2 else 1
         for it in items:
             if it['kind'] == 'take' and Path(it['output']).name in TRACKS:
-                x = copy.deepcopy(it); x.update(output=str(W / name / Path(it['output']).name), population=n, iterationCap=cap, highSeeds=[], seeds=[0, 1])
+                x = copy.deepcopy(it); x.update(output=str(W / name / Path(it['output']).name), population=n, iterationCap=cap, edgeSliceUpdates=sl, highSeeds=[], seeds=[0, 1])
                 out.append(x)
     W.mkdir(parents=True, exist_ok=True); (W / 'items.json').write_text(json.dumps(dict(items=out)))
     print(len(out), 'items')

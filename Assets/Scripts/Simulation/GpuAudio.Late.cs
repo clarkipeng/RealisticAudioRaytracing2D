@@ -77,7 +77,7 @@ internal sealed partial class GpuAudio
     // while fading, the previous) bank's block output.
     void QueueLateBlock(long now)
     {
-        if(!lateReady || now%latePartition!=0)return;
+        if(!lateReady || now%latePartition!=0 || SkipLateConvolution)return;
         long block=now/latePartition;Set("LateBlock",checked((int)block));
         commands.BeginSample("Acoustics.GPU.Late");
         commands.DispatchCompute(shader,lateInput,lateSources,1,1);

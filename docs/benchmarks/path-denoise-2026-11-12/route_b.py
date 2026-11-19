@@ -1,4 +1,4 @@
-"""README parts 28-29. Noise after the denoiser at lower populations (Church standing and walking, updates 32-63, 2 seeds) against 8N."""
+"""README parts 28-30. Noise after the denoiser at lower populations (Church standing and walking, updates 32-63, 2 seeds) against 8N."""
 import json, sys
 from pathlib import Path
 import numpy as np
@@ -11,7 +11,7 @@ def load(d):
 pdn.EDGES = np.fromfile(D / 'standing/low-0/bin-edges.f32', '<f4')
 net = ppd.model(); net.load_state_dict(torch.load(ppd.WORK / 'denoiser-persistent.pt', map_location='cpu')); net.eval()
 configs = {'11000 (part 25 runs, no cap)': D}
-configs.update({c.name: c for c in sorted(W.glob('cap16n*'))})
+configs.update({c.name: c for c in sorted(W.iterdir()) if c.is_dir()})
 for name, base in configs.items():
     rows = {'noisy': [], 'denoised': []}
     for track in ('standing', 'walking'):

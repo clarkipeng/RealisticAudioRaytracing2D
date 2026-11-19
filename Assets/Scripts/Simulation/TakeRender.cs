@@ -119,6 +119,8 @@ public static partial class TakeRender
         [Min(0),Tooltip("Path method, persistent rays: past this many loop iterations of a ray within one update, each further reflection survives with probability pathIterationSurvival and the survivors are reweighted (unbiased). It bounds the update's long serial chains (rays caught between close surfaces), which set the update's time. Zero: off.")]
         public int pathIterationCap;
         [Range(.05f,1)] public float pathIterationSurvival=.75f;
+        [Min(1),Tooltip("Path method, persistent rays, one source-listener pair: refresh the edge-ray distribution (a slice of 2,048 edge weights, then the distribution) every this many updates; in between the last one stays. Unbiased at any value: the weights only steer the sampling.")]
+        public int pathEdgeSliceUpdates=1;
         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
         public string pathHistogramExport="";
         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]

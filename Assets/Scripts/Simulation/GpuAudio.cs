@@ -33,7 +33,7 @@ internal sealed partial class GpuAudio : IDisposable
     public TakeRender.AudioDiagnostics Diagnostics {get;}=new TakeRender.AudioDiagnostics();
     public long NumericBytes {get;private set;}
     // Profiling only (MeasurePathLiveBudget): the path kernels built once and then left (a bound on their cost).
-    internal bool SkipPathKernels;
+    internal bool SkipPathKernels,SkipLateConvolution;   // (the late convolution left out: a bound on its cost)
     public int ResponseSupportSamples {get;private set;}
     public bool IsPending=>pending;
     public long UploadedBytes {get;private set;}
