@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.IO;
+using UnityEngine.Rendering;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -132,5 +134,55 @@ public partial class TakeChecks
         Array.Sort(build, 2, build.Length - 2); Array.Sort(render, 2, render.Length - 2);
         double b0 = build[2 + (build.Length - 2) / 2], r0 = render[2 + (render.Length - 2) / 2];
         UnityEngine.Debug.Log($"PathReverb CPU at 48 kHz, binaural, 8 bands, 6 s ({bins.Count} bins): kernel build {b0:F1} ms per update, convolution {r0:F1} ms per block of {step} (an update lasts {1000.0 * step / rate:F1} ms)");
+    }
+
+    // Opt-in (ACOUSTIC_PATH_BUDGET=/abs/job.json, a TakeBatch job of the Church; ACOUSTIC_PATH_BUDGET_POPULATION, default
+    // 11000): the live path method's GPU time per update in the Church, as the playable Church runs it (persistent
+    // rays under population control, GPU audio, binaural), with a fence after each phase: the tracer's update, then
+    // the audio (the denoiser if on, the path kernels, the convolution, the readback of 1,024 samples), and the CPU
+    // time of the audio calls. Medians over 40 updates after a horizon of them, the listener on the take's walk.
+    [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
+    public void MeasurePathLiveBudget()
+    {
+        string file = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET");
+        if (string.IsNullOrEmpty(file)) Assert.Ignore("Set ACOUSTIC_PATH_BUDGET.");
+        int population = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_POPULATION") ?? "11000");
+        var shader = RequireGpu();
+        var job = TakeBatch.ParseJob(File.ReadAllText(file));
+        using var take = AcousticTake.Open(job.take);
+        var scene = take.Metadata.scene; int rate = take.Metadata.sampleRate;
+        var clips = new float[scene.clips.Length][]; for (int c = 0; c < clips.Length; c++) clips[c] = take.ReadClip(c);
+        using var probe = new ComputeBuffer(1, 4);
+        void Fence() => AsyncGPUReadback.Request(probe).WaitForCompletion();
+        foreach (bool denoise in new[] {false, true})
+        {
+            var settings = JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(job.settings));
+            settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
+            settings.pathPopulation = population; settings.pathDenoise = denoise; settings.maximumResponsesPerBatch = 1;
+            settings.pathHistogramExport = settings.pathHistogramImport = "";
+            var signals = TakeRender.Signal.FromTake(take, clips);
+            using var gpu = new GpuAudio(scene, rate, settings, signals, 1, transported: true);
+            using var solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
+            var state = new AcousticTake.State[scene.objects.Length]; var pcm = new float[settings.responseStepSamples * 2];
+            int warm = solver.Method.WarmUpdates, measured = 40, step = settings.responseStepSamples;
+            var trace = new double[measured]; var audio = new double[measured]; var cpu = new double[measured];
+            for (int u = 0; u < warm + measured; u++)
+            {
+                long sample = (long)u * step;
+                take.Evaluate(Math.Min(7 * 44100L + sample, take.Metadata.durationSamples), state);
+                Fence();
+                var w = Stopwatch.StartNew();
+                solver.BeginSolve(state, 1, false); Fence();
+                double t = w.Elapsed.TotalMilliseconds; w.Restart();
+                gpu.SetResponse(sample, u == 0, solver.RayBuffer, 0, scene, state, late: solver.Late(0));
+                gpu.QueueRender(sample, step); double c = w.Elapsed.TotalMilliseconds;
+                gpu.BeginReadback(); gpu.TryComplete(pcm, true); solver.CompleteAfterGpuAudio();
+                double a = w.Elapsed.TotalMilliseconds;
+                if (u >= warm) { trace[u - warm] = t; audio[u - warm] = a; cpu[u - warm] = c; }
+            }
+            double Median(double[] v) { var x = (double[])v.Clone(); Array.Sort(x); return x[x.Length / 2]; }
+            UnityEngine.Debug.Log($"PATH_BUDGET population {population}, denoiser {(denoise ? "on" : "off")}: tracer {Median(trace):F2} ms, audio {Median(audio):F2} ms " +
+                                  $"(CPU calls {Median(cpu):F2} ms), {solver.Method.Rays} new rays per update, {take.Geometry.Length} triangles");
+        }
     }
 }

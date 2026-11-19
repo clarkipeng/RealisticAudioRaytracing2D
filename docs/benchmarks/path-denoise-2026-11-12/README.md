@@ -1271,3 +1271,46 @@ Results:
 - **Memory:** the tree is trimmed to its node count; at most 2n − 1 nodes per mesh, against n/2 for leaves of four before. The Church's tree grows by about 0.5 MB.
 
 The batch tools now start the editor with `--burst-disable-compilation`: twice the editor's Burst compiler crashed at start-up in the runner, and no code here uses Burst.
+
+**The live budget after change 1** (`MeasurePathLiveBudget`, opt-in with `ACOUSTIC_PATH_BUDGET`).
+The Church as the playable Church runs it: persistent rays at population 11,000, GPU audio, binaural, one update of 1,024 samples at a time, with a fence after each phase; medians over 40 updates after a horizon of them, with the listener on the take's walk.
+
+| Phase | ms per update |
+|---|---:|
+| tracer (edge slice, walk, population control, histogram and ring) | 6.2 |
+| audio without the denoiser (path kernels, input transform, partitioned convolution, PCM, readback of 1,024 samples) | 2.3 |
+| denoiser (the difference with it on) | 1.0 |
+| total | 9.5 |
+| CPU time of the audio calls on the main thread | 0.15 |
+
+So the round has gone from about 27 ms (24 ms of tracer, 1.6 ms of denoiser and the audio) to 9.5 ms.
+The target of 5 ms is not reached yet.
+
+**Tried and not kept: a roulette on long chains** (`settings.pathIterationCap`, reverted).
+Instrumenting the walk showed that about 180 of the update's 11,000 threads run more than 16 loop iterations and about 32 run more than 32; the longest runs about 280.
+A ray past 32 iterations within an update survived each further reflection with probability 0.75 and was reweighted, which is unbiased.
+The walk went from 6.0–6.2 ms to 4.4–4.6 ms, less than the chain length suggests: the dispatch is bound by many moderately long chains, each iteration's latency being a traversal, the beam scoring and the histogram atomics, not by the single longest one.
+Its variance cost was not measured, and the timings on this machine moved by more than 1 ms between runs while other jobs ran, so it is not kept on this evidence.
+
+**Hardware ray tracing on the M5, a feasibility assessment (not built).**
+Unity 6.4 reports neither ray tracing nor inline ray tracing on Metal here (`supportsRayTracing`, `supportsInlineRayTracing`, recorded by `MeasurePathProfile`).
+A native plugin can reach the GPU underneath:
+- `IUnityGraphicsMetalV2` gives the device and the current command buffer.
+- `ComputeBuffer.GetNativeBufferPtr` gives our buffers as `MTLBuffer`.
+- An `MTLAccelerationStructure` can be built from the triangle buffer: one per object, plus an instance structure refitted when the doors move.
+
+But intersection queries exist only in Metal Shading Language kernels, and the walk is Unity HLSL compiled by Unity.
+The walk would have to be compiled outside Unity: HLSL through DXC to SPIR-V, then SPIRV-Cross to MSL, with `TraceScene` replaced by an MSL `intersector` call.
+The plugin would then dispatch it with our buffers bound by pointer, ordered with Unity's work through `CommandBuffer.IssuePluginEventAndData`.
+That is a second toolchain and a second binding layout for the walk, a large kernel through SPIRV-Cross, and maintenance on every shader change.
+The gain is bounded by the traversal's share of each iteration's latency, which is not yet measured.
+The measurement to make first is the walk with the traversal replaced by a trivial one (an analytic box), at the same chains.
+
+**Next, in order of expected gain:**
+- **The walk's per-iteration latency.** Measure the traversal's share as above. Then split the walk into stages (trace, score, connect), or give the histogram writes a local accumulation in place of global atomics.
+- **The audio.** Precomputed twiddles in the shared FFT, which now evaluates a sine and a cosine per butterfly (about 2,500 FFTs of 2,048 points per update). For late partitions with one or two impulse groups, assemble the kernel from fixed group spectra instead of eight FFTs.
+- **The denoiser.** Its first convolution reads 292 channels per output; tile it in shared memory and try half precision.
+- **Edges.** The edge slice is 0.8 ms. Cull edges too short for UTD in a band and edges that cannot see the listener's region, then use a spatial index for the walk's candidates.
+- **Overlap.** The tracer of update n+1 with the audio of update n.
+
+None of these have been measured yet.
