@@ -142,7 +142,7 @@ public partial class TakeChecks
     // kernels, the convolution, the readback of 1,024 samples), and the CPU time of the audio calls.
     // ACOUSTIC_PATH_BUDGET_VARIANTS: variants separated by ';', each "name:key=value,..." with keys population,
     // denoise (0/1), flags (MethodTransport.ProfileFlags), iterationCap, kernels (0: the path kernels built once and
-    // then left, a profiling bound); default "base:". All variants live in one
+    // then left, a profiling bound), spectra (0: every partition through the band FFTs); default "base:". All variants live in one
     // process and are measured interleaved, in rounds of 8 updates each (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25),
     // after a horizon of warm-up updates each, so drift from other work on the machine falls on every variant
     // alike. Reported: median and the 10th-90th percentile range per phase, and the load average before and after.
@@ -172,7 +172,7 @@ public partial class TakeChecks
                 settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
                 settings.pathPopulation = 11000; settings.pathDenoise = false; settings.maximumResponsesPerBatch = 1;
                 settings.pathHistogramExport = settings.pathHistogramImport = "";
-                int flags = 0, kernels = 1;
+                int flags = 0, kernels = 1, spectra = 1;
                 string options = entry.Contains(":") ? entry.Substring(entry.IndexOf(':') + 1) : "";
                 foreach (string kv in options.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries))
                 {
@@ -183,6 +183,7 @@ public partial class TakeChecks
                         case "denoise": settings.pathDenoise = v != 0; break;
                         case "flags": flags = v; break;
                         case "kernels": kernels = v; break;
+                        case "spectra": spectra = v; break;
                         case "iterationCap": settings.pathIterationCap = v; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
@@ -190,7 +191,7 @@ public partial class TakeChecks
                 var gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
                 var solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
                 solver.Method.ProfileFlags = flags;
-                gpu.SkipPathKernels = kernels == 0;
+                gpu.SkipPathKernels = kernels == 0; gpu.PathGroupSpectraOff = spectra == 0;
                 variants.Add((name, gpu, solver, new AcousticTake.State[scene.objects.Length], 0, new[] {new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>()}));
             }
             var pcm = new float[2048];
@@ -213,6 +214,13 @@ public partial class TakeChecks
             for (int r = 0; r < rounds; r++) for (int i = 0; i < variants.Count; i++) for (int u = 0; u < perRound; u++) Update(i, true);
             string Stat(System.Collections.Generic.List<double> v) { var x = v.ToArray(); Array.Sort(x); return $"{x[x.Length / 2]:F2} [{x[x.Length / 10]:F2}-{x[x.Length * 9 / 10]:F2}]"; }
             string loadAfter = Load();
+            var lengths = (float[])variants[0].solver.Method.EdgeLengths.Clone(); Array.Sort(lengths);
+            if (lengths.Length > 0)
+            {
+                string Share(double l) { int n = 0; foreach (float x in lengths) if (x < l) n++; return $"{100.0 * n / lengths.Length:F1}%"; }
+                UnityEngine.Debug.Log($"PATH_BUDGET edges: {lengths.Length}, length quantiles 10/50/90% {lengths[lengths.Length / 10]:F3}/{lengths[lengths.Length / 2]:F3}/{lengths[lengths.Length * 9 / 10]:F3} m; " +
+                                      $"shorter than the wavelength at 16 kHz {Share(343.0 / 16000)}, 4 kHz {Share(343.0 / 4000)}, 1 kHz {Share(343.0 / 1000)}, 250 Hz {Share(343.0 / 250)}, 125 Hz {Share(343.0 / 125)}");
+            }
             foreach (var v in variants)
                 UnityEngine.Debug.Log($"PATH_BUDGET {v.name}: tracer {Stat(v.times[0])} ms, audio {Stat(v.times[1])} ms, CPU calls {Stat(v.times[2])} ms; " +
                                       $"{v.times[0].Count} updates, population {v.solver.Method.LastRaysInFlight}, load {loadBefore} -> {loadAfter}");

@@ -86,4 +86,34 @@ public partial class TakeChecks
             Assert.That(ms, Is.LessThan(5), "the denoiser must fit beside the tracer in a 23 ms update");
         }
     }
+
+    // Opt-in (ACOUSTIC_DENOISER_STEPS=1): GPU time of each denoiser step at the Church's 447 bins, a fence after each
+    // (medians of 60 updates after 10).
+    [Test, Category("QualityMeasurement")]
+    public void MeasurePathDenoiserSteps()
+    {
+        if (Environment.GetEnvironmentVariable("ACOUSTIC_DENOISER_STEPS") != "1") Assert.Ignore("Set ACOUSTIC_DENOISER_STEPS=1.");
+        var (shader, weights, header) = RequireDenoiser();
+        var bins = new PathBins(new TakeRender.Settings {method = TakeRender.Method.Path, maximumDelaySeconds = 6});
+        var starts = Enumerable.Range(0, bins.Count).Select(k => bins.Start(k)).ToArray();
+        using var denoiser = new PathDenoiser(shader, weights, header, starts);
+        var rng = new System.Random(1);
+        var h = Enumerable.Range(0, PathDenoiser.Cells * bins.Count).Select(_ => (float)rng.NextDouble()).ToArray();
+        var c = Enumerable.Range(0, bins.Count).Select(_ => (float)rng.Next(100)).ToArray();
+        using var probe = new ComputeBuffer(1, 4);
+        var times = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<double>>();
+        var order = new System.Collections.Generic.List<string>();
+        var w = new Stopwatch();
+        int iteration = 0;
+        denoiser.StepFence = step =>
+        {
+            AsyncGPUReadback.Request(probe).WaitForCompletion();
+            if (iteration >= 10) { if (!times.ContainsKey(step)) { times[step] = new System.Collections.Generic.List<double>(); order.Add(step); } times[step].Add(w.Elapsed.TotalMilliseconds); }
+            w.Restart();
+        };
+        for (; iteration < 70; iteration++) { AsyncGPUReadback.Request(probe).WaitForCompletion(); w.Restart(); denoiser.Push(h, c); }
+        double total = 0; var line = new System.Text.StringBuilder();
+        foreach (var step in order) { var x = times[step].OrderBy(v => v).ToArray(); double m = x[x.Length / 2]; total += m; line.Append($"{step} {m:F3}, "); }
+        UnityEngine.Debug.Log($"Denoiser steps (ms, fenced medians; each includes one fence's round trip): {line}total {total:F2}");
+    }
 }

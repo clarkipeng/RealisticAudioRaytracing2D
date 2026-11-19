@@ -10,7 +10,10 @@ using UnityEngine;
 // goes through the persistent-ray denoiser (PathDenoiser), recorded into the same command buffer.
 internal sealed partial class GpuAudio
 {
-    int pathEar,pathGroups,pathBand,pathPieces,pathPowers;
+    int pathEar,pathGroups,pathBand,pathBandGroups,pathPieces,pathPowers;
+    int pathFftCount,pathSpectralCount;
+    ComputeBuffer pathFftBuffer,pathAllBuffer;
+    internal bool PathGroupSpectraOff;   // profiling only (MeasurePathLiveBudget): every partition through the band FFTs
     bool pathMode,lateInitializedOnce;
     int pathBins,pathGroupCount;
     ComputeBuffer pathDenoised;
@@ -23,7 +26,7 @@ internal sealed partial class GpuAudio
         pathMode=settings.method==TakeRender.Method.Path;
         foreach(var name in new[]{"PathHistogram","PathEarWeights","PathTermWeights","PathMix","PathEnergy","LatePowers"})Buffer(name,1,4);
         foreach(var name in new[]{"PathAlphaBeta","PathSampleValues","PathFilters","PathCoefficients","PathFiltered"})Buffer(name,1,8);
-        Buffer("PathGroupInfo",1,16);Buffer("PathTermBins",1,4);Buffer("PathSampleGroup",1,4);
+        Buffer("PathGroupInfo",1,16);Buffer("PathTermBins",1,4);Buffer("PathSampleGroup",1,4);Buffer("PathFftPartitions",1,4);Buffer("PathSpectralPartitions",1,16);Buffer("PathGroupSpectra",1,8);
         Set("LateAdvance",0);Set("LatePower",0);Set("PathFloat",0);
         if(!pathMode)return;
         var bins=new PathBins(settings);pathBins=bins.Count;
@@ -39,11 +42,25 @@ internal sealed partial class GpuAudio
         var histogram=new PathBins(settings);
         var filters=PathReverb.BandFilters(lateRate,latePartition);
         var info=new List<uint>();var termBins=new List<uint>();var termWeights=new List<float>();var mix=new List<float>();
+        var fftPartitions=new List<uint>();var spectral=new List<uint>();var groupSpectra=new List<Vector2>();
         var sampleGroup=new int[checked(pairs*lateCount*latePartition)];var sampleValues=new Vector2[sampleGroup.Length];
         for(int pair=0;pair<pairs;pair++)
         {
-            var slots=PathReverb.BuildSlots(pair,histogram,lateRate,latePartition,lateCount,filters,false,true);
+            var slots=PathReverb.BuildSlots(pair,histogram,lateRate,latePartition,lateCount,filters,true,true);
             int first=info.Count/4;
+            // Partitions with at most two impulse groups are summed from the groups' spectra (PathBandGroups).
+            var members=new List<int>[lateCount];for(int q=0;q<lateCount;q++)members[q]=new List<int>();
+            for(int g=0;g<slots.groups.Count;g++)members[slots.groups[g].partition].Add(g);
+            for(int q=0;q<lateCount;q++)
+            {
+                uint entry=(uint)(pair*lateCount+q);
+                if(members[q].Count>2){fftPartitions.Add(entry);continue;}
+                uint g0=members[q].Count>0?(uint)(first+members[q][0]):0xffffffffu,g1=members[q].Count>1?(uint)(first+members[q][1]):0xffffffffu;
+                spectral.Add(entry);spectral.Add(g0);spectral.Add(g1);spectral.Add((uint)(groupSpectra.Count/(2*bins)));
+                foreach(int g in members[q])groupSpectra.AddRange(new ArraySegment<Vector2>(slots.spectra,g*2*bins,2*bins));
+                if(members[q].Count==1)groupSpectra.AddRange(new Vector2[2*bins]);   // (slot 1 unused, kept for a fixed stride of two)
+                if(members[q].Count==0)groupSpectra.AddRange(new Vector2[4*bins]);
+            }
             foreach(var g in slots.groups){info.Add((uint)pair);info.Add((uint)g.partition);info.Add((uint)(termBins.Count+g.first));info.Add((uint)g.terms);}
             for(int i=0;i<slots.bins.Count;i++){termBins.Add((uint)slots.bins[i]);termWeights.Add(slots.weights[i]);}
             mix.AddRange(slots.mix);
@@ -63,6 +80,12 @@ internal sealed partial class GpuAudio
         Buffer("PathSampleGroup",sampleGroup.Length,4).SetData(sampleGroup);
         Buffer("PathSampleValues",sampleValues.Length,8).SetData(sampleValues);
         Buffer("PathFilters",filters.Length,8).SetData(filters);
+        pathFftCount=fftPartitions.Count;pathSpectralCount=spectral.Count/4;
+        pathFftBuffer=Buffer("PathFftPartitions",Math.Max(1,pathFftCount),4);pathFftBuffer.SetData(pathFftCount>0?fftPartitions.ToArray():new uint[1]);
+        var all=new uint[pairs*lateCount];for(int i=0;i<all.Length;i++)all[i]=(uint)i;
+        pathAllBuffer=new ComputeBuffer(all.Length,4);owned.Add(pathAllBuffer);pathAllBuffer.SetData(all);
+        Buffer("PathSpectralPartitions",Math.Max(1,pathSpectralCount),16).SetData(pathSpectralCount>0?spectral.ToArray():new uint[4]);
+        Buffer("PathGroupSpectra",Math.Max(1,groupSpectra.Count),8).SetData(groupSpectra.Count>0?groupSpectra.ToArray():new Vector2[1]);
         var ears=LateBasis.Get(lateRate,latePartition,1,channels).EarWeights;
         Buffer("PathEarWeights",ears.Length,4).SetData(ears);
         var alphaBeta=new Vector2[TakeRender.Settings.LateBands];
@@ -126,7 +149,17 @@ internal sealed partial class GpuAudio
         commands.DispatchCompute(shader,pathGroups,(checked(channels*TakeRender.Settings.LateBands*pathGroupCount)+63)/64,1,1);
         if(!SkipPathKernels || !lateInitializedOnce)
         {
-            commands.DispatchCompute(shader,pathBand,checked(pairs*lateCount),1,1);
+            if(PathGroupSpectraOff)
+            {
+                commands.SetComputeBufferParam(shader,pathBand,"PathFftPartitions",pathAllBuffer);
+                commands.DispatchCompute(shader,pathBand,checked(pairs*lateCount),1,1);
+                commands.SetComputeBufferParam(shader,pathBand,"PathFftPartitions",pathFftBuffer);
+            }
+            else
+            {
+                if(pathFftCount>0)commands.DispatchCompute(shader,pathBand,pathFftCount,1,1);
+                if(pathSpectralCount>0)commands.DispatchCompute(shader,pathBandGroups,pathSpectralCount,1,1);
+            }
             commands.DispatchCompute(shader,pathPieces,checked(pairs*lateCount),1,1);
         }
         lateInitializedOnce=true;

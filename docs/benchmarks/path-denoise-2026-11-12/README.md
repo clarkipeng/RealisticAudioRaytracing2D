@@ -1386,3 +1386,79 @@ Still open, in order:
 - edge culling per band and by visibility (the edge slice and the edge connections, about 1.4 ms together);
 - the denoiser's dispatches (about 25 small ones);
 - overlap of the tracer with the audio. Unity issues compute work serially on Metal, so overlap hides latency but does not lower GPU time; it needs a measurement of whether the tracer leaves the GPU idle.
+
+## 29. Toward 5 ms, continued: group spectra, the denoiser's steps, edges, and whether 5 ms is in reach
+
+All times are from `MeasurePathLiveBudget` (interleaved variants, medians with the 10th–90th percentile range). They were taken on a quiet machine this time (load average 4–7).
+At that load the ranges are tight and earlier parts' loaded numbers run 1–2 ms high.
+
+**Audio: kernels from the groups' spectra** (`PathBandGroups`).
+Most of the late kernel's partitions hold one or two impulse groups.
+For those, the filtered partition is summed in the frequency domain from the groups' fixed spectra (PathReverb's own zero-padded FFTs of their two slot sequences), weighted by the band filters and the groups' coefficients. That replaces eight band FFTs per partition.
+The rest keep the band FFTs.
+It is exact: `GpuPathReverbMatchesTheCpuReference` gives the same agreement as before (3.75 × 10⁻⁵ binaural, 6.3 × 10⁻⁶ mono).
+
+| Variant (cap 16, population 11,000, no denoiser), 480 updates each | audio, ms |
+|---|---|
+| every partition through the band FFTs | 2.45 [2.30–2.77] |
+| group spectra where a partition has at most two groups | 2.17 [2.00–2.49] |
+| kernels built once, then left (a bound) | 1.34 [1.14–1.62] |
+
+- The kernel build went from 1.11 to 0.83 ms. That is less than the FFT count suggested: the early partitions, the transforms of the pieces and the coefficient passes remain.
+
+**Denoiser: where its time goes** (`MeasurePathDenoiserSteps`: a fence after each step at 447 bins, minus the fence's own round trip of about 0.2 ms).
+- The first convolution takes about 0.26 ms, the other seven about 0.07 ms each, the scale reduction about 0.07 ms.
+- Every other step is about 0.01–0.03 ms.
+- The convolutions are about 0.75 of the denoiser's 1.0 ms. Fusing the small steps' dispatches would save at most about 0.1 ms, so it was not done.
+- **Tiling, not kept:** a convolution staging its input in threadgroup memory (64 bins × 4 outputs per group, 32 channels at a time) matched the model (worst relative error 1.9 × 10⁻⁵) but was slower, 0.72 against 0.26 ms for the first layer and 0.26 against 0.08 ms for the others. Its barriers cost more than the reads it saved, so it was removed.
+- **Half precision: not tried.** Rounding the activations to 11 bits gives relative errors of order 10⁻³ per layer, against the check's tolerance of 2 × 10⁻³; it would need the check relaxed, which is not what was asked.
+- A smaller network, 64 channels wide instead of 96, would take the convolutions to about half; that needs retraining.
+
+**Edges.**
+- The Church has 14,075 diffracting edges, with lengths at the 10th, 50th and 90th percentiles of 0.13, 0.56 and 15.3 m.
+- **Per band, UTD validity.** UTD's wedge solution assumes the edge is long against the wavelength, so in a band where it is not, the method's UTD energy is not the edge's. Dropping such an edge from that band biases that band low by the edge's contribution, and BTM, which handles finite edges, is the reference for that bias. The Church's share of edges shorter than one wavelength is 2.4% at 16 kHz, 5.3% at 4 kHz, 29% at 1 kHz, 71% at 250 Hz and 77% at 125 Hz. The edge work is the same for all eight bands at once (one sampled point, one visibility ray, one UTD evaluation per band), so it is saved only for an edge culled in every band, which is the 2.4% shorter than 2 cm. That culling would save nothing measurable, so it was not built. Its bias against BTM was therefore not measured; the half-plane and solid checks use edges of metres and would not see it.
+- **By visibility of the listener's region.** The edge slice (about 0.8 ms) and the edge connections (part 28: about 0.6 ms with the straight ones) are the whole edge budget, so this culling could save at most about 1 ms. To stay unbiased it may drop only edges proven invisible from the whole region, which takes conservative occlusion queries per region. That was not built.
+
+**The whole update, quiet machine** (cap 16, group spectra, 320 updates each):
+
+| Population | tracer, ms | audio with the denoiser, ms | total |
+|---|---|---|---|
+| 11,000 | 5.15 [4.75–5.88] | 3.22 [2.90–3.93] | 8.4 |
+| 8,000 | 4.47 [4.02–5.28] | 3.22 [2.91–3.72] | 7.7 |
+| 6,000 | 3.59 [3.28–4.29] | 3.20 [2.90–3.81] | 6.8 |
+| 4,000 | 3.40 [3.02–4.12] | 3.18 [2.88–3.91] | 6.6 |
+| 11,000, without the denoiser | 5.17 [4.73–5.77] | 2.15 [1.91–2.59] | 7.3 |
+
+- Each phase's figure includes one fence's round trip (about 0.2 ms), so the GPU's own work is about 0.4 ms less than the total.
+- **Is 5 ms in reach?** Not with the present structure.
+- The audio side, the kernels, convolution and readback (about 2.2 ms) plus the denoiser (about 1.0 ms), does not depend on the number of rays.
+- The tracer has a floor of about 3.3 ms below 6,000 rays: the edge slice, the population control and the dispatches, and the chains of the rays that remain.
+- At 4,000 rays the update still costs 6.6 ms.
+
+**The two remaining routes, with numbers** (neither built; the user decides).
+
+(a) **Hardware ray tracing through a native Metal plugin.**
+- Part 28 measured traversal at about a third of the tracer. At 11,000 rays on the quiet machine that is about 1.7 ms of 5.15 ms; at lower populations it is less.
+- Hardware traversal would recover most of it but not all, since the queries remain.
+- Expected: the update from 8.4 to about 6.9–7.2 ms at today's accuracy.
+- Cost: a second shader toolchain for the walk (HLSL through DXC and SPIRV-Cross to Metal, with the intersector call patched in), a native plugin that builds and refits the acceleration structures, and both kept in step with every shader change.
+
+(b) **Fewer rays, the denoiser compensating** (`route_b.py` beside this file, after `lottery.py plan` and `MeasurePathPersistentSequences`; Church standing and walking, updates 32–63, two seeds, against part 25's 8 N targets; window / band level / decay curve in dB; the target's own noise is about 4.5–6 dB in window, so all rows are inflated alike):
+
+| Population (cap 16) | update, ms | noisy input | after the denoiser |
+|---|---|---|---|
+| 11,000 (today) | 8.4 | 10.37 / 5.09 / 4.68 | 6.43 / 2.03 / 2.74 |
+| 6,000 | 6.8 | 11.81 / 5.81 / 5.87 | 7.98 / 3.35 / 4.45 |
+| 4,000 | 6.6 | 13.01 / 6.79 / 6.56 | 8.43 / 2.36 / 4.59 |
+
+- No population fits 5 ms: the update still costs 6.6 ms at 4,000 rays.
+- Halving the rays costs about 1.5 dB of window error and 1.7 dB of decay curve after denoising, and the denoiser was trained at the 23 ms populations, not at these.
+- So fewer rays alone cannot reach 5 ms.
+- With (a), and the denoiser retrained 64 channels wide (about −0.4 ms), the update would come to about 5.6–6 ms at 6,000 rays, still at (b)'s accuracy cost.
+
+**5 ms needs the fixed costs to fall.** About 3.2 ms of audio and denoiser, and the tracer's 3.3 ms floor below 6,000 rays, do not scale with the number of rays.
+Candidates, unmeasured:
+- the convolution's partitions run at a coarser block for the late tail (non-uniform partitions; the late field changes slowly);
+- the late kernel rebuilt every second update with the crossfade kept (a stated approximation of 23 ms in the late tail's timing);
+- the denoiser narrowed and retrained;
+- the edge slice refreshed less often (its weights are an importance distribution, so any refresh rate is unbiased).

@@ -29,6 +29,9 @@ public sealed class PathDenoiser : IDisposable
     readonly int outBase;
     readonly bool ownsOutput;
     CommandBuffer cb;
+    // Profiling only (MeasurePathDenoiserSteps): called after each step with the work so far executed.
+    internal Action<string> StepFence;
+    void Mark(string step) { if (StepFence == null) return; Graphics.ExecuteCommandBuffer(cb); cb.Clear(); StepFence(step); }
     readonly int convert, ingest, scale, features, smooth, cellMean, normaliser, convolve, predict, totals, conserve;
     readonly float[] decays;
     static readonly double[] SegmentStarts = {.05, .2};   // tools/path_denoise.py SEGMENTS
@@ -123,7 +126,7 @@ public sealed class PathDenoiser : IDisposable
 
     void Run()
     {
-        cb.BeginSample(ProfilerSample);
+        if (StepFence == null) cb.BeginSample(ProfilerSample);
         int cells = Cells * Bins;
         int slot = Updates % K;
         Updates++;
@@ -136,17 +139,23 @@ public sealed class PathDenoiser : IDisposable
             Int("Slot", s); Int("UpdateAverages", s == slot ? 1 : 0);
             cb.DispatchCompute(shader, ingest, Groups(cells), 1, 1);
         }
+        Mark("ingest");
         Int("Slot", slot);
         Bind(scale, ("History", history), ("Ema", ema), ("Sums", sums));
         cb.DispatchCompute(shader, scale, 1, 1, 1);
+        Mark("scale");
         Bind(features, ("History", history), ("CountHistory", countHistory), ("Ema", ema), ("Sums", sums), ("X", x), ("Ms", ms), ("Norm", norm));
         cb.DispatchCompute(shader, features, Groups(cells), 1, 1);
+        Mark("features");
         Bind(smooth, ("Norm", norm), ("Smoothed", smoothed));
         cb.DispatchCompute(shader, smooth, Groups(cells), 1, 1);
+        Mark("smooth");
         Bind(cellMean, ("Smoothed", smoothed), ("Norm", norm), ("BinMean", binMean), ("Sums", sums));
         cb.DispatchCompute(shader, cellMean, Math.Max(1, (Bins + 255) / 256), 1, 1);
+        Mark("cellMean");
         Bind(normaliser, ("Smoothed", smoothed), ("BinMean", binMean), ("Sums", sums), ("Norm", norm));
         cb.DispatchCompute(shader, normaliser, Groups(cells), 1, 1);
+        Mark("normaliser");
         var input = x;
         for (int l = 0; l < header.layers.Length; l++)
         {
@@ -159,14 +168,18 @@ public sealed class PathDenoiser : IDisposable
             Bind(convolve, ("Weights", weights), ("Input", input), ("Output", output));
             cb.DispatchCompute(shader, convolve, Groups(Bins), layer.output, 1);
             input = output;
+            Mark("conv" + l);
         }
         Bind(predict, ("Raw", raw), ("Ms", ms), ("Norm", norm), ("Den", den));
         cb.DispatchCompute(shader, predict, Groups(cells), 1, 1);
+        Mark("predict");
         Bind(totals, ("Den", den), ("Ms", ms), ("Raw", raw), ("Segment", segment), ("Sums", sums));
         cb.DispatchCompute(shader, totals, 8 * 3, 1, 1);
+        Mark("totals");
         Bind(conserve, ("Den", den), ("Segment", segment), ("Sums", sums), ("Out", outBuffer));
         cb.DispatchCompute(shader, conserve, Groups(cells), 1, 1);
-        cb.EndSample(ProfilerSample);
+        Mark("conserve");
+        if (StepFence == null) cb.EndSample(ProfilerSample);
     }
 
     public void Dispose()

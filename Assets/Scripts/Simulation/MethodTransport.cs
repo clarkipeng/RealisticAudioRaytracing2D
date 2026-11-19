@@ -232,6 +232,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 if (Math.Abs(nu - Math.Round(nu)) > 1e-3) kept.Add(edge);
             }
             EdgeCount = kept.Count; DroppedEdges = all.Length - kept.Count;
+            EdgeLengths = kept.ConvertAll(e => ((Vector3)(e.b - e.a)).magnitude).ToArray();
             edgeBuffer = new ComputeBuffer(Math.Max(1, kept.Count), 80);
             if (kept.Count > 0) edgeBuffer.SetData(kept);
             var adjacency = new List<int>[Math.Max(1, geometry.Length)];
@@ -649,6 +650,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         pathLive.GetData(live);
         return (int)Math.Min(live[pair * 2 + parity[pair]], (uint)PersistentCapacity);
     }
+    internal float[] EdgeLengths = Array.Empty<float>();   // diagnostics: each diffracting edge's length
     public long RaysOverflowed() => PersistentCount(2);
     // Live diagnostics without a stall: the latest asynchronous read of the rays in flight (pair 0), -1 before one.
     public const string TraceSample = "Acoustics.GPU.PathTrace";
