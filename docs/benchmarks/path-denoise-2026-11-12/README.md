@@ -1314,3 +1314,75 @@ The measurement to make first is the walk with the traversal replaced by a trivi
 - **Overlap.** The tracer of update n+1 with the audio of update n.
 
 None of these have been measured yet.
+
+## 28. Toward 5 ms: trustworthy timing, the traversal's share, the long-chain lottery, the FFT's twiddles
+
+**Timing.**
+`MeasurePathLiveBudget` now measures every variant in one process, interleaved in rounds of 8 updates (25 rounds, 200 updates each, after a horizon of warm-up each).
+Drift from other work on the machine therefore falls on every variant alike.
+It reports the median and the 10th–90th percentile range per phase, and the load average before and after.
+The heavy-job lock is held throughout, but other users' light jobs kept the machine's load at 10–30 during every run here; that cannot be switched off from this side.
+So the absolute times below carry wide ranges, and the comparisons rely on the interleaving: within one run the medians of identical work agree to about 0.1 ms.
+
+**The traversal's share** (a profiling bit, since removed, that traced each walk segment twice; the second query is identical, so the chains do not change and the extra time is one traversal per step).
+Interleaved, at load 11–20:
+
+| Variant | tracer, ms (median [10th–90th]) |
+|---|---|
+| as is | 7.90 [6.90–9.24] |
+| each segment traced twice | 10.51 [9.41–12.42] |
+| no histogram or ring writes | 7.88 [6.92–9.78] |
+| no shortcut and no edge connections | 7.31 [6.30–8.69] |
+
+- The traversal is about 2.6 ms of the tracer's 7.9 ms, a third.
+- Hardware ray tracing could at best remove most of that, about 2 ms, and leaves the other two thirds (beam scoring, the walk's bookkeeping, population control, the edge slice).
+- That is real, but not by itself the route to 5 ms. The native plugin's cost (a second shader toolchain for the walk) is not justified yet; it is the first lever after the cheaper ones below.
+- The histogram and ring writes cost nothing measurable (7.88 against 7.90 ms), so accumulating them in threadgroup memory instead of global atomics would gain nothing; it was not built.
+- The connections are about 0.6 ms.
+
+**The long-chain lottery** (`settings.pathIterationCap`, `pathIterationSurvival` = 0.75).
+After `pathIterationCap` loop iterations of a ray within one update, each further reflection survives with probability 0.75 and the survivor is reweighted, which is unbiased.
+Time, interleaved at load 27–31 (wide ranges, stable medians):
+
+| Variant | tracer, ms |
+|---|---|
+| population 11,000, no cap | 7.68 [6.43–12.03] |
+| cap 32 | 6.63 [5.53–11.73] |
+| cap 32, population 14,000 | 7.75 [6.67–12.08] |
+| cap 32, population 17,000 | 8.70 [7.38–12.76] |
+| cap 16 | 6.06 [5.13–10.81] |
+
+Noise, Church standing and walking windows (2 seeds × 64 updates each), in dB.
+"Seed against seed" compares two independent runs, so the target's own noise is absent; "against 8 N" compares with part 25's 8 N targets.
+
+| Variant | seed against seed: window / level / decay | against 8 N: window / level / decay |
+|---|---|---|
+| population 11,000, no cap (part 25's runs) | 8.31 / 5.57 / 5.17 | 10.23 / 5.15 / 4.81 |
+| population 11,000, cap 32 | 8.34 / 5.76 / 5.06 | 10.12 / 5.17 / 4.76 |
+| population 14,000, no cap | 8.26 / 5.47 / 4.82 | 9.73 / 4.65 / 4.59 |
+| population 14,000, cap 32 | 8.40 / 5.41 / 5.05 | 9.77 / 4.56 / 4.67 |
+| population 14,000, cap 16 | 8.21 / 5.36 / 5.08 | 9.69 / 4.66 / 4.64 |
+
+- At the same population the lottery's extra noise is below what these runs resolve (cap 32 at 11,000 against no cap: 10.12 against 10.23 dB).
+- At equal time it wins: cap 32 at 14,000 costs what no cap costs at 11,000 (7.75 against 7.68 ms) and is about 0.5 dB closer to the target in window and level, the gain of 27% more rays.
+- Cap 16 at 14,000 matches no cap at 14,000 in noise. In the dataset render it took 6.0 ms against 7.8 ms per update.
+- It is kept. The playable Church uses cap 16. The default stays off, so the checks that compare persistent and full solves ray for ray keep their meaning.
+
+**The FFT's twiddles.**
+The shared FFT evaluated a sine and a cosine per butterfly. It now reads them from a table computed in double precision, 1,024 entries for every size up to 2,048.
+The audio phase went from 3.53 to 3.39 ms, interleaved.
+`GpuPathReverbMatchesTheCpuReference` and the GPU audio parity checks pass unchanged.
+
+**Where the audio's time goes** (profiling switch `GpuAudio.SkipPathKernels`: build the path kernels once and then leave them).
+3.39 ms with the kernels built every update, 1.93 ms without, so the kernel build is about 1.5 ms. The rest is the input transform, the partitioned convolution, the direct path, and the readback with its fence.
+Rebuilding only kernels whose bins changed beyond noise was not built. Undenoised, the Church's late bins change by several dB between updates (part 25's seed-against-seed errors), so most kernels would be rebuilt anyway.
+The exact alternative is cheaper: about 220 of the 283 partitions hold at most two impulse groups. Their kernels can be summed from fixed group spectra (16 multiply-adds per bin and ear) instead of eight band FFTs, which would cut the kernel build to about a third. It is the next change.
+
+**Where this leaves the budget** (medians from these runs at load 10–30): tracer about 6.1 ms with cap 16, audio about 3.4 ms, denoiser about 1.2 ms, against 7.7, 3.5 and 1.3 ms at the start of this part.
+On a quiet machine part 27 measured 6.2, 2.3 and 1.0 ms for the earlier code.
+
+Still open, in order:
+- the group-spectra kernel build (about 1 ms);
+- edge culling per band and by visibility (the edge slice and the edge connections, about 1.4 ms together);
+- the denoiser's dispatches (about 25 small ones);
+- overlap of the tracer with the audio. Unity issues compute work serially on Metal, so overlap hides latency but does not lower GPU time; it needs a measurement of whether the tracer leaves the GPU idle.

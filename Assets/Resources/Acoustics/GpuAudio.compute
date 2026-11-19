@@ -297,6 +297,9 @@ void AudioMatch(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
         }
     }
 }
+// Twiddles exp(-2 pi i j / 2048), j < 1024, computed in double precision once (GpuAudio); the table replaces a
+// sine and a cosine per butterfly.
+StructuredBuffer<float2> AudioTwiddles;
 void AudioFftShared(uint n,bool inverse,uint thread)
 {
     uint bits=(uint)firstbithigh(n);
@@ -306,8 +309,8 @@ void AudioFftShared(uint n,bool inverse,uint thread)
     {
         for(uint i=thread;i<n/2;i+=256)
         {
-            uint k=i%(step/2),at=(i/(step/2))*step+k;float angle=(inverse?2:-2)*AUDIO_PI*k/step;
-            float2 a=AudioShared[at],b=AudioMultiply(AudioShared[at+step/2],float2(cos(angle),sin(angle)));
+            uint k=i%(step/2),at=(i/(step/2))*step+k;float2 w=AudioTwiddles[k*(AUDIO_SHARED/step)];if(inverse)w.y=-w.y;
+            float2 a=AudioShared[at],b=AudioMultiply(AudioShared[at+step/2],w);
             AudioShared[at]=a+b;AudioShared[at+step/2]=a-b;
         }
         GroupMemoryBarrierWithGroupSync();

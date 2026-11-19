@@ -22,7 +22,7 @@ public partial class TakeChecks
         public string kind, spec, job, output;
         public float[] track;     // scene items: listener xyz per update (warm + record)
         public long[] samples;    // take items: take sample per update
-        public int warm, record, population;
+        public int warm, record, population, iterationCap;   // iterationCap: settings.pathIterationCap (0: off)
         public float highFactor = 8;
         public int[] seeds, highSeeds;
     }
@@ -81,7 +81,7 @@ public partial class TakeChecks
                 {
                     var settings = JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(template));
                     settings.method = TakeRender.Method.Path; settings.pathPersistent = true; settings.pathPopulation = population;
-                    settings.responseStepSamples = step; settings.seed = seed; settings.pathHistogramExport = settings.pathHistogramImport = "";
+                    settings.responseStepSamples = step; settings.seed = seed; settings.pathIterationCap = item.iterationCap; settings.pathHistogramExport = settings.pathHistogramImport = "";
                     return new TransportSolver(scene, geometry, settings, shader, sampleRate: rate);
                 }
                 int population = item.population;

@@ -32,6 +32,8 @@ internal sealed partial class GpuAudio : IDisposable
     const int Header=8,SumTiles=16;
     public TakeRender.AudioDiagnostics Diagnostics {get;}=new TakeRender.AudioDiagnostics();
     public long NumericBytes {get;private set;}
+    // Profiling only (MeasurePathLiveBudget): the path kernels built once and then left (a bound on their cost).
+    internal bool SkipPathKernels;
     public int ResponseSupportSamples {get;private set;}
     public bool IsPending=>pending;
     public long UploadedBytes {get;private set;}
@@ -115,6 +117,8 @@ internal sealed partial class GpuAudio : IDisposable
             transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(maximumGroups,listeners*channels)*fft),8):work;
             Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
+            var twiddles=new Vector2[1024];for(int j=0;j<twiddles.Length;j++)twiddles[j]=new Vector2((float)Math.Cos(-2*Math.PI*j/2048),(float)Math.Sin(-2*Math.PI*j/2048));
+            Buffer("AudioTwiddles",twiddles.Length,8).SetData(twiddles);
             PrepareEars(hrtf);
             PrepareLate(scene,rate);PreparePath(settings,rate);
             if(pathMode && settings.pathDenoise)

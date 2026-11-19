@@ -61,6 +61,9 @@ float PathVolumeSide(uint owner)
 // the unfolded length from it: a diffuse reflection keeps no phase relation with the path before it, so the
 // scattering point is the new source of the Gaussian beam argument (w^2 = lambda L / pi, L from the chain's origin).
 uint PathBeamsOnly;
+// Persistent rays: past this many loop iterations within one update, every further reflection is survived with
+// probability PathIterationSurvival (weight / probability: unbiased); bounds the update's longest serial chains.
+uint PathIterationCap; float PathIterationSurvival;
 // Persistent rays (see "Persistent rays" below): on/off, pool capacity and offsets, the update period.
 uint PathPersistent, PathCapacity, PathReadBase, PathWriteBase, PathReadCount, PathWriteCount, PathOverflowCount, PathFlush;
 float PathStep;
@@ -929,6 +932,7 @@ void TracePath(uint index)
             [unroll] for (uint k17 = 0; k17 < MethodBands; k17++) fluxNow = max(fluxNow, Phi0[k17] * C[k17]);
             survive = min(survive, fluxNow / (Q * 4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
         }
+        if (PathIterationCap != 0 && iterations > PathIterationCap) survive *= PathIterationSurvival;
         float alive = PathSurvival(tau);
         survive *= alive / survival;
         survival = alive;

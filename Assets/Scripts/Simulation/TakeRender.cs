@@ -116,6 +116,9 @@ public static partial class TakeRender
         public int pathPopulation;
         [Tooltip("Path method, persistent rays, GPU audio: denoise each update's histogram with the bundled persistent-ray denoiser (Resources/Acoustics/PathDenoise; docs/benchmarks/path-denoise-2026-11-12, part 25) before the reverb is built.")]
         public bool pathDenoise;
+        [Min(0),Tooltip("Path method, persistent rays: past this many loop iterations of a ray within one update, each further reflection survives with probability pathIterationSurvival and the survivors are reweighted (unbiased). It bounds the update's long serial chains (rays caught between close surfaces), which set the update's time. Zero: off.")]
+        public int pathIterationCap;
+        [Range(.05f,1)] public float pathIterationSurvival=.75f;
         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
         public string pathHistogramExport="";
         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]

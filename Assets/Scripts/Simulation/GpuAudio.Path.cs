@@ -11,7 +11,7 @@ using UnityEngine;
 internal sealed partial class GpuAudio
 {
     int pathEar,pathGroups,pathBand,pathPieces,pathPowers;
-    bool pathMode;
+    bool pathMode,lateInitializedOnce;
     int pathBins,pathGroupCount;
     ComputeBuffer pathDenoised;
     PathDenoiser[] denoisers;
@@ -124,8 +124,12 @@ internal sealed partial class GpuAudio
         commands.BeginSample("Acoustics.GPU.PathKernels");
         commands.DispatchCompute(shader,pathEar,(checked(pairs*channels*TakeRender.Settings.LateBands*pathBins)+63)/64,1,1);
         commands.DispatchCompute(shader,pathGroups,(checked(channels*TakeRender.Settings.LateBands*pathGroupCount)+63)/64,1,1);
-        commands.DispatchCompute(shader,pathBand,checked(pairs*lateCount),1,1);
-        commands.DispatchCompute(shader,pathPieces,checked(pairs*lateCount),1,1);
+        if(!SkipPathKernels || !lateInitializedOnce)
+        {
+            commands.DispatchCompute(shader,pathBand,checked(pairs*lateCount),1,1);
+            commands.DispatchCompute(shader,pathPieces,checked(pairs*lateCount),1,1);
+        }
+        lateInitializedOnce=true;
         commands.EndSample("Acoustics.GPU.PathKernels");
     }
 

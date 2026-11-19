@@ -136,17 +136,23 @@ public partial class TakeChecks
         UnityEngine.Debug.Log($"PathReverb CPU at 48 kHz, binaural, 8 bands, 6 s ({bins.Count} bins): kernel build {b0:F1} ms per update, convolution {r0:F1} ms per block of {step} (an update lasts {1000.0 * step / rate:F1} ms)");
     }
 
-    // Opt-in (ACOUSTIC_PATH_BUDGET=/abs/job.json, a TakeBatch job of the Church; ACOUSTIC_PATH_BUDGET_POPULATION, default
-    // 11000): the live path method's GPU time per update in the Church, as the playable Church runs it (persistent
-    // rays under population control, GPU audio, binaural), with a fence after each phase: the tracer's update, then
-    // the audio (the denoiser if on, the path kernels, the convolution, the readback of 1,024 samples), and the CPU
-    // time of the audio calls. Medians over 40 updates after a horizon of them, the listener on the take's walk.
+    // Opt-in (ACOUSTIC_PATH_BUDGET=/abs/job.json, a TakeBatch job of the Church): the live path method's GPU time per
+    // update in the Church, as the playable Church runs it (persistent rays under population control, GPU audio,
+    // binaural), with a fence after each phase: the tracer's update, then the audio (the denoiser if on, the path
+    // kernels, the convolution, the readback of 1,024 samples), and the CPU time of the audio calls.
+    // ACOUSTIC_PATH_BUDGET_VARIANTS: variants separated by ';', each "name:key=value,..." with keys population,
+    // denoise (0/1), flags (MethodTransport.ProfileFlags), iterationCap, kernels (0: the path kernels built once and
+    // then left, a profiling bound); default "base:". All variants live in one
+    // process and are measured interleaved, in rounds of 8 updates each (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25),
+    // after a horizon of warm-up updates each, so drift from other work on the machine falls on every variant
+    // alike. Reported: median and the 10th-90th percentile range per phase, and the load average before and after.
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
     public void MeasurePathLiveBudget()
     {
         string file = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET");
         if (string.IsNullOrEmpty(file)) Assert.Ignore("Set ACOUSTIC_PATH_BUDGET.");
-        int population = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_POPULATION") ?? "11000");
+        string spec = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_VARIANTS") ?? "base:";
+        int rounds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_ROUNDS") ?? "25"), perRound = 8;
         var shader = RequireGpu();
         var job = TakeBatch.ParseJob(File.ReadAllText(file));
         using var take = AcousticTake.Open(job.take);
@@ -154,35 +160,63 @@ public partial class TakeChecks
         var clips = new float[scene.clips.Length][]; for (int c = 0; c < clips.Length; c++) clips[c] = take.ReadClip(c);
         using var probe = new ComputeBuffer(1, 4);
         void Fence() => AsyncGPUReadback.Request(probe).WaitForCompletion();
-        foreach (bool denoise in new[] {false, true})
+        string Load() { try { var p = System.Diagnostics.Process.Start(new ProcessStartInfo("/usr/sbin/sysctl", "-n vm.loadavg") {RedirectStandardOutput = true, UseShellExecute = false}); string o = p.StandardOutput.ReadToEnd().Trim(); p.WaitForExit(); return o; } catch { return "?"; } }
+        string loadBefore = Load();
+        var variants = new System.Collections.Generic.List<(string name, GpuAudio gpu, TransportSolver solver, AcousticTake.State[] state, long cursor, System.Collections.Generic.List<double>[] times)>();
+        try
         {
-            var settings = JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(job.settings));
-            settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
-            settings.pathPopulation = population; settings.pathDenoise = denoise; settings.maximumResponsesPerBatch = 1;
-            settings.pathHistogramExport = settings.pathHistogramImport = "";
-            var signals = TakeRender.Signal.FromTake(take, clips);
-            using var gpu = new GpuAudio(scene, rate, settings, signals, 1, transported: true);
-            using var solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
-            var state = new AcousticTake.State[scene.objects.Length]; var pcm = new float[settings.responseStepSamples * 2];
-            int warm = solver.Method.WarmUpdates, measured = 40, step = settings.responseStepSamples;
-            var trace = new double[measured]; var audio = new double[measured]; var cpu = new double[measured];
-            for (int u = 0; u < warm + measured; u++)
+            foreach (string entry in spec.Split(';'))
             {
-                long sample = (long)u * step;
-                take.Evaluate(Math.Min(7 * 44100L + sample, take.Metadata.durationSamples), state);
+                string name = entry.Split(':')[0];
+                var settings = JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(job.settings));
+                settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
+                settings.pathPopulation = 11000; settings.pathDenoise = false; settings.maximumResponsesPerBatch = 1;
+                settings.pathHistogramExport = settings.pathHistogramImport = "";
+                int flags = 0, kernels = 1;
+                string options = entry.Contains(":") ? entry.Substring(entry.IndexOf(':') + 1) : "";
+                foreach (string kv in options.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var p = kv.Split('='); int v = int.Parse(p[1]);
+                    switch (p[0])
+                    {
+                        case "population": settings.pathPopulation = v; break;
+                        case "denoise": settings.pathDenoise = v != 0; break;
+                        case "flags": flags = v; break;
+                        case "kernels": kernels = v; break;
+                        case "iterationCap": settings.pathIterationCap = v; break;
+                        default: throw new ArgumentException("Unknown budget option " + p[0]);
+                    }
+                }
+                var gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
+                var solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
+                solver.Method.ProfileFlags = flags;
+                gpu.SkipPathKernels = kernels == 0;
+                variants.Add((name, gpu, solver, new AcousticTake.State[scene.objects.Length], 0, new[] {new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>()}));
+            }
+            var pcm = new float[2048];
+            void Update(int i, bool record)
+            {
+                var v = variants[i]; int step = 1024; long sample = v.cursor;
+                take.Evaluate(Math.Min(7 * 44100L + sample % (8 * 44100L), take.Metadata.durationSamples), v.state);
                 Fence();
                 var w = Stopwatch.StartNew();
-                solver.BeginSolve(state, 1, false); Fence();
+                v.solver.BeginSolve(v.state, 1, false); Fence();
                 double t = w.Elapsed.TotalMilliseconds; w.Restart();
-                gpu.SetResponse(sample, u == 0, solver.RayBuffer, 0, scene, state, late: solver.Late(0));
-                gpu.QueueRender(sample, step); double c = w.Elapsed.TotalMilliseconds;
-                gpu.BeginReadback(); gpu.TryComplete(pcm, true); solver.CompleteAfterGpuAudio();
+                v.gpu.SetResponse(sample, sample == 0, v.solver.RayBuffer, 0, scene, v.state, late: v.solver.Late(0));
+                v.gpu.QueueRender(sample, step); double c = w.Elapsed.TotalMilliseconds;
+                v.gpu.BeginReadback(); v.gpu.TryComplete(pcm, true); v.solver.CompleteAfterGpuAudio();
                 double a = w.Elapsed.TotalMilliseconds;
-                if (u >= warm) { trace[u - warm] = t; audio[u - warm] = a; cpu[u - warm] = c; }
+                if (record) { v.times[0].Add(t); v.times[1].Add(a); v.times[2].Add(c); }
+                variants[i] = (v.name, v.gpu, v.solver, v.state, sample + step, v.times);
             }
-            double Median(double[] v) { var x = (double[])v.Clone(); Array.Sort(x); return x[x.Length / 2]; }
-            UnityEngine.Debug.Log($"PATH_BUDGET population {population}, denoiser {(denoise ? "on" : "off")}: tracer {Median(trace):F2} ms, audio {Median(audio):F2} ms " +
-                                  $"(CPU calls {Median(cpu):F2} ms), {solver.Method.Rays} new rays per update, {take.Geometry.Length} triangles");
+            for (int i = 0; i < variants.Count; i++) for (int u = 0; u < variants[i].solver.Method.WarmUpdates; u++) Update(i, false);
+            for (int r = 0; r < rounds; r++) for (int i = 0; i < variants.Count; i++) for (int u = 0; u < perRound; u++) Update(i, true);
+            string Stat(System.Collections.Generic.List<double> v) { var x = v.ToArray(); Array.Sort(x); return $"{x[x.Length / 2]:F2} [{x[x.Length / 10]:F2}-{x[x.Length * 9 / 10]:F2}]"; }
+            string loadAfter = Load();
+            foreach (var v in variants)
+                UnityEngine.Debug.Log($"PATH_BUDGET {v.name}: tracer {Stat(v.times[0])} ms, audio {Stat(v.times[1])} ms, CPU calls {Stat(v.times[2])} ms; " +
+                                      $"{v.times[0].Count} updates, population {v.solver.Method.LastRaysInFlight}, load {loadBefore} -> {loadAfter}");
         }
+        finally { foreach (var v in variants) { v.gpu.Dispose(); v.solver.Dispose(); } }
     }
 }

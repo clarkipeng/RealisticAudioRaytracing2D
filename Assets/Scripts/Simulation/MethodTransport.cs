@@ -454,6 +454,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetInt("PathAudio", audio ? 1 : 0);
                 shader.SetInt("PathProfileFlags", 0);
                 shader.SetFloat("PathSurvivalSeconds", population ? 0 : settings.pathSurvivalSeconds); // (population control applies the age profile itself)
+                shader.SetInt("PathIterationCap", persistent ? Math.Max(0, settings.pathIterationCap) : 0); shader.SetFloat("PathIterationSurvival", Mathf.Clamp(settings.pathIterationSurvival, .05f, 1));
                 shader.SetInt("PathPopulation", population ? 1 : 0); shader.SetInt("PathCohorts", Math.Max(1, cohorts));
                 shader.SetFloat("PathCohortTarget", Rays); shader.SetFloat("PathFineEnd", settings.pathFineBins * settings.pathBinSeconds);
                 shader.SetInt("PathPersistent", persistent ? 1 : 0);
@@ -804,6 +805,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (frames < 1 || frames > Frames) throw new ArgumentOutOfRangeException(nameof(frames));
         EnsureRing(null);
         bind();
+        if (path) shader.SetInt("PathProfileFlags", ProfileFlags); // (profiling only; zero in use)
         shader.SetInt("BvhNodeCount", bvhNodeCount);
         long start = Stopwatch.GetTimestamp();
         // A GPU profiler sample around the updates (the live HUD reads its time with a Recorder).
