@@ -32,7 +32,7 @@ uint PathFineBins, PathBins, PathCountBase, PathCountCells, PathAudio;
 uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 2 straight connections, 3 edge connections; bit 4 traces every blocked connection;
                       // diagnostics (docs/benchmarks/path-denoise-2026-11-12, part 6): bit 5 stops rays (and zeroes branches) that refract into a medium
                       // outside a partition, counted as nonFinite; bit 10 draws small transmissions instead of keeping reservoir branches; bit 14 keeps
-                      // only unobstructed straight connections
+                      // only unobstructed straight connections; bit 15 traces every walk segment twice (the traversal's share)
 // Survival in time (Russian roulette per time bin, weight-compensated, unbiased): a path is alive at
 // time t with probability S(t) = min(1, PathSurvivalSeconds / t). The histogram's bins widen in
 // proportion to t after the fine region, so with S proportional to 1/t each bin keeps about as many
@@ -66,7 +66,7 @@ uint PathBeamsOnly;
 uint PathIterationCap; float PathIterationSurvival;
 // Persistent rays (see "Persistent rays" below): on/off, pool capacity and offsets, the update period.
 uint PathPersistent, PathCapacity, PathReadBase, PathWriteBase, PathReadCount, PathWriteCount, PathOverflowCount, PathFlush;
-float PathStep;
+float PathStep, PathLaunchScale;
 // Beams (docs/benchmarks/path-denoise-2026-11-12, part 8; they replaced an exact connection of
 // specular chains by detection regions, geometric trials and image retrace): every ray segment after
 // at least one specular reflection scores at the listener with a normalised Gaussian kernel of its distance rho
@@ -470,23 +470,115 @@ void PathPersistentBegin()
     if (PathPopulation != 0) { [loop] for (uint k = 0; k < PathCohorts; k++) PathCohortCount[PathCohortBase + k] = 0; }
 }
 // Population control, after the walk: the walk wrote its rays to the scratch pool (PathWriteBase); they go back
-// to the pool the next update reads (PathReadBase), split or kept by lottery.
-void PathControlBegin() { PathLive[PathReadCount] = 0; }
-void PathControl(uint index)
+// to the pool the next update reads (PathReadBase), split or kept by lottery. A ray's copies and the divisor of its
+// weight (rho) depend only on the ray and its cohort's count, so the passes below recompute them alike.
+uint PathCopies(PathRay r, out float rho, out uint rng)
+{
+    float age = r.direction.w;
+    rho = min(PathCohortWanted(age) / max(1, PathCohortCount[PathCohortBase + PathCohortOf(age)]), PathSplitLimit);
+    rng = HashRay(r.meta.z ^ 0x27d4eb2fu);
+    return (uint)floor(rho) + (RandomRay(rng) < frac(rho) ? 1u : 0u);
+}
+// Coherence (README part 31): the kept copies are written by their direction's octant, then in Morton order of their
+// position's cell, by a counting sort fused with population control (count, scan, scatter, in place of an atomic
+// append), so that neighbouring threads of the next update's walk trace neighbouring rays in similar directions and
+// visit the same tree nodes in the same order (the octant first: it was 0.5 ms faster than the cell first). Only the order of the pool changes, so every estimate is unchanged in distribution.
+// Cells: 2^PathSortBits per axis, the quantiles of the rays' positions along that axis at the previous update (equal
+// numbers of rays per slab), read from a histogram of PathSortFine bins over the scene's box (PathSortLow, PathSortScale:
+// bins per metre). A box of the geometry alone would not do: the Church's meadow makes its box ten times the church's.
+// ProfileFlags bit 16 gives every ray key 0 (the atomic order, as before).
+static const uint PathSortBits = 4, PathSortKeys = 1u << (3 * PathSortBits + 3), PathScanThreads = 1024, PathSortFine = 1024;
+RWStructuredBuffer<uint> PathSortBuckets; // [pair]: copies per key [PathSortKeys] (zero between updates), each key's first slot [PathSortKeys],
+                                          // then per axis the copies per fine bin [PathSortFine] (zero between updates) and each fine bin's cell [PathSortFine]
+RWStructuredBuffer<uint2> PathSortEntry;  // [pair][PathCapacity]: per ray of the scratch pool, its key and copies (key | copies << 24) and its
+                                          // first copy's offset in the key
+uint PathSortBase, PathSortEntryBase;
+float4 PathSortLow, PathSortScale;
+uint PathSpread(uint v) // bits of a PathSortBits-bit value two apart (Morton interleave)
+{
+    v &= 0x3ff;
+    v = (v | (v << 16)) & 0x030000ffu; v = (v | (v << 8)) & 0x0300f00fu;
+    v = (v | (v << 4)) & 0x030c30c3u; v = (v | (v << 2)) & 0x09249249u;
+    return v;
+}
+uint PathSortAxis(uint axis) { return PathSortBase + 2 * PathSortKeys + axis * 2 * PathSortFine; }
+// Pass 1, per ray of the scratch pool: its copies, counted under its key (the count before them is its offset) and in
+// the fine bins of its position (the next update's cells).
+void PathSortCount(uint index)
 {
     if (index >= min(PathLive[PathWriteCount], PathCapacity)) return;
     PathRay r = PathRays[PathWriteBase + index];
-    float age = r.direction.w, rho = PathCohortWanted(age) / max(1, PathCohortCount[PathCohortBase + PathCohortOf(age)]);
-    rho = min(rho, PathSplitLimit);
-    uint rng = HashRay(r.meta.z ^ 0x27d4eb2fu);
-    uint copies = (uint)floor(rho) + (RandomRay(rng) < frac(rho) ? 1u : 0u);
+    float rho; uint rng;
+    uint copies = PathCopies(r, rho, rng), key = 0, offset = 0;
+    if (copies > 0 && (PathProfileFlags & 65536) == 0)
+    {
+        uint3 fine = (uint3)clamp(floor((r.position.xyz - PathSortLow.xyz) * PathSortScale.xyz), 0.0, (float)(PathSortFine - 1)), cell = 0;
+        [unroll] for (uint axis = 0; axis < 3; axis++)
+        {
+            InterlockedAdd(PathSortBuckets[PathSortAxis(axis) + fine[axis]], copies);
+            cell[axis] = PathSortBuckets[PathSortAxis(axis) + PathSortFine + fine[axis]];
+        }
+        uint octant = (r.direction.x < 0 ? 1u : 0u) | (r.direction.y < 0 ? 2u : 0u) | (r.direction.z < 0 ? 4u : 0u);
+        key = octant << (3 * PathSortBits) | PathSpread(cell.x) | PathSpread(cell.y) << 1 | PathSpread(cell.z) << 2;
+    }
+    if (copies > 0) InterlockedAdd(PathSortBuckets[PathSortBase + key], copies, offset);
+    PathSortEntry[PathSortEntryBase + index] = uint2(key | copies << 24, offset);
+}
+// Pass 2, one group: each key's first slot (an exclusive scan of the counts), the pool's new count, and per axis the
+// next update's cells (fine bin -> the quantile its middle ray falls in); every count is emptied for the next update.
+groupshared uint PathScanTotal[PathScanThreads];
+uint PathScanInclusive(uint thread, uint value)
+{
+    GroupMemoryBarrierWithGroupSync(); // (the previous scan's reads are done)
+    PathScanTotal[thread] = value;
+    GroupMemoryBarrierWithGroupSync();
+    [loop] for (uint step = 1; step < PathScanThreads; step <<= 1)
+    {
+        uint before = thread >= step ? PathScanTotal[thread - step] : 0;
+        GroupMemoryBarrierWithGroupSync();
+        PathScanTotal[thread] += before;
+        GroupMemoryBarrierWithGroupSync();
+    }
+    return PathScanTotal[thread];
+}
+void PathSortScan(uint thread)
+{
+    const uint per = PathSortKeys / PathScanThreads;
+    uint base = PathSortBase + thread * per, sum = 0;
+    [loop] for (uint i = 0; i < per; i++) sum += PathSortBuckets[base + i];
+    uint running = PathScanInclusive(thread, sum) - sum;
+    if (thread == PathScanThreads - 1) PathLive[PathReadCount] = min(running + sum, PathCapacity);
+    [loop] for (uint j = 0; j < per; j++)
+    {
+        uint count = PathSortBuckets[base + j];
+        PathSortBuckets[base + PathSortKeys + j] = running;
+        PathSortBuckets[base + j] = 0;
+        running += count;
+    }
+    [loop] for (uint axis = 0; axis < 3; axis++) // (PathSortFine == PathScanThreads: one fine bin per thread)
+    {
+        uint at = PathSortAxis(axis) + thread, count = PathSortBuckets[at], upTo = PathScanInclusive(thread, count), total = PathScanTotal[PathScanThreads - 1];
+        if (total > 0) PathSortBuckets[at + PathSortFine] = min((1u << PathSortBits) - 1, (uint)(((upTo - .5 * count) / total) * (1u << PathSortBits)));
+        PathSortBuckets[at] = 0;
+    }
+}
+// Pass 3, per ray of the scratch pool: its copies, each with its own random sequence and the weight divided by rho,
+// written from its key's first slot plus its offset. Copies past the pool's capacity are dropped and counted.
+void PathSortScatter(uint index)
+{
+    if (index >= min(PathLive[PathWriteCount], PathCapacity)) return;
+    PathRay r = PathRays[PathWriteBase + index];
+    float rho; uint rng;
+    uint2 entry = PathSortEntry[PathSortEntryBase + index];
+    uint copies = entry.x >> 24, key = entry.x & 0xffffff;
+    if (copies == 0) return;
+    PathCopies(r, rho, rng); // (the weight's divisor and the random sequence)
+    uint first = PathSortBuckets[PathSortBase + PathSortKeys + key] + entry.y;
     r.phiLow /= rho; r.phiHigh /= rho;
     [loop] for (uint copy = 0; copy < copies; copy++)
     {
         r.meta.z = HashRay(rng + copy * 0x9e3779b9u);
-        uint slot;
-        InterlockedAdd(PathLive[PathReadCount], 1u, slot);
-        if (slot < PathCapacity) PathRays[PathReadBase + slot] = r;
+        if (first + copy < PathCapacity) PathRays[PathReadBase + first + copy] = r;
         else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount], 1u); }
     }
 }
@@ -497,7 +589,7 @@ void PathKeep(PathRay r)
     InterlockedAdd(PathLive[PathWriteCount], 1u, slot);
     if (slot < PathCapacity) PathRays[PathWriteBase + slot] = r;
     else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount], 1u); }
-    if (PathPopulation != 0) InterlockedAdd(PathCohortCount[PathCohortBase + PathCohortOf(r.direction.w)], 1u);
+    if (PathPopulation != 0 && slot < PathCapacity) InterlockedAdd(PathCohortCount[PathCohortBase + PathCohortOf(r.direction.w)], 1u);
 }
 
 // PartitionExit for the walk, where overlapping solids are one: the crossing ends at the partition's far
@@ -580,13 +672,17 @@ void TracePath(uint index)
         if (end == 0) v.medium = here; else airListener = here == AirMedium;
     }
     float I[8], cI[8], Phi0[8], C[8];
+    // A new ray's weight: the histogram is divided by MethodTotalRays when read, so a cohort of n rays carries
+    // MethodTotalRays / n each (PathLaunchScale, persistent rays; 1 otherwise) and a change of n between updates
+    // (MethodTransport.Population, the auto-budget) leaves every cohort's estimate unbiased.
+    float launch = PathPersistent != 0 ? PathLaunchScale : 1;
     float4 pendingLow = 0, pendingHigh = 0; // bands of the pending contribution (no arrays across function boundaries)
     [unroll] for (uint k = 0; k < MethodBands; k++)
-    { I[k] = ReferenceDistance * ReferenceDistance; cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; }
+    { I[k] = ReferenceDistance * ReferenceDistance * launch; cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; }
     MethodAnchor c = v;
     // Ray 0 makes the source's straight connection for every ray (it is deterministic).
     bool connectListener = ray == 0, connectEdge = PathBeamsOnly == 0, hasPending = false;
-    float listenerScale = MethodTotalRays, pendingTime = 0;
+    float listenerScale = MethodTotalRays / launch, pendingTime = 0; // (the source's exact connection: launch cancels)
     float3 pendingFrom = 0;
     uint events = 0;
     bool edges = MethodEdgeCount > 0 && DiffractionFactor > 0, travelling = false, done = false, fluxPending = false, inBranch = false;
@@ -645,7 +741,7 @@ void TracePath(uint index)
             hasPending = PathListener(c, cI, L, listenerScale, c.kind == 0, rng, pendingLow, pendingHigh, pendingTime, pendingFrom, length0);
             if (hasPending && PathAudio != 0 && c.kind == 0)
             {
-                PathDirectArrival(S, L, pendingLow, pendingHigh, listenerScale, pendingTime, length0); // exact, rendered as a delayed path
+                PathDirectArrival(S, L, pendingLow, pendingHigh, MethodTotalRays, pendingTime, length0); // exact, rendered as a delayed path
                 hasPending = false;
             }
             continue;
@@ -730,7 +826,10 @@ void TracePath(uint index)
         // A segment that leaves a surface starts RayEpsilon out along that surface's outgoing normal and is traced
         // from zero distance: a fixed minimum distance would skip another object's surface within RayEpsilon of the
         // start (a mullion's face meeting a window pane let rays into the pane, where they bounced for hundreds of events).
-        bool found = TraceScene(MethodState, p, d, offSurface ? 0 : RayEpsilon, limit, false, false, 0xffffffff, hit, distance, normal);
+        // (Profiling bit 15: every segment is traced twice, the same query, so the extra time is one traversal per segment.)
+        bool found = false;
+        [loop] for (uint traces = (PathProfileFlags & 32768) != 0 ? 0u : 1u; traces < 2; traces++)
+            found = TraceScene(MethodState, p, d, offSurface ? 0 : RayEpsilon, limit, false, false, 0xffffffff, hit, distance, normal);
         // A ray in air cannot meet a closed solid's face from inside: it got there through a leak (README part 18)
         // and carries energy that is not in the room, so it ends before scoring anything more.
         if (found && medium == AirMedium && dot(normal, d) * PathVolumeSide(Primitives[hit].indices.x) > 0) { MethodCount(CounterInsideSolid); done = true; continue; }

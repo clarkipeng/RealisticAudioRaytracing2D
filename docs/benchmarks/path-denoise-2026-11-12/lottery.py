@@ -1,20 +1,23 @@
 """README parts 28-30. Lottery noise: Church tracks, runs under .context/path-optimise/lottery/<config>/<track>/low-{0,1}, scored against
-the persistent dataset's 8N targets (raw/church/<track>/high-*). plan CONFIGS... | score"""
+the persistent dataset's 8N targets (raw/church/<track>/high-*). plan CONFIGS... | score
+(a config: name=population,cap[,edge slice updates[,resampling (part 32's systematic, since removed)]]; parts 31-34 write to .context/path-optimise/r31 with LOTTERY_DIR)"""
 import json, sys, copy
 from pathlib import Path
 import numpy as np
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'tools'))
-D = ROOT / '.context/path-dataset-persistent'; W = ROOT / '.context/path-optimise/lottery'
+import os
+D = ROOT / '.context/path-dataset-persistent'; W = Path(os.environ.get('LOTTERY_DIR', ROOT / '.context/path-optimise/lottery'))
 TRACKS = ['standing', 'walking']
 def plan(configs):
     items = json.loads((D / 'items.json').read_text())['items']
     out = []
     for cfg in configs:                       # name=population,cap
         name, v = cfg.split('='); vals = list(map(int, v.split(','))); n, cap = vals[0], vals[1]; sl = vals[2] if len(vals) > 2 else 1
+        resampling = vals[3] if len(vals) > 3 else 0
         for it in items:
             if it['kind'] == 'take' and Path(it['output']).name in TRACKS:
-                x = copy.deepcopy(it); x.update(output=str(W / name / Path(it['output']).name), population=n, iterationCap=cap, edgeSliceUpdates=sl, highSeeds=[], seeds=[0, 1])
+                x = copy.deepcopy(it); x.update(output=str(W / name / Path(it['output']).name), population=n, iterationCap=cap, edgeSliceUpdates=sl, resampling=resampling, highSeeds=[], seeds=[0, 1])
                 out.append(x)
     W.mkdir(parents=True, exist_ok=True); (W / 'items.json').write_text(json.dumps(dict(items=out)))
     print(len(out), 'items')

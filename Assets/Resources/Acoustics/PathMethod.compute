@@ -3,7 +3,8 @@
 // PathEdgeScan (the source's edge-ray distribution), PathClearance (the listener's clearance for the
 // beam kernel), then per chunk of rays TracePath (the loop), and for audio PathExpand (the exact
 // direct arrival as delayed paths). Persistent rays: PathPersistentBeginKernel, then TracePath over the
-// rays kept from the previous update and the new ones, then PathRingKernel (the update's histogram).
+// rays kept from the previous update and the new ones, population control (PathSortCount, PathSortScan and
+// PathSortScatter: the kept rays resampled and written in coherent order), then PathRingKernel (the update's histogram).
 #pragma kernel TracePath3D
 #pragma kernel TracePath3DBvh USE_BVH
 #pragma kernel PathEdgeWeights3D
@@ -16,8 +17,9 @@
 #pragma kernel PathPersistentBeginKernel
 #pragma kernel PathRingKernel
 #pragma kernel PathEdgeCopyKernel
-#pragma kernel PathControlBeginKernel
-#pragma kernel PathControlKernel
+#pragma kernel PathSortCountKernel
+#pragma kernel PathSortScanKernel
+#pragma kernel PathSortScatterKernel
 
 #include "../../Shaders/Geometry.hlsl"
 #include "../../Shaders/Transport.hlsl"
@@ -33,8 +35,9 @@
 [numthreads(256,1,1)] void PathClearance3D(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
 [numthreads(256,1,1)] void PathClearance3DBvh(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
 [numthreads(1,1,1)] void PathPersistentBeginKernel(uint3 id:SV_DispatchThreadID) { PathPersistentBegin(); }
-[numthreads(1,1,1)] void PathControlBeginKernel(uint3 id:SV_DispatchThreadID) { PathControlBegin(); }
-[numthreads(64,1,1)] void PathControlKernel(uint3 id:SV_DispatchThreadID) { PathControl(id.x + MethodRayOffset); }
+[numthreads(64,1,1)] void PathSortCountKernel(uint3 id:SV_DispatchThreadID) { PathSortCount(id.x + MethodRayOffset); }
+[numthreads(1024,1,1)] void PathSortScanKernel(uint3 t:SV_GroupThreadID) { PathSortScan(t.x); }
+[numthreads(64,1,1)] void PathSortScatterKernel(uint3 id:SV_DispatchThreadID) { PathSortScatter(id.x + MethodRayOffset); }
 [numthreads(64,1,1)] void PathEdgeCopyKernel(uint3 id:SV_DispatchThreadID) { PathEdgeCopy(id.x); }
 [numthreads(64,1,1)] void PathRingKernel(uint3 id:SV_DispatchThreadID) { PathRing(id.x); }
 [numthreads(64,1,1)] void PathExpandDirect(uint3 id:SV_DispatchThreadID) { PathExpand(id.x); }

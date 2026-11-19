@@ -4,6 +4,8 @@
     $PY tools/path_persistent_dataset.py plan            # scenes, listener tracks and the Unity items
     nice -n 19 $PY tools/path_persistent_dataset.py render   # guarded Unity (MeasurePathPersistentSequences)
     $PY tools/path_persistent_dataset.py pack            # one .npz per track, index.json
+    $PY tools/path_persistent_dataset.py plan-populations   # part 33: inputs at 4,000-23,000 rays (render with
+    $PY tools/path_persistent_dataset.py pack-populations   #   ACOUSTIC_PERSISTENT_DATASET=.context/path-dataset-populations/items.json)
 
 Every track is replayed update by update (1,024 samples at 44.1 kHz) with persistent rays under population
 control. Inputs: the input population (each scene's 23 ms budget, calibrated in Unity) with two seeds; targets:
@@ -144,8 +146,71 @@ def pack():
     print(f'{len(out)} tracks packed')
 
 
+# README part 33: inputs across the auto-budget's populations. Per generated track and seed one input run at a
+# population log-uniform on POPULATIONS (from a hash of the track and the seed), with the live settings (the
+# long-chain lottery at 16, the edge distribution refreshed every 4th update); the targets
+# stay part 25's (8 N, independent seeds: a target does not depend on the input's population). The Church's
+# standing and walking tracks at CHURCH_POPULATIONS, both seeds each (the evaluation at fixed N).
+POPULATION_WORK = ROOT / '.context/path-dataset-populations'
+POPULATIONS = (4000, 23000)
+CHURCH_POPULATIONS = (4000, 6000, 11000, 16000, 23000)
+
+
+def population_of(scene, track, seed):
+    v = int(hashlib.sha256(f'{scene}/{track}/{seed}'.encode()).hexdigest()[:8], 16) / 2 ** 32
+    lo, hi = POPULATIONS
+    return int(round(lo * (hi / lo) ** v / 100) * 100)
+
+
+def plan_populations():
+    old = {Path(i['output']).relative_to(WORK / 'raw').as_posix(): i for i in json.loads((WORK / 'items.json').read_text())['items']}
+    items = []
+    for key, item in old.items():
+        scene, track = key.split('/')
+        runs = [(n, s) for n in CHURCH_POPULATIONS for s in SEEDS] if scene == 'church' else [(population_of(scene, track, s), s) for s in SEEDS]
+        if scene == 'church' and track == 'outside':
+            continue
+        for n, s in runs:
+            items.append(dict(item, output=str(POPULATION_WORK / 'raw' / scene / track / f'n{n}-s{s}'), population=n, seeds=[s], highSeeds=[],
+                              iterationCap=16, edgeSliceUpdates=4))
+    POPULATION_WORK.mkdir(parents=True, exist_ok=True)
+    (POPULATION_WORK / 'items.json').write_text(json.dumps(dict(items=items)) + '\n')
+    print(f'{len(items)} input runs')
+
+
+def pack_populations(church_population=11000):
+    """One .npz per track as pack(): seed s from its population's run, the targets from part 25's raw runs."""
+    out = []
+    for e in json.loads((WORK / 'plan.json').read_text()):
+        if e['track'] == 'outside':
+            continue
+        church = e['scene'] == 'church'
+        dirs = [POPULATION_WORK / 'raw' / e['scene'] / e['track'] / f"n{church_population if church else population_of(e['scene'], e['track'], s)}-s{s}" for s in SEEDS]
+        if not all((d / 'done').exists() for d in dirs):
+            continue
+        runs = []
+        for s, d in zip(SEEDS, dirs):
+            r = json.loads((d / f'low-{s}' / 'run.json').read_text()); B = r['bins']
+            runs.append((np.fromfile(d / f'low-{s}' / 'histogram.f32', '<f4').reshape(r['updates'], 48, B),
+                         np.fromfile(d / f'low-{s}' / 'counts.u32', '<u4').reshape(r['updates'], B).astype(np.float32), r))
+        raw = Path(e['raw'])
+        high = []
+        for d in sorted(raw.glob('high-*')):
+            r = json.loads((d / 'run.json').read_text())
+            high.append(np.fromfile(d / 'histogram.f32', '<f4').reshape(r['updates'], 48, r['bins']))
+        file = POPULATION_WORK / 'packed' / f"{e['scene']}-{e['track']}.npz"
+        file.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(file, low=np.stack([x[0] for x in runs]), lowCounts=np.stack([x[1] for x in runs]), high=np.stack(high),
+                 edges=np.fromfile(dirs[0] / f'low-{SEEDS[0]}' / 'bin-edges.f32', '<f4'))
+        out.append(dict(e, file=str(file), population=runs[0][2]['population'], populations=[x[2]['population'] for x in runs],
+                        updateMs=float(np.mean([x[2]['updateMs'] for x in runs]))))
+    (POPULATION_WORK / 'index.json').write_text(json.dumps(out, indent=1) + '\n')
+    print(f'{len(out)} tracks packed')
+
+
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('command', choices=['plan', 'render', 'pack'])
+    p.add_argument('command', choices=['plan', 'render', 'pack', 'plan-populations', 'pack-populations'])
     a = p.parse_args()
-    dict(plan=plan, render=render, pack=pack)[a.command]()
+    dict(plan=plan, render=render, pack=pack, **{'plan-populations': plan_populations,
+                                                'pack-populations': pack_populations})[a.command]()

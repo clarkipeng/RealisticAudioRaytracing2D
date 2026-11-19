@@ -1500,3 +1500,130 @@ Noise, Church standing and walking against the 8 N targets (window / level / dec
 - **Energy-aware selection and systematic resampling.** The first measurement is CV² of the weights per cohort, in the Church, the shoebox and the furnished room.
 - **A 64-channel denoiser retrained across 4k–23k populations.** It needs a dataset rendered at those populations, about 40 minutes.
 - **The auto-budget:** N adjusted each update from the measured GPU time.
+
+## 31. The pool sorted for coherence, fused with population control
+
+**What changed** (`MethodPath.hlsl`, "Coherence"; `MethodTransport.cs`).
+Population control no longer appends the kept copies with an atomic counter.
+A counting sort writes them in order instead, in three passes over the rays the walk kept:
+- **count:** each ray's copies (the same draw as before), added to its key's count; the count before them is the ray's offset within the key;
+- **scan:** one group of 1,024 threads turns the counts into each key's first slot, sets the pool's new size and empties the counts;
+- **scatter:** each ray writes its copies from its key's first slot plus its offset.
+
+The key is the direction's octant (3 bits), then the Morton code of the position's cell (4 bits per axis), 32,768 keys in all.
+The next update's threads then trace neighbouring rays in similar directions, which visit the same tree nodes in the same order.
+Only the order of the pool changes.
+Every ray keeps its own random sequence, and the histogram's sums are integer atomics, so the estimates are the same.
+The Church's histograms after the change equal part 30's runs to 2 × 10⁻⁸ of the total; 2% of the cells differ in their last bits.
+
+**The cells.**
+A box over the scene's geometry does not work in the Church.
+The rays the walk keeps (`MeasurePathPool`, `pool.py` beside this file, 8 updates after a horizon) lie between −30 and 37 m in x and −35 and 37 m in z at the 0.5% and 99.5% quantiles.
+The scene's box is 696 × 82 × 1,032 m, because of the meadow.
+Sixteen even cells per axis would be 44 × 5 × 65 m, so the church would fill one or two cells across.
+The cells are therefore the quantiles of the rays' own positions along each axis, from the previous update.
+Each axis has 16 slabs holding equal numbers of rays.
+They are read from a histogram of 1,024 bins per axis over the scene's box, which the count pass fills and the scan turns into the next update's cells.
+That costs three more atomics per ray, and nothing is tuned.
+
+**The key's layout**, interleaved in one process (`MeasurePathLiveBudget`, cap 16, edge distribution every 4th update, population 11,000, 240 updates each, load average 10–38):
+
+| Order of the pool | tracer, ms |
+|---|---|
+| unsorted (the atomic order, as before; `ProfileFlags` bit 16) | 4.89 [4.40–5.94] |
+| octant only | 4.53 [4.10–5.27] |
+| cells only | 4.63 [4.06–5.74] |
+| cell, then octant | 4.67 [4.06–5.91] |
+| octant, then cell (kept) | 4.18 [3.75–5.10] |
+
+- The direction matters more than the position.
+- The ordered traversal visits a node's children in an order set by the direction's signs, so rays of one octant take the same branches.
+- The cells add 0.35 ms on top of the octant.
+
+**Before and after.**
+- The tracer goes from 4.89 to 4.18 ms, 0.71 ms less, at the top of the 0.3–0.7 ms expected.
+- The traversal is measured by tracing every walk segment twice (`ProfileFlags` bit 15, part 28's probe, now kept). It is 1.26 ms of the sorted tracer (5.44 against 4.18 ms, same run). Unsorted, it was 1.48 ms in an earlier interleaved run (6.08 against 4.60 ms).
+- So the sort takes about 0.2 ms off the traversal and 0.5 ms off the rest of the walk: the beam scoring, the connections and the reads of the ray state, all of which now run in step across a SIMD group.
+- The unsorted row runs the same three passes with a single key, so it includes their cost. The old atomic append was not timed in the same process.
+- The update now costs about 4.2 ms of tracer and 2.05 ms of audio without the denoiser, against 4.7 and 2.05 ms at the start of this round.
+- The full tier passes. `PersistentRaysMatchTheFullSolveInExpectation` adds a population that changes at every update (part 34).
+
+**Found on the way.**
+The first version stored each ray's rank in its cohort from the walk, which made the walk bind one more buffer.
+With it, the walk's cohort counts read as zero, every ray was split 16 times, and the pool overflowed by 230,000 rays per update.
+The walk already binds about 26 buffers, close to Metal's limit of 31 per kernel, which is the likely cause.
+Nothing the walk binds changed in the version kept.
+`MeasurePathLiveBudget` now reports the overflow count, and it was zero in every run below.
+
+## 32. Resampling the cohorts: measured, one variant built, neither kept
+
+**Today's rule** (part 20).
+Each of a cohort's A rays is kept or split with ρ = n/A whatever its weight, where n is the cohort's target.
+For thinning, the variance this adds to a band total of the cohort is (A/n − 1) Σ w².
+Two alternatives were proposed:
+- **energy-aware selection**, keeping each ray with p_i ∝ its weight and dividing its weight by p_i;
+- **systematic resampling**, with one uniform per cohort, so that the counts hit their targets exactly.
+
+**The weights, measured first** (`MeasurePathPool`, the rays the walk keeps before population control, 8 updates after a horizon; `pool.py`).
+The Church is at N = 11,000 with its live settings; the stone shoebox and the furnished room are at N = 16,384.
+CV² is the squared coefficient of variation of a ray's weight within its cohort.
+"Thinned" averages the cohorts that are thinned (most of them), weighted by their rays:
+
+| Scene | CV², band-max weight: median / thinned | CV², band-sum weight: median / thinned | rays in a transmitted branch |
+|---|---|---|---|
+| Church | 1.47 / 15.5 | 1.37 / 9.3 | 28% |
+| stone shoebox | 0.57 / 0.23 | 0.72 / 0.28 | 0 |
+| furnished room | 5.1 / 5.6 | 4.8 / 3.9 | 0 |
+
+The variance each rule adds to the cohorts' band totals, relative to today's rule, summed over cohorts (systematic variants simulated with 400 draws per cohort):
+
+| Rule | Church | stone shoebox | furnished room |
+|---|---|---|---|
+| systematic, today's ρ | 0.73–0.87 | 0.65–0.98 | 0.92–0.97 |
+| energy-aware, band-max | 0.60–0.90 | 0.14–0.26 | 0.40–0.53 |
+| energy-aware, band-sum | 0.59–0.78 | 0.14–0.26 | 0.40–0.53 |
+| energy-aware, relative L2 | 0.51–0.58 | 0.13–0.26 | 0.40–0.53 |
+| energy-aware, relative L2, systematic | 0.39–0.44 | 0.11–0.14 | 0.38–0.49 |
+
+(The range is over the eight bands.)
+
+**Which scalar weight.**
+Neither band-max nor band-sum is the right scalar weight.
+Minimising the summed relative variances, Σ_k Σ_i w_ik² (1/p_i − 1) / W_k² at Σ p_i = n, gives p_i ∝ √(Σ_k (w_ik / W_k)²) by a Lagrange multiplier, where W_k is the cohort's total in band k.
+That is the L2 norm of the ray's band weights relative to the cohort's totals.
+In the rooms, every band's weight is nearly proportional, so the three choices agree.
+In the Church, the relative L2 weight is best in every band.
+
+**Systematic resampling, built and measured** (a switch, since removed).
+- Each ray's copies were F(r + 1) − F(r), with F(r) = ⌊(rR + U)/M⌋.
+- Here r is the ray's rank in its cohort (its order in the count pass), R = round(ρM), M = 1,024, and U is uniform on 0 … M − 1, one per cohort and update.
+- By Hermite's identity, E[copies] = R/M exactly, so dividing the weight by R/M is unbiased.
+- The rank does not depend on U, so the argument holds for any order.
+- The cohort's count is its target to within one.
+- `PersistentRaysMatchTheFullSolveInExpectation` passed with it: window ratios 0.96–1.18 against the full solve, as with today's rule.
+
+Its noise was measured at equal time (both rules cost the same: 4.38 against 4.40 ms).
+The runs are the Church standing and walking, two seeds, against part 25's 8 N targets, in dB of window / band level / decay curve:
+
+| Rule | noisy input, updates 32–63 | after the denoiser | seed against seed, all 64 updates |
+|---|---|---|---|
+| today's (independent draws) | 10.35 / 5.21 / 4.57 | 6.49 / 2.09 / 2.76 | 8.42 / 5.57 / 4.83 |
+| systematic | 10.18 / 5.15 / 4.72 | 6.64 / 2.69 / 3.22 | 8.61 / 5.48 / 5.12 |
+
+- On the noisy input the two are within these runs' noise of each other.
+- After the denoiser, systematic resampling is worse: 0.6 dB in band level and 0.5 dB in decay curve.
+- The denoiser was trained on today's rule. Systematic resampling makes a cohort's count exact while its rays' choices stay random, and the denoiser does not expect that noise.
+- Systematic resampling is therefore not kept.
+
+**Energy-aware selection: not built.**
+- **The share of the noise at stake is small.** Systematic resampling removed 13–27% of the variance that resampling adds in the Church and did not move the noisy input beyond the runs' noise. So resampling is a minor part of an update's noise. That noise comes from where the rays go, and it is heavy-tailed (parts 15 and 20). The best energy-aware rule removes 56–61%, a few tenths of a dB at most on the noisy input.
+- **Its objective is the wrong one where it matters most.** The analysis minimises the variance of the cohorts' total energy. In the Church, 28% of the rays are transmitted branches, whose weights are small (stone transmits 10⁻⁴). These rays carry all the sound that reaches a listener outside, and a weight-proportional selection would thin them hardest. A selection that reduced the variance at a listener would need that listener's importance, not the weight.
+- **Cost.** It needs, per cohort, the weights' sum over a dynamic range of 10⁻⁶ to 1 (atomic sums in fixed point under a per-cohort maximum), a water-filling solve for the cap p_i ≤ 1 (or splitting to keep p_i proportional), and for the systematic form a segmented scan of every ray. That is three or four more passes, against an expected gain inside the measurement noise.
+
+**Unbiasedness, for the record.**
+Any rule that keeps ray i with an expected number of copies e_i > 0, fixed by the past, and divides its weight by e_i is unbiased: E[copies_i · w_i / e_i] = w_i.
+Here the past means the cohort's weights and count after the walk, and the rank.
+Each copy then continues independently with its own random sequence.
+Today's rule, the systematic variant and the energy-aware rule (with every e_i > 0) all have this form.
+A rule that let e_i round to 0 for a light ray would drop that ray's expected contribution and be biased; the systematic variant prevented it with R ≥ 1.
+

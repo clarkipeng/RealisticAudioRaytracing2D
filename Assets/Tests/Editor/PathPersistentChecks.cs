@@ -61,23 +61,33 @@ public partial class TakeChecks
 
     // The same room with transmitting walls (t = 0.05: branch reservoirs, queued as rays of their own when a ray
     // stops) and independent seeds: the persistent response equals the full solve's in expectation, window by window;
-    // so does that of a fixed population (settings.pathPopulation: cohorts split and rouletted to their share).
+    // so does that of a fixed population (settings.pathPopulation: cohorts split and rouletted to their share), and
+    // that of a population changed at every update (9,000 and 17,000 in turn, as the auto-budget may:
+    // MethodTransport.Population; README part 34).
     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void PersistentRaysMatchTheFullSolveInExpectation()
     {
         ApertureRoom(true, false, ApertureOutside, out var scene, out var geometry, out var state, transmission: .05f, roomScattering: .5f);
         int[][] windows = {new[] {0, 20}, new[] {20, 60}, new[] {60, 500}};
         int seeds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PERSISTENT_SEEDS") ?? "6"); // more: a closer look
-        var sums = new double[3, 2, 3]; var squares = new double[3, 2, 3];
+        const int modes = 4;
+        string[] names = {"full", "persistent", "population", "changing"};
+        var sums = new double[modes, 2, 3]; var squares = new double[modes, 2, 3];
         long branches = 0;
-        for (int mode = 0; mode < 3; mode++)
+        for (int mode = 0; mode < modes; mode++)
             for (int seed = 0; seed < seeds; seed++)
             {
                 var settings = ControlSettings(TakeRender.Method.Path, 4096, .5f); settings.diffractionFactor = 1; settings.seed = 100 + seed;
                 if (mode >= 1) { settings.pathPersistent = true; settings.responseStepSamples = 256; }
-                if (mode == 2) settings.pathPopulation = 13000; // about 4,000 new rays per update
+                if (mode >= 2) settings.pathPopulation = 13000; // about 4,000 new rays per update
+                if (mode == 3) settings.pathPopulationMaximum = 17000;
                 using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-                solver.Solve(state, new TakeRender.DirectPath[1]);
+                if (mode < 3) solver.Solve(state, new TakeRender.DirectPath[1]);
+                else
+                {
+                    var m = solver.Method; m.PersistentSingleUpdate = true; // (the first update flushes)
+                    for (int u = 0; u < m.WarmUpdates; u++) { m.Population = u % 2 == 0 ? 9000 : 17000; solver.Solve(state, new TakeRender.DirectPath[1]); }
+                }
                 if (mode >= 1) { AssertNoOverflow(solver); branches += solver.Method.Counter(14); }
                 for (int band = 0; band < 2; band++)
                 {
@@ -89,15 +99,16 @@ public partial class TakeChecks
         for (int band = 0; band < 2; band++)
             for (int w = 0; w < 3; w++)
             {
-                double[] mean = new double[3], error = new double[3];
-                for (int mode = 0; mode < 3; mode++)
+                double[] mean = new double[modes], error = new double[modes];
+                for (int mode = 0; mode < modes; mode++)
                 {
                     mean[mode] = sums[mode, band, w] / seeds;
                     error[mode] = Math.Sqrt(Math.Max(0, squares[mode, band, w] / seeds - mean[mode] * mean[mode]) / (seeds - 1));
                 }
-                TestContext.WriteLine($"{(band == 0 ? 500 : 4000)} Hz, {windows[w][0]}-{windows[w][1]} ms: full {mean[0]:G5} +- {error[0]:G3}, persistent {mean[1]:G5} +- {error[1]:G3}, ratio {mean[1] / mean[0]:F3}; " +
-                                      $"population {mean[2]:G5} +- {error[2]:G3}, ratio {mean[2] / mean[0]:F3}");
-                for (int mode = 1; mode < 3; mode++)
+                var line = new System.Text.StringBuilder($"{(band == 0 ? 500 : 4000)} Hz, {windows[w][0]}-{windows[w][1]} ms: full {mean[0]:G5} +- {error[0]:G3}");
+                for (int mode = 1; mode < modes; mode++) line.Append($"; {names[mode]} {mean[mode]:G5} +- {error[mode]:G3}, ratio {mean[mode] / mean[0]:F3}");
+                TestContext.WriteLine(line.ToString());
+                for (int mode = 1; mode < modes; mode++)
                     Assert.That(Math.Abs(mean[mode] - mean[0]), Is.LessThan(3 * Math.Sqrt(error[0] * error[0] + error[mode] * error[mode]) + .02 * mean[0]));
             }
     }

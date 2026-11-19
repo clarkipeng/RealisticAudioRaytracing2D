@@ -4,13 +4,14 @@ from pathlib import Path
 import numpy as np
 ROOT = Path(__file__).resolve().parents[3]; sys.path.insert(0, str(ROOT / 'tools'))
 import path_persistent_denoise as ppd, path_denoise as pdn, torch
-D = ROOT / '.context/path-dataset-persistent/raw/church'; W = ROOT / '.context/path-optimise/lottery'
+import os
+D = ROOT / '.context/path-dataset-persistent/raw/church'; W = Path(os.environ.get('LOTTERY_DIR', ROOT / '.context/path-optimise/lottery'))
 def load(d):
     r = json.loads((d / 'run.json').read_text()); B = r['bins']
     return (np.fromfile(d / 'histogram.f32', '<f4').reshape(r['updates'], 48, B), np.fromfile(d / 'counts.u32', '<u4').reshape(r['updates'], B))
 pdn.EDGES = np.fromfile(D / 'standing/low-0/bin-edges.f32', '<f4')
-net = ppd.model(); net.load_state_dict(torch.load(ppd.WORK / 'denoiser-persistent.pt', map_location='cpu')); net.eval()
-configs = {'11000 (part 25 runs, no cap)': D}
+net = ppd.load_model(os.environ.get('DENOISER', 'persistent'))   # (part 33: DENOISER=<tag> scores another model)
+configs = {} if os.environ.get('LOTTERY_DIR') else {'11000 (part 25 runs, no cap)': D}
 configs.update({c.name: c for c in sorted(W.iterdir()) if c.is_dir()})
 for name, base in configs.items():
     rows = {'noisy': [], 'denoised': []}

@@ -114,6 +114,8 @@ public static partial class TakeRender
         public bool pathBeamsOnly;
         [Min(0),Tooltip("Path method, persistent rays: population control. Hold this many rays in flight per source/listener pair, cohort by cohort (rays of age a: a share min(1, T_f / a), T_f the end of the fine bins), by splitting and weight lottery; the new rays per update follow from it and replace methodRays. Zero: off (survival in time and methodRays new rays).")]
         public int pathPopulation;
+        [Min(0),Tooltip("Path method, population control: the largest population the auto-budget may choose (the pools are sized for it). Zero: pathPopulation.")]
+        public int pathPopulationMaximum;
         [Tooltip("Path method, persistent rays, GPU audio: denoise each update's histogram with the bundled persistent-ray denoiser (Resources/Acoustics/PathDenoise; docs/benchmarks/path-denoise-2026-11-12, part 25) before the reverb is built.")]
         public bool pathDenoise;
         [Min(0),Tooltip("Path method, persistent rays: past this many loop iterations of a ray within one update, each further reflection survives with probability pathIterationSurvival and the survivors are reweighted (unbiased). It bounds the update's long serial chains (rays caught between close surfaces), which set the update's time. Zero: off.")]

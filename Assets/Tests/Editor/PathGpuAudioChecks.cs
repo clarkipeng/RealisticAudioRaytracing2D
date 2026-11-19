@@ -141,17 +141,29 @@ public partial class TakeChecks
     // binaural), with a fence after each phase: the tracer's update, then the audio (the denoiser if on, the path
     // kernels, the convolution, the readback of 1,024 samples), and the CPU time of the audio calls.
     // ACOUSTIC_PATH_BUDGET_VARIANTS: variants separated by ';', each "name:key=value,..." with keys population,
-    // denoise (0/1), flags (MethodTransport.ProfileFlags), iterationCap, kernels (0: the path kernels built once and
-    // then left, a profiling bound), spectra (0: every partition through the band FFTs); default "base:". All variants live in one
-    // process and are measured interleaved, in rounds of 8 updates each (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25),
-    // after a horizon of warm-up updates each, so drift from other work on the machine falls on every variant
-    // alike. Reported: median and the 10th-90th percentile range per phase, and the load average before and after.
+    // denoise (0/1), flags (MethodTransport.ProfileFlags), iterationCap, edgeSlice, kernels (0: the path
+    // kernels built once and then left, a profiling bound), spectra (0: every partition through the band FFTs),
+    // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000-23,000),
+    // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU); default "base:".
+    // All variants live in one process and are measured interleaved, in rounds of 8 updates each
+    // (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25), after a horizon of warm-up updates each, so drift from other work on
+    // the machine falls on every variant alike. Reported: median and the 10th-90th percentile range per phase, and the
+    // load average before and after; with a budget, also the population per round (ACOUSTIC_PATH_BUDGET_TRACE, a file:
+    // per update the variant, round, population, tracer and audio ms).
+    sealed class BudgetVariant
+    {
+        public string name; public GpuAudio gpu; public TransportSolver solver; public AcousticTake.State[] state; public long cursor;
+        public readonly System.Collections.Generic.List<double>[] times = {new(), new(), new()};
+        public readonly System.Collections.Generic.List<int> populations = new();
+        public PathPopulationBudget budget; public int flags, loadRound = -1;
+    }
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
     public void MeasurePathLiveBudget()
     {
         string file = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET");
         if (string.IsNullOrEmpty(file)) Assert.Ignore("Set ACOUSTIC_PATH_BUDGET.");
         string spec = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_VARIANTS") ?? "base:";
+        string tracePath = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_TRACE");
         int rounds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_ROUNDS") ?? "25"), perRound = 8;
         var shader = RequireGpu();
         var job = TakeBatch.ParseJob(File.ReadAllText(file));
@@ -162,44 +174,51 @@ public partial class TakeChecks
         void Fence() => AsyncGPUReadback.Request(probe).WaitForCompletion();
         string Load() { try { var p = System.Diagnostics.Process.Start(new ProcessStartInfo("/usr/sbin/sysctl", "-n vm.loadavg") {RedirectStandardOutput = true, UseShellExecute = false}); string o = p.StandardOutput.ReadToEnd().Trim(); p.WaitForExit(); return o; } catch { return "?"; } }
         string loadBefore = Load();
-        var variants = new System.Collections.Generic.List<(string name, GpuAudio gpu, TransportSolver solver, AcousticTake.State[] state, long cursor, System.Collections.Generic.List<double>[] times)>();
+        var variants = new System.Collections.Generic.List<BudgetVariant>();
+        var trace = new System.Text.StringBuilder("variant,round,population,tracerMs,audioMs\n");
         try
         {
             foreach (string entry in spec.Split(';'))
             {
-                string name = entry.Split(':')[0];
+                var v = new BudgetVariant {name = entry.Split(':')[0]};
                 var settings = JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(job.settings));
                 settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
                 settings.pathPopulation = 11000; settings.pathDenoise = false; settings.maximumResponsesPerBatch = 1;
                 settings.pathHistogramExport = settings.pathHistogramImport = "";
-                int flags = 0, kernels = 1, spectra = 1, convolution = 1;
+                int kernels = 1, spectra = 1, convolution = 1; double budget = 0;
                 string options = entry.Contains(":") ? entry.Substring(entry.IndexOf(':') + 1) : "";
                 foreach (string kv in options.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    var p = kv.Split('='); int v = int.Parse(p[1]);
+                    var p = kv.Split('=');
+                    if (p[0] == "budget") { budget = double.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture); continue; }
+                    int value = int.Parse(p[1]);
                     switch (p[0])
                     {
-                        case "population": settings.pathPopulation = v; break;
-                        case "denoise": settings.pathDenoise = v != 0; break;
-                        case "flags": flags = v; break;
-                        case "kernels": kernels = v; break;
-                        case "spectra": spectra = v; break;
-                        case "convolution": convolution = v; break;
-                        case "edgeSlice": settings.pathEdgeSliceUpdates = v; break;
-                        case "iterationCap": settings.pathIterationCap = v; break;
+                        case "population": settings.pathPopulation = value; break;
+                        case "denoise": settings.pathDenoise = value != 0; break;
+                        case "flags": v.flags = value; break;
+                        case "kernels": kernels = value; break;
+                        case "spectra": spectra = value; break;
+                        case "convolution": convolution = value; break;
+                        case "edgeSlice": settings.pathEdgeSliceUpdates = value; break;
+                        case "iterationCap": settings.pathIterationCap = value; break;
+                        case "load": v.loadRound = value; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
                 }
-                var gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
-                var solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
-                solver.Method.ProfileFlags = flags;
-                gpu.SkipPathKernels = kernels == 0; gpu.PathGroupSpectraOff = spectra == 0; gpu.SkipLateConvolution = convolution == 0;
-                variants.Add((name, gpu, solver, new AcousticTake.State[scene.objects.Length], 0, new[] {new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>(), new System.Collections.Generic.List<double>()}));
+                if (budget > 0) { settings.pathPopulationMaximum = 23000; v.budget = new PathPopulationBudget(budget, settings.pathPopulation, 4000, 23000); }
+                v.gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
+                v.solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
+                v.solver.Method.ProfileFlags = v.flags;
+                v.gpu.SkipPathKernels = kernels == 0; v.gpu.PathGroupSpectraOff = spectra == 0; v.gpu.SkipLateConvolution = convolution == 0;
+                v.state = new AcousticTake.State[scene.objects.Length];
+                variants.Add(v);
             }
             var pcm = new float[2048];
-            void Update(int i, bool record)
+            void Update(BudgetVariant v, int round)
             {
-                var v = variants[i]; int step = 1024; long sample = v.cursor;
+                int step = 1024; long sample = v.cursor;
+                if (v.loadRound >= 0) v.solver.Method.ProfileFlags = round >= v.loadRound ? v.flags | 32768 : v.flags;
                 take.Evaluate(Math.Min(7 * 44100L + sample % (8 * 44100L), take.Metadata.durationSamples), v.state);
                 Fence();
                 var w = Stopwatch.StartNew();
@@ -209,24 +228,27 @@ public partial class TakeChecks
                 v.gpu.QueueRender(sample, step); double c = w.Elapsed.TotalMilliseconds;
                 v.gpu.BeginReadback(); v.gpu.TryComplete(pcm, true); v.solver.CompleteAfterGpuAudio();
                 double a = w.Elapsed.TotalMilliseconds;
-                if (record) { v.times[0].Add(t); v.times[1].Add(a); v.times[2].Add(c); }
-                variants[i] = (v.name, v.gpu, v.solver, v.state, sample + step, v.times);
+                int population = v.solver.Method.Population;
+                if (round >= 0)
+                {
+                    v.times[0].Add(t); v.times[1].Add(a); v.times[2].Add(c); v.populations.Add(population);
+                    trace.Append(FormattableString.Invariant($"{v.name},{round},{population},{t:F3},{a:F3}\n"));
+                }
+                if (v.budget != null) v.solver.Method.Population = v.budget.Observe(t + a);
+                v.cursor = sample + step;
             }
-            for (int i = 0; i < variants.Count; i++) for (int u = 0; u < variants[i].solver.Method.WarmUpdates; u++) Update(i, false);
-            for (int r = 0; r < rounds; r++) for (int i = 0; i < variants.Count; i++) for (int u = 0; u < perRound; u++) Update(i, true);
+            foreach (var v in variants) for (int u = 0; u < v.solver.Method.WarmUpdates; u++) Update(v, -1);
+            for (int r = 0; r < rounds; r++) foreach (var v in variants) for (int u = 0; u < perRound; u++) Update(v, r);
             string Stat(System.Collections.Generic.List<double> v) { var x = v.ToArray(); Array.Sort(x); return $"{x[x.Length / 2]:F2} [{x[x.Length / 10]:F2}-{x[x.Length * 9 / 10]:F2}]"; }
             string loadAfter = Load();
-            var lengths = (float[])variants[0].solver.Method.EdgeLengths.Clone(); Array.Sort(lengths);
-            if (lengths.Length > 0)
-            {
-                string Share(double l) { int n = 0; foreach (float x in lengths) if (x < l) n++; return $"{100.0 * n / lengths.Length:F1}%"; }
-                UnityEngine.Debug.Log($"PATH_BUDGET edges: {lengths.Length}, length quantiles 10/50/90% {lengths[lengths.Length / 10]:F3}/{lengths[lengths.Length / 2]:F3}/{lengths[lengths.Length * 9 / 10]:F3} m; " +
-                                      $"shorter than the wavelength at 16 kHz {Share(343.0 / 16000)}, 4 kHz {Share(343.0 / 4000)}, 1 kHz {Share(343.0 / 1000)}, 250 Hz {Share(343.0 / 250)}, 125 Hz {Share(343.0 / 125)}");
-            }
             foreach (var v in variants)
+            {
+                var n = v.populations.ToArray(); Array.Sort(n);
                 UnityEngine.Debug.Log($"PATH_BUDGET {v.name}: tracer {Stat(v.times[0])} ms, audio {Stat(v.times[1])} ms, CPU calls {Stat(v.times[2])} ms; " +
-                                      $"{v.times[0].Count} updates, population {v.solver.Method.LastRaysInFlight}, load {loadBefore} -> {loadAfter}");
+                                      $"{v.times[0].Count} updates, population {n[n.Length / 2]} [{n[n.Length / 10]}-{n[n.Length * 9 / 10]}], in flight {v.solver.Method.RaysInFlight()}, overflowed {v.solver.Method.RaysOverflowed()}, load {loadBefore} -> {loadAfter}");
+            }
+            if (!string.IsNullOrEmpty(tracePath)) File.WriteAllText(tracePath, trace.ToString());
         }
-        finally { foreach (var v in variants) { v.gpu.Dispose(); v.solver.Dispose(); } }
+        finally { foreach (var v in variants) { v.gpu?.Dispose(); v.solver?.Dispose(); } }
     }
 }

@@ -101,13 +101,22 @@ def features(track, seed, u):
     return x.astype(np.float32), ms.astype(np.float32), n, scale
 
 
-def model():
+def model(width=None):
     import torch.nn as nn
-    layers = [nn.Conv1d(CIN, WIDTH, 3, padding=1), nn.GELU()]
+    width = width or WIDTH
+    layers = [nn.Conv1d(CIN, width, 3, padding=1), nn.GELU()]
     for d in DILATIONS[1:]:
-        layers += [nn.Conv1d(WIDTH, WIDTH, 3, padding=d, dilation=d), nn.GELU()]
-    layers += [nn.Conv1d(WIDTH, 4 * CH + MIX, 1)]
+        layers += [nn.Conv1d(width, width, 3, padding=d, dilation=d), nn.GELU()]
+    layers += [nn.Conv1d(width, 4 * CH + MIX, 1)]
     return nn.Sequential(*layers)
+
+
+def load_model(tag):
+    """A trained model, its width read from the checkpoint."""
+    import torch
+    state = torch.load(WORK / f'denoiser-{tag}.pt', map_location='cpu')
+    net = model(state['0.weight'].shape[0]); net.load_state_dict(state); net.eval()
+    return net
 
 
 def predict(net, x, ms, n, S):
@@ -252,7 +261,7 @@ def evaluate(tag):
     import torch
     decay, grid = choose_decay()
     tracks = load({'validation', 'test'}); set_edges(tracks)
-    net = model(); net.load_state_dict(torch.load(WORK / f'denoiser-{tag}.pt', map_location='cpu')); net.eval()
+    net = load_model(tag)
     torch.set_num_threads(1)
     rows, t_infer = [], []
     for t in tracks:
@@ -274,7 +283,7 @@ def evaluate(tag):
     summary['groups'] = {g: dict(n=len(v), **{e: {k: float(np.nanmean([r[e][k] for r in v])) for k in NAMES} for e in ESTIMATES})
                          for g, v in groups.items()}
     WORK.mkdir(parents=True, exist_ok=True)
-    (WORK / f'eval-{tag}.json').write_text(json.dumps(dict(summary=summary, rows=rows), indent=1))
+    (WORK / f'eval-{tag}{EVAL_SUFFIX}.json').write_text(json.dumps(dict(summary=summary, rows=rows), indent=1))
     print(json.dumps(summary, indent=1))
     return summary
 
@@ -283,7 +292,7 @@ def export(tag):
     """Weights for the compute kernel (Assets/Resources/Acoustics/PathDenoise.compute), float32 little endian:
     per convolution, weight [out][in][tap] then bias [out]; and a JSON header with the shapes."""
     import torch
-    net = model(); net.load_state_dict(torch.load(WORK / f'denoiser-{tag}.pt', map_location='cpu'))
+    net = load_model(tag)
     convs = [m for m in net if isinstance(m, torch.nn.Conv1d)]
     target = ROOT / 'Assets/Resources/Acoustics/PathDenoise'
     target.mkdir(parents=True, exist_ok=True)
@@ -317,13 +326,22 @@ def fixture(net, updates=8, bins=64):
     print(f'fixture: {t["scene"]} {t["track"]}, {updates} updates of {bins} bins -> {FIXTURE}')
 
 
+EVAL_SUFFIX = ''
+
+
 def main(argv=None):
+    global DATA, WIDTH, EVAL_SUFFIX
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest='command', required=True)
     t = sub.add_parser('train'); t.add_argument('--steps', type=int, default=8000); t.add_argument('--model', default='persistent')
     e = sub.add_parser('evaluate'); e.add_argument('--model', default='persistent')
     x = sub.add_parser('export'); x.add_argument('--model', default='persistent')
+    p.add_argument('--data', help='a dataset folder with index.json (default: part 25\'s); part 33: .context/path-dataset-populations')
+    p.add_argument('--width', type=int, default=WIDTH, help='channels of the hidden convolutions (train)')
     a = p.parse_args(argv)
+    WIDTH = a.width
+    if a.data:
+        DATA = Path(a.data).resolve(); EVAL_SUFFIX = '-' + DATA.name
     dict(train=lambda: train(a.steps, a.model), evaluate=lambda: evaluate(a.model), export=lambda: export(a.model))[a.command]()
 
 
