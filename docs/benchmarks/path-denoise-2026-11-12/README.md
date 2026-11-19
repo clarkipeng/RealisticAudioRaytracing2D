@@ -1230,3 +1230,44 @@ Both are fixed and covered by `LivePathRendersOnTheGpuWithTheDenoiser`.
 - The population that fits beside the Church's rendering. 8,000 is a guess below part 20's 11,000 for the offline tracer.
 - The HUD's GPU timings in a release player.
 - The method toggle (path against energy): it needs the session to restart its take, so it was left out.
+
+## 27. Optimisation round: the GPU budget, a profile, and the mesh trees
+
+**The budget.**
+In a game the audio cannot have the whole GPU.
+The target is about 5 ms of GPU time per 23 ms update in the Church for the tracer, the denoiser and the audio together, at today's accuracy (the same noise at the same N, the wave suite within seed noise); the stretch goal is 2–3 ms.
+
+**Profile before any change** (`MeasurePathProfile` with the Church take, persistent rays, population 11,000; a fence after every phase; the variants switch parts off with `ProfileFlags`; medians of the warm-up's updates, ±1 ms between runs on this machine).
+
+| Part | ms per update |
+|---|---:|
+| walk (all ray segments of the update: traversal, beam scoring at the listener, shortcuts, edge connections, histogram and ring writes, population control) | 18.3–22.6 |
+| of which histogram and ring writes (bit 0 off) | about 3 |
+| of which straight shortcut and shadow rays (bit 2 off) | about 1.5 |
+| of which edge connections to the 14,075 edges (bit 3 off) | about 2 |
+| edge distribution and the edge-weight slice | 1.8–2.1 |
+| readback of the histogram | 0.1–0.4 |
+| denoiser (part 25, its own fence) | 1.2–1.6 |
+| path reverb on the GPU (part 26) | not yet measured |
+
+- The walk is the update.
+- With every ablation off it still took about 20 ms, so the cost is the walk's own segments, the BVH traversal above all.
+- The counters show why it is latency, not work. An update traces about 40,000 segments, which takes under a millisecond at any plausible GPU ray rate. But the longest thread runs about 280 segments in series (a ray caught in a narrow gap between surfaces), so the dispatch lasts as long as 280 dependent traversals.
+- Each traversal walked the mesh tree with a median split, children in fixed order, and every node's box rotated into world space on the fly (three quaternion rotations per node visit).
+
+**Change 1: the mesh trees** (`DirectBvh.BuildSah`, `Geometry.hlsl` `TraceMesh`).
+- **Build.** Binned surface-area heuristic over three axes (12 bins), with leaves of up to 8 triangles where the heuristic prefers them. Below depth 18 the split falls back to the median, so the tree stays within the 32-entry traversal stack.
+- **Traversal.** The ray is brought into the mesh's frame once, and boxes are tested with the inverse direction. Each box is padded by more than the transform's rounding, so no box the world-space triangle test would hit is ever culled.
+- **Order.** The nearer child goes first; the farther one waits on the stack and is culled when popped if a closer hit has been found since.
+- **Planar scenes** keep the rotated world bounds. Their geometry is extruded along world z, which a mesh-frame box cannot express under an out-of-plane rotation; `BvhChecks` caught this.
+- **Exactness.** Triangles are still tested in world space, and ties are still broken by primitive ID, so the hits are the same.
+
+Results:
+- **Church, persistent, population 11,000:** the walk went from 18.3–20.3 ms to 6.2–6.9 ms. The edge phase went from 2.0 ms to 0.8 ms (it traces the edges' clearance rays). The update's counters (segments, events, rays in flight) are unchanged.
+- **Wave suite, full solves at 2,048 rays:** every scene's histograms for seeds 0 and 1 match the published runs to a relative 6 × 10⁻⁸ (18 of 22 differ in the last bits of the summation, 4 are bit-identical), with the same total energy.
+- **Four seeds** (new runs in `raw-path-bvh`): level 3.38 dB, in the shadow 4.91 dB, closed rooms 1.95 dB, against 3.37, 4.91 and 1.93 dB with the scoreboard's two seeds.
+- **Time per solve:** 0.66 s, against 2.1–2.7 s.
+- **Checks:** the full tier passes; peak footprint 1.98 GiB.
+- **Memory:** the tree is trimmed to its node count; at most 2n − 1 nodes per mesh, against n/2 for leaves of four before. The Church's tree grows by about 0.5 MB.
+
+The batch tools now start the editor with `--burst-disable-compilation`: twice the editor's Burst compiler crashed at start-up in the runner, and no code here uses Burst.

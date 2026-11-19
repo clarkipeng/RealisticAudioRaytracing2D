@@ -63,7 +63,7 @@ def launch(name, arguments, env=None, work_fraction=hg.WORK_FRACTION):
     clear_stale_lock()
     prune_runner()
     (logs / 'provenance.json').write_text(json.dumps(dict(files=dj.sync_runner(dj.RUNNER)), indent=1) + '\n')
-    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '-force-metal', '-disable-audio', '-job-worker-count', '1',
+    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '--burst-disable-compilation', '-force-metal', '-disable-audio', '-job-worker-count', '1',
                '-projectPath', str(dj.RUNNER)] + arguments + ['-logFile', str(logs / 'unity.log')]
     environment = dict(os.environ, ACOUSTIC_TEST_WORK_FRACTION=str(work_fraction),
                        ACOUSTIC_SOLID_PYTHON=str(dj.SOLID_PYTHON), **(env or {}))

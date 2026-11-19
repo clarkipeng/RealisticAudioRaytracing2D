@@ -63,7 +63,7 @@ def run(test_filter, category=None, work_fraction=hg.WORK_FRACTION, env=None):
     prune_runner()
     dj.sync_runner(dj.RUNNER)
     results = logs / 'tests.xml'
-    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '-force-metal', '-disable-audio',
+    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '--burst-disable-compilation', '-force-metal', '-disable-audio',
                '-job-worker-count', '1', '-projectPath', str(dj.RUNNER), '-runTests', '-testPlatform', 'EditMode',
                '-testFilter', test_filter, '-testResults', str(results), '-logFile', str(logs / 'unity.log')]
     if category:

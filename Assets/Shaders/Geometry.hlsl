@@ -156,7 +156,9 @@ BvhNode WorldBounds(BvhNode node, State pose)
     center = pose.position.xyz + Rotate(pose.rotation, center);
     node.boundsMin.xyz = center - extent; node.boundsMax.xyz = center + extent; return node;
 }
-bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 direction, float minimum,
+// Planar scenes: geometry is projected onto the plane (extruded along world z), which a mesh-frame box cannot
+// express under an out-of-plane rotation, so they keep the rotated world bounds per node.
+bool TraceMeshPlanar(uint root, State pose, uint stateOffset, float3 origin, float3 direction, float minimum,
                bool is2D, bool anyHit, inout uint hit, inout float distance, inout float3 normal)
 {
     uint stack[32], depth = 0, index = root;
@@ -172,6 +174,61 @@ bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 di
         }
         if (depth == 0) break;
         index = stack[--depth];
+    }
+    return false;
+}
+// A mesh tree's box in the mesh's own frame against the ray brought into that frame (exact boxes, no rotated
+// world bounds per node), over [0, limit]; `pad` widens the box by more than the transform's rounding, so a
+// box is never missed that the world-space triangle test would hit. `entry` orders the children.
+bool LocalBox(BvhNode node, float3 o, float3 inv, float limit, float pad, bool is2D, out float entry)
+{
+    float3 a = (node.boundsMin.xyz - pad - o) * inv, b = (node.boundsMax.xyz + pad - o) * inv;
+    float3 low = min(a, b), high = max(a, b);
+    entry = max(max(low.x, low.y), max(low.z, 0));
+    return entry <= min(min(high.x, high.y), min(high.z, limit));
+}
+float SafeInverse(float v) { return 1 / (abs(v) < 1e-30 ? (v < 0 ? -1e-30 : 1e-30) : v); }
+// Ordered traversal (the nearer child first, the farther one kept on the stack and culled when popped if a
+// closer hit has been found since); the triangles are tested in world space exactly as before, and exact ties
+// are resolved by primitive ID, so the hit does not depend on the order.
+bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 direction, float minimum,
+               bool is2D, bool anyHit, inout uint hit, inout float distance, inout float3 normal)
+{
+    if (is2D) return TraceMeshPlanar(root, pose, stateOffset, origin, direction, minimum, is2D, anyHit, hit, distance, normal);
+    float4 inverse = pose.rotation; inverse.xyz = -inverse.xyz;
+    float3 o = Rotate(inverse, origin - pose.position.xyz), d = Rotate(inverse, direction);
+    float3 inv = float3(SafeInverse(d.x), SafeInverse(d.y), SafeInverse(d.z));
+    BvhNode top = BvhNodes[root];
+    float3 m = max(abs(top.boundsMin.xyz), abs(top.boundsMax.xyz)), p = abs(pose.position.xyz), q = abs(origin);
+    float pad = 16 * 1.1920929e-7 * (1 + max(p.x, max(p.y, p.z)) + 4 * max(m.x, max(m.y, m.z)) + max(q.x, max(q.y, q.z)));
+    uint stack[32], depth = 0, index = root;
+    float entry;
+    bool tested = false;
+    while (true)
+    {
+        BvhNode node = BvhNodes[index];
+        if (tested || LocalBox(node, o, inv, distance, pad, is2D, entry))
+        {
+            if (node.links.w == 0)
+            {
+                float nearLeft, nearRight;
+                bool left = LocalBox(BvhNodes[node.links.x], o, inv, distance, pad, is2D, nearLeft);
+                bool right = LocalBox(BvhNodes[node.links.y], o, inv, distance, pad, is2D, nearRight);
+                if (left && right)
+                {
+                    bool leftFirst = nearLeft <= nearRight;
+                    stack[depth++] = leftFirst ? node.links.y : node.links.x;
+                    index = leftFirst ? node.links.x : node.links.y; tested = true; continue;
+                }
+                if (left || right) { index = left ? node.links.x : node.links.y; tested = true; continue; }
+            }
+            else
+                for (uint leaf = 0; leaf < node.links.w; leaf++)
+                    if (ConsiderPrimitive(BvhIndices[node.links.z + leaf], stateOffset, origin, direction,
+                                          minimum, is2D, hit, distance, normal) && anyHit) return true;
+        }
+        if (depth == 0) break;
+        index = stack[--depth]; tested = false;
     }
     return false;
 }
