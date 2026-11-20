@@ -1794,3 +1794,41 @@ The auto-budget now chooses N within 4,000–23,000 from a budget in millisecond
 Part 34's runs hold five GPU-audio instances in one process and measured the audio phase at 3.6–4.0 ms, so their absolute times are above this table's.
 On a quiet machine 4,000 rays, the floor of the auto-budget's range, should cost about 5.9 ms. That is part 29's 6.6 ms less the denoiser's 0.36 ms and part of the sort's gain; it was not measured.
 The next fixed costs to cut are the path-kernel build (part 35) and the traversal (part 29, route a).
+
+## 37. The path-kernel build, faster (part 35's three changes)
+
+**What changed** (`GpuAudio.compute`, `GpuAudio.Path.cs`). All three changes are exact.
+1. **Group spectra where they take fewer operations.**
+   - A partition is summed from its groups' spectra when G groups × 8 bands × channels complex multiply-adds per bin, over P + 1 bins, cost no more than the 8 forward band FFTs (P log₂ 2P butterflies each) and their 8 × 2P filter products. The inverse transform is common to both paths.
+   - That gives G ≤ 6 for P = 1,024 and two ears (`GpuAudio.SpectralGroupLimit`, derived rather than tuned), against part 29's G ≤ 2.
+   - In the Church, 235 of 283 partitions now take this path instead of 106.
+   - The kernel takes a list of groups per partition, and their spectra sit in consecutive slots: 535 of the 1,063 groups have stored spectra (8.8 MB), against 106 before.
+2. **Two FFT stages per pass.**
+   - The shared FFT (`AudioFftShared`) still runs radix-2 butterflies, but each thread now takes four elements through two consecutive stages in registers before the next barrier.
+   - The butterflies and their order are unchanged, so every transform of the GPU audio gives the same bits as before, with half the barriers and half the shared-memory passes.
+   - A 2,048-point transform has 6 passes instead of 11.
+3. **Fewer dispatches.**
+   - `PathEar` is folded into `PathGroups`: each group sums its bins' ear energies itself, so the `PathEnergy` buffer is gone.
+   - `PathBand` and `PathBandGroups` are one dispatch, `PathFilter`, in which each threadgroup takes one branch.
+
+**Checks.**
+`GpuPathReverbMatchesTheCpuReference` gives the same agreement as before: 3.75 × 10⁻⁵ binaural and 6.27 × 10⁻⁶ mono.
+All of `GpuAudioParity` passes.
+
+**Time**, interleaved (`MeasurePathLiveBudget`, N = 11,000, no denoiser, 320 updates each, load average 10–18).
+"Kernels built once" is a bound: the build left out after the first update.
+The old variant uses part 29's rule and one FFT stage per pass, but it already has the fused dispatches, which cannot be switched back.
+
+| Variant | audio phase, ms | path-kernel build (minus the bound) |
+|---|---|---|
+| part 29's rule (G ≤ 2), one FFT stage per pass | 2.43 [2.04–4.14] | 0.94 |
+| G ≤ 2, two stages per pass | 2.02 [1.68–4.33] | 0.53 |
+| G ≤ 6, one stage per pass | 1.99 [1.61–4.48] | 0.50 |
+| G ≤ 6, two stages per pass (kept) | 1.81 [1.46–3.65] | 0.32 |
+| kernels built once (a bound) | 1.49 [1.17–3.82] | 0 |
+
+- The build fell from about 0.94 ms to 0.32 ms, a third, in line with part 35's estimate.
+- The two changes are about equal: 0.41 and 0.44 ms each alone, 0.62 ms together.
+- The audio phase without the denoiser is now 1.81 ms at this load, against 2.43 ms.
+
+**The update at N = 11,000** (each phase with its fence; part 36's quieter numbers for the tracer and the denoiser): tracer about 4.2 ms, audio about 1.45 ms (part 36's 2.07 ms less these 0.62 ms), denoiser 0.64 ms, about **6.3 ms** in all, against 6.9 ms after part 36 and 7.8 ms at the start of part 31.

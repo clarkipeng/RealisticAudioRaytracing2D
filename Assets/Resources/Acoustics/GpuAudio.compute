@@ -23,10 +23,8 @@
 #pragma kernel LateSum
 #pragma kernel LateInverse
 #pragma kernel LateWrite
-#pragma kernel PathEar
 #pragma kernel PathGroups
-#pragma kernel PathBand
-#pragma kernel PathBandGroups
+#pragma kernel PathFilter
 #pragma kernel PathPieces
 #pragma kernel PathPowers
 
@@ -301,18 +299,44 @@ void AudioMatch(uint3 id:SV_GroupID,uint3 tid:SV_GroupThreadID)
 // Twiddles exp(-2 pi i j / 2048), j < 1024, computed in double precision once (GpuAudio); the table replaces a
 // sine and a cosine per butterfly.
 StructuredBuffer<float2> AudioTwiddles;
+// Radix 2, decimation in time, in place. The stages are done two at a time (spans h and 2h on four elements held in
+// registers, README part 37): the same butterflies in the same order, so the result is bit for bit the radix-2 one, with
+// half the barriers and half the shared-memory passes. An odd number of stages starts with one stage alone.
+// AudioFftSingle (profiling only) runs one stage per pass, as before.
+uint AudioFftSingle;
 void AudioFftShared(uint n,bool inverse,uint thread)
 {
     uint bits=(uint)firstbithigh(n);
     for(uint i=thread;i<n;i+=256){uint j=reversebits(i)>>(32-bits);if(j>i){float2 v=AudioShared[i];AudioShared[i]=AudioShared[j];AudioShared[j]=v;}}
     GroupMemoryBarrierWithGroupSync();
-    for(uint step=2;step<=n;step*=2)
+    uint step=2;
+    if((bits&1)!=0 || AudioFftSingle!=0)
     {
-        for(uint i=thread;i<n/2;i+=256)
+        for(;step<=n;step*=2)
         {
-            uint k=i%(step/2),at=(i/(step/2))*step+k;float2 w=AudioTwiddles[k*(AUDIO_SHARED/step)];if(inverse)w.y=-w.y;
-            float2 a=AudioShared[at],b=AudioMultiply(AudioShared[at+step/2],w);
-            AudioShared[at]=a+b;AudioShared[at+step/2]=a-b;
+            for(uint i=thread;i<n/2;i+=256)
+            {
+                uint k=i%(step/2),at=(i/(step/2))*step+k;float2 w=AudioTwiddles[k*(AUDIO_SHARED/step)];if(inverse)w.y=-w.y;
+                float2 a=AudioShared[at],b=AudioMultiply(AudioShared[at+step/2],w);
+                AudioShared[at]=a+b;AudioShared[at+step/2]=a-b;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            if(AudioFftSingle==0){step*=2;break;}
+        }
+    }
+    for(;2*step<=n;step*=4)
+    {
+        uint h=step/2;
+        for(uint j=thread;j<n/4;j+=256)
+        {
+            uint k=j%h,at=(j/h)*4*h+k;
+            float2 w1=AudioTwiddles[k*(AUDIO_SHARED/step)],w2=AudioTwiddles[k*(AUDIO_SHARED/(2*step))],w3=AudioTwiddles[(k+h)*(AUDIO_SHARED/(2*step))];
+            if(inverse){w1.y=-w1.y;w2.y=-w2.y;w3.y=-w3.y;}
+            float2 x0=AudioShared[at],x1=AudioShared[at+h],x2=AudioShared[at+2*h],x3=AudioShared[at+3*h];
+            float2 b=AudioMultiply(x1,w1),y0=x0+b,y1=x0-b;
+            b=AudioMultiply(x3,w1);float2 y2=x2+b,y3=x2-b;
+            b=AudioMultiply(y2,w2);AudioShared[at]=y0+b;AudioShared[at+2*h]=y0-b;
+            b=AudioMultiply(y3,w3);AudioShared[at+h]=y1+b;AudioShared[at+3*h]=y1-b;
         }
         GroupMemoryBarrierWithGroupSync();
     }
@@ -747,11 +771,11 @@ void LateWrite(uint3 id:SV_DispatchThreadID)
     AudioOutput[8+AudioWriteOffset*channels+i]=value;
 }
 
-// Path method (PathReverb.cs is the CPU reference): per update, each pair's ear energies, then per impulse group
-// the two sequences' weights, then per partition the kernel: each band's slot sequences filtered by its band FIR
-// and summed over bands (both channels packed as real and imaginary parts), overlap-added across partitions and
-// transformed into LateKernels. The convolution, crossfade and output are the late field's (LateInput with the
-// band filters' delay as LateAdvance, LateSum, LateInverse, LateWrite with LatePower).
+// Path method (PathReverb.cs is the CPU reference): per update, per impulse group the two sequences' weights (from
+// the ear energies of the group's histogram bins), then per partition the kernel: each band's slot sequences filtered
+// by its band FIR and summed over bands (both channels packed as real and imaginary parts), overlap-added across
+// partitions and transformed into LateKernels. The convolution, crossfade and output are the late field's (LateInput
+// with the band filters' delay as LateAdvance, LateSum, LateInverse, LateWrite with LatePower).
 StructuredBuffer<float> PathHistogram;          // denoised [pair][6][8][bin] (PathFloat), else LateHistogram as fixed point
 StructuredBuffer<float> PathEarWeights;         // [direction][2][band]
 StructuredBuffer<float2> PathAlphaBeta;         // [band]
@@ -761,37 +785,36 @@ StructuredBuffer<float> PathTermWeights,PathMix; // mix [group][band][3]
 StructuredBuffer<int> PathSampleGroup;          // [pair][count * P]
 StructuredBuffer<float2> PathSampleValues;
 StructuredBuffer<float2> PathFilters;           // [band][2P]
-RWStructuredBuffer<float> PathEnergy;           // [pair][channel][band][bin]
 RWStructuredBuffer<float2> PathCoefficients;    // [channel][band][group]
 RWStructuredBuffer<float2> PathFiltered;        // [pair][partition][2P]: both channels' filtered partition
-StructuredBuffer<uint> PathFftPartitions;        // pair * count + partition, for PathBand
+StructuredBuffer<uint> PathFftPartitions;        // pair * count + partition, for the band FFTs
 uint PathFloat,PathGroupTotal,PathBinsCount,PathFixedOffset;
-[numthreads(64,1,1)]
-void PathEar(uint3 id:SV_DispatchThreadID)
+bool PathPairActive(uint pair){return LateValid!=0 && AudioFilterPairs[pair]>=0 && AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x!=0;}
+// Ear energy of channel c, band b at histogram bin k of a pair (the directions weighted by the ear's response).
+float PathEarEnergy(uint pair,uint c,uint b,uint k)
 {
-    uint count=AudioPairs*AudioChannels*LATE_BANDS*PathBinsCount;if(id.x>=count)return;
-    uint k=id.x%PathBinsCount,b=(id.x/PathBinsCount)%LATE_BANDS,c=(id.x/(PathBinsCount*LATE_BANDS))%AudioChannels,pair=id.x/(PathBinsCount*LATE_BANDS*AudioChannels);
-    bool active=LateValid!=0 && AudioFilterPairs[pair]>=0 && AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x!=0;
-    if(id.x%(PathBinsCount*LATE_BANDS*AudioChannels)==0)LateActive[LateBank*AudioPairs+pair]=active?1:0;
     float energy=0;
-    if(active)for(uint d=0;d<LATE_DIRECTIONS;d++)
+    for(uint d=0;d<LATE_DIRECTIONS;d++)
     {
         uint cell=((pair*LATE_DIRECTIONS+d)*LATE_BANDS+b)*PathBinsCount+k;
         float e=PathFloat!=0?PathHistogram[cell]:(LateHistogram[2*(PathFixedOffset+cell)+1]+LateHistogram[2*(PathFixedOffset+cell)]/4294967296.0)/LateRays;
         if(e>0)energy+=PathEarWeights[(d*2+c)*LATE_BANDS+b]*e;
     }
-    PathEnergy[id.x]=energy;
+    return energy;
 }
+// Per group, band and channel: the slot energy (the group's histogram bins, ear-weighted) and its two sequences'
+// weights. The first AudioPairs threads also record which pairs are active for the convolution's kernels.
 [numthreads(64,1,1)]
 void PathGroups(uint3 id:SV_DispatchThreadID)
 {
+    if(id.x<AudioPairs)LateActive[LateBank*AudioPairs+id.x]=PathPairActive(id.x)?1:0;
     uint g=id.x%PathGroupTotal,b=(id.x/PathGroupTotal)%LATE_BANDS,c=id.x/(PathGroupTotal*LATE_BANDS);if(c>=AudioChannels)return;
     uint4 info=PathGroupInfo[g];
     float2 w=0;
-    if(LateActive[LateBank*AudioPairs+info.x]!=0)
+    if(PathPairActive(info.x))
     {
         float slot=0;
-        for(uint i=0;i<info.w;i++)slot+=PathEnergy[((info.x*AudioChannels+c)*LATE_BANDS+b)*PathBinsCount+PathTermBins[info.z+i]]*PathTermWeights[info.z+i];
+        for(uint i=0;i<info.w;i++)slot+=PathEarEnergy(info.x,c,b,PathTermBins[info.z+i])*PathTermWeights[info.z+i];
         if(slot>0)
         {
             float amplitude=sqrt(slot),a1=PathAlphaBeta[b].x,a2=AudioChannels==2?(c==0?PathAlphaBeta[b].y:-PathAlphaBeta[b].y):0;
@@ -801,11 +824,10 @@ void PathGroups(uint3 id:SV_DispatchThreadID)
     }
     PathCoefficients[(c*LATE_BANDS+b)*PathGroupTotal+g]=w;
 }
-// One group per pair and partition: sum over bands of FFT(band slot sequences) x band filter, then the inverse.
-[numthreads(256,1,1)]
-void PathBand(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
+// A partition through the band FFTs: sum over bands of FFT(band slot sequences) x band filter, then the inverse.
+void PathBandPartition(uint entry,uint t)
 {
-    uint entry=PathFftPartitions[group.x],p=entry%LateCount,pair=entry/LateCount,t=tid.x,size=2*LatePartition,per=size/256;
+    uint p=entry%LateCount,pair=entry/LateCount,size=2*LatePartition,per=size/256;
     float2 sum[8];
     for(uint i=0;i<8;i++)sum[i]=0;
     for(uint b=0;b<LATE_BANDS;b++)
@@ -835,23 +857,22 @@ void PathBand(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     AudioFftShared(size,true,t);
     for(uint n=t;n<size;n+=256)PathFiltered[(pair*LateCount+p)*size+n]=AudioShared[n];
 }
-// One group per partition that holds at most two impulse groups (most of the late kernel): the same filtered
-// partition as PathBand, summed in the frequency domain from the groups' fixed spectra (PathReverb's own, the
-// zero-padded FFTs of their two slot sequences) instead of eight band FFTs. Real signals: bins above P mirror.
-StructuredBuffer<uint4> PathSpectralPartitions;  // pair * count + partition, group 0, group 1 (or ~0), first spectrum slot
-StructuredBuffer<float2> PathGroupSpectra;       // [slot][sequence 2][P + 1]
-[numthreads(256,1,1)]
-void PathBandGroups(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
+// A partition through its groups' spectra: the same filtered partition as PathBandPartition, summed in the frequency
+// domain from the groups' fixed spectra (PathReverb's own, the zero-padded FFTs of their two slot sequences) instead of
+// eight band FFTs. Real signals: bins above P mirror. Used where it takes fewer operations (GpuAudio.EnsurePath).
+StructuredBuffer<uint4> PathSpectralPartitions;  // pair * count + partition, first entry in PathSpectralGroups, groups, first spectrum slot
+StructuredBuffer<uint> PathSpectralGroups;       // the groups of each spectral partition, in order
+StructuredBuffer<float2> PathGroupSpectra;       // [slot][sequence 2][P + 1], a partition's groups in consecutive slots
+void PathSpectralPartition(uint4 entry,uint t)
 {
-    uint4 entry=PathSpectralPartitions[group.x];
-    uint p=entry.x%LateCount,pair=entry.x/LateCount,t=tid.x,size=2*LatePartition,bins=LatePartition+1;
+    uint p=entry.x%LateCount,pair=entry.x/LateCount,size=2*LatePartition,bins=LatePartition+1;
     for(uint k=t;k<bins;k+=256)
     {
         float2 y0=0,y1=0;
-        for(uint j=0;j<2;j++)
+        for(uint j=0;j<entry.z;j++)
         {
-            uint g=j==0?entry.y:entry.z;if(g==0xffffffffu)continue;
-            uint slot=entry.w+j;float2 s1=PathGroupSpectra[(slot*2)*bins+k],s2=PathGroupSpectra[(slot*2+1)*bins+k];
+            uint g=PathSpectralGroups[entry.y+j],slot=entry.w+j;
+            float2 s1=PathGroupSpectra[(slot*2)*bins+k],s2=PathGroupSpectra[(slot*2+1)*bins+k];
             for(uint b=0;b<LATE_BANDS;b++)
             {
                 float2 h=PathFilters[b*size+k],w=PathCoefficients[b*PathGroupTotal+g];
@@ -866,6 +887,15 @@ void PathBandGroups(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     GroupMemoryBarrierWithGroupSync();
     AudioFftShared(size,true,t);
     for(uint n=t;n<size;n+=256)PathFiltered[(pair*LateCount+p)*size+n]=AudioShared[n];
+}
+// One dispatch for both kinds: the first PathFftDispatch groups take a partition through the band FFTs, the rest
+// spectral partitions from PathSpectralFirst on (each group follows one branch, so its barriers stay uniform).
+uint PathFftDispatch,PathSpectralFirst;
+[numthreads(256,1,1)]
+void PathFilter(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
+{
+    if(group.x<PathFftDispatch)PathBandPartition(PathFftPartitions[group.x],tid.x);
+    else PathSpectralPartition(PathSpectralPartitions[PathSpectralFirst+group.x-PathFftDispatch],tid.x);
 }
 // One group per pair and partition: the partition's piece (its filtered first half plus the previous one's
 // second half), transformed; the packed channels are separated by conjugate symmetry.

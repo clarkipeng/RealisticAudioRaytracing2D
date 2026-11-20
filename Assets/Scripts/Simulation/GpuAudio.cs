@@ -63,9 +63,9 @@ internal sealed partial class GpuAudio : IDisposable
             reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");match=Kernel("AudioMatch");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
             lateEnvelope=Kernel("LateEnvelope");lateExtend=Kernel("LateExtend");lateBuild=Kernel("LateBuild");lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
-            pathEar=Kernel("PathEar");pathGroups=Kernel("PathGroups");pathBand=Kernel("PathBand");pathBandGroups=Kernel("PathBandGroups");pathPieces=Kernel("PathPieces");pathPowers=Kernel("PathPowers");
+            pathGroups=Kernel("PathGroups");pathFilter=Kernel("PathFilter");pathPieces=Kernel("PathPieces");pathPowers=Kernel("PathPowers");
             kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateExtend,lateBuild,lateInput,lateSum,lateInverse,lateWrite,
-                pathEar,pathGroups,pathBand,pathBandGroups,pathPieces,pathPowers};
+                pathGroups,pathFilter,pathPieces,pathPowers};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(slots*2+1);
             Buffer("AudioRanges",pairs,8).SetData(layout.Ranges);Buffer("AudioOwners",capacity,4).SetData(layout.Owners);

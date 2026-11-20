@@ -11,11 +11,15 @@ using UnityEngine;
 // goes through the persistent-ray denoiser (PathDenoiser), recorded into the same command buffer.
 internal sealed partial class GpuAudio
 {
-    int pathEar,pathGroups,pathBand,pathBandGroups,pathPieces,pathPowers;
+    int pathGroups,pathFilter,pathPieces,pathPowers;
     int pathFftCount,pathSpectralCount;
     ComputeBuffer pathFftBuffer,pathAllBuffer;
     internal bool PathGroupSpectraOff;   // profiling only (MeasurePathLiveBudget): every partition through the band FFTs
-    internal int PathKernelSkip;         // profiling only (MeasurePathLiveBudget): skip PathEar and PathGroups (1), PathBand (2), PathBandGroups (4), PathPieces (8)
+    internal int PathKernelSkip;         // profiling only (MeasurePathLiveBudget): skip PathGroups (1), the band-FFT partitions (2), the spectral ones (4), PathPieces (8)
+    // Partitions with at most this many impulse groups are summed from the groups' spectra; -1: where that takes fewer
+    // operations than the band FFTs (SpectralGroupLimit). Profiling only (part 29's rule was 2); set before the first response.
+    internal int PathSpectralGroupLimit=-1;
+    internal bool FftSingleStages { set => shader.SetInt("AudioFftSingle",value?1:0); }   // profiling only: one FFT stage per pass, as before part 37
     internal string PathPartitionGroups = ""; // diagnostics: how many partitions hold 0, 1, 2, ... impulse groups (all pairs)
     bool pathMode,lateInitializedOnce;
     int pathBins,pathGroupCount;
@@ -27,9 +31,9 @@ internal sealed partial class GpuAudio
     void PreparePath(TakeRender.Settings settings,int rate)
     {
         pathMode=settings.method==TakeRender.Method.Path;
-        foreach(var name in new[]{"PathHistogram","PathEarWeights","PathTermWeights","PathMix","PathEnergy","LatePowers"})Buffer(name,1,4);
+        foreach(var name in new[]{"PathHistogram","PathEarWeights","PathTermWeights","PathMix","LatePowers"})Buffer(name,1,4);
         foreach(var name in new[]{"PathAlphaBeta","PathSampleValues","PathFilters","PathCoefficients","PathFiltered"})Buffer(name,1,8);
-        Buffer("PathGroupInfo",1,16);Buffer("PathTermBins",1,4);Buffer("PathSampleGroup",1,4);Buffer("PathFftPartitions",1,4);Buffer("PathSpectralPartitions",1,16);Buffer("PathGroupSpectra",1,8);
+        Buffer("PathGroupInfo",1,16);Buffer("PathTermBins",1,4);Buffer("PathSampleGroup",1,4);Buffer("PathFftPartitions",1,4);Buffer("PathSpectralPartitions",1,16);Buffer("PathSpectralGroups",1,4);Buffer("PathGroupSpectra",1,8);
         Set("LateAdvance",0);Set("LatePower",0);Set("PathFloat",0);
         if(!pathMode)return;
         var bins=new PathBins(settings);pathBins=bins.Count;
@@ -45,24 +49,22 @@ internal sealed partial class GpuAudio
         var histogram=new PathBins(settings);
         var filters=PathReverb.BandFilters(lateRate,latePartition);
         var info=new List<uint>();var termBins=new List<uint>();var termWeights=new List<float>();var mix=new List<float>();
-        var fftPartitions=new List<uint>();var spectral=new List<uint>();var groupSpectra=new List<Vector2>();
+        var fftPartitions=new List<uint>();var spectral=new List<uint>();var spectralGroups=new List<uint>();var groupSpectra=new List<Vector2>();
+        int limit=PathSpectralGroupLimit>=0?PathSpectralGroupLimit:SpectralGroupLimit(latePartition,channels);
         var sampleGroup=new int[checked(pairs*lateCount*latePartition)];var sampleValues=new Vector2[sampleGroup.Length];
         for(int pair=0;pair<pairs;pair++)
         {
             var slots=PathReverb.BuildSlots(pair,histogram,lateRate,latePartition,lateCount,filters,true,true);
             int first=info.Count/4;
-            // Partitions with at most two impulse groups are summed from the groups' spectra (PathBandGroups).
+            // Partitions with at most `limit` impulse groups are summed from the groups' spectra (PathSpectralPartition).
             var members=new List<int>[lateCount];for(int q=0;q<lateCount;q++)members[q]=new List<int>();
             for(int g=0;g<slots.groups.Count;g++)members[slots.groups[g].partition].Add(g);
             for(int q=0;q<lateCount;q++)
             {
                 uint entry=(uint)(pair*lateCount+q);
-                if(members[q].Count>2){fftPartitions.Add(entry);continue;}
-                uint g0=members[q].Count>0?(uint)(first+members[q][0]):0xffffffffu,g1=members[q].Count>1?(uint)(first+members[q][1]):0xffffffffu;
-                spectral.Add(entry);spectral.Add(g0);spectral.Add(g1);spectral.Add((uint)(groupSpectra.Count/(2*bins)));
-                foreach(int g in members[q])groupSpectra.AddRange(new ArraySegment<Vector2>(slots.spectra,g*2*bins,2*bins));
-                if(members[q].Count==1)groupSpectra.AddRange(new Vector2[2*bins]);   // (slot 1 unused, kept for a fixed stride of two)
-                if(members[q].Count==0)groupSpectra.AddRange(new Vector2[4*bins]);
+                if(members[q].Count>limit){fftPartitions.Add(entry);continue;}
+                spectral.Add(entry);spectral.Add((uint)spectralGroups.Count);spectral.Add((uint)members[q].Count);spectral.Add((uint)(groupSpectra.Count/(2*bins)));
+                foreach(int g in members[q]){spectralGroups.Add((uint)(first+g));groupSpectra.AddRange(new ArraySegment<Vector2>(slots.spectra,g*2*bins,2*bins));}
             }
             var census=new SortedDictionary<int,int>();foreach(var m in members)census[m.Count]=census.TryGetValue(m.Count,out int c)?c+1:1;
             PathPartitionGroups+=string.Join(" ",census.Select(kv=>$"{kv.Key}:{kv.Value}"))+$" (groups {slots.groups.Count}, terms {slots.bins.Count}); ";
@@ -90,6 +92,7 @@ internal sealed partial class GpuAudio
         var all=new uint[pairs*lateCount];for(int i=0;i<all.Length;i++)all[i]=(uint)i;
         pathAllBuffer=new ComputeBuffer(all.Length,4);owned.Add(pathAllBuffer);pathAllBuffer.SetData(all);
         Buffer("PathSpectralPartitions",Math.Max(1,pathSpectralCount),16).SetData(pathSpectralCount>0?spectral.ToArray():new uint[4]);
+        Buffer("PathSpectralGroups",Math.Max(1,spectralGroups.Count),4).SetData(spectralGroups.Count>0?spectralGroups.ToArray():new uint[1]);
         Buffer("PathGroupSpectra",Math.Max(1,groupSpectra.Count),8).SetData(groupSpectra.Count>0?groupSpectra.ToArray():new Vector2[1]);
         var ears=LateBasis.Get(lateRate,latePartition,1,channels).EarWeights;
         Buffer("PathEarWeights",ears.Length,4).SetData(ears);
@@ -101,7 +104,6 @@ internal sealed partial class GpuAudio
             alphaBeta[b]=new Vector2((float)Math.Sqrt((1+g)/2),(float)Math.Sqrt((1-g)/2));
         }
         Buffer("PathAlphaBeta",alphaBeta.Length,8).SetData(alphaBeta);
-        Buffer("PathEnergy",checked(pairs*channels*TakeRender.Settings.LateBands*pathBins),4);
         Buffer("PathCoefficients",checked(channels*TakeRender.Settings.LateBands*pathGroupCount),8);
         Buffer("PathFiltered",checked(pairs*lateCount*size),8);
         Buffer("LatePowers",3*lanes,4);
@@ -113,6 +115,16 @@ internal sealed partial class GpuAudio
         Set("LateTiles",LateTiles);Set("LateStep",settings.responseStepSamples);
         Set("LateAdvance",latePartition/2);Set("LatePower",1);Set("PathGroupTotal",pathGroupCount);Set("PathBinsCount",pathBins);
         lateReady=true;
+    }
+
+    // The most impulse groups for which summing a partition from its groups' spectra takes no more operations than the
+    // band FFTs: G groups x 8 bands x channels complex multiply-adds per bin (P + 1 bins) against 8 forward transforms
+    // (P log2 2P butterflies each) and their 8 x 2P filter products; the inverse transform is common to both.
+    // P = 1,024, two ears: 6.
+    internal static int SpectralGroupLimit(int partition,int channels)
+    {
+        double transforms=partition*Math.Log(2.0*partition,2)+2.0*partition;
+        return (int)Math.Floor(transforms/(channels*(partition+1.0)));
     }
 
     // The persistent-ray denoiser, one per pair, writing into the histogram the reverb reads (PathFloat).
@@ -147,28 +159,19 @@ internal sealed partial class GpuAudio
                 denoisers[p].Record(commands,method.LateBuffer,fixedOffset+p*PathDenoiser.Cells*pathBins,method.CountsBuffer,(late.Frame*pairs+p)*pathBins,method.LateRays);
             }
         }
-        commands.SetComputeBufferParam(shader,pathEar,"LateHistogram",valid?method.LateBuffer:lateEmpty);
+        commands.SetComputeBufferParam(shader,pathGroups,"LateHistogram",valid?method.LateBuffer:lateEmpty);
         Set("LateValid",valid?1:0);Set("LateBank",lateBank);Set("LateBlend",lateBlend?1:0);Clock("LateSwap",sample);
         Set("PathFloat",denoise?1:0);Set("PathFixedOffset",fixedOffset);Set("LateRays",valid?method.LateRays:1);
         commands.BeginSample("Acoustics.GPU.PathKernels");
         if((PathKernelSkip&1)==0)
-        {
-            commands.DispatchCompute(shader,pathEar,(checked(pairs*channels*TakeRender.Settings.LateBands*pathBins)+63)/64,1,1);
-            commands.DispatchCompute(shader,pathGroups,(checked(channels*TakeRender.Settings.LateBands*pathGroupCount)+63)/64,1,1);
-        }
+            commands.DispatchCompute(shader,pathGroups,(Math.Max(pairs,checked(channels*TakeRender.Settings.LateBands*pathGroupCount))+63)/64,1,1);
         if(!SkipPathKernels || !lateInitializedOnce)
         {
-            if(PathGroupSpectraOff)
-            {
-                commands.SetComputeBufferParam(shader,pathBand,"PathFftPartitions",pathAllBuffer);
-                commands.DispatchCompute(shader,pathBand,checked(pairs*lateCount),1,1);
-                commands.SetComputeBufferParam(shader,pathBand,"PathFftPartitions",pathFftBuffer);
-            }
-            else
-            {
-                if(pathFftCount>0 && (PathKernelSkip&2)==0)commands.DispatchCompute(shader,pathBand,pathFftCount,1,1);
-                if(pathSpectralCount>0 && (PathKernelSkip&4)==0)commands.DispatchCompute(shader,pathBandGroups,pathSpectralCount,1,1);
-            }
+            // One dispatch: the band-FFT partitions, then the spectral ones (PathFilter).
+            int fft=PathGroupSpectraOff?pairs*lateCount:(PathKernelSkip&2)!=0?0:pathFftCount,spectralCount=PathGroupSpectraOff||(PathKernelSkip&4)!=0?0:pathSpectralCount;
+            commands.SetComputeBufferParam(shader,pathFilter,"PathFftPartitions",PathGroupSpectraOff?pathAllBuffer:pathFftBuffer);
+            Set("PathFftDispatch",fft);Set("PathSpectralFirst",0);
+            if(fft+spectralCount>0)commands.DispatchCompute(shader,pathFilter,fft+spectralCount,1,1);
             if((PathKernelSkip&8)==0)commands.DispatchCompute(shader,pathPieces,checked(pairs*lateCount),1,1);
         }
         lateInitializedOnce=true;

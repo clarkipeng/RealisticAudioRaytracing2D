@@ -142,7 +142,7 @@ public partial class TakeChecks
     // kernels, the convolution, the readback of 1,024 samples), and the CPU time of the audio calls.
     // ACOUSTIC_PATH_BUDGET_VARIANTS: variants separated by ';', each "name:key=value,..." with keys population,
     // denoise (0/1), flags (MethodTransport.ProfileFlags), iterationCap, edgeSlice, kernels (0: the path
-    // kernels built once and then left, a profiling bound), spectra (0: every partition through the band FFTs), kernelSkip (GpuAudio.PathKernelSkip, a profiling bound), otherDenoiser (1: the weights in ACOUSTIC_PATH_BUDGET_DENOISER),
+    // kernels built once and then left, a profiling bound), spectra (0: every partition through the band FFTs), kernelSkip (GpuAudio.PathKernelSkip, a profiling bound), otherDenoiser (1: the weights in ACOUSTIC_PATH_BUDGET_DENOISER), spectralLimit (GpuAudio.PathSpectralGroupLimit), fftSingle (1: one FFT stage per pass),
     // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000-23,000),
     // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU); default "base:".
     // All variants live in one process and are measured interleaved, in rounds of 8 updates each
@@ -155,7 +155,7 @@ public partial class TakeChecks
         public string name; public GpuAudio gpu; public TransportSolver solver; public AcousticTake.State[] state; public long cursor;
         public readonly System.Collections.Generic.List<double>[] times = {new(), new(), new()};
         public readonly System.Collections.Generic.List<int> populations = new();
-        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip;
+        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle;
     }
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
     public void MeasurePathLiveBudget()
@@ -205,6 +205,8 @@ public partial class TakeChecks
                         case "load": v.loadRound = value; break;
                         case "kernelSkip": v.kernelSkip = value; break;
                         case "otherDenoiser": other = value != 0; break;
+                        case "spectralLimit": v.spectralLimit = value; break;
+                        case "fftSingle": v.fftSingle = value != 0; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
                 }
@@ -219,7 +221,7 @@ public partial class TakeChecks
                     v.gpu.EnablePathDenoiser(Resources.Load<ComputeShader>(PathDenoiser.ShaderResource), File.ReadAllBytes(Path.Combine(folder, "weights.bytes")),
                                              File.ReadAllText(Path.Combine(folder, "header.json")));
                 }
-                v.gpu.PathKernelSkip = v.kernelSkip; v.gpu.SkipPathKernels = kernels == 0; v.gpu.PathGroupSpectraOff = spectra == 0; v.gpu.SkipLateConvolution = convolution == 0;
+                v.gpu.PathKernelSkip = v.kernelSkip; v.gpu.PathSpectralGroupLimit = v.spectralLimit; v.gpu.FftSingleStages = v.fftSingle; v.gpu.SkipPathKernels = kernels == 0; v.gpu.PathGroupSpectraOff = spectra == 0; v.gpu.SkipLateConvolution = convolution == 0;
                 v.state = new AcousticTake.State[scene.objects.Length];
                 variants.Add(v);
             }
