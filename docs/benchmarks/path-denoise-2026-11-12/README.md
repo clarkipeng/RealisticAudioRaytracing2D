@@ -1832,3 +1832,44 @@ The old variant uses part 29's rule and one FFT stage per pass, but it already h
 - The audio phase without the denoiser is now 1.81 ms at this load, against 2.43 ms.
 
 **The update at N = 11,000** (each phase with its fence; part 36's quieter numbers for the tracer and the denoiser): tracer about 4.2 ms, audio about 1.45 ms (part 36's 2.07 ms less these 0.62 ms), denoiser 0.64 ms, about **6.3 ms** in all, against 6.9 ms after part 36 and 7.8 ms at the start of part 31.
+
+## 38. The playable Church, finished: the build, a scripted smoke run, the population
+
+**The smoke run** (`tools/path_live_church.py smoke [--windowed] [-- player arguments]`; `PathLiveChurch`, `-pathLiveSmoke DIR`).
+- **The walk.** The player stands 5 s, then walks to the organ, back to the doors, opens them, walks out and along the facade.
+  - Each leg steers toward a waypoint taken from the scene itself: the organ source, the sliding doors' centre, and points outside along the line from the organ through the doors.
+  - A leg ends at its waypoint, or when the player has not come 10 cm closer for 2 s. That is how the organ leg ends: at the chancel step, about 8 m from the organ.
+  - The earlier script used fixed movement timings and pressed E on a tick that never came, so the doors never opened. Both the doors now open, and the walk takes 29 s.
+- **The report.** It writes `output.wav` (the session's monitor capture) and `smoke.json` (frame times, underruns, callbacks, the frame's GPU time, camera renders per frame). It also writes `timeline.csv`: per frame the phase, the population, the frame and frame-GPU times, the position, the doors and the underruns so far.
+- **The screen's focus.** Two modes were tried; only the windowed one is usable:
+  - **Windowless** (`-batchmode`): it never takes the focus, but the player does not draw the scene (0 camera renders per frame), so it cannot measure the rendering's share.
+  - **Windowed** (`--windowed`): it launches the app hidden and not activated (`open -g -j`), and watches the front application throughout. It stops the player if it ever becomes frontmost; that happened in none of the runs. The scene is drawn every frame (1.00 camera render per frame).
+  - In windowed mode the guard holds the heavy-job lock, but it cannot see the player's footprint, because the player is `open`'s child, not the guard's. The player peaked under 1 GiB when it was run directly.
+
+**GPU timings in a release player.**
+- The HUD's per-stage GPU times (the profiler `Recorder`s around the tracer, the reverb and the denoiser) are empty in a release player, windowed or not. Unity reports them only in development players and the editor.
+- So `-pathBudget` stays off by default; the auto-budget has no per-stage time to read in a release player.
+- The build now enables frame timing stats. The HUD and the smoke run therefore show the whole frame's GPU time (`FrameTimingManager`): the scene's rendering and the audio's compute together.
+- That time could drive the auto-budget toward a frame-level budget, but it does not separate the audio from the rendering, so it was not wired in.
+
+**The population beside the Church's rendering** (windowed smoke runs at 60 Hz, one after another, with other users' jobs on the machine):
+
+| N | underrun samples | frame, ms (median / 99th pct / max) | frame GPU, ms (median / 90th / 99th pct) |
+|---:|---:|---|---|
+| 8,000 | 0 | 16.67 / 24.2 / 42.1 | 9.3 / 15.6 / 21.1 |
+| 11,000 | 0 | 16.67 / 23.2 / 32.8 | 8.4 / 10.5 / 11.5 |
+| 11,000 (again) | 1,972, as the doors opened | 16.67 / 17.6 / 32.7 | 8.3 / 10.4 / 11.7 |
+| 16,000 | 57,084 | 16.67 / 30.7 / 232 | 10.1 / 12.1 / 28.9 |
+| 23,000 | 1,242 | 16.67 / 24.3 / 107 | 13.5 / 18.2 / 30.1 |
+
+- At 16,000 and 23,000 the underruns came with frames of 100–230 ms, at the same point of the walk, about 9 s in.
+- In the repeated 11,000 run they came as the doors began to move. The frames stayed at 16.7 ms then, but the frame's GPU time rose to 16.4 ms.
+- So the default stays at **8,000**, the only population with no underrun in every run (`-pathPopulation N` overrides it).
+- The handover run of the final build at 8,000 had no underrun either: frames 16.67 ms median, 17.3 ms at the 99th percentile and 24.3 ms at most, frame GPU time 8.2 ms median and 16.8 ms at the 99th percentile, the longest callback 0.42 ms. The screen was locked during it, which did not stop the drawing (1.00 camera render per frame). The door-opening stall at 11,000 is not understood yet. It is the next thing to look at before raising the default.
+- The audio thread's callbacks never took more than 0.7 ms.
+
+**Listening.** The handover run's recording is `.context/energy-audio/listen/path-live-player.m4a` (and `.wav`), linked on the listening page (`path.html`) as "path, live player" and copied to the Agentworld gallery (`raytracer/church-live-player-smoke.m4a`).
+
+**The path/energy toggle: left out.**
+Switching method needs the session to restart its take: the transports, the GPU audio and the denoisers are built per method at the take's start. That is not a cheap change.
+

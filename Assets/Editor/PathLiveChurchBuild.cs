@@ -42,6 +42,9 @@ public static class PathLiveChurchBuild
             scenes = new[] {Scene}, locationPathName = output, target = BuildTarget.StandaloneOSX, targetGroup = BuildTargetGroup.Standalone,
             extraScriptingDefines = new[] {"PATH_LIVE_CHURCH"}, options = BuildOptions.None
         };
+        // Frame timing stats: release players report the frame's GPU time through FrameTimingManager (the profiler's
+        // per-sample GPU times are development-only); the HUD and the smoke run read it.
+        PlayerSettings.enableFrameTimingStats = true;
         var report = BuildPipeline.BuildPlayer(options);
         var summary = report.summary;
         Debug.Log($"PATH_LIVE_BUILD {summary.result} {output} {summary.totalSize / (1 << 20)} MiB in {summary.totalTime.TotalSeconds:F0} s, {summary.totalErrors} errors");

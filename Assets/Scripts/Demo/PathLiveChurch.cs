@@ -17,10 +17,14 @@ using UnityEngine.Profiling;
 [DefaultExecutionOrder(-200)]
 public sealed class PathLiveChurch : MonoBehaviour
 {
+    // 8,000 rays in flight: smoke runs beside the Church's own rendering had no audio underrun at 8,000, but at 11,000 one
+    // of two runs lost 1,972 samples when the doors opened, and 16,000 and 23,000 lost more (README part 38).
+    // Command line: -pathPopulation N.
     public int population = 8000;
     // The auto-budget (PathPopulationBudget, README part 34): the GPU milliseconds per update the tracer, the denoiser and
     // the reverb may take together; the population then moves within the denoiser's trained range. Zero: a fixed population.
-    // Command line: -pathBudget MS.
+    // Command line: -pathBudget MS. Off by default: it reads the profiler's per-sample GPU times, which only development
+    // players and the editor report (README part 38).
     public float budgetMs;
     PathPopulationBudget budget;
     public float horizonSeconds = 6;
@@ -33,7 +37,10 @@ public sealed class PathLiveChurch : MonoBehaviour
     string smoke;
     float smokeStart = -1;
     readonly List<float> frameMs = new List<float>();
-    readonly List<float> traceMs = new List<float>(), reverbMs = new List<float>(), denoiseMs = new List<float>();
+    readonly List<float> traceMs = new List<float>(), reverbMs = new List<float>(), denoiseMs = new List<float>(), gpuMs = new List<float>(), frameGpuMs = new List<float>();
+    readonly FrameTiming[] frameTiming = new FrameTiming[1];
+    float frameGpu = float.NaN;
+    System.Text.StringBuilder timeline;   // smoke run: per frame with updates, time, phase, population, GPU ms (timeline.csv)
     Recorder traceRecorder, reverbRecorder, denoiseRecorder;
     long lastUpdates;
     float inFlightAt;
@@ -69,6 +76,8 @@ public sealed class PathLiveChurch : MonoBehaviour
         var args = Environment.GetCommandLineArgs();
         int at = Array.IndexOf(args, "-pathLiveSmoke");
         if (at >= 0 && at + 1 < args.Length) smoke = Path.GetFullPath(args[at + 1]);
+        int n = Array.IndexOf(args, "-pathPopulation");
+        if (n >= 0 && n + 1 < args.Length) population = int.Parse(args[n + 1]);
         int b = Array.IndexOf(args, "-pathBudget");
         if (b >= 0 && b + 1 < args.Length) budgetMs = float.Parse(args[b + 1], System.Globalization.CultureInfo.InvariantCulture);
         Configure();
@@ -115,18 +124,58 @@ public sealed class PathLiveChurch : MonoBehaviour
         session.ReadPlayerInput = false;
         session.SampleInput += Script;
         manager.audioManager.muteOutput = true;
+        Application.runInBackground = true;   // the smoke run never takes focus; without this the player pauses
+        // Evidence that the scene is drawn (the smoke run may be windowless, -batchmode): camera renders per frame.
+        Camera.onPostRender += _ => cameraRenders++;
+        UnityEngine.Rendering.RenderPipelineManager.endCameraRendering += (_, _) => cameraRenders++;
         hud = false;
+        // Waypoints from the scene itself: the organ (stopping short of it), the doors' centre from inside, then out
+        // through them and along the facade.
+        var organ = manager.takeSources[0].transform.position;
+        var doors = session.actors.OfType<SlidingDoor>().ToArray();
+        var door = doors.Length > 0 ? doors.Aggregate(Vector3.zero, (a, d) => a + d.transform.position) / doors.Length : organ;
+        float y = session.player.position.y;
+        Vector3 Flat(Vector3 v) => new Vector3(v.x, y, v.z);
+        var inward = Flat(organ) - Flat(door); inward.y = 0; inward = inward.sqrMagnitude > 0 ? inward.normalized : Vector3.forward;
+        var along = Vector3.Cross(Vector3.up, inward);
+        route = new[] {Flat(organ) - inward * 3, Flat(door) + inward * 1.2f, Flat(door) - inward * 8, Flat(door) - inward * 8 + along * 8};
     }
+    Vector3[] route;
+    long cameraRenders;
+    public string ScriptPhase { get; private set; } = "";
 
-    // The smoke walk (as ChurchAcoustics.CaptureSpeechWalk): stand 5 s, walk to the doors and back, open them,
-    // walk out and along the facade; a slow look around throughout. Ticks of the session's fixed step.
-    long firstTick = -1;
+    // The smoke walk: stand 5 s, walk to the organ, back to the doors, open them, walk out and along the facade. Each leg
+    // steers toward its waypoint (movement in the player's frame) and ends there or after its time limit; ticks of the
+    // session's fixed step.
+    long firstTick = -1, legStart;
+    int leg = -1;
+    bool scriptDone, pressed;
+    float best = float.MaxValue, bestAt;
     void Script(long tick)
     {
-        if (firstTick < 0) firstTick = tick;
-        int i = (int)(tick - firstTick);
-        var movement = i >= 250 && i < 350 ? Vector2.up : i >= 350 && i < 500 || i >= 580 && i < 680 ? Vector2.down : i >= 680 && i < 780 ? Vector2.right : Vector2.zero;
-        session.SubmitInput(movement, new Vector2(Mathf.Sin(i * .01f) * .4f, 0), false, i == 500);
+        if (firstTick < 0) { firstTick = tick; legStart = tick; }
+        float seconds = (tick - legStart) * Time.fixedDeltaTime;
+        var movement = Vector2.zero; bool interact = false;
+        void Next() { leg++; legStart = tick; best = float.MaxValue; bestAt = 0; }
+        switch (leg)
+        {
+            case -1: ScriptPhase = "standing"; if (seconds >= 5) Next(); break;
+            case 0: case 1: case 3: case 4:
+            {
+                int target = leg <= 1 ? leg : leg - 1;
+                ScriptPhase = new[] {"to the organ", "to the doors", "outside", "along the facade"}[target];
+                var to = route[target] - session.player.position; to.y = 0;
+                // A leg ends at its waypoint, or when it has not come 10 cm closer for 2 s (blocked: a step, a rail, a door).
+                if (to.magnitude < best - .1f) { best = to.magnitude; bestAt = seconds; }
+                if (to.magnitude < .4f || seconds - bestAt > 2) { Next(); break; }
+                to.Normalize();
+                movement = new Vector2(Vector3.Dot(to, session.player.right), Vector3.Dot(to, session.player.forward));
+                break;
+            }
+            case 2: ScriptPhase = "opening the doors"; interact = !pressed; pressed = true; if (seconds >= 3) Next(); break;
+            case 5: ScriptPhase = "done"; if (seconds >= 2) scriptDone = true; break;
+        }
+        session.SubmitInput(movement, Vector2.zero, false, interact);
     }
 
     void Update()
@@ -138,17 +187,27 @@ public sealed class PathLiveChurch : MonoBehaviour
         var method = live.Method;
         long updates = method.AudioUpdates, done = updates - lastUpdates; lastUpdates = updates;
         frameMs.Add(Time.unscaledDeltaTime * 1000);
+        // The whole frame's GPU time (the scene's rendering and the audio's compute), which release players report
+        // through FrameTimingManager (Player Settings: frame timing stats), unlike the profiler's per-sample GPU times.
+        FrameTimingManager.CaptureFrameTimings();
+        frameGpu = FrameTimingManager.GetLatestTimings(1, frameTiming) > 0 ? (float)frameTiming[0].gpuFrameTime : float.NaN;
+        if (frameGpu > 0) frameGpuMs.Add(frameGpu);
         if (done > 0)
         {
             float gpu = 0;
             if (traceRecorder.isValid && traceRecorder.gpuElapsedNanoseconds > 0) { traceMs.Add(traceRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += traceMs[^1]; }
             if (reverbRecorder.isValid && reverbRecorder.gpuElapsedNanoseconds > 0) { reverbMs.Add(reverbRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += reverbMs[^1]; }
             if (denoiseRecorder.isValid && denoiseRecorder.gpuElapsedNanoseconds > 0) { denoiseMs.Add(denoiseRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += denoiseMs[^1]; }
+            if (gpu > 0) gpuMs.Add(gpu);
             if (budget != null && gpu > 0) method.Population = budget.Observe(gpu);
+            if (smoke != null && smokeStart >= 0) (timeline ??= new System.Text.StringBuilder("seconds,phase,population,gpuMs,frameMs,frameGpuMs,x,z,doorsOpen,underrunSamples\n")).Append(
+                FormattableString.Invariant($"{Time.unscaledTime - smokeStart:F3},{ScriptPhase},{method.Population},{gpu:F3},{Time.unscaledDeltaTime * 1000:F2},{frameGpu:F2},{session.player.position.x:F2},{session.player.position.z:F2},{session.actors.OfType<SlidingDoor>().Count(d => d.IsOpen)},{manager.audioManager.OutputQueue?.UnderrunSamples ?? 0}\n"));
         }
         if (Time.unscaledTime > inFlightAt) { method.RequestRaysInFlight(); inFlightAt = Time.unscaledTime + .5f; }
         var queue = manager.audioManager.OutputQueue;
-        status = $"path method, persistent rays: {Recent(traceMs):F1} ms per update (GPU tracer), reverb {Recent(reverbMs):F1} ms, denoiser {Recent(denoiseMs):F2} ms\n" +
+        string stages = traceMs.Count > 0 ? $"{Recent(traceMs):F1} ms per update (GPU tracer), reverb {Recent(reverbMs):F1} ms, denoiser {Recent(denoiseMs):F2} ms"
+                                          : "per-stage GPU times need a development player";
+        status = $"path method, persistent rays: {stages}; whole frame on the GPU {Recent(frameGpuMs):F1} ms\n" +
                  $"rays in flight {method.LastRaysInFlight:N0} (population {method.Population:N0}{(budget != null ? $", auto-budget {budgetMs:F1} ms" : "")}, {method.NewRays:N0} new per update)\n" +
                  $"denoiser {(live.HasPathDenoiser ? live.PathDenoising ? "on" : "off" : "not loaded")} (N)   frame {Recent(frameMs):F1} ms   " +
                  $"audio underruns {queue?.UnderrunSamples ?? 0} samples   doors: E   HUD: H";
@@ -162,14 +221,16 @@ public sealed class PathLiveChurch : MonoBehaviour
         public string scene, takePath, outputWav;
         public int population, newRaysPerUpdate, sampleRate, leadSamples, frames, raysInFlightLast;
         public long audioUpdates, underrunSamples, overBudgetCallbacks, callbacks, lateSamples, overflowSamples;
-        public float seconds, frameMsMedian, frameMsP99, frameMsMax, maximumCallbackMs, traceMsMedian, traceMsP99, reverbMsMedian, denoiseMsMedian;
+        public float seconds, frameMsMedian, frameMsP99, frameMsMax, maximumCallbackMs, traceMsMedian, traceMsP99, reverbMsMedian, denoiseMsMedian, gpuMsMedian, gpuMsP90, budgetMs;
+        public bool gpuTimings, batchMode;
+        public float cameraRendersPerFrame, frameGpuMsMedian, frameGpuMsP99;
         public bool denoiser;
     }
 
     void Smoke(AudioManager.PcmQueue queue)
     {
         if (smokeStart < 0 && manager.IsRecordingTake) smokeStart = Time.unscaledTime;
-        if (smokeStart < 0 || finishing || Time.unscaledTime - smokeStart < 24) return;
+        if (smokeStart < 0 || finishing || !scriptDone && Time.unscaledTime - smokeStart < 120) return;
         finishing = true;
         var live = manager.LiveRenderer; var method = live.Method;
         float P(List<float> v, double q) { if (v.Count == 0) return float.NaN; var s = v.Skip(Math.Min(v.Count - 1, 60)).OrderBy(x => x).ToArray(); return s[Math.Min(s.Length - 1, (int)(q * s.Length))]; }
@@ -182,9 +243,12 @@ public sealed class PathLiveChurch : MonoBehaviour
             maximumCallbackMs = (float)(queue.MaximumCallbackTicks * 1000.0 / System.Diagnostics.Stopwatch.Frequency),
             frameMsMedian = P(frameMs, .5), frameMsP99 = P(frameMs, .99), frameMsMax = P(frameMs, 1),
             traceMsMedian = P(traceMs, .5), traceMsP99 = P(traceMs, .99), reverbMsMedian = P(reverbMs, .5), denoiseMsMedian = P(denoiseMs, .5),
+            gpuMsMedian = P(gpuMs, .5), gpuMsP90 = P(gpuMs, .9), budgetMs = budgetMs, gpuTimings = traceMs.Count > 0,
+            batchMode = Application.isBatchMode, frameGpuMsMedian = P(frameGpuMs, .5), frameGpuMsP99 = P(frameGpuMs, .99), cameraRendersPerFrame = frameMs.Count > 0 ? cameraRenders / (float)frameMs.Count : 0,
             denoiser = live.PathDenoising, takePath = manager.takePath, outputWav = Path.Combine(smoke, "output.wav")
         };
         File.WriteAllText(Path.Combine(smoke, "smoke.json"), JsonUtility.ToJson(report, true));
+        if (timeline != null) File.WriteAllText(Path.Combine(smoke, "timeline.csv"), timeline.ToString());
         manager.EndTakeRecording();
         StartCoroutine(Quit(report));
     }

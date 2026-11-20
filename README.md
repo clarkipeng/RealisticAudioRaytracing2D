@@ -498,9 +498,16 @@ Build settings start `Assets/Scenes/TrainStation.unity`. Player recordings go to
 
 The Church with the path method running live: persistent rays traced every audio update, the persistent-ray denoiser, and the path reverb built and convolved on the GPU.
 One source, the organ, plays in a loop.
-Details and status are in docs/benchmarks/path-denoise-2026-11-12, part 26.
+Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 26 and 38.
 
+- **App:** `Builds/ChurchLive/ChurchLive.app` (macOS). Open it like any app.
+- **Build it again:** run `nice -n 19 .context/fdtd-teacher/venv/bin/python tools/path_live_church.py build` (guarded, built from the test runner's copy), or choose Acoustics > Build playable Church (macOS). Either writes the app above.
 - **Editor:** choose Acoustics > Play Church live (path method). It opens `Assets/Scenes/Church.unity` and enters Play mode with `PathLiveChurch` added.
-- **Build:** run `nice -n 19 .context/fdtd-teacher/venv/bin/python tools/path_live_church.py build` (guarded, built from the test runner's copy), or choose Acoustics > Build playable Church (macOS). Either writes `Builds/ChurchLive/ChurchLive.app`; open it like any app.
 - **Controls:** WASD and the mouse to move and look, E to open and close the doors, N to switch the denoiser, H to show or hide the HUD, Escape to release the cursor (click to capture it again).
-- **Smoke run:** `tools/path_live_church.py smoke` runs a scripted walk, records the output to wav, and writes frame times, GPU times and audio underruns to `.context/path-live/smoke-*/smoke.json`. Not yet passed: see part 26.
+- **HUD:** the rays in flight, the whole frame's GPU time and the audio underruns. Per-stage GPU times appear only in a development player.
+- **Options** (command line, e.g. `open Builds/ChurchLive/ChurchLive.app --args -pathPopulation 11000`):
+  - `-pathPopulation N`: the rays in flight; the default is 8,000.
+  - `-pathBudget MS`: the auto-budget (part 34). It needs a development player, because release players do not report the per-stage GPU times it reads.
+- **Smoke run:** `tools/path_live_church.py smoke --windowed` runs a scripted walk (stand, walk to the organ, open the doors, walk outside). It runs hidden and never takes the screen's focus.
+  - It writes the output to `.context/path-live/smoke-*/output.wav`, with frame times, GPU times and audio underruns in `smoke.json` and `timeline.csv`.
+  - The latest recording, at 8,000 rays, is in `.context/energy-audio/listen/` ("path, live player") and in the Agentworld gallery.
