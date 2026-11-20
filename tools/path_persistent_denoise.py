@@ -61,17 +61,23 @@ def ema(h, decay):
     return out
 
 
-def load(splits):
+def ema_at(h, decay, u):
+    """ema(h, decay)[u] without the whole sequence: the bias-corrected weights (1 - d) d^(u - j) / (1 - d^(u + 1))."""
+    w = (1 - decay) * decay ** np.arange(u, -1, -1, dtype=np.float64)
+    return np.tensordot(w / w.sum(), h[:u + 1].astype(np.float64), 1)
+
+
+def load(splits, keep_high=True):
     tracks = []
-    for e in json.loads((DATA / 'index.json').read_text()):
+    for e in [e for d in (DATA if isinstance(DATA, list) else [DATA]) for e in json.loads((d / 'index.json').read_text())]:
         if e['split'] not in splits:
             continue
         z = np.load(e['file'])
         low, counts, high = z['low'], z['lowCounts'], z['high'].astype(np.float64)
         # float32 throughout (the training set is about a gigabyte in float64): the target is the two high seeds'
         # mean, and one high seed is kept for the target's own noise level.
-        tracks.append(dict(e, low=low, counts=counts, target=high.mean(0).astype(np.float32), high=high[:1].astype(np.float32), edges=z['edges'],
-                           emas=[[ema(low[s].astype(np.float64), d).astype(np.float32) for d in DECAYS] for s in range(len(low))]))
+        tracks.append(dict(e, low=low, counts=counts, target=high.mean(0).astype(np.float32), high=high[:1].astype(np.float32) if keep_high else None, edges=z['edges'],
+                           emas=[[ema(low[s].astype(np.float64), d).astype(np.float32) for d in DECAYS] for s in range(len(low))] if keep_high else None))
     return tracks
 
 
@@ -88,7 +94,8 @@ def features(track, seed, u):
     """Network input [CIN, B], the K-update mean m and the normaliser n (scaled), and the scale; None if empty."""
     h = track['low'][seed][u - K + 1:u + 1].astype(np.float64)   # [K, 48, B]
     m = h.mean(0)
-    e = [track['emas'][seed][j][u].astype(np.float64) for j in range(len(DECAYS))]
+    e = [track['emas'][seed][j][u].astype(np.float64) for j in range(len(DECAYS))] if track.get('emas') is not None else \
+        [ema_at(track['low'][seed], d, u) for d in DECAYS]
     scale = m.sum() if m.sum() > 0 else e[-1].sum()
     if scale <= 0:
         return None
@@ -193,7 +200,7 @@ def segment(B):
 def train(steps, tag, seed=0):
     import torch
     torch.manual_seed(seed)
-    tracks, valid = load({'train'}), load({'validation'})
+    tracks, valid = load({'train'}, False), load({'validation'}, False)
     set_edges(tracks + valid)
     dev = pdn.device(); net = model().to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=3e-4, weight_decay=1e-3)
@@ -336,12 +343,12 @@ def main(argv=None):
     t = sub.add_parser('train'); t.add_argument('--steps', type=int, default=8000); t.add_argument('--model', default='persistent')
     e = sub.add_parser('evaluate'); e.add_argument('--model', default='persistent')
     x = sub.add_parser('export'); x.add_argument('--model', default='persistent')
-    p.add_argument('--data', help='a dataset folder with index.json (default: part 25\'s); part 33: .context/path-dataset-populations')
+    p.add_argument('--data', help='dataset folders with index.json, comma-separated (default: part 25\'s); part 33: part 25\'s and .context/path-dataset-populations')
     p.add_argument('--width', type=int, default=WIDTH, help='channels of the hidden convolutions (train)')
     a = p.parse_args(argv)
     WIDTH = a.width
     if a.data:
-        DATA = Path(a.data).resolve(); EVAL_SUFFIX = '-' + DATA.name
+        DATA = [Path(d).resolve() for d in a.data.split(',')]; EVAL_SUFFIX = '-' + '+'.join(d.name for d in DATA)
     dict(train=lambda: train(a.steps, a.model), evaluate=lambda: evaluate(a.model), export=lambda: export(a.model))[a.command]()
 
 

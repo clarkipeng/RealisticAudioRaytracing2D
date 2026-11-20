@@ -8,52 +8,52 @@
  "layers": [
   {
    "input": 292,
-   "output": 96,
+   "output": 64,
    "taps": 3,
    "dilation": 1
   },
   {
-   "input": 96,
-   "output": 96,
+   "input": 64,
+   "output": 64,
    "taps": 3,
    "dilation": 1
   },
   {
-   "input": 96,
-   "output": 96,
+   "input": 64,
+   "output": 64,
    "taps": 3,
    "dilation": 2
   },
   {
-   "input": 96,
-   "output": 96,
+   "input": 64,
+   "output": 64,
    "taps": 3,
    "dilation": 4
   },
   {
-   "input": 96,
-   "output": 96,
+   "input": 64,
+   "output": 64,
    "taps": 3,
    "dilation": 8
   },
   {
-   "input": 96,
-   "output": 96,
+   "input": 64,
+   "output": 64,
    "taps": 3,
    "dilation": 16
   },
   {
-   "input": 96,
-   "output": 96,
+   "input": 64,
+   "output": 64,
    "taps": 3,
    "dilation": 1
   },
   {
-   "input": 96,
+   "input": 64,
    "output": 216,
    "taps": 1,
    "dilation": 1
   }
  ],
- "floats": 271608
+ "floats": 144280
 }

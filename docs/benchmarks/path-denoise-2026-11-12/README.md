@@ -1540,10 +1540,16 @@ That costs three more atomics per ray, and nothing is tuned.
 - The ordered traversal visits a node's children in an order set by the direction's signs, so rays of one octant take the same branches.
 - The cells add 0.35 ms on top of the octant.
 
-**Before and after.**
-- The tracer goes from 4.89 to 4.18 ms, 0.71 ms less, at the top of the 0.3–0.7 ms expected.
-- The traversal is measured by tracing every walk segment twice (`ProfileFlags` bit 15, part 28's probe, now kept). It is 1.26 ms of the sorted tracer (5.44 against 4.18 ms, same run). Unsorted, it was 1.48 ms in an earlier interleaved run (6.08 against 4.60 ms).
-- So the sort takes about 0.2 ms off the traversal and 0.5 ms off the rest of the walk: the beam scoring, the connections and the reads of the ray state, all of which now run in step across a SIMD group.
+**Before and after**, a second interleaved run (320 updates each, load average 28–34):
+
+| Variant | tracer, ms | each segment traced twice, ms | traversal (the difference) |
+|---|---|---|---|
+| unsorted | 4.81 [4.21–6.68] | 6.23 [5.69–8.83] | 1.42 |
+| sorted, octant then cell | 4.22 [3.71–6.03] | 5.45 [4.92–7.23] | 1.23 |
+
+- The tracer is 0.59 ms faster here and 0.71 ms faster in the first run, at the top of the 0.3–0.7 ms expected.
+- The traversal is measured by tracing every walk segment twice (`ProfileFlags` bit 15, part 28's probe, now kept).
+- So the sort takes about 0.2 ms off the traversal and 0.4–0.5 ms off the rest of the walk: the beam scoring, the connections and the reads of the ray state, all of which now run in step across a SIMD group.
 - The unsorted row runs the same three passes with a single key, so it includes their cost. The old atomic append was not timed in the same process.
 - The update now costs about 4.2 ms of tracer and 2.05 ms of audio without the denoiser, against 4.7 and 2.05 ms at the start of this round.
 - The full tier passes. `PersistentRaysMatchTheFullSolveInExpectation` adds a population that changes at every update (part 34).
@@ -1627,3 +1633,52 @@ Each copy then continues independently with its own random sequence.
 Today's rule, the systematic variant and the energy-aware rule (with every e_i > 0) all have this form.
 A rule that let e_i round to 0 for a light ray would drop that ray's expected contribution and be biased; the systematic variant prevented it with R ≥ 1.
 
+
+## 33. A denoiser 64 channels wide, trained across populations
+
+**Data** (`path_persistent_dataset.py plan-populations`, then `MeasurePathPersistentSequences`, then `pack-populations`).
+Every generated track of part 25 was rendered again with the live settings:
+- the sorted pool;
+- the long-chain lottery at 16;
+- the edge distribution refreshed every 4th update.
+
+Each seed of each track ran at its own population, log-uniform on 4,000–23,000 and drawn from a hash of the track and the seed.
+The targets stay part 25's (8 N, independent seeds): a target does not depend on the input's population.
+The Church's standing and walking tracks were rendered at 4,000, 6,000, 11,000, 16,000 and 23,000 rays, both seeds each, for the evaluation.
+That is 128 input runs; the render took a few minutes, because none of them is larger than 23,000 rays.
+
+**Training** (`path_persistent_denoise.py --data … --width 64 train`).
+The network is part 25's with 64 channels instead of 96: 144,280 parameters instead of 271,608.
+Trained on the new inputs alone, both widths overfit within 500–1,000 steps.
+Both widths then lost to today's denoiser at 11,000 and above: 6.58 / 2.10 / 3.04 dB (64 wide) against 6.49 / 2.09 / 2.76.
+The width was not the cause; a 96-wide model trained the same way did the same.
+The inputs were: none of them is cleaner than 23,000 rays.
+Trained on part 25's inputs and the new ones together (48 training tracks; the training script now computes the moving averages on demand, so twice the tracks fit in 2.5 GiB), the 64-wide model is kept (best checkpoint at step 6,000, 5 minutes).
+
+**Accuracy in the Church at each population** (`populations.py`; standing and walking, two seeds, updates 32–63, against part 25's 8 N targets; window / band level / decay curve, dB):
+
+| N | noisy input | today's denoiser (96 wide) | 64 wide, all populations |
+|---:|---|---|---|
+| 4,000 | 13.03 / 7.11 / 6.68 | 8.53 / 3.69 / 5.32 | **8.09** / 3.69 / **4.89** |
+| 6,000 | 11.76 / 5.55 / 5.70 | 7.82 / 2.49 / 3.86 | **7.48** / 2.50 / **3.66** |
+| 11,000 | 10.35 / 5.21 / 4.57 | 6.49 / 2.09 / 2.76 | **6.34** / 2.09 / 2.75 |
+| 16,000 | 9.74 / 4.34 / 4.49 | 6.33 / 2.11 / 2.72 | **6.24** / 2.11 / 2.71 |
+| 23,000 | 8.92 / 3.72 / 4.11 | 6.22 / 2.29 / 2.56 | **6.12** / 2.30 / 2.54 |
+
+- At 11,000 it matches today's denoiser: 0.15 dB better in window, equal in level and decay.
+- It is better at every other population, by up to 0.44 dB in window and 0.43 dB in decay at 4,000, where the auto-budget will put a tight budget.
+- On part 25's held-out families, with their inputs at 22,000–262,000 rays, it is 0.06 dB worse in window (2.02 against 1.96 dB) and equal in level (0.54 dB). It still beats the moving average there (2.08 dB).
+
+**Kernel and time.**
+The compute kernel reads the layer shapes from the exported header, so it needed no change.
+`PathDenoiserKernelMatchesTheModel` passes: the worst relative error against PyTorch is 1.75 × 10⁻⁵, against 1.9 × 10⁻⁵ for the old weights.
+Interleaved in the live budget (N = 11,000, 320 updates each; the difference of the audio phase with and without the denoiser):
+
+| Denoiser | audio phase, ms | the denoiser's share |
+|---|---|---|
+| none | 2.10 [1.81–2.27] | |
+| 96 wide | 3.10 [2.77–3.27] | 1.00 ms |
+| 64 wide | 2.74 [2.39–2.97] | 0.64 ms |
+
+It saves 0.36 ms per update.
+The bundled weights (`Resources/Acoustics/PathDenoise`) and the fixture are now the 64-wide model's.
