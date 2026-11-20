@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 // GPU synthesis of the Path method's histogram reverb (PathReverb.cs is the CPU reference, with the same slot
@@ -14,6 +15,8 @@ internal sealed partial class GpuAudio
     int pathFftCount,pathSpectralCount;
     ComputeBuffer pathFftBuffer,pathAllBuffer;
     internal bool PathGroupSpectraOff;   // profiling only (MeasurePathLiveBudget): every partition through the band FFTs
+    internal int PathKernelSkip;         // profiling only (MeasurePathLiveBudget): skip PathEar and PathGroups (1), PathBand (2), PathBandGroups (4), PathPieces (8)
+    internal string PathPartitionGroups = ""; // diagnostics: how many partitions hold 0, 1, 2, ... impulse groups (all pairs)
     bool pathMode,lateInitializedOnce;
     int pathBins,pathGroupCount;
     ComputeBuffer pathDenoised;
@@ -61,6 +64,8 @@ internal sealed partial class GpuAudio
                 if(members[q].Count==1)groupSpectra.AddRange(new Vector2[2*bins]);   // (slot 1 unused, kept for a fixed stride of two)
                 if(members[q].Count==0)groupSpectra.AddRange(new Vector2[4*bins]);
             }
+            var census=new SortedDictionary<int,int>();foreach(var m in members)census[m.Count]=census.TryGetValue(m.Count,out int c)?c+1:1;
+            PathPartitionGroups+=string.Join(" ",census.Select(kv=>$"{kv.Key}:{kv.Value}"))+$" (groups {slots.groups.Count}, terms {slots.bins.Count}); ";
             foreach(var g in slots.groups){info.Add((uint)pair);info.Add((uint)g.partition);info.Add((uint)(termBins.Count+g.first));info.Add((uint)g.terms);}
             for(int i=0;i<slots.bins.Count;i++){termBins.Add((uint)slots.bins[i]);termWeights.Add(slots.weights[i]);}
             mix.AddRange(slots.mix);
@@ -114,6 +119,7 @@ internal sealed partial class GpuAudio
     public void EnablePathDenoiser(ComputeShader denoise,byte[] weights,string header)
     {
         if(!pathMode)throw new InvalidOperationException("The denoiser applies to the path method.");
+        if(denoisers!=null)foreach(var d in denoisers)d?.Dispose();   // (replacing the bundled weights: measurements)
         var bins=new PathBins(settings);var starts=new double[bins.Count];for(int k=0;k<starts.Length;k++)starts[k]=bins.Start(k);
         pathDenoised=Buffer("PathHistogram",checked(pairs*PathDenoiser.Cells*bins.Count),4);
         denoisers=new PathDenoiser[pairs];
@@ -145,8 +151,11 @@ internal sealed partial class GpuAudio
         Set("LateValid",valid?1:0);Set("LateBank",lateBank);Set("LateBlend",lateBlend?1:0);Clock("LateSwap",sample);
         Set("PathFloat",denoise?1:0);Set("PathFixedOffset",fixedOffset);Set("LateRays",valid?method.LateRays:1);
         commands.BeginSample("Acoustics.GPU.PathKernels");
-        commands.DispatchCompute(shader,pathEar,(checked(pairs*channels*TakeRender.Settings.LateBands*pathBins)+63)/64,1,1);
-        commands.DispatchCompute(shader,pathGroups,(checked(channels*TakeRender.Settings.LateBands*pathGroupCount)+63)/64,1,1);
+        if((PathKernelSkip&1)==0)
+        {
+            commands.DispatchCompute(shader,pathEar,(checked(pairs*channels*TakeRender.Settings.LateBands*pathBins)+63)/64,1,1);
+            commands.DispatchCompute(shader,pathGroups,(checked(channels*TakeRender.Settings.LateBands*pathGroupCount)+63)/64,1,1);
+        }
         if(!SkipPathKernels || !lateInitializedOnce)
         {
             if(PathGroupSpectraOff)
@@ -157,10 +166,10 @@ internal sealed partial class GpuAudio
             }
             else
             {
-                if(pathFftCount>0)commands.DispatchCompute(shader,pathBand,pathFftCount,1,1);
-                if(pathSpectralCount>0)commands.DispatchCompute(shader,pathBandGroups,pathSpectralCount,1,1);
+                if(pathFftCount>0 && (PathKernelSkip&2)==0)commands.DispatchCompute(shader,pathBand,pathFftCount,1,1);
+                if(pathSpectralCount>0 && (PathKernelSkip&4)==0)commands.DispatchCompute(shader,pathBandGroups,pathSpectralCount,1,1);
             }
-            commands.DispatchCompute(shader,pathPieces,checked(pairs*lateCount),1,1);
+            if((PathKernelSkip&8)==0)commands.DispatchCompute(shader,pathPieces,checked(pairs*lateCount),1,1);
         }
         lateInitializedOnce=true;
         commands.EndSample("Acoustics.GPU.PathKernels");

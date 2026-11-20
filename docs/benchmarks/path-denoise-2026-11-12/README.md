@@ -1682,3 +1682,115 @@ Interleaved in the live budget (N = 11,000, 320 updates each; the difference of 
 
 It saves 0.36 ms per update.
 The bundled weights (`Resources/Acoustics/PathDenoise`) and the fixture are now the 64-wide model's.
+
+## 34. The auto-budget
+
+**What changed** (`PathPopulationBudget.cs`; `MethodTransport.Population`; `PathLiveChurch`, `-pathBudget MS`).
+The update's GPU time is measured every update: the tracer, the denoiser and the reverb together.
+From it, the population N moves toward a budget set in milliseconds, within 4,000–23,000, the range the 64-wide denoiser was trained on (part 33).
+
+**Unbiased when N changes.**
+The histogram is divided by a fixed count when it is read (`MethodTransport.Rays`, N's first value over the shares).
+Each cohort's new rays therefore carry Rays / n of a ray's share, where n is the number of new rays launched that update (`PathLaunchScale`).
+- The new-ray count n is fixed on the CPU before the cohort launches.
+- Every cohort's target n S(a) changes with it, and population control brings each cohort to its new target. Its ρ depends only on the cohort's count after the walk, so the weights stay unbiased.
+- `PersistentRaysMatchTheFullSolveInExpectation` now has a population that alternates between 9,000 and 17,000 at every update. It matches the full solve in every window: ratios 0.97–1.21, against 0.96–1.17 for the fixed population and 0.97–1.23 for persistent rays without population control. All are within three standard errors; the 0–20 ms window is high in every persistent mode, as in part 17.
+
+**The rule, and why it neither oscillates nor needs a gain.**
+- Times are gathered in blocks of 16 updates at a fixed N. The first update after a change is left out, because it still traces the old cohorts.
+- If the budget B lies outside the block median's 97.9% confidence interval (order statistics 4 and 13 of 16), N becomes N B / T, with T the block median. Otherwise N stays.
+- The update's time is T = T₀ + cN, with fixed costs T₀ ≥ 0 (audio, denoiser, dispatches). After the step the time is T₀ + cNB/T, so its error is (T₀ / T)(T − B): the same sign as before, and a fraction T₀/T < 1 of it.
+- N therefore approaches its target from one side, without overshoot, and stops inside the median's noise.
+- The step assumes all of the time scales with N. Because T₀ ≥ 0, that assumption can only make it cautious, so there is no gain to tune.
+
+**In the Church** (`MeasurePathLiveBudget` with `budget=`, 5 variants interleaved in one process, 60 rounds of 8 updates each after a horizon, starting from N = 11,000; the 64-wide denoiser on; the time controlled is the tracer's plus the audio's, each with its fence; `autobudget.py`).
+At a load average of 7–14, the audio phase with the denoiser took 4.0 ms in this process, more than part 33's 2.7 ms, and the tracer took 4.2 ms at 4,000 rays.
+So no budget below about 8.4 ms can be met.
+The noise is the Church's at the settled N, interpolated in log N from part 33's table (64-wide denoiser, window / level / decay, dB):
+
+| Budget | N, rounds 30–59 (median [10th–90th]) | update, rounds 30–59, ms | rounds in which N changed | noise after the denoiser at that N |
+|---|---|---|---|---|
+| 6.5 ms | 4,001 (the floor) | 8.46 [7.71–9.52] | 0 | 8.09 / 3.69 / 4.89 |
+| 7.5 ms | 4,001 (the floor) | 8.52 [7.64–9.62] | 0 | 8.09 / 3.69 / 4.89 |
+| 8.5 ms | 8,234 [6,979–8,774] | 8.77 [7.97–9.84] | 6 | 6.88 / 2.29 / 3.18 |
+| 9.5 ms | 13,564 [12,652–13,564] | 9.61 [8.78–10.48] | 1 | 6.28 / 2.10 / 2.73 |
+
+- At 9.5 ms, N went 12,792 → 12,310 → 13,233 → 13,564 and held, with the median update 0.1 ms above the budget.
+- At 8.5 ms, N stepped down monotonically (9,302 → 8,774 → 8,234 → 6,979) as the machine's load rose during the run, each step a few percent. It never stepped back up and down.
+- At 6.5 and 7.5 ms, N went to the floor and stayed there, as the rule says it should when even the floor is over budget.
+- **A slowdown applied midway** (budget 8.5 ms, every walk segment traced twice from round 30, i.e. a slower GPU): N held 9,296–9,621 at 8.58 ms before the slowdown. After it, N fell monotonically (9,296 → 7,427 → 6,079 → 5,046 → 4,668 → 4,001) within ten rounds and reached the floor, where 9.7 ms was the least the slower GPU could do.
+- No variant overshot: every change of N has the sign of the error before it.
+- The pools are sized for 23,000. No ray overflowed in any run.
+
+**A second run under heavy load** (load average 35–54, the same variants but a slowdown at 7.5 ms).
+The audio phase alone took 3.6 ms, and an update's 10th–90th percentile range was 6–17 ms.
+
+| Budget | N, second half | update, ms |
+|---|---|---|
+| 6.5 ms | 4,001 (the floor) | 7.87 [5.66–15.95] |
+| 7.5 ms | 4,001 [4,001–5,063] | 7.91 [5.69–16.83] |
+| 8.5 ms | 9,372 [4,001–10,370] | 8.44 [6.16–18.59] |
+| 9.5 ms | 10,370 [4,001–15,509] | 8.90 [6.30–16.70] |
+
+- Here N followed the machine: in the 9.5 ms variant it went from 20,654 at the start to the floor twice, with 12,000–15,500 in between.
+- The 8.5 ms variant dropped to the floor in the same rounds, so the cause was the machine, not the controller.
+
+**In the playable Church**, `-pathBudget MS` (or the component's `budgetMs`) turns the auto-budget on. It feeds the profiler's GPU time of the tracer, the reverb and the denoiser into the same rule. It is off by default: the profiler's GPU timings in a release player are still unverified (part 26).
+
+## 35. The path-kernel build: a profile, and three exact speedups to make
+
+**Profile** (`GpuAudio.PathKernelSkip`, a profiling switch that leaves out one stage of the build: its results are wrong, only its time counts; `MeasurePathLiveBudget`, no denoiser, N = 11,000).
+The machine was loaded in both runs, with load averages of 10–20 and then 100–110, so only the shares are worth reading.
+
+| Left out | audio phase, ms (run 1) | difference | audio phase, ms (run 2) | difference |
+|---|---|---|---|---|
+| nothing | 3.38 | | 5.52 | |
+| `PathEar` and `PathGroups` (ear energies, group coefficients) | 2.99 | 0.39 | 4.88 | 0.64 |
+| `PathBand` (partitions with three or more impulse groups: eight band FFTs and an inverse each) | 2.50 | 0.88 | 3.44 | 2.08 |
+| `PathBandGroups` (partitions with at most two: group spectra and an inverse FFT) | 3.13 | 0.25 | 5.00 | 0.52 |
+| `PathPieces` (overlap-add and the forward FFT of every partition) | 2.97 | 0.41 | 4.78 | 0.74 |
+| all of them | 2.03 | 1.35 | 2.98 | 2.54 |
+
+- In both runs, `PathBand` is most of the build: two thirds of it in run 1 and four fifths in run 2.
+- It handles 152 of the 283 partitions.
+- The impulse groups per partition in the Church (`PATH_BUDGET impulse groups per partition`) are: 104 partitions with one group, 109 with three, 18 with five, 6 with seven, and 22 with nine to 93 (the early ones), 1,063 groups in all.
+- So the ≤ 2 rule of part 29 sends 109 three-group partitions through eight band FFTs. Their group spectra would cost three multiply-adds per bin and band instead.
+
+**Speedups to make, all exact (the same kernels to rounding):**
+1. **Group spectra up to G groups.**
+   - Generalise `PathBandGroups` from two groups to a list per partition.
+   - Send every partition with at most 7 groups through it: 135 more partitions, 471 more group spectra, 7.7 MB.
+   - A partition through the band FFTs costs about 5.8 µs in run 1 (0.88 ms over 152). One through the group spectra costs about 2.4 µs (0.25 ms over 104), most of it the inverse FFT.
+   - Moving 135 partitions should save about 0.45 ms at run 1's load.
+   - Why 7: the multiply-adds of G groups' spectra (G × 2 sequences × 8 bands per bin and ear) stay below the eight forward FFTs' butterflies (8 × 11 × 1,024 per partition) while G ≤ 7 or so.
+2. **A faster shared-memory FFT.**
+   - `AudioFftShared` is radix 2: 11 stages of 2,048 points, each a full pass through shared memory with a barrier.
+   - A radix-4 Stockham form (five radix-4 stages and one radix-2, no bit-reversal pass) halves the barriers and the shared-memory traffic.
+   - Every FFT of the audio uses it: the build's 63 + 220 + 283 partitions, and the convolution.
+   - Expected: 30–40% off the FFT-bound stages.
+3. **One dispatch for the ear energies and the group coefficients.**
+   - `PathGroups` can sum each group's terms over directions itself (the ear weights are per direction, band and ear), which removes `PathEnergy` and one dispatch boundary.
+   - The two together cost 0.39 ms for under 25,000 threads of a few multiply-adds each, so the cost is the serialisation, not the work.
+   - Merging `PathBand` and `PathBandGroups` into one dispatch, branching on the group's index, removes another.
+   - Expected: about 0.1 ms on a quiet machine.
+
+On a quiet machine the build is about 0.8 ms (part 29), and the shares above scale with it.
+Speedup 1 should remove about a third of the build, and speedups 2 and 3 about a quarter more, so the build would be about 0.3–0.4 ms.
+None of them was built in this round.
+
+## 36. Where the round leaves the budget
+
+At N = 11,000 in the Church, interleaved, medians (parts 31 and 33):
+
+| Phase | start of the round, ms | now, ms |
+|---|---|---|
+| tracer (edge slice, walk, population control, histogram and ring) | 4.7–4.9 | 4.1–4.2 |
+| audio without the denoiser | 2.05–2.10 | 2.05–2.10 |
+| denoiser | 1.00 | 0.64 |
+| total (each phase with its fence, about 0.2 ms) | about 7.8 | about 6.9 |
+
+The noise after the denoiser at 11,000 is unchanged or better (6.34 / 2.09 / 2.75 dB against 6.49 / 2.09 / 2.76 dB).
+The auto-budget now chooses N within 4,000–23,000 from a budget in milliseconds.
+Part 34's runs hold five GPU-audio instances in one process and measured the audio phase at 3.6–4.0 ms, so their absolute times are above this table's.
+On a quiet machine 4,000 rays, the floor of the auto-budget's range, should cost about 5.9 ms. That is part 29's 6.6 ms less the denoiser's 0.36 ms and part of the sort's gain; it was not measured.
+The next fixed costs to cut are the path-kernel build (part 35) and the traversal (part 29, route a).

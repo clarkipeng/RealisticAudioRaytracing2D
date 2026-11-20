@@ -18,6 +18,11 @@ using UnityEngine.Profiling;
 public sealed class PathLiveChurch : MonoBehaviour
 {
     public int population = 8000;
+    // The auto-budget (PathPopulationBudget, README part 34): the GPU milliseconds per update the tracer, the denoiser and
+    // the reverb may take together; the population then moves within the denoiser's trained range. Zero: a fixed population.
+    // Command line: -pathBudget MS.
+    public float budgetMs;
+    PathPopulationBudget budget;
     public float horizonSeconds = 6;
     public int leadSamples = 6144;
     public bool denoise = true;
@@ -64,6 +69,8 @@ public sealed class PathLiveChurch : MonoBehaviour
         var args = Environment.GetCommandLineArgs();
         int at = Array.IndexOf(args, "-pathLiveSmoke");
         if (at >= 0 && at + 1 < args.Length) smoke = Path.GetFullPath(args[at + 1]);
+        int b = Array.IndexOf(args, "-pathBudget");
+        if (b >= 0 && b + 1 < args.Length) budgetMs = float.Parse(args[b + 1], System.Globalization.CultureInfo.InvariantCulture);
         Configure();
     }
 
@@ -83,6 +90,7 @@ public sealed class PathLiveChurch : MonoBehaviour
         s.method = TakeRender.Method.Path; s.transport = TakeRender.Transport.Raytraced; s.synthesis = TakeRender.Synthesis.Spectral;
         s.audioBackend = TakeRender.AudioBackend.Gpu; s.listenerOutput = TakeRender.ListenerOutput.Binaural;
         s.pathPersistent = true; s.pathPopulation = population; s.pathDenoise = denoise;
+        if (budgetMs > 0) { s.pathPopulationMaximum = 23000; budget = new PathPopulationBudget(budgetMs, population, 4000, 23000); }
         s.pathEdgeSliceUpdates = 4;   // the edge distribution refreshed every 4th update (README part 30)
         s.pathIterationCap = 16;   // the long-chain lottery (README part 28): unbiased, about a fifth off the tracer at equal noise
         s.responseStepSamples = 1024; s.fftSize = 1024; s.spectralHop = 256; s.transitionSamples = 512;
@@ -132,14 +140,16 @@ public sealed class PathLiveChurch : MonoBehaviour
         frameMs.Add(Time.unscaledDeltaTime * 1000);
         if (done > 0)
         {
-            if (traceRecorder.isValid && traceRecorder.gpuElapsedNanoseconds > 0) traceMs.Add(traceRecorder.gpuElapsedNanoseconds * 1e-6f / done);
-            if (reverbRecorder.isValid && reverbRecorder.gpuElapsedNanoseconds > 0) reverbMs.Add(reverbRecorder.gpuElapsedNanoseconds * 1e-6f / done);
-            if (denoiseRecorder.isValid && denoiseRecorder.gpuElapsedNanoseconds > 0) denoiseMs.Add(denoiseRecorder.gpuElapsedNanoseconds * 1e-6f / done);
+            float gpu = 0;
+            if (traceRecorder.isValid && traceRecorder.gpuElapsedNanoseconds > 0) { traceMs.Add(traceRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += traceMs[^1]; }
+            if (reverbRecorder.isValid && reverbRecorder.gpuElapsedNanoseconds > 0) { reverbMs.Add(reverbRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += reverbMs[^1]; }
+            if (denoiseRecorder.isValid && denoiseRecorder.gpuElapsedNanoseconds > 0) { denoiseMs.Add(denoiseRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += denoiseMs[^1]; }
+            if (budget != null && gpu > 0) method.Population = budget.Observe(gpu);
         }
         if (Time.unscaledTime > inFlightAt) { method.RequestRaysInFlight(); inFlightAt = Time.unscaledTime + .5f; }
         var queue = manager.audioManager.OutputQueue;
         status = $"path method, persistent rays: {Recent(traceMs):F1} ms per update (GPU tracer), reverb {Recent(reverbMs):F1} ms, denoiser {Recent(denoiseMs):F2} ms\n" +
-                 $"rays in flight {method.LastRaysInFlight:N0} (population {population:N0}, {method.Rays:N0} new per update)\n" +
+                 $"rays in flight {method.LastRaysInFlight:N0} (population {method.Population:N0}{(budget != null ? $", auto-budget {budgetMs:F1} ms" : "")}, {method.NewRays:N0} new per update)\n" +
                  $"denoiser {(live.HasPathDenoiser ? live.PathDenoising ? "on" : "off" : "not loaded")} (N)   frame {Recent(frameMs):F1} ms   " +
                  $"audio underruns {queue?.UnderrunSamples ?? 0} samples   doors: E   HUD: H";
         if (smoke != null) Smoke(queue);
@@ -165,7 +175,7 @@ public sealed class PathLiveChurch : MonoBehaviour
         float P(List<float> v, double q) { if (v.Count == 0) return float.NaN; var s = v.Skip(Math.Min(v.Count - 1, 60)).OrderBy(x => x).ToArray(); return s[Math.Min(s.Length - 1, (int)(q * s.Length))]; }
         var report = new SmokeReport
         {
-            scene = gameObject.scene.name, population = population, newRaysPerUpdate = method.Rays, sampleRate = manager.sampleRate, leadSamples = leadSamples,
+            scene = gameObject.scene.name, population = method.Population, newRaysPerUpdate = method.NewRays, sampleRate = manager.sampleRate, leadSamples = leadSamples,
             frames = frameMs.Count, raysInFlightLast = method.LastRaysInFlight, audioUpdates = method.AudioUpdates, seconds = Time.unscaledTime - smokeStart,
             underrunSamples = queue.UnderrunSamples, overBudgetCallbacks = queue.OverBudgetCallbacks, callbacks = queue.CallbackCount,
             lateSamples = queue.LateSamples, overflowSamples = queue.OverflowSamples,
