@@ -17,7 +17,6 @@ public partial class TakeChecks
     public void GpuPathReverbMatchesTheCpuReference(TakeRender.ListenerOutput ears, bool moving)
     {
         var shader = RequireGpu();
-        if (moving) ToleratePathDopplerUavMessage();
         const int rate = 8000, size = 256;
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
         var a = new Vector3(-20, 0, -20); var b = new Vector3(20, 0, -20); var c = new Vector3(20, 0, 20); var d = new Vector3(-20, 0, 20);

@@ -24,6 +24,15 @@
 #pragma kernel PathSortScanKernel
 #pragma kernel PathSortScatterKernel
 
+// The Doppler walks read the edge distribution and the listener's clearance through read-only views of them
+// (MethodEnergy.hlsl, MethodPath.hlsl): as UAVs they made 10, over the 8 Unity supports (README part 44). Only there:
+// the static walks compile as before, so their outputs stay bit-identical.
+#if defined(PATH_DOPPLER)
+StructuredBuffer<float> MethodEdgeCdfRead;
+StructuredBuffer<uint> PathClearanceRead;
+#define METHOD_EDGE_CDF_READ MethodEdgeCdfRead
+#define PATH_CLEARANCE_READ PathClearanceRead
+#endif
 #include "../../Shaders/Geometry.hlsl"
 #include "../../Shaders/Transport.hlsl"
 #include "../../Shaders/MethodCommon.hlsl"

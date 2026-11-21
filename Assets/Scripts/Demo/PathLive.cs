@@ -151,6 +151,15 @@ public sealed class PathLive : MonoBehaviour
         s.pathHistogramExport = s.pathHistogramImport = "";
         manager.monitorLive = true; manager.monitorLeadSamples = leadSamples;
         manager.monitorCapacitySamples = Math.Max(manager.monitorCapacitySamples, 4 * leadSamples);
+        // The station's train (smoke and listening runs): -stationTrainSpeed V and -stationTrainAcceleration A (m/s, m/s^2)
+        // replace StationDemo's cruise speed and acceleration, before the session initialises its actors.
+        foreach (var demo in session.actors.OfType<StationDemo>())
+        {
+            var arguments = Environment.GetCommandLineArgs();
+            int v = Array.IndexOf(arguments, "-stationTrainSpeed"), a = Array.IndexOf(arguments, "-stationTrainAcceleration");
+            if (v >= 0 && v + 1 < arguments.Length) demo.trainSpeed = float.Parse(arguments[v + 1], System.Globalization.CultureInfo.InvariantCulture);
+            if (a >= 0 && a + 1 < arguments.Length) demo.trainAcceleration = float.Parse(arguments[a + 1], System.Globalization.CultureInfo.InvariantCulture);
+        }
         traceRecorder = Recorder.Get(MethodTransport.TraceSample); reverbRecorder = Recorder.Get("Acoustics.GPU.PathKernels");
         denoiseRecorder = Recorder.Get(PathDenoiser.ProfilerSample);
         foreach (var r in new[] {traceRecorder, reverbRecorder, denoiseRecorder}) if (r.isValid) r.enabled = true;

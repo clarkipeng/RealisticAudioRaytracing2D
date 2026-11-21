@@ -102,6 +102,11 @@ bool EnergyEnumerated(uint family) { return ((MethodArrivalFamilies >> family) &
 // the visibility factor: bounded, where uniform edge and point choices multiplied it by the
 // edge count and 1/m^2 (the Church's reverb-tail bursts, docs/benchmarks/energy-audio-2026-11-09).
 RWStructuredBuffer<float> MethodEdgeCdf;   // per edge, then its running sum (EnergyEdgeScan)
+// The readers' view of it: the path shader's Doppler walks read it through a read-only buffer bound to the same data
+// (PathMethod.compute), so they do not count it among their UAVs (README part 44).
+#ifndef METHOD_EDGE_CDF_READ
+#define METHOD_EDGE_CDF_READ MethodEdgeCdf
+#endif
 static const float MethodEdgeHidden = .1;
 float EnergyEdgeSpan(float3 a, float3 u, float extent, float3 x, out float z0, out float r)
 {
@@ -146,10 +151,10 @@ void EnergyEdgeScan(uint thread)
 }
 uint EnergySampleEdge(float u, out float probability)
 {
-    float total = MethodEdgeCdf[MethodEdgeCount - 1], target = u * total;
+    float total = METHOD_EDGE_CDF_READ[MethodEdgeCount - 1], target = u * total;
     uint lo = 0, hi = MethodEdgeCount - 1;
-    [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (MethodEdgeCdf[mid] > target) hi = mid; else lo = mid + 1; }
-    probability = (MethodEdgeCdf[lo] - (lo > 0 ? MethodEdgeCdf[lo - 1] : 0)) / total;
+    [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (METHOD_EDGE_CDF_READ[mid] > target) hi = mid; else lo = mid + 1; }
+    probability = (METHOD_EDGE_CDF_READ[lo] - (lo > 0 ? METHOD_EDGE_CDF_READ[lo - 1] : 0)) / total;
     return lo;
 }
 float EnergyDirectivity(MethodAnchor v, float3 w) { return v.kind == 1 ? max(0, dot(w, v.normal)) : 1; }

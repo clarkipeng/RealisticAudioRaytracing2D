@@ -139,8 +139,23 @@ def smoke(extra=(), windowed=False, scenes=(), shots=False):
         print(f'{r["scene"]}: {r["seconds"]:.0f} s, underruns {r["underrunSamples"]} samples, frames {r["frameMsMedian"]:.2f} / '
               f'{r["frameMsP99"]:.1f} / {r["frameMsMax"]:.1f} ms (median / p99 / max), frame GPU {r["frameGpuMsMedian"]:.1f} ms median, '
               f'{r["cameraRendersPerFrame"]:.2f} camera renders per frame; {report}')
+    stalls(out / 'pipeline.csv.stalls')
     if len(reports) < max(1, len(scenes)):
         print(f'{max(1, len(scenes)) - len(reports)} scene(s) without a report; see {out}/player.log')
+
+
+def stalls(path):
+    """The main-thread stalls of the run (-liveTrace FILE.stalls, README part 41), each with its kind: computing (the
+    main thread's CPU time is most of it), paging (blocked, with page faults that needed I/O), or blocked (waiting or
+    preempted). Scene loads and the end of each take are stalls too; they are not in a walk."""
+    import csv
+    if not path.exists():
+        return
+    for row in csv.DictReader(path.open()):
+        ms, cpu = float(row['ms']), float(row.get('mainThreadCpuMs') or 'nan')
+        kind = ('computing' if cpu > .5 * ms else 'paging' if int(row.get('majorFaults') or 0) > 0 else 'blocked') if cpu == cpu else '?'
+        print(f"stall {row['seconds']} s, frame {row['frame']}: {row['system']} {ms:.0f} ms, {kind} (main thread CPU {cpu:.0f} ms, "
+              f"{row.get('majorFaults')} page-ins, {row.get('involuntarySwitches')} preemptions)")
 
 
 if __name__ == '__main__':

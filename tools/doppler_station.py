@@ -4,6 +4,8 @@
     nice -n 19 $PY tools/doppler_station.py render TAKE   # guarded Unity renders of a station take, with and without
                                                          # Doppler on the reflections -> .context/doppler/station-*/
     $PY tools/doppler_station.py clips                   # listening clips -> .context/energy-audio/listen/
+    (--tag T: renders and clips named station-*-T, e.g. the 30 m/s pass of part 44: render TAKE --tag fast;
+     clips --tag fast --start S --seconds N)
 
 TAKE is a recorded TrainStation take with the horn on the moving train (e.g. a live smoke run's take). Both renders
 use the path method as the live showcase runs it (persistent rays under population control, binaural, GPU audio) and
@@ -34,9 +36,10 @@ VARIANTS = {'station-doppler': dict(SETTINGS, pathReflectionDoppler=True),
             'station-direct-only': dict(SETTINGS, pathReflectionDoppler=False)}
 
 
-def render(take):
+def render(take, tag=''):
     mr.LOGS = WORK / 'logs'; mr.LOGS.mkdir(parents=True, exist_ok=True)
     for name, settings in VARIANTS.items():
+        name += tag
         output = WORK / name
         shutil.rmtree(output, ignore_errors=True)
         job = dict(take=str(Path(take).resolve()), output=str(output), shader='Assets/Shaders/Transport.compute', settings=settings, workFraction=.5)
@@ -59,10 +62,11 @@ def write(path, rate, x):
     wavfile.write(str(path), rate, (np.clip(x, -1, 1) * 32767).astype(np.int16))
 
 
-def clips(start, seconds):
+def clips(start, seconds, tag=''):
     """The passage of the train, both renders at the same gain, and the two back to back."""
     pieces = []
     for name in VARIANTS:
+        name += tag
         wav = next((WORK / name).glob('listener-0*.wav'))
         rate, x = read(wav)
         pieces.append((name, rate, x[int(start * rate):int((start + seconds) * rate)]))
@@ -71,8 +75,8 @@ def clips(start, seconds):
     for name, rate, x in pieces:
         write(LISTEN / f'{name}.wav', rate, .9 * x / peak)
     rate = pieces[0][1]; gap = np.zeros((rate // 2, pieces[0][2].shape[1]))
-    write(LISTEN / 'station-doppler-ab.wav', rate, .9 * np.concatenate([pieces[1][2], gap, pieces[0][2]]) / peak)
-    print('\n'.join(str(LISTEN / f) for f in ['station-direct-only.wav', 'station-doppler.wav', 'station-doppler-ab.wav']))
+    write(LISTEN / f'station-doppler{tag}-ab.wav', rate, .9 * np.concatenate([pieces[1][2], gap, pieces[0][2]]) / peak)
+    print('\n'.join(str(LISTEN / f) for f in [f'station-direct-only{tag}.wav', f'station-doppler{tag}.wav', f'station-doppler{tag}-ab.wav']))
 
 
 if __name__ == '__main__':
@@ -81,5 +85,7 @@ if __name__ == '__main__':
     p.add_argument('take', nargs='?')
     p.add_argument('--start', type=float, default=10.0, help='clips: seconds into the render')
     p.add_argument('--seconds', type=float, default=12.0)
+    p.add_argument('--tag', default='', help='suffix of the renders and clips (e.g. fast)')
     a = p.parse_args()
-    render(a.take) if a.command == 'render' else clips(a.start, a.seconds)
+    tag = f'-{a.tag}' if a.tag else ''
+    render(a.take, tag) if a.command == 'render' else clips(a.start, a.seconds, tag)

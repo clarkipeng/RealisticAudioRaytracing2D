@@ -445,8 +445,8 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 {
                     shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
                     shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
-                    shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
-                    shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
+                    shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "MethodEdgeCdfRead", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
+                    shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathClearanceRead", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
                     shader.SetBuffer(kernel, "PathEdgeWeight", edgeWeights); shader.SetBuffer(kernel, "PathCohortCount", cohortCounts);
                     shader.SetBuffer(kernel, "PathSortBuckets", sortBuckets); shader.SetBuffer(kernel, "PathSortEntry", sortEntries);
                     shader.SetBuffer(kernel, "PathRays", pathRays); shader.SetBuffer(kernel, "PathLive", pathLive);

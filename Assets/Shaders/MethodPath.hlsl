@@ -80,6 +80,9 @@ float PathStep, PathLaunchScale;
 // cell (the room's copy in the unfolded space), so the kernel is truncated at R and renormalised: wider,
 // it would lose the mass of rays that belong to a neighbouring image.
 RWStructuredBuffer<uint> PathClearanceOut;
+#ifndef PATH_CLEARANCE_READ
+#define PATH_CLEARANCE_READ PathClearanceOut   // (the Doppler walks read a read-only view of it: PathMethod.compute)
+#endif
 StructuredBuffer<float> PathMirrorCdf; // cumulative primitive areas (RD mirrors drawn by area)
 groupshared uint PathClearanceMin;
 void PathClearance(uint thread)
@@ -374,15 +377,15 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     // the mean). Same estimator, lower variance.
     uint edge, edge2;
     float uSource = RandomRay(rng);
-    bool distribution = MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0;
+    bool distribution = METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
     if (v.kind == 0 && distribution) edge = EnergySampleEdge(uSource, pick);
     else if (v.kind == 1 && distribution)
     {
         float pickCdf, pickLocal;
         if (uSource < .5) edge = EnergySampleEdge(2 * uSource, pickCdf);
         else edge = MethodPickEdge(v.primitive, rng, pickLocal);
-        float total = MethodEdgeCdf[MethodEdgeCount - 1];
-        pickCdf = (MethodEdgeCdf[edge] - (edge > 0 ? MethodEdgeCdf[edge - 1] : 0)) / total;
+        float total = METHOD_EDGE_CDF_READ[MethodEdgeCount - 1];
+        pickCdf = (METHOD_EDGE_CDF_READ[edge] - (edge > 0 ? METHOD_EDGE_CDF_READ[edge - 1] : 0)) / total;
         uint2 local = v.primitive == 0xffffffff ? uint2(0, 0) : EdgeRanges[v.primitive];
         pickLocal = (local.y > 0 ? .5 : 1) / MethodEdgeCount;
         [loop] for (uint i = 0; i < local.y; i++) if (EdgeIndices[local.x + i] == edge) pickLocal += .5 / local.y;
@@ -869,7 +872,7 @@ void TracePath(uint index)
         if (!travelling)
         {
             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
-            bool edgeRays = edges && v.kind == 0 && MethodEdgeCdf[max(MethodEdgeCount, 1u) - 1] > 0;
+            bool edgeRays = edges && v.kind == 0 && METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
             bool viaEdge = edgeRays && RandomRay(rng) < MethodEdgeProbability;
             [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) C[k3] = 1;
             medium = v.medium;
@@ -969,7 +972,7 @@ void TracePath(uint index)
             float3 offset = L - p - d * along;
             float rho2 = dot(offset, offset), lc = chain.travelled + along;
             float lu = sqrt(max(lc * lc + rho2, RayEpsilon * RayEpsilon));
-            float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PathClearanceOut[0]);
+            float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PATH_CLEARANCE_READ[0]);
             // A point of the segment nearest the listener, kept 4 RayEpsilon (perpendicular) off the walls at both
             // ends, so that the visibility test cannot start inside a wall's tolerance and see through it.
             float startInset = max(0, 4 * RayEpsilon / max(abs(dot(d, plane.xyz)), 1e-3) - sinceStart);

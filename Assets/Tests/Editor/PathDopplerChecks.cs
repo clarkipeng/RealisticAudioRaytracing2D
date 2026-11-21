@@ -7,11 +7,6 @@ using UnityEngine;
 // part's sliding slots (PathReverb), against the analytic image source of a rigid plane.
 public partial class TakeChecks
 {
-    // Unity's validation logs "There are more uavs (10) than the maximum supported (8)" when it first dispatches a
-    // TracePath3D*Doppler kernel (README part 40: the kernel binds the same buffers as the static walk, which never logs
-    // it, and its outputs pass these checks; the cause is not found). The checks tolerate that message only.
-    static void ToleratePathDopplerUavMessage() =>
-        UnityEngine.TestTools.LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("more uavs .* kernel 'TracePath3D(Bvh)?Doppler'"));
     // A source moving at 30 m/s past a rigid plane, the listener still, persistent rays, 8 kHz. Per update the rate
     // channel's mean over the plane's reflection must be the image source's Doppler (its delay rate, Doppler.Direct of
     // the mirrored motion); the reverb of a 250 Hz tone (the reflection alone: the direct sound is a separate path) must
@@ -21,7 +16,6 @@ public partial class TakeChecks
     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void PathReflectionsCarryTheImageSourceDoppler()
     {
-        ToleratePathDopplerUavMessage();
         const int rate = 8000, step = 256; const float speed = 343, f0 = 250;
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
         var a = new Vector3(-200, 0, -200); var b = new Vector3(200, 0, -200); var c = new Vector3(200, 0, 200); var d = new Vector3(-200, 0, 200);
@@ -147,7 +141,6 @@ public partial class TakeChecks
     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void PathEchoesCarryTheHrtfInterauralDelay()
     {
-        ToleratePathDopplerUavMessage();
         const int rate = 16000, step = 512, window = 6 * step; const float v = 10, start = 8;
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
         var a = new Vector3(0, -30, -30); var b = new Vector3(0, -30, 30); var c = new Vector3(0, 30, 30); var d = new Vector3(0, 30, -30);   // (60 m: the persistent rays' ring scales with the scene)

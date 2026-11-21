@@ -523,6 +523,7 @@ Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 2
   The station has two sources, so it runs 4,000 per source: at 8,000 per source its smoke run lost 22,104 samples as the train came back past the platform.
 - **Options** (command line, for example `open Builds/LiveShowcase/LiveShowcase.app --args -pathPopulation 11000`):
   - `-pathPopulation N`: the rays in flight per source, in every scene.
+  - `-stationTrainSpeed V`, `-stationTrainAcceleration A`: the station train's cruise speed (m/s, default 12) and acceleration (m/s², default 3); part 44's 30 m/s pass uses 30 and 6.
   - `-pathBudget MS`: the auto-budget (part 34).
     It needs a development player, because release players do not report the per-stage GPU times it reads.
 - **Smoke run:** `tools/path_live_church.py smoke --windowed --scenes Church TrainStation` walks each scene's scripted route in turn, loading each scene the way the menu does.
@@ -530,6 +531,8 @@ Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 2
   - Church: stand, walk to the organ, back to the doors, open them, walk out and along the facade.
   - Train station: stand, walk to the waiting room's door, open it, walk in and out again, then wait at the platform's edge while the train leaves and comes back.
   - It writes each scene's output to `.context/path-live/smoke-*/<scene>/output.wav`, with frame times, GPU times and audio underruns in `smoke.json` and `timeline.csv`.
+    It then lists the main thread's stalls of more than 40 ms, each with its kind (computing, paging or blocked; part 41).
+    Run it with the screen unlocked: a locked Mac neither presents nor plays the player.
     With `--shots` it also saves a screenshot at each phase of the walk.
   - The Church's handover recording, at 8,000 rays, is in `.context/energy-audio/listen/` ("path, live player") and in the Agentworld gallery.
 - **Stills:** `tools/path_live_church.py stills` renders every scene from its player camera, its first spawn point and its smoke walk's waypoints, without Play mode, to `.context/polish/stills`.

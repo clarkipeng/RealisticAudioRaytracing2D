@@ -2164,3 +2164,18 @@ Sound reduction (Sharp), transmitted share τ at 125 / 500 / 2,000 Hz: steel she
 - The level on the open platform falls by 2.3 dB: the grass and the ballast now absorb 0.25–0.9 instead of the default's reflection.
 - Under the canopy it rises 0.8 dB and the early decay lengthens (EDT 0.33 → 0.41 s at 500 Hz): the concrete slab and platform now reflect more than the default did.
 - A cheaper station: the frame's GPU time at 4,000 rays per source fell from 10.3–10.4 ms median to 8.6 ms (shorter paths: more absorption outside).
+
+## 44. The showcase rebuilt: ITD, materials, a faster train, and the UAV message
+
+**The UAV message of part 40: fixed.**
+- At its first dispatch, each Doppler walk logged "There are more uavs (10) than the maximum supported (8)"; the static walks bind the same buffers and never did.
+- Two buffers the walk only reads were declared read-write: the edge distribution (`MethodEdgeCdf`, written by the edge scan) and the listener's clearance (`PathClearanceOut`, written by the clearance pass). Declared so, they count as UAVs in every kernel that reads them.
+- The Doppler walks now read both through read-only views bound to the same buffers (`MethodEdgeCdfRead`, `PathClearanceRead`, defined only for the `PATH_DOPPLER` kernels in `PathMethod.compute`). The message is gone, and the checks no longer tolerate it (`ToleratePathDopplerUavMessage` is removed).
+- A first version gave the static walks the views too. Their outputs then changed (histogram SHA-256 03AD9BDF… against HEAD's 407F2A3B… for the full solve; 02CDAE52… against 1C01E5D5… for persistent rays), deterministically, from the compiled code alone: the values read are the same. Part 24's and part 40's warning about this loop applies, so the static walks keep their code.
+- With the views in the Doppler walks only, `MeasurePathHistogramHash` gives 407F2A3B… and 1C01E5D5… again, on two runs each: the static outputs are bit-identical to HEAD's.
+- `PathReflectionsCarryTheImageSourceDoppler`, `PathEchoesCarryTheHrtfInterauralDelay`, `GpuPathReverbMatchesTheCpuReference` (moving binaural) and the persistent-ray checks pass with no tolerated message.
+
+**Tools.**
+- `-stationTrainSpeed V` and `-stationTrainAcceleration A` set the station train's cruise speed and acceleration for a smoke or listening run (`PathLive`), before the session initialises its actors; the take records them (`StationDemo.SettingsJson`).
+- At 3 m/s² the train cannot reach 30 m/s on its 216 m loop and stop again at the platform (its peak is √(a d) = 25 m/s), so the 30 m/s pass uses 6 m/s².
+- `tools/path_live_church.py smoke` now lists the run's stalls with their kind (part 41), and `tools/doppler_station.py --tag T` names its renders and clips `station-*-T`.
