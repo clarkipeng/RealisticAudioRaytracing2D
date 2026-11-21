@@ -16,7 +16,7 @@ internal sealed class DirectBvh
     public Node[] Nodes {get;private set;}
     public readonly int[] Indices;
     readonly AcousticTake.Primitive[] local;
-    readonly int[] owners,roots,stack=new int[32],meshStack=new int[32];
+    readonly int[] owners,order,roots,stack=new int[32],meshStack=new int[32];
     readonly Node[] bounds;
     readonly Vector3[] centers;
     readonly CenterComparer comparer;
@@ -43,7 +43,7 @@ internal sealed class DirectBvh
         roots=new int[objectCount];bounds=new Node[objectCount];
         var counts=new int[objectCount];foreach(var p in geometry)counts[p.objectIndex]++;
         int instances=0,nodeCount=0;foreach(int count in counts)if(count>0){instances++;nodeCount+=2*count-1;}   // an upper bound; trimmed below
-        owners=new int[instances];topCount=CountNodes(instances,1);Nodes=new Node[checked(topCount+nodeCount)];
+        owners=new int[instances];order=new int[instances];topCount=CountNodes(instances,1);Nodes=new Node[checked(topCount+nodeCount)];
         Indices=new int[geometry.Length];centers=new Vector3[Math.Max(objectCount,geometry.Length)];comparer=new CenterComparer(centers);
         var starts=new int[objectCount];int first=0,ownerIndex=0;
         for(int owner=0;owner<objectCount;owner++){starts[owner]=first;first+=counts[owner];if(counts[owner]>0)owners[ownerIndex++]=owner;}
@@ -87,12 +87,11 @@ internal sealed class DirectBvh
             changed|=!box.min.Equals(bounds[owner].min)||!box.max.Equals(bounds[owner].max);bounds[owner]=box;
             centers[owner]=((Vector3)box.min+(Vector3)box.max)*.5f;
         }
-        if(!initialized){built=0;if(owners.Length>0)Build(owners,0,owners.Length,true);}
-        else if(changed)for(int i=topCount-1;i>=0;i--)
-        {
-            var node=Nodes[i];var box=node.count==uint.MaxValue?bounds[node.first]:Union(Nodes[node.left],Nodes[node.right]);
-            node.min=box.min;node.max=box.max;Nodes[i]=node;
-        }
+        // The instance tree is rebuilt whenever an instance moved, not refitted: a refit keeps the first update's
+        // grouping, so an object that travels far (the station's train on its loop) stretches every box above it across
+        // its path, and rays then descend into subtrees they cannot hit (README part 41). The rebuild is the same median
+        // split over the instances' current centres as the first build: O(n log n) over the instances, n in the hundreds.
+        if(changed){built=0;Array.Copy(owners,order,owners.Length);if(order.Length>0)Build(order,0,order.Length,true);}
         previousFrames=frames;
         if(changed)UpdateCount++;
         if(!initialized){initialized=true;BuildSeconds+=TakeRender.Elapsed(start);}else UpdateSeconds+=TakeRender.Elapsed(start);

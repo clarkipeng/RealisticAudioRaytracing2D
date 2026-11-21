@@ -10,7 +10,7 @@ public sealed class PathLiveScene : MonoBehaviour
     public RaytracedAudioSource[] sources = Array.Empty<RaytracedAudioSource>();
     [Tooltip("Those of the sources that play looped from the start; the scene's actors play the rest.")]
     public RaytracedAudioSource[] startLooped = Array.Empty<RaytracedAudioSource>();
-    [Tooltip("Rays in flight per source (0: PathLive's default, 8,000). The tracer, the denoiser and the reverb run per " +
+    [Tooltip("Rays in flight per source (0: PathLive's default, 11,000). The tracer, the denoiser and the reverb run per " +
              "source, so a scene with more sources needs fewer rays per source; -pathPopulation N overrides it.")]
     [Min(0)] public int population;
     [Tooltip("The smoke run's walk from Player spawn 0: waypoints in order, at floor height.")]

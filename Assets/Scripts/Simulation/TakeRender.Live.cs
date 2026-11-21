@@ -302,10 +302,34 @@ public static partial class TakeRender
         int used;
         LiveTrace(string file){this.file=file;InstallLoopMarkers();}
         // The player loop's own time: a marker between every pair of its systems records a timestamp; a system that
-        // takes longer than 40 ms in a frame is written to FILE.stalls (what the main thread did during a stall).
+        // takes longer than 40 ms in a frame is written to FILE.stalls (what the main thread did during a stall), with
+        // what the main thread and the process did meanwhile: the main thread's CPU time (near the wall time: it was
+        // computing; near zero: it was blocked or preempted), the process's page faults that needed I/O (paging), its
+        // voluntary context switches (waits) and involuntary ones (preemption by other work), and its garbage collections.
         static readonly List<(string name,long ticks)> marks=new List<(string,long)>(512);
-        static readonly List<(long ticks,int frame,string name,double ms)> stalls=new List<(long,int,string,double)>();
-        static bool installed;
+        struct Usage { public double cpu; public long major,voluntary,involuntary; public int gc; }
+        static readonly List<(long ticks,int frame,string name,double ms,Usage used)> stalls=new List<(long,int,string,double,Usage)>();
+        static Usage lastUsage;
+        static bool installed,usageAvailable=true;
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct TimeSpec { public long seconds,nanoseconds; }
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct ResourceUsage { public long userSeconds,userMicroseconds,systemSeconds,systemMicroseconds,maxrss,ixrss,idrss,isrss,minflt,majflt,nswap,inblock,oublock,msgsnd,msgrcv,nsignals,nvcsw,nivcsw; }
+        [System.Runtime.InteropServices.DllImport("/usr/lib/libSystem.B.dylib")] static extern int clock_gettime(int clock,out TimeSpec value);
+        [System.Runtime.InteropServices.DllImport("/usr/lib/libSystem.B.dylib")] static extern int getrusage(int who,out ResourceUsage value);
+        const int ThreadCpuClock=16,Self=0;   // macOS: CLOCK_THREAD_CPUTIME_ID, RUSAGE_SELF
+        static Usage Now()
+        {
+            var u=new Usage{gc=GC.CollectionCount(0),cpu=double.NaN};
+            if(!usageAvailable)return u;
+            try
+            {
+                if(clock_gettime(ThreadCpuClock,out var t)==0)u.cpu=t.seconds*1e3+t.nanoseconds*1e-6;
+                if(getrusage(Self,out var r)==0){u.major=r.majflt;u.voluntary=r.nvcsw;u.involuntary=r.nivcsw;}
+            }
+            catch(Exception){usageAvailable=false;}   // (not macOS: wall time only)
+            return u;
+        }
         static void InstallLoopMarkers()
         {
             if(installed)return;installed=true;
@@ -329,11 +353,12 @@ public static partial class TakeRender
         static long frameStart;
         static void Mark(string name,bool last)
         {
-            long now=Stopwatch.GetTimestamp();
+            long now=Stopwatch.GetTimestamp();var usage=Now();
             long previous=marks.Count>0?marks[marks.Count-1].ticks:frameStart;
-            if((now-previous)*1000.0/Stopwatch.Frequency>40)
-                stalls.Add((now,Time.frameCount,name,(now-previous)*1000.0/Stopwatch.Frequency));
-            marks.Add((name,now));
+            if(previous>0 && (now-previous)*1000.0/Stopwatch.Frequency>40)
+                stalls.Add((now,Time.frameCount,name,(now-previous)*1000.0/Stopwatch.Frequency,new Usage{cpu=usage.cpu-lastUsage.cpu,major=usage.major-lastUsage.major,
+                    voluntary=usage.voluntary-lastUsage.voluntary,involuntary=usage.involuntary-lastUsage.involuntary,gc=usage.gc-lastUsage.gc}));
+            marks.Add((name,now));lastUsage=usage;
             if(last){frameStart=now;marks.Clear();}
         }
         public static LiveTrace FromCommandLine()
@@ -360,8 +385,8 @@ public static partial class TakeRender
                 text.Append(FormattableString.Invariant($"{(r.ticks-origin)/(double)Stopwatch.Frequency:F4},{r.frame},{r.kind},{r.cursor},{r.read},{r.written},{r.pending},{r.first},{r.end},{r.count},{r.ms:F2},{r.gc0},{r.gc2},{r.main:F2},{r.present:F2},{r.render:F2},{r.gpu:F2}\n"));
             }
             System.IO.File.WriteAllText(file,text.ToString());
-            var lines=new System.Text.StringBuilder("seconds,frame,system,ms\n");
-            foreach(var (ticks,frame,name,ms) in stalls)lines.Append(FormattableString.Invariant($"{(ticks-origin)/(double)Stopwatch.Frequency:F4},{frame},{name},{ms:F1}\n"));
+            var lines=new System.Text.StringBuilder("seconds,frame,system,ms,mainThreadCpuMs,majorFaults,voluntarySwitches,involuntarySwitches,collections\n");
+            foreach(var (ticks,frame,name,ms,u) in stalls)lines.Append(FormattableString.Invariant($"{(ticks-origin)/(double)Stopwatch.Frequency:F4},{frame},{name},{ms:F1},{u.cpu:F1},{u.major},{u.voluntary},{u.involuntary},{u.gc}\n"));
             System.IO.File.WriteAllText(file+".stalls",lines.ToString());
         }
     }

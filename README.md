@@ -497,7 +497,7 @@ Build settings start `Assets/Scenes/TrainStation.unity`. Player recordings go to
 ## Live showcase (path method)
 
 The path method running live in two scenes, the Church and the train station: persistent rays traced every audio update, the persistent-ray denoiser, and the path reverb built and convolved on the GPU.
-Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 26 and 38.
+Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 26, 38 and 41.
 
 | Scene | What plays | What to try |
 |---|---|---|
@@ -518,7 +518,7 @@ Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 2
   It plays the open scene if it is a showcase scene, and the Church otherwise, with `PathLive` added.
 - **Add a scene:** give its `SceneSession` a `PathLiveScene` (the sources that stay on, those that loop from the start, the rays per source and the smoke walk) and list the scene in `PathLive.Scenes`.
   `ShowcaseAuthoring` (Acoustics > Author live showcase scenes) authors the two scenes' components.
-- **Rays in flight:** 8,000 per source in the Church.
+- **Rays in flight:** 11,000 per source in the Church.
   The station has two sources, so it runs 4,000 per source: at 8,000 per source its smoke run lost 22,104 samples as the train came back past the platform.
 - **Options** (command line, for example `open Builds/LiveShowcase/LiveShowcase.app --args -pathPopulation 11000`):
   - `-pathPopulation N`: the rays in flight per source, in every scene.

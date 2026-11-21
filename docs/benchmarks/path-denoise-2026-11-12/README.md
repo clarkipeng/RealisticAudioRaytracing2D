@@ -2006,3 +2006,60 @@ The kernels' outputs pass the analytic check and the GPU-against-CPU check, so t
 - Both renders were made with the first version, which had the rate code in every walk. Its static outputs varied in their last bits from run to run, so the −52 dB in the still parts is that, not the rates. They were not rendered again.
 - At 12 m/s the shift is ±3.5% (about 0.6 semitone): the direct sound and the wall's echo move in pitch by different amounts as the angles differ.
 
+
+## 41. The main-thread stalls, attributed; the station's tree refit, fixed
+
+**What a stall now records.**
+`FILE.stalls` (`-liveTrace FILE`) had only the player-loop system that took more than 40 ms.
+Each row now also has what the main thread and the process did meanwhile (`LiveTrace`, macOS):
+- the main thread's CPU time (`CLOCK_THREAD_CPUTIME_ID`): near the wall time, it was computing; near zero, it was blocked or preempted;
+- the process's page faults that needed I/O (paging);
+- its voluntary context switches (waits) and involuntary ones (preemption by other work);
+- its garbage collections.
+
+So the next stall says whether it was our code, a wait, the scheduler or the pager.
+
+**The Church at 11,000 rays: the stalls did not recur.**
+The screen was unlocked throughout (`IOConsoleUsers` has no `CGSSessionScreenIsLocked`), on mains power.
+
+| Runs (windowed, the Church's walk) | rays per source | underrun samples | frame, ms (99th pct / max) | frame GPU, ms (median / 99th pct) |
+|---|---:|---|---|---|
+| 5, HEAD's build | 11,000 | 0, 0, 0, 0, 0 | 17.3–17.6 / 26.9–33.3 | 10.0–12.1 / 15.1–20.8 |
+| 2, with a screenshot at every phase | 11,000 | 0, 0 | 17.5 / 33.3 | 9.9–10.2 / 16.2 |
+| 3, this part's build | 11,000 | 0, 0, 0 | 17.4–17.6 / 27.2–32.5 | 10.0–10.3 / 13.3–17.6 |
+| 3, HEAD's build | 16,000 | 0, 0, 0 | 17.4–17.6 / 32.4–65.5 | 10.9–12.0 / 19.9–24.8 |
+
+- The longest stall inside a walk was 56 ms, in `PreLateUpdate.ScriptRunBehaviourLateUpdate` at 16,000 rays. The queue kept 2,048 samples then, and nothing underran.
+- The screenshots (`--shots`) were a suspect, since part 39's runs may have taken them and they read the frame back on the main thread. They cost no stall.
+- So the 125–362 ms stalls of part 39 were not reproduced in 13 runs, and their cause is not proven.
+  - In part 38 and 39 the machine ran other projects' jobs, and the frame's GPU time at 16,000 rays reached 25–37 ms near the organ. Here it stays at 11–12 ms median there.
+  - The swap was 17 of 18 GiB used during these runs, and still no stall came, so paging alone is unlikely.
+  - With the new columns, a recurrence will name its kind.
+- The Church's default rises to **11,000** rays per source (`PathLive.population`); `-pathPopulation N` still overrides it.
+
+**The station: the GPU, not the main thread.**
+At 8,000 rays per source (16,000 in all) the station's walk lost 81,920 samples with no frame over 22.6 ms.
+The frame's GPU time rose from 12 ms to 29 ms (median of 15–20 s) while the train pulled away from the platform, and the audio's readbacks fell behind.
+
+**The cause: a refitted instance tree.**
+- The scene's tree has one immutable tree per object below a tree over the objects' boxes (`DirectBvh`).
+- The tree over the objects was built once, at the first update, and only refitted afterwards: the boxes were moved, the grouping kept.
+- An object that travels far, the train on its 216 m loop, then stretches every box above it across its path.
+- Rays then descend into subtrees they cannot hit, all over the platform.
+
+**The fix.**
+- The tree over the objects is rebuilt, not refitted, whenever an object moves: the same median split over the objects' current centres as the first build.
+- It costs O(n log n) over the objects, n in the hundreds, on the CPU; the upload is the same top nodes as before.
+- The tree only orders and culls the exact triangle tests, and ties go to the lower primitive, so the hits do not change.
+- A static scene never rebuilds it, and its first build is the one before, so static outputs stay bit-identical.
+
+| Station, windowed | rays per source | underrun samples | frame GPU, ms, 15–20 s (median / 90th pct) | rest of the walk (median) |
+|---|---:|---:|---|---|
+| refit (HEAD) | 8,000 | 81,920 | 29.1 / 32.2 | 11.5–14.7 |
+| rebuilt | 8,000 | 0 | 15.9 / 29.0 | 11.7–14.3 |
+| rebuilt | 11,000 | 98,304; 189,440; 141,312 | 29.8 / 32.5 | 13.1–17.4 |
+| handover (part 38) | 4,000 | 0 | 14.8 / 24.4 | 10.3–11.8 |
+
+- A spike remains in 15–20 s, while the horn passes the listener at the platform's edge: at 8,000 rays per source the frame's GPU time still reaches 29–30 ms in some frames.
+  Its cause is not located; a development player's per-stage times would split it.
+- The station's default stays at 4,000 rays per source for now; part 44 sets it after the materials of part 43.
