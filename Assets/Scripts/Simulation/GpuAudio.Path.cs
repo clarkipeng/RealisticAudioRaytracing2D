@@ -37,7 +37,7 @@ internal sealed partial class GpuAudio
         pathMode=settings.method==TakeRender.Method.Path;
         foreach(var name in new[]{"PathHistogram","PathEarWeights","PathTermWeights","PathMix","LatePowers"})Buffer(name,1,4);
         foreach(var name in new[]{"PathAlphaBeta","PathSampleValues","PathFilters","PathCoefficients","PathFiltered"})Buffer(name,1,8);
-        foreach(var name in new[]{"PathSlideRates","PathSlideDelays","PathSlideAmplitudes","PathSlideEnd","PathBandHistory","PathBinCounts","PathBinStarts"})Buffer(name,1,4);
+        foreach(var name in new[]{"PathSlideRates","PathSlideDelays","PathSlideAmplitudes","PathSlideEnd","PathBandHistory","PathBinCounts","PathBinStarts","PathItd"})Buffer(name,1,4);
         Buffer("PathGroupInfo",1,16);Buffer("PathTermBins",1,4);Buffer("PathSampleGroup",1,4);Buffer("PathFftPartitions",1,4);Buffer("PathSpectralPartitions",1,16);Buffer("PathSpectralGroups",1,4);Buffer("PathGroupSpectra",1,8);
         Set("LateAdvance",0);Set("LatePower",0);Set("PathFloat",0);
         if(!pathMode)return;
@@ -123,7 +123,10 @@ internal sealed partial class GpuAudio
         // drift either way, the interpolation's reach and two blocks (PathReverb's ring).
         int need=checked(lateCount*latePartition+2*settings.responseStepSamples+8*(settings.sincRadius+2)+4*latePartition);pathHistoryLength=1;while(pathHistoryLength<need)pathHistoryLength<<=1;
         Buffer("PathSlideRates",checked(2*pairs*pathBins),4).SetData(new float[2*pairs*pathBins]);
-        Buffer("PathSlideDelays",checked(2*pairs*pathBins),4).SetData(new float[2*pairs*pathBins]);
+        Buffer("PathSlideDelays",checked(2*pairs*pathBins*channels),4).SetData(new float[2*pairs*pathBins*channels]);
+        // The echoes' interaural delay (PathReverb, README part 42): the HRTF set's ITD over head-frame directions.
+        var itd=channels==2?Hrtf.Load(lateRate).InterauralDelayGrid:new float[1];
+        Buffer("PathItd",itd.Length,4).SetData(itd);
         Buffer("PathSlideAmplitudes",checked(2*pairs*pathBins*channels*TakeRender.Settings.LateBands),4);
         Buffer("PathSlideEnd",2*pairs,4).SetData(new uint[2*pairs]);
         Buffer("PathBandHistory",checked(lateSources*TakeRender.Settings.LateBands*pathHistoryLength),4).SetData(new float[lateSources*TakeRender.Settings.LateBands*pathHistoryLength]);

@@ -39,6 +39,13 @@ using UnityEngine;
 // (variance <= mean^2). The early part ends at the first bin that holds energy and is not: there the bin pools
 // arrivals of different shifts, which one rate cannot represent, and it and every later bin stay in the convolution
 // (their spread of shifts averages out). A static scene has no rates, so nothing slides and the output is unchanged.
+// Interaural delay of the echoes (README part 42): a slid bin is one echo, so it has one arrival direction, and its ears
+// hear it at different times. The direction is read from the bin's six direction channels: the tracer splits each
+// arrival's energy over the axes by its squared components, so for one arrival u_axis = sqrt(E_+axis / E) -
+// sqrt(E_-axis / E) exactly (for several, an energy-weighted mean). The HRTF set's own ITD there (Hrtf.InterauralDelay,
+// the direct path's blend) splits the echo's delay symmetrically: the left ear's is tau + ITD / 2, the right's
+// tau - ITD / 2. The dense part keeps the diffuse field's interaural coherence, which already holds the ITDs of every
+// direction, so it gets none (it would count them twice).
 internal sealed class PathReverb
 {
     const int Bands=TakeRender.Settings.LateBands,Directions=TakeRender.Settings.LateDirections;
@@ -70,7 +77,8 @@ internal sealed class PathReverb
     // Doppler: per bank the bins' slide rates [bank][pair][bin] (0: not slid), their mean delays in samples and their
     // per-ear band amplitudes [bank][pair][bin][channel][band], the output sample at which the bank's echoes sit at
     // their mean delays, and per source and band a ring of the band-filtered input.
-    readonly float[] slideRates,slideDelays,slideAmplitudes;
+    readonly float[] slideRates,slideDelays,slideAmplitudes;   // slideDelays: [bank][pair][bin][channel], with the ITD
+    readonly float[] itdGrid;   // binaural: the HRTF set's ITD over head-frame directions (Hrtf.InterauralDelayGrid)
     readonly long[] slideReference=new long[2];
     readonly bool[] sliding=new bool[2];
     readonly float[] history; // [source][band][historyLength]
@@ -110,7 +118,7 @@ internal sealed class PathReverb
         energy=new double[channels*Bands*histogram.Count];
         sincRadius=settings.sincRadius;sinc=settings.delayFilter==TakeRender.DelayFilter.WindowedSinc;doppler=settings.pathReflectionDoppler;
         int B=histogram.Count;
-        slideRates=new float[2*pairs*B];slideDelays=new float[2*pairs*B];slideAmplitudes=new float[checked(2*pairs*B*channels*Bands)];
+        slideRates=new float[2*pairs*B];slideDelays=new float[2*pairs*B*channels];itdGrid=channels==2?Hrtf.Load(rate).InterauralDelayGrid:null;slideAmplitudes=new float[checked(2*pairs*B*channels*Bands)];
         // History: the horizon, one step of drift either way, the interpolation's reach and two blocks.
         int need=checked(count*partition+2*step+2*(sincRadius+2)*4+4*partition);
         historyLength=1;while(historyLength<need)historyLength<<=1;
@@ -388,7 +396,9 @@ internal sealed class PathReverb
                 {
                     if(slideRates[bins0+k]==0)continue;
                     double offset=rates(pair,2,k)/rawEnergy[k];   // (referred to the update's time: it may lie a little outside the bin)
-                    slideDelays[bins0+k]=(float)((this.histogram.Start(k)+offset)*rate);sliding[bank]=true;SlidBins++;
+                    float tau=(float)((this.histogram.Start(k)+offset)*rate),half=itdGrid==null?0:.5f*rate*Hrtf.InterauralDelay(itdGrid,EchoDirection(d=>{double x=0;for(int b=0;b<Bands;b++){double v=raw(pair,d,b,k);if(v>0)x+=v;}return x;}));
+                    for(int c=0;c<channels;c++)slideDelays[(bins0+k)*channels+c]=channels==2?(c==0?tau+half:tau-half):tau;
+                    sliding[bank]=true;SlidBins++;
                     for(int c=0;c<channels;c++)for(int b=0;b<Bands;b++)
                     {double e=energy[(c*Bands+b)*B+k];slideAmplitudes[((bins0+k)*channels+c)*Bands+b]=e>0?(float)Math.Sqrt(e):0;}
                 }
@@ -412,6 +422,14 @@ internal sealed class PathReverb
             }
         }
     }
+    // An echo's head-frame arrival direction from its bin's energy per direction channel (+x, -x, +y, -y, +z, -z):
+    // exact for one arrival, whose energy the tracer splits by its squared components (PathDeposit). Zero if none.
+    internal static Vector3 EchoDirection(Func<int,double> energy)
+    {
+        double e0=energy(0),e1=energy(1),e2=energy(2),e3=energy(3),e4=energy(4),e5=energy(5),total=e0+e1+e2+e3+e4+e5;
+        if(!(total>0))return Vector3.zero;
+        return new Vector3((float)((Math.Sqrt(e0)-Math.Sqrt(e1))/Math.Sqrt(total)),(float)((Math.Sqrt(e2)-Math.Sqrt(e3))/Math.Sqrt(total)),(float)((Math.Sqrt(e4)-Math.Sqrt(e5))/Math.Sqrt(total)));
+    }
     // Adds bank b0's slid slots to its output block: per sample a time-varying delay tau + r (t - t_ref) into the
     // band-filtered input, read with the direct path's interpolation filter. t_ref: the end of the bank's crossfade in,
     // where the response's state is (TakeRender.Live: the update's anchor is its sample + step - latency in take time,
@@ -429,12 +447,12 @@ internal sealed class PathReverb
                 double r=slideRates[bins0+k];if(r==0)continue;
                 // Read speed 1 - r: reading faster than real time lowers the filter's cutoff (Doppler.Read).
                 double cutoff=sinc?Math.Min(1,1/(1-r)):1;int extent=sinc?(int)Math.Ceiling(sincRadius/cutoff):1;
-                for(int n=0;n<partition;n++)
+                for(int c=0;c<channels;c++)for(int n=0;n<partition;n++)
                 {
                     long t=(long)block*partition+n;
                     // (The filter reads `extent` samples past its centre and the band input reaches t - latency, so a delay
                     // is at least that: only an echo within centimetres of its source is held there.)
-                    double u=t-latency-Math.Max(extent,slideDelays[bins0+k]+r*(t-slideReference[b0]));long center=(long)Math.Floor(u);double phase=u-center;
+                    double u=t-latency-Math.Max(extent,slideDelays[(bins0+k)*channels+c]+r*(t-slideReference[b0]));long center=(long)Math.Floor(u);double phase=u-center;
                     Array.Clear(acc,0,Bands);
                     if(!sinc)for(int b=0;b<Bands;b++){int row=(s*Bands+b)*historyLength;acc[b]=history[row+(int)(center&mask)]*(1-phase)+history[row+(int)((center+1)&mask)]*phase;}
                     else
@@ -448,7 +466,6 @@ internal sealed class PathReverb
                         }
                         for(int b=0;b<Bands;b++)acc[b]/=sum;
                     }
-                    for(int c=0;c<channels;c++)
                     {
                         double value=0;int a=((bins0+k)*channels+c)*Bands;
                         for(int b=0;b<Bands;b++)value+=slideAmplitudes[a+b]*acc[b];

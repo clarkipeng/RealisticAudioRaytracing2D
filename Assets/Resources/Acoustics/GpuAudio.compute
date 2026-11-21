@@ -811,14 +811,39 @@ float PathEarEnergy(uint pair,uint c,uint b,uint k)
 // bins out of the kernel; PathBandInput keeps the band-filtered input of each block in a ring; PathSlide adds each
 // bank's echoes to its output block.
 RWStructuredBuffer<float> PathSlideRates;       // [bank][pair][bin]: the slid bins' rates (0: not slid)
-RWStructuredBuffer<float> PathSlideDelays;      // [bank][pair][bin]: their mean delays, in samples
+RWStructuredBuffer<float> PathSlideDelays;      // [bank][pair][bin][channel]: their mean delays per ear (with the ITD), in samples
 RWStructuredBuffer<float> PathSlideAmplitudes;  // [bank][pair][bin][channel][band]
 RWStructuredBuffer<uint> PathSlideEnd;          // [bank][pair]: one past the last slid bin
 RWStructuredBuffer<float> PathBandHistory;      // [source][band][PathHistoryLength]
 StructuredBuffer<uint> PathBinCounts;           // the tracer's contributions per [frame][pair][bin] (PathCountOffset: the frame's)
 StructuredBuffer<float> PathBinStarts;          // [bin]: its start in samples
 uint PathRateOffset,PathCountOffset,PathHistoryLength,PathSincRadius,PathSincFilter,PathDoppler;
+// Interaural delay of the echoes (PathReverb.EchoDirection, Hrtf.InterauralDelay; README part 42): the HRTF set's ITD in
+// seconds over head-frame directions, [elevation 91][azimuth 181] every 2 degrees, read bilinearly.
+StructuredBuffer<float> PathItd;
+static const uint PATH_ITD_AZIMUTHS=181,PATH_ITD_ELEVATIONS=91;
+float PathInterauralDelay(float3 direction)
+{
+    if(!(dot(direction,direction)>0))return 0;
+    direction=normalize(direction);
+    float fa=(atan2(direction.x,direction.z)*57.29578+180)/2,fe=(asin(clamp(direction.y,-1.0,1.0))*57.29578+90)/2;
+    int a=clamp((int)floor(fa),0,(int)PATH_ITD_AZIMUTHS-2),e=clamp((int)floor(fe),0,(int)PATH_ITD_ELEVATIONS-2);
+    float ta=saturate(fa-a),te=saturate(fe-e);
+    float low=PathItd[e*PATH_ITD_AZIMUTHS+a]*(1-ta)+PathItd[e*PATH_ITD_AZIMUTHS+a+1]*ta,high=PathItd[(e+1)*PATH_ITD_AZIMUTHS+a]*(1-ta)+PathItd[(e+1)*PATH_ITD_AZIMUTHS+a+1]*ta;
+    return low*(1-te)+high*te;
+}
 int PathHistoryAt,PathSlideOffset;
+float PathRawDirectionEnergy(uint pair,uint d,uint k)
+{
+    float e=0;
+    for(uint b=0;b<LATE_BANDS;b++)
+    {
+        uint cell=((pair*LATE_DIRECTIONS+d)*LATE_BANDS+b)*PathBinsCount+k;
+        float x=(LateHistogram[2*(PathFixedOffset+cell)+1]+LateHistogram[2*(PathFixedOffset+cell)]/4294967296.0)/LateRays;
+        if(x>0)e+=x;
+    }
+    return e;
+}
 float PathRawEnergy(uint pair,uint k)
 {
     float e=0;
@@ -854,7 +879,15 @@ void PathSlideSelect(uint3 id:SV_DispatchThreadID)
                 if(PathBinCounts[PathCountOffset+pair*PathBinsCount+k]>=2 && mean!=0 && variance<=mean*mean)
                 {
                     rate=mean;end=k+1;
-                    PathSlideDelays[(LateBank*AudioPairs+pair)*PathBinsCount+k]=PathBinStarts[k]+PathRateMoment(pair,2,k)/e*AudioRate;
+                    float tau=PathBinStarts[k]+PathRateMoment(pair,2,k)/e*AudioRate,half=0;
+                    if(AudioChannels==2)
+                    {
+                        float e0=PathRawDirectionEnergy(pair,0,k),e1=PathRawDirectionEnergy(pair,1,k),e2=PathRawDirectionEnergy(pair,2,k),e3=PathRawDirectionEnergy(pair,3,k),e4=PathRawDirectionEnergy(pair,4,k),e5=PathRawDirectionEnergy(pair,5,k);
+                        float total=e0+e1+e2+e3+e4+e5;
+                        float3 u=total>0?float3(sqrt(e0)-sqrt(e1),sqrt(e2)-sqrt(e3),sqrt(e4)-sqrt(e5))/sqrt(total):0;
+                        half=.5*AudioRate*PathInterauralDelay(u);
+                    }
+                    for(uint c0=0;c0<AudioChannels;c0++)PathSlideDelays[((LateBank*AudioPairs+pair)*PathBinsCount+k)*AudioChannels+c0]=AudioChannels==2?(c0==0?tau+half:tau-half):tau;
                     for(uint c=0;c<AudioChannels;c++)for(uint b=0;b<LATE_BANDS;b++)
                     {float x=PathEarEnergy(pair,c,b,k);PathSlideAmplitudes[(((LateBank*AudioPairs+pair)*PathBinsCount+k)*AudioChannels+c)*LATE_BANDS+b]=x>0?sqrt(x):0;}
                 }
@@ -923,7 +956,7 @@ void PathSlide(uint3 id:SV_DispatchThreadID)
             float r=PathSlideRates[bins+k];if(r==0)continue;
             any=true;
             float cutoff=PathSincFilter!=0?min(1.0,1.0/(1.0-r)):1;int extent=PathSincFilter!=0?(int)ceil(PathSincRadius/cutoff):1;
-            float u=(float)(PathHistoryAt+(int)n)-max((float)extent,PathSlideDelays[bins+k]+r*(float)(PathSlideOffset+(int)n));
+            float u=(float)(PathHistoryAt+(int)n)-max((float)extent,PathSlideDelays[(bins+k)*AudioChannels+c]+r*(float)(PathSlideOffset+(int)n));
             int center=(int)floor(u);float phase=u-center;
             float acc[8];for(uint b0=0;b0<LATE_BANDS;b0++)acc[b0]=0;
             float sum=0;

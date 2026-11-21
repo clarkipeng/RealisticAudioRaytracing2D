@@ -30,6 +30,7 @@ public sealed class Hrtf
     }
     Hrtf(int rate)
     {
+        this.rate=rate;
         var asset=Resources.Load<TextAsset>("Acoustics/Kemar");
         if(asset==null) throw new InvalidOperationException("Missing bundled KEMAR HRTF data.");
         var bytes=asset.bytes;
@@ -197,5 +198,61 @@ public sealed class Hrtf
     }
     public float Coefficient(int direction,int ear,int tap) => filters[(direction*2+ear)*Taps+tap];
     public int DirectionCount => directions.Length;
+
+    // Interaural time difference (README part 42), the set's own: per measured direction, the lag of the peak of the
+    // cross-correlation of its left and right HRIRs (the broadband interaural cross-correlation estimator; Katz &
+    // Noisternig, JASA 135, 2014, compare it with the others), searched within +-1 ms (beyond any head's ITD), between
+    // samples by band-limited interpolation of the correlation (PeakLag). Seconds, positive when the left ear hears later
+    // (a source on the right). Over a grid of head-frame directions, every 2 degrees of azimuth (atan2(x, z)) and
+    // elevation (asin y), each point the blend of the measured directions the direct path uses there (Interpolate), so
+    // an echo arriving from a direction gets the ITD the direct path has from it; read bilinearly (InterauralDelay).
+    public const int ItdAzimuths=181,ItdElevations=91;
+    public const float ItdStepDegrees=2;
+    float[] itdGrid;
+    public float[] InterauralDelayGrid {get {if(itdGrid==null)itdGrid=BuildItdGrid();return itdGrid;}}
+    readonly int rate;
+    // The lag, in samples, of the peak of a correlation r(lag) of two band-limited signals within +-lags: the largest
+    // sample, then the maximum of r interpolated between samples (a Lanczos-windowed sinc of radius 8, which is exact
+    // for a band-limited r up to the window's ripple) within a sample of it, on a 1/64-sample grid.
+    public static double PeakLag(Func<int,double> correlation,int lags)
+    {
+        const int radius=8;int reach=lags+radius+1;
+        var r=new double[2*reach+1];for(int l=-reach;l<=reach;l++)r[l+reach]=correlation(l);
+        int best=-lags;for(int l=-lags;l<=lags;l++)if(r[l+reach]>r[best+reach])best=l;
+        double peakLag=best,peak=double.NegativeInfinity;
+        for(int step=-64;step<=64;step++)
+        {
+            double tau=best+step/64.0,sum=0;
+            for(int l=(int)Math.Floor(tau)-radius+1;l<=(int)Math.Floor(tau)+radius;l++)
+            {double x=tau-l;sum+=r[l+reach]*Sinc(x)*Sinc(x/radius);}
+            if(sum>peak){peak=sum;peakLag=tau;}
+        }
+        return peakLag;
+    }
+    float[] BuildItdGrid()
+    {
+        int lags=(int)Math.Ceiling(.001*rate);var measured=new float[directions.Length];
+        for(int i=0;i<directions.Length;i++)
+            measured[i]=(float)(PeakLag(lag=>{double sum=0;for(int t=Math.Max(0,-lag);t<Taps && t+lag<Taps;t++)sum+=(double)Coefficient(i,0,t+lag)*Coefficient(i,1,t);return sum;},lags)/rate);
+        var grid=new float[ItdAzimuths*ItdElevations];
+        for(int e=0;e<ItdElevations;e++)for(int a=0;a<ItdAzimuths;a++)
+        {
+            float azimuth=(-180+a*ItdStepDegrees)*Mathf.Deg2Rad,elevation=(-90+e*ItdStepDegrees)*Mathf.Deg2Rad;
+            var blend=Interpolate(new Vector3(Mathf.Cos(elevation)*Mathf.Sin(azimuth),Mathf.Sin(elevation),Mathf.Cos(elevation)*Mathf.Cos(azimuth)));
+            grid[e*ItdAzimuths+a]=blend.weights.x*measured[blend.a]+blend.weights.y*measured[blend.b]+blend.weights.z*measured[blend.c]+blend.weights.w*measured[blend.d];
+        }
+        return grid;
+    }
+    // The ITD (seconds) from a head-frame direction, bilinear in the grid (GpuAudio.compute PathInterauralDelay is the same).
+    public static float InterauralDelay(float[] grid,Vector3 direction)
+    {
+        if(!(direction.sqrMagnitude>0))return 0;
+        direction.Normalize();
+        float fa=(Mathf.Atan2(direction.x,direction.z)*Mathf.Rad2Deg+180)/ItdStepDegrees,fe=(Mathf.Asin(Mathf.Clamp(direction.y,-1,1))*Mathf.Rad2Deg+90)/ItdStepDegrees;
+        int a=Mathf.Clamp((int)Mathf.Floor(fa),0,ItdAzimuths-2),e=Mathf.Clamp((int)Mathf.Floor(fe),0,ItdElevations-2);
+        float ta=Mathf.Clamp01(fa-a),te=Mathf.Clamp01(fe-e);
+        float low=grid[e*ItdAzimuths+a]*(1-ta)+grid[e*ItdAzimuths+a+1]*ta,high=grid[(e+1)*ItdAzimuths+a]*(1-ta)+grid[(e+1)*ItdAzimuths+a+1]*ta;
+        return low*(1-te)+high*te;
+    }
     public Vector3 Direction(int index) => directions[index];
 }

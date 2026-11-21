@@ -2063,3 +2063,50 @@ The frame's GPU time rose from 12 ms to 29 ms (median of 15–20 s) while the tr
 - A spike remains in 15–20 s, while the horn passes the listener at the platform's edge: at 8,000 rays per source the frame's GPU time still reaches 29–30 ms in some frames.
   Its cause is not located; a development player's per-stage times would split it.
 - The station's default stays at 4,000 rays per source for now; part 44 sets it after the materials of part 43.
+
+## 42. Interaural time difference of the echoes
+
+Until now an echo reached the two ears at the same time; only its level differed between them (the HRTF set's band energies per direction).
+The direct sound has the full HRTF, so a reflection from the side was lateralised by level alone, against the direct path's level and time.
+
+**Where it applies.**
+- The early part of part 40: the bins the synthesis renders as discrete echoes, each an impulse at its mean delay.
+- A discrete echo has one arrival direction, so its ears hear it at different times.
+- The dense part keeps no ITD of its own: its two ears' noise is mixed to the HRTF set's diffuse-field interaural coherence, which already holds the interaural delays of every direction. A per-direction delay there would count them twice.
+- So a scene with nothing moving has no discrete echoes and is unchanged, bit for bit.
+
+**The echo's direction, from the direction channels.**
+- The tracer splits each arrival's energy over the six head-frame axes by its squared components (`PathDeposit`).
+- So for one arrival, u_axis = sqrt(E_+axis / E) − sqrt(E_−axis / E) exactly, E the bin's energy over all six. For several, it is an energy-weighted mean.
+- No new tracer output is needed, so the walk kernels are untouched (part 24's and part 40's Metal miscompile cannot come in).
+
+**The ITD: the HRTF set's own.**
+- Per measured direction of the KEMAR set, the lag of the peak of the cross-correlation of its left and right HRIRs (the broadband interaural cross-correlation estimator; Katz & Noisternig, JASA 135, 2014, compare it with the others), within ±1 ms.
+- Between samples, the correlation is interpolated band-limited (a Lanczos-windowed sinc of radius 8) and its maximum taken on a 1/64-sample grid (`Hrtf.PeakLag`).
+- It is laid on a grid of head-frame directions every 2° of azimuth and elevation. Each point is the blend of measured directions the direct path itself uses there (`Hrtf.Interpolate`), so an echo from a direction gets the ITD the direct path has from it.
+- The echo's delay is split symmetrically: the left ear's is τ + ITD/2, the right's τ − ITD/2 (ITD positive when the source is on the right).
+- Woodworth's spherical head was the alternative. It needs a head radius, and at 90° it gives 656 µs for the usual 8.75 cm against the set's 735 µs; the set's own needs no constant.
+
+**Code.** CPU reference: `PathReverb` (`EchoDirection`, per-ear delays in `SlideBlock`). GPU: `PathSlideSelect` reads the direction channels and the ITD grid (`PathItd`, a read-only buffer, so no new UAV), `PathSlideDelays` holds a delay per ear, and `PathSlide` reads its ear's.
+
+**The check** (`PathEchoesCarryTheHrtfInterauralDelay`).
+- One reflection off a rigid wall, binaural, persistent rays, 16 kHz, a noise source.
+- The image source recedes from the listener at 10 m/s along a fixed line, so the echo slides and its direction stays put; the head turns so that the image lies at each azimuth in turn.
+- The echo's ITD is the lag of the peak of the cross-correlation of the reverb's two ears over the last six updates.
+- The reference is the direct path: the same noise through the HRTF blend the direct path uses for that head-frame direction, measured the same way.
+- A moving source stretches it: with the delay growing at r per second of reception, p_L(t) = p_R(t − D) with D (1 − r) = ITD, so the reference is the direct path's ITD / (1 − r) (r = 0.0283 here).
+
+| azimuth | echo, µs | direct path, static, µs | expected, µs | HRTF grid, µs | Woodworth (8.75 cm), µs |
+|---:|---:|---:|---:|---:|---:|
+| −90° | −754.9 | −736.3 | −757.8 | −735.4 | −655.8 |
+| −60° | −531.3 | −515.6 | −530.7 | −516.6 | −488.1 |
+| −30° | −266.6 | −260.7 | −268.3 | −260.7 | −261.1 |
+| 0° | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| 30° | 265.6 | 260.7 | 268.3 | 260.7 | 261.1 |
+| 60° | 530.3 | 515.6 | 530.7 | 516.6 | 488.1 |
+| 90° | 754.9 | 736.3 | 757.8 | 735.4 | 655.8 |
+
+- The worst error is 2.9 µs (at ±90°), a twentieth of a sample at 16 kHz and below the smallest audible ITD change (about 10 µs). The check's limit is 10 µs.
+- Before this part, every echo's ITD was 0.
+- `GpuPathReverbMatchesTheCpuReference` with the source passing at 20 m/s (binaural, so its echoes slide and carry the ITD on both sides) agrees to 6.1 × 10⁻⁵, as before; the static cases are unchanged (3.75 × 10⁻⁵ binaural, 6.27 × 10⁻⁶ mono).
+- `PathReflectionsCarryTheImageSourceDoppler` is unchanged (mono): 271.25 Hz against 271.17 Hz, and its static control bit-identical.
