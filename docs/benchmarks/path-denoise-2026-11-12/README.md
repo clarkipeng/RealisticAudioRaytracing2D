@@ -2179,3 +2179,28 @@ Sound reduction (Sharp), transmitted share τ at 125 / 500 / 2,000 Hz: steel she
 - `-stationTrainSpeed V` and `-stationTrainAcceleration A` set the station train's cruise speed and acceleration for a smoke or listening run (`PathLive`), before the session initialises its actors; the take records them (`StationDemo.SettingsJson`).
 - At 3 m/s² the train cannot reach 30 m/s on its 216 m loop and stop again at the platform (its peak is √(a d) = 25 m/s), so the 30 m/s pass uses 6 m/s².
 - `tools/path_live_church.py smoke` now lists the run's stalls with their kind (part 41), and `tools/doppler_station.py --tag T` names its renders and clips `station-*-T`.
+
+**The rebuilt showcase** (`tools/path_live_church.py build`, with the instance-tree rebuild, the echoes' ITD, the station's materials and the read-only views).
+Three windowed smoke runs of both scenes, one after the other, the screen unlocked, at the defaults (the Church 11,000 rays, the station 4,000 per source):
+
+| Run | Church: underruns, frame ms (99th pct / max), frame GPU ms (median / 99th pct) | Station: the same |
+|---|---|---|
+| 1 | 0; 17.2 / 28.2; 9.3 / 12.5 | 0; 18.5 / 49.5; 8.5 / 10.5 |
+| 2 | 0; 17.0 / 33.1; 9.4 / 12.2 | 0; 17.0 / 32.4; 8.5 / 10.3 |
+| 3 | 0; 25.4 / 33.3; 9.3 / 12.4 | 0; 17.6 / 20.8; 8.4 / 10.3 |
+| station, train at 30 m/s | | 0; 17.6 / 23.6; 8.5 / 13.7 |
+
+- The longest audio callback took 0.43 ms.
+- The stalls the runs list are outside the walks: each scene's load (2.4–2.7 s of computing in `ScriptRunDelayedDynamicFrameRate`) and each take's end (1.2–1.9 s in `ScriptRunBehaviourUpdate`, mostly waiting).
+- The station's frame GPU time at 4,000 rays per source no longer rises while the horn passes the listener: 9.1–9.2 ms median and under 10.8 ms at the 90th percentile in 15–20 s, against 14.8 / 24.4 ms in part 38's handover run. Part 41's tree and part 43's absorbing ground both shorten the work there.
+- Raising the station's default was not tried in these runs: the screen locked again before the runs at 8,000 rays per source could start, so it stays at 4,000.
+
+**Earlier in this round, a paging stall.** The first station run after the materials (4,000 rays per source) lost 43,040 samples. Its stalls were 139 ms in `PostLateUpdate.UpdateAudio` and 155 ms in `WaitForLastPresentationAndUpdateTime`, with 7 and 31 ms of main-thread CPU and 35 and 132 page-ins: the player waited on the pager. The Mac then had 18–32 GiB of swap in use, with other projects' processes holding the memory. Part 41's columns name such a stall at once; it is the machine, not the walk, and the run counts as invalid.
+
+**Doppler on the reflections at 30 m/s** (`tools/doppler_station.py render TAKE --tag fast`, `clips --tag fast --start 9 --seconds 16`).
+- The take is the fourth run above, the station's walk with `-stationTrainSpeed 30 -stationTrainAcceleration 6`: the train leaves at 10 s, reaches 30 m/s after 5 s, rounds the far end and the far straight at speed and brakes to the platform about 22 s in.
+- It was rendered twice with the final kernels and the live settings (persistent rays, 11,000 in flight, binaural, GPU audio), once with `pathReflectionDoppler` off.
+- The renders are bit-identical while nothing moves (0–4 s and 24–32 s: the difference is exactly zero). Part 40's renders, from the first version, differed there at −52 dB; the static walks are now separate.
+- While the train moves the difference is −3 to −14 dB of the render's level (−10.6 to −13.5 dB in 10–16 s, as it accelerates away).
+  That is less than part 40's −5 dB at 12 m/s, though the shift is 2.5 times larger: the ballast and the grass now absorb 0.5–0.9 of what the ground used to reflect, so the echoes carry less of the sound.
+- Listening: `.context/energy-audio/listen/station-direct-only-fast.wav` and `station-doppler-fast.wav` (9–25 s of the take, the same gain), and `station-doppler-fast-ab.wav` and `.m4a` back to back, linked on `path.html`. The gallery has `raytracer/station-doppler-30ms-ab.m4a`.
