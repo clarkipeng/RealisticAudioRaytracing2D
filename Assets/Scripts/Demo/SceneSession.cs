@@ -26,6 +26,7 @@ public sealed class SceneSession : MonoBehaviour
     bool ready;
     public long Tick {get;private set;}
     public bool ReadPlayerInput {get;set;}=true;
+    public bool SaveOnR {get;set;}=true; // the live showcase (PathLive) offers no saved runs
     public Action<long> SampleInput;
     public PlayerController Walker => walker;
     public MouseLook Look => look;
@@ -111,7 +112,7 @@ public sealed class SceneSession : MonoBehaviour
                 accept ? look.ReadDelta():Vector2.zero,accept && Input.GetButtonDown("Jump"),accept && Input.GetKeyDown(KeyCode.E));
         }
         manager.AdvanceSimulation();
-        if(Cursor.lockState==CursorLockMode.Locked && Input.GetKeyDown(KeyCode.R)) SaveRecording();
+        if(SaveOnR && Cursor.lockState==CursorLockMode.Locked && Input.GetKeyDown(KeyCode.R)) SaveRecording();
     }
     public void SubmitInput(Vector2 movement,Vector2 lookDegrees,bool jump=false,bool interact=false)
     {
@@ -212,21 +213,23 @@ public sealed class SceneSession : MonoBehaviour
         else using(var input=new SceneRecording.Playback(path))input.ValidateScene(this);
         StartCoroutine(AfterStop(()=> {
             multiplayer?.Shutdown();pendingReplay=Path.GetFullPath(path);
-            ReloadScene();
+            Load(gameObject.scene.path);
         }));
     }
-    public void RestartScene()
+    public void RestartScene() => LoadScene(gameObject.scene.path);
+    // Ends the session (its take saved, its audio drained), then loads the scene at this path in its place.
+    public void LoadScene(string path)
     {
         if(Busy)return;
-        StartCoroutine(AfterStop(()=> {multiplayer?.Shutdown();ReloadScene();}));
+        StartCoroutine(AfterStop(()=> {multiplayer?.Shutdown();Load(path);}));
     }
-    void ReloadScene()
+    static void Load(string path)
     {
 #if UNITY_EDITOR
-            UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(gameObject.scene.path,
+            UnityEditor.SceneManagement.EditorSceneManager.LoadSceneInPlayMode(path,
                 new UnityEngine.SceneManagement.LoadSceneParameters(UnityEngine.SceneManagement.LoadSceneMode.Single));
 #else
-            UnityEngine.SceneManagement.SceneManager.LoadScene(gameObject.scene.path);
+            UnityEngine.SceneManagement.SceneManager.LoadScene(path);
 #endif
     }
     void LateUpdate()

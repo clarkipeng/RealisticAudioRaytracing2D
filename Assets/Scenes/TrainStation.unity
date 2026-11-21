@@ -4485,6 +4485,7 @@ GameObject:
   - component: {fileID: 1303114733}
   - component: {fileID: 1303114740}
   - component: {fileID: 1303114739}
+  - component: {fileID: 1303114741}
   m_Layer: 0
   m_Name: Acoustic simulation
   m_TagString: Untagged
@@ -4545,6 +4546,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::AudioManager
   paused: 0
+  muteOutput: 0
 --- !u!114 &1303114736
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4563,6 +4565,7 @@ MonoBehaviour:
   directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
   directSettings:
     responseStepSamples: 1024
+    renderSeconds: 0
     speedOfSound: 343
     referenceDistance: 1
     minimumDistance: 0.1
@@ -4580,8 +4583,40 @@ MonoBehaviour:
     synthesis: 1
     audioBackend: 0
     raysPerBin: 1
+    reflectionSampling: 0
+    reflectionCandidates: 128
+    completeRouteSamples: 0
+    familyGains: 0
     maxBounces: 5
+    lateRays: 512
+    lateReceiverRadius: 0.5
+    lateTailSeconds: 0
+    lateAccumulationSeconds: 0
     seed: 0
+    method: 0
+    methodRays: 4096
+    specularDetectionRadius: 0.25
+    methodEdgeProbability: 0.5
+    methodRouletteFloor: 0.000001
+    methodArrivals: 1
+    methodArrivalOrder: 2
+    methodArrivalSlots: 64
+    methodNearPlanes: 0
+    methodMaxEvents: 65536
+    pathBinSeconds: 0.00025
+    pathFineBins: 64
+    pathSurvivalSeconds: 0.1
+    pathPersistent: 0
+    pathRaysInFlight: 0
+    pathBeamsOnly: 0
+    pathPopulation: 0
+    pathPopulationMaximum: 0
+    pathDenoise: 0
+    pathIterationCap: 0
+    pathIterationSurvival: 0.75
+    pathEdgeSliceUpdates: 1
+    pathHistogramExport:
+    pathHistogramImport:
     raysPerPair: 0
     diffractionFactor: 1
     airAbsorption: 1
@@ -4610,9 +4645,15 @@ MonoBehaviour:
       responseUpdates: 0
       reusedResponses: 0
       filterBytes: 0
+      materialFilters: 0
+      inputFfts: 0
       pathCapacity: 0
       activeGroups: 0
       peakGroups: 0
+      readbacks: 0
+      readbackSeconds: 0
+      maximumReadbackSeconds: 0
+      maximumConsumeDelaySeconds: 0
     channelMismatchSamples: 0
     observedSamples: 0
     leadSamples: 0
@@ -4917,6 +4958,33 @@ MonoBehaviour:
   address: 127.0.0.1
   port: 7777
   presentationSeconds: 0.1
+--- !u!114 &1303114741
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1303114732}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a20e64cc16014def997ac1be0299c4f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Acoustics::PathLiveScene
+  sources:
+  - {fileID: 5123702278139013080}
+  - {fileID: 1277931755}
+  startLooped:
+  - {fileID: 5123702278139013080}
+  - {fileID: 1277931755}
+  population: 4000
+  route:
+  - {x: 5.6, y: 0, z: 4.4}
+  - {x: 5.6, y: 0, z: 11}
+  - {x: 5.6, y: 0, z: 2.5}
+  - {x: 8.8, y: 0, z: -0.5}
+  interactAfter: 0
+  standSeconds: 5
+  holdSeconds: 25
 --- !u!1 &1323180786
 GameObject:
   m_ObjectHideFlags: 0

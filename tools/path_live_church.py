@@ -1,14 +1,20 @@
-"""The playable Church (README.md, "Playable Church"; docs/benchmarks/path-denoise-2026-11-12, part 26).
+"""The live showcase: the path method live in the Church and the train station (README.md, "Live showcase";
+docs/benchmarks/path-denoise-2026-11-12, parts 26 and 38).
 
     PY=.context/fdtd-teacher/venv/bin/python
-    nice -n 19 $PY tools/path_live_church.py build   # guarded Unity build -> Builds/ChurchLive/ChurchLive.app
-    nice -n 19 $PY tools/path_live_church.py smoke   # guarded scripted run of the build -> .context/path-live/smoke-*/
+    nice -n 19 $PY tools/path_live_church.py build    # guarded Unity build -> Builds/LiveShowcase/LiveShowcase.app
+    nice -n 19 $PY tools/path_live_church.py smoke --windowed [--scenes Church TrainStation] [--shots]
+                                                      # guarded scripted run of the build -> .context/path-live/smoke-*/
+    nice -n 19 $PY tools/path_live_church.py stills   # guarded still images of every scene -> .context/polish/stills
+    nice -n 19 $PY tools/path_live_church.py author   # guarded ShowcaseAuthoring of the showcase scenes
 
 The build comes from the test runner's copy of the project (tools/dlss_jobs.py RUNNER, synced from this
-working tree), so the editor's Library is untouched. The smoke run launches the build windowed with
--pathLiveSmoke: the scripted walk of PathLiveChurch (stand, walk to the doors, open them, walk out), the
-output recorded to output.wav, frame times, GPU times and audio underruns to smoke.json. It runs windowless
-(-batchmode) so it never takes the screen's focus; arguments after `smoke --` go to the player (e.g. -pathBudget 6).
+working tree), so the editor's Library is untouched. The smoke run launches the build with -pathLiveSmoke:
+each scene's scripted walk (PathLive, PathLiveScene), one scene after another, loaded as the scene picker loads
+them. Per scene the output is recorded to output.wav, frame times, GPU times and audio underruns to smoke.json,
+and with --shots a screenshot is saved at each phase of the walk. --windowed launches it hidden and unfocused;
+without it, it runs windowless (-batchmode) and draws nothing. Arguments after `smoke --` go to the player
+(e.g. -pathBudget 6).
 """
 import argparse
 import json
@@ -24,21 +30,69 @@ import dlss_jobs as dj  # noqa: E402
 import method_runs as mr  # noqa: E402
 
 WORK = ROOT / '.context/path-live'
-APP = ROOT / 'Builds/ChurchLive/ChurchLive.app'
+APP = ROOT / 'Builds/LiveShowcase/LiveShowcase.app'
+OLD_APP = ROOT / 'Builds/ChurchLive'   # the Church-only app this replaces; removed by the next build (disk space)
+# The scenes and their visual content. dlss_jobs syncs only code, shaders, tests and tools into the runner, so the
+# player build and the stills would otherwise use the runner's older copies of these.
+CONTENT = ['Assets/Scenes', 'Assets/Materials', 'Assets/Prefabs', 'Assets/External', 'Assets/Audio']
+
+
+def sync_content():
+    """Mirror CONTENT into the runner: copy new or changed files, remove files deleted here."""
+    for folder in CONTENT:
+        for source in (ROOT / folder).rglob('*'):
+            target = dj.RUNNER / source.relative_to(ROOT)
+            if source.is_file() and (not target.exists() or source.read_bytes() != target.read_bytes()):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+        for target in sorted((dj.RUNNER / folder).rglob('*'), reverse=True):
+            if not (ROOT / target.relative_to(dj.RUNNER)).exists():
+                shutil.rmtree(target) if target.is_dir() else target.unlink()
+
+
+def launch(name, arguments):
+    """A guarded batch editor run in the runner, its scenes and content synced first."""
+    mr.LOGS = WORK / 'logs'; mr.LOGS.mkdir(parents=True, exist_ok=True)
+    sync_content()
+    return mr.launch(name, arguments)
+
+
+def stills(scenes):
+    """Still images of the scenes (SceneStills) for a visual review: .context/polish/stills."""
+    out = ROOT / '.context/polish/stills'
+    shutil.rmtree(out, ignore_errors=True)
+    logs, resources = launch('stills', ['-quit', '-executeMethod', 'SceneStills.Capture', '-stillsOutput', str(out),
+                                        *(['-stillsScenes', ','.join(scenes)] if scenes else [])])
+    print(f'{len(list(out.glob("*.png")))} stills in {out}' if resources['exitCode'] == 0 else f'stills failed: see {logs}/unity.log')
+
+
+def author():
+    """ShowcaseAuthoring in the runner, then its scenes (and the metas of new scripts) copied back here."""
+    logs, resources = launch('author', ['-quit', '-executeMethod', 'ShowcaseAuthoring.Apply'])
+    if resources['exitCode'] != 0:
+        raise SystemExit(f'authoring failed: see {logs}/unity.log')
+    for scene in ['Assets/Scenes/Church.unity', 'Assets/Scenes/TrainStation.unity']:
+        shutil.copy2(dj.RUNNER / scene, ROOT / scene)
+    for folder in ['Assets/Scripts', 'Assets/Editor']:
+        for meta in (dj.RUNNER / folder).rglob('*.meta'):
+            target = ROOT / meta.relative_to(dj.RUNNER)
+            if not target.exists() and target.with_suffix('').exists():
+                shutil.copy2(meta, target)
+    print('authored the showcase scenes')
 
 
 def build():
-    mr.LOGS = WORK / 'logs'; mr.LOGS.mkdir(parents=True, exist_ok=True)
-    staged = WORK / 'build/ChurchLive.app'
-    if staged.exists():
-        shutil.rmtree(staged)
-    logs, resources = mr.launch('build', ['-quit', '-executeMethod', 'PathLiveChurchBuild.Build', '-pathLiveOutput', str(staged)])
+    staged = WORK / 'build' / APP.name
+    shutil.rmtree(WORK / 'build', ignore_errors=True)
+    logs, resources = launch('build', ['-quit', '-executeMethod', 'PathLiveBuild.Build', '-pathLiveOutput', str(staged)])
     if resources['exitCode'] != 0 or not staged.exists():
         raise SystemExit(f'build failed: see {logs}/unity.log')
     if APP.exists():
         shutil.rmtree(APP)
     APP.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(staged, APP, symlinks=True)
+    shutil.rmtree(WORK / 'build')
+    shutil.rmtree(OLD_APP, ignore_errors=True)
     print(f'built {APP}')
 
 
@@ -50,14 +104,15 @@ def front_app():
     return info.split('=')[-1].strip().strip('"')
 
 
-def smoke(extra=(), windowed=False):
+def smoke(extra=(), windowed=False, scenes=(), shots=False):
     out = WORK / time.strftime('smoke-%Y%m%d-%H%M%S')
     out.mkdir(parents=True)
     binary = next((APP / 'Contents/MacOS').iterdir())
     # -batchmode: no window, so the run never takes the screen's focus; the player still draws the scene every frame
     # (smoke.json reports camera renders per frame) and still plays its audio callbacks (callbacks, underruns).
     command = [str(binary), '-batchmode', '-pathLiveSmoke', str(out), '-screen-width', '1280', '-screen-height', '720',
-               '-logFile', str(out / 'player.log'), *extra]
+               '-logFile', str(out / 'player.log'),
+               *(['-pathLiveScenes', ','.join(scenes)] if scenes else []), *(['-pathLiveShots'] if shots else []), *extra]
     if windowed:
         # A window, so that the scene is drawn and the profiler's GPU timings can be read: launched hidden and not
         # activated (open -g -j). The front application is watched throughout; if the player ever became frontmost it
@@ -68,7 +123,7 @@ def smoke(extra=(), windowed=False):
         def watch():
             while not done.wait(.2):
                 name = front_app()
-                if name != before and ('ChurchLive' in name or 'AudioRayTrace' in name):
+                if name != before and (APP.stem in name or 'AudioRayTrace' in name):
                     stolen.append(name); subprocess.run(['pkill', '-f', str(APP)]); return
         threading.Thread(target=watch, daemon=True).start()
     resources = dj.Worker(command, dict(os.environ), lambda m: print(m, flush=True)).run()
@@ -77,15 +132,24 @@ def smoke(extra=(), windowed=False):
         resources['focusTaken'] = bool(stolen)
         print('the player took the focus and was stopped' if stolen else f'focus stayed with {before}')
     (out / 'resources.json').write_text(json.dumps(resources, indent=1) + '\n')
-    report = out / 'smoke.json'
     print(f'exit {resources["exitCode"]}, {resources["wallSeconds"]:.0f} s, peak footprint {resources["peakTreeFootprintBytes"] / dj.GIB:.2f} GiB')
-    print(report.read_text() if report.exists() else f'no report; see {out}/player.log')
+    reports = sorted(out.glob('*/smoke.json'))
+    for report in reports:
+        r = json.loads(report.read_text())
+        print(f'{r["scene"]}: {r["seconds"]:.0f} s, underruns {r["underrunSamples"]} samples, frames {r["frameMsMedian"]:.2f} / '
+              f'{r["frameMsP99"]:.1f} / {r["frameMsMax"]:.1f} ms (median / p99 / max), frame GPU {r["frameGpuMsMedian"]:.1f} ms median, '
+              f'{r["cameraRendersPerFrame"]:.2f} camera renders per frame; {report}')
+    if len(reports) < max(1, len(scenes)):
+        print(f'{max(1, len(scenes)) - len(reports)} scene(s) without a report; see {out}/player.log')
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('command', choices=['build', 'smoke'])
-    p.add_argument('player', nargs='*', help='smoke: extra player arguments (after --)')
+    p.add_argument('command', choices=['build', 'smoke', 'stills', 'author'])
+    p.add_argument('player', nargs='*', help='smoke: extra player arguments (after --); stills: scene names')
     p.add_argument('--windowed', action='store_true', help='smoke: with a window, launched hidden and unfocused (open -g -j)')
+    p.add_argument('--scenes', nargs='+', default=[], help='smoke: the scenes to walk, in turn (default: the first)')
+    p.add_argument('--shots', action='store_true', help='smoke: a screenshot at each phase of each walk')
     a = p.parse_args()
-    build() if a.command == 'build' else smoke(a.player, a.windowed)
+    {'build': build, 'smoke': lambda: smoke(a.player, a.windowed, a.scenes, a.shots), 'stills': lambda: stills(a.player),
+     'author': author}[a.command]()

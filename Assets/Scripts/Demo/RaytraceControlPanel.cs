@@ -6,6 +6,9 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+// The demo UI, the same in every scene: a HUD while walking (H hides it), and a menu while the cursor is free (Escape).
+// In the live showcase (PathLive) the menu is the scene picker; in authored scenes it holds the session's runs, voice and
+// multiplayer; in the 2D rooms (no SceneSession) it starts and stops the audio.
 public class RaytraceControlPanel : MonoBehaviour
 {
     public RayTraceManager rayTraceManager;
@@ -20,9 +23,12 @@ public class RaytraceControlPanel : MonoBehaviour
     static readonly Color Muted = new Color(.58f, .68f, .7f);
     static readonly Color Surface = new Color(.13f, .2f, .23f);
     static readonly Color Accent = new Color(.25f, .75f, .67f);
+    static readonly Color Backdrop = new Color(.035f, .065f, .08f, .97f);
     Font font;
-    GameObject controls, connectionSetup;
-    Text status, hud, microphoneStatus, networkStatus, error;
+    GameObject controls, connectionSetup, hudBox;
+    Text status, hudTitle, hudStatus, hudKeys, microphoneStatus, networkStatus, error;
+    PathLive live;
+    bool hudVisible = true;
     Button save, restart, replay, microphone, host, join, copyCode;
     Dropdown takes, mode;
     InputField address;
@@ -56,17 +62,60 @@ public class RaytraceControlPanel : MonoBehaviour
         panel.anchoredPosition = anchoredPosition;
         panel.sizeDelta = new Vector2(buttonSize.x + 32, 0);
         panel.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(16, 16, 14, 14);
-        panel.gameObject.AddComponent<Image>().color = new Color(.035f, .065f, .08f, .97f);
+        panel.gameObject.AddComponent<Image>().color = Backdrop;
         if (session == null)
         {
+            Label(panel, "2D ROOM", 12, 22).color = Accent;
+            Label(panel, "A planar scene for the 2D transport and the 2D Ray Debugger.", 13, 0).color = Muted;
             if (rayTraceManager != null)
             {
-                AddButton(panel, "Play", () => { foreach (var source in rayTraceManager.takeSources) source.Play(); });
-                AddButton(panel, "Stop", rayTraceManager.StopLiveSimulation);
+                var actions2D = Row(panel);
+                AddButton(actions2D, "Play", () => { foreach (var source in rayTraceManager.takeSources) source.Play(); });
+                AddButton(actions2D, "Stop", rayTraceManager.StopLiveSimulation);
             }
+            if (FindAnyObjectByType<Oscillator>() != null) Label(panel, "M moves the source", 13, 22).color = Muted;
             return;
         }
 
+        live = session.GetComponent<PathLive>();
+        if (live != null) BuildScenePicker(panel);
+        else BuildSessionMenu(panel);
+        BuildSettings(panel);
+        BuildHud(canvas.transform);
+        wasRecording = rayTraceManager.IsRecordingTake;
+        RefreshState();
+    }
+
+    // The live showcase's menu: its scenes, the current one marked.
+    void BuildScenePicker(Transform panel)
+    {
+        Label(panel, "LIVE ACOUSTIC RAY TRACING", 12, 22).color = Accent;
+        Label(panel, "Path method: persistent rays, a learned denoiser and a GPU reverb, live.", 13, 0).color = Muted;
+        Label(panel, "SCENES", 12, 26).color = Muted;
+        var buttons = new List<Button>();
+        foreach (var (title, path) in PathLive.Scenes)
+        {
+            bool here = path == session.gameObject.scene.path;
+            Button button = null;
+            button = AddButton(panel, here ? title + "   ·   you are here" : title, () => {
+                if (session.Busy) return;
+                foreach (var b in buttons) b.interactable = false;
+                Caption(button).text = "Loading " + title + "…";
+                session.LoadScene(path);
+            });
+            buttons.Add(button);
+            button.interactable = !here;
+            if (here)
+            {
+                var colors = button.colors; colors.disabledColor = Color.white; button.colors = colors;
+                button.GetComponent<Image>().color = new Color(.12f, .39f, .36f);
+            }
+        }
+    }
+
+    // The authored scenes' menu: the session's runs, then voice and multiplayer.
+    void BuildSessionMenu(Transform panel)
+    {
         Label(panel, "SESSION", 12, 22).color = Accent;
         status = Label(panel, "Recording from scene start", 15, 22);
         var actions = Row(panel);
@@ -111,6 +160,11 @@ public class RaytraceControlPanel : MonoBehaviour
             copyCode = AddButton(panel, "Copy join code", () => GUIUtility.systemCopyBuffer = network.JoinCode);
             copyCode.gameObject.SetActive(false);
         }
+    }
+
+    void BuildSettings(Transform panel)
+    {
+        Label(panel, "MOUSE", 12, 26).color = Muted;
         var look = session.player.GetComponentInChildren<MouseLook>();
         var sensitivityLabel = Label(panel, "", 13, 24); sensitivityLabel.color = Muted;
         var sensitivity = Mount(DefaultControls.CreateSlider(new DefaultControls.Resources()), panel, "Mouse sensitivity", 18).GetComponent<Slider>();
@@ -122,25 +176,54 @@ public class RaytraceControlPanel : MonoBehaviour
         sensitivityLabel.text = "Mouse sensitivity   " + look.sensitivity.ToString("F0");
         sensitivity.fillRect.GetComponent<Image>().color = Accent;
         sensitivity.handleRect.GetComponent<Image>().color = Ink;
-        Label(panel, "Click scene to walk  ·  Esc for controls", 12, 20).color = Muted;
-        hud = Label(canvas.transform, "", 13, 24);
-        var hudRect = hud.rectTransform;
-        hudRect.anchorMin = hudRect.anchorMax = hudRect.pivot = new Vector2(0, 1);
-        hudRect.anchoredPosition = anchoredPosition; hudRect.sizeDelta = new Vector2(540, 24);
-        hud.gameObject.AddComponent<Shadow>().effectDistance = new Vector2(1, -1);
-        wasRecording = rayTraceManager.IsRecordingTake;
-        RefreshState();
+        Label(panel, "Click the scene to walk   ·   Esc for this menu", 13, 26).color = Muted;
     }
+
+    // The HUD while walking: the scene, its live figures or the session's state, and the keys.
+    void BuildHud(Transform canvas)
+    {
+        var box = Stack(canvas, "HUD"); hudBox = box.gameObject;
+        box.anchorMin = box.anchorMax = box.pivot = new Vector2(0, 1);
+        box.anchoredPosition = anchoredPosition;
+        var layout = box.GetComponent<VerticalLayoutGroup>(); layout.padding = new RectOffset(14, 14, 10, 10); layout.spacing = 3;
+        box.GetComponent<ContentSizeFitter>().horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        box.gameObject.AddComponent<Image>().color = new Color(Backdrop.r, Backdrop.g, Backdrop.b, .8f);
+        hudTitle = Label(box, PathLive.Title(session.gameObject.scene) + (live != null ? "   ·   path method, live" : ""), 18, 0);
+        hudTitle.fontStyle = FontStyle.Bold;
+        hudStatus = Label(box, "", 15, 0);
+        hudKeys = Label(box, live != null ? "WASD move   ·   Mouse look   ·   E doors   ·   N denoiser   ·   H hide HUD   ·   Esc menu"
+                                          : "WASD move   ·   Mouse look   ·   E doors   ·   R save run   ·   H hide HUD   ·   Esc menu", 14, 0);
+        hudKeys.color = Muted;
+        overlay = FindAnyObjectByType<AudioSourceOverlay>();
+    }
+    AudioSourceOverlay overlay;
+
+    bool Walking => live != null && live.IsSmokeRun ? !live.SmokeShowsMenu : Cursor.lockState == CursorLockMode.Locked;
 
     void Update()
     {
-        if (session == null || status == null || Time.unscaledTime < nextUpdate) return;
+        if (session == null || hudBox == null) return;
+        // H toggles the HUD and the source markers together (while walking, so typing in the menu's fields is safe).
+        if (Walking && Input.GetKeyDown(KeyCode.H))
+        {
+            hudVisible = !hudVisible;
+            if (overlay != null) overlay.visible = hudVisible;
+            nextUpdate = 0;
+        }
+        if (Time.unscaledTime < nextUpdate) return;
         nextUpdate = Time.unscaledTime + .1f;
         RefreshState();
     }
 
     void RefreshState()
     {
+        bool walking = Walking;
+        controls.SetActive(!walking); hudBox.SetActive(walking && hudVisible);
+        if (live != null)
+        {
+            hudStatus.text = string.IsNullOrEmpty(live.StageTimes) ? live.Stats : live.Stats + "\n" + live.StageTimes;
+            return;
+        }
         bool waiting = session.Busy || rayTraceManager.Mode == RayTraceManager.SessionMode.Draining;
         bool recording = rayTraceManager.IsRecordingTake, playing = session.IsInputReplay;
         status.text = waiting ? "Finishing audio…" : playing ? (session.InputReplayFinished ? "Replay finished" : "Replaying saved run")
@@ -153,9 +236,7 @@ public class RaytraceControlPanel : MonoBehaviour
         Caption(replay).text = recording ? "Save current run to replay" : "Replay selected run";
         if (wasRecording && !recording) RefreshTakes();
         wasRecording = recording;
-        bool walking = Cursor.lockState == CursorLockMode.Locked;
-        controls.SetActive(!walking); hud.gameObject.SetActive(walking);
-        hud.text = (recording ? "Recording  ·  R save  ·  " : "") + "Esc controls";
+        hudStatus.text = waiting ? "Finishing audio…" : recording ? "Recording this run   ·   R saves it" : status.text;
         if (microphone == null) return;
         var network = session.multiplayer; var mic = network.microphone;
         microphone.interactable = !playing && !waiting && rayTraceManager.IsLiveSimulation;
@@ -163,7 +244,7 @@ public class RaytraceControlPanel : MonoBehaviour
         microphone.GetComponent<Image>().color = mic.Active ? new Color(.12f, .39f, .36f) : Surface;
         microphoneStatus.text = playing ? "Recorded voice · microphone disabled" : mic.Status;
         microphoneStatus.gameObject.SetActive(playing || (mic.Status != "Microphone off" && !mic.Active));
-        if (mic.Active) hud.text += "  ·  Mic on";
+        if (mic.Active) hudStatus.text += "   ·   microphone on";
         networkStatus.text = network.Status + (network.Connected ? "\n" + network.ConnectedPlayers + " / " + network.Capacity + " players" : "");
         connectionSetup.SetActive(!network.Connected && !playing);
         host.interactable = !waiting && !network.Connecting;

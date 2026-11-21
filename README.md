@@ -4,7 +4,7 @@ Unity **6000.4.1f1 (Unity 6.4)**, C# and HLSL. The shared renderer runs directio
 
 **Implemented now:** editable 3D station and church with asset/voice sources and a binaural listener, train service with station stops and walking aboard, sliding door and walkthrough controls, strict take capture, live directional spectral monitoring, pose replay/scrubbing, CPU/HLSL direct solvers for 2D/3D, offline WAV/response export, bounded asynchronous GPU batches, captured output PCM/timing, configurable fractional-delay FIR, binaural headphone rendering, and a native comparison window with synchronized audio, plots and recorded scene views. Live and offline share interpolation, the source timeline and scheduling. Raytraced DSP has a GPU implementation and a selectable CPU reference. The direct/opaque baseline still has matching CPU/GPU implementations. The GPU spectral preview adds reflections, scattering, transmission/refraction, material/air attenuation and deterministic sampling of signed edge diffraction, with per-arrival head orientation.
 
-**Still planned:** LakeForest, validated/converged indirect transport, training-example curation and learned reconstruction. Church, microphone sources, LAN/Relay multiplayer and offline client replay are implemented. All five scenes use the current renderer; the obsolete 2D renderer is retained in Git history. The geometric preview is not a validated high-fidelity training teacher.
+**Still planned:** LakeForest, validated/converged indirect transport, training-example curation and learned reconstruction. Church, microphone sources, LAN/Relay multiplayer and offline client replay are implemented. All four scenes use the current renderer; the obsolete 2D renderer is retained in Git history. The geometric preview is not a validated high-fidelity training teacher.
 
 **Audit repairs:** [current implementation and remaining limits](docs/simulation-contracts.md#renderer-repairs-2026-10-05). CPU IR synthesis uses partitioned linear convolution; GPU IR evaluates equivalent delayed short filters; the optional spectral synthesis uses continuous path clocks for Doppler and short spectral/ear filters. Both retain sample-by-sample response fades, complete per-frequency ray budgets and first-order image-source reflections. Compact recording failures invalidate the save. Independent convolution/reflection/replay checks cover the repaired errors; diffuse transport and diffraction still need physical validation before training.
 
@@ -167,7 +167,7 @@ manager.BeginTakeReplay(newTakeDirectory, play: false);
 
 ## Inspect 2D ray propagation
 
-Open `Assets/Scenes/SmollRoom.unity` (or Big Room / SampleScene), then **Acoustics → 2D Ray Debugger**. Choose the scene manager, source/listener pair, frequency bin and probe ray count, and click **Capture**. Use **Play** or **Travel ms** to follow propagation. Select a path or click a segment for its material, delay and signed weight; scroll to zoom and drag to pan. The field to the right of the time slider sets the displayed time range in milliseconds.
+Open `Assets/Scenes/SmollRoom.unity` (or Big Room), then **Acoustics → 2D Ray Debugger**. Choose the scene manager, source/listener pair, frequency bin and probe ray count, and click **Capture**. Use **Play** or **Travel ms** to follow propagation. Select a path or click a segment for its material, delay and signed weight; scroll to zoom and drag to pan. The field to the right of the time slider sets the displayed time range in milliseconds.
 
 This captures a frozen geometry probe from the actual GPU transport, including direct, mirror, surface and edge paths. Scene motion is paused for the probe; no audio playback is required. Capturing again picks up your scene edits. Rejected proposals are optional dotted lines. Ordinary playback has no debug buffers or readback. [Capture layout and limitations](docs/simulation-contracts.md#2d-propagation-debugger).
 
@@ -494,20 +494,41 @@ No new test package: Unity Test Framework handles selection, coroutines and repo
 
 Build settings start `Assets/Scenes/TrainStation.unity`. Player recordings go to `Application.persistentDataPath/Recordings`; Editor recordings stay in the project's `Recordings` folder. The Escape controls list completed takes for the current scene in Editor and standalone. Editor tools also provide folder selection and offline comparisons.
 
-## Playable Church (path method, live)
+## Live showcase (path method)
 
-The Church with the path method running live: persistent rays traced every audio update, the persistent-ray denoiser, and the path reverb built and convolved on the GPU.
-One source, the organ, plays in a loop.
+The path method running live in two scenes, the Church and the train station: persistent rays traced every audio update, the persistent-ray denoiser, and the path reverb built and convolved on the GPU.
 Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 26 and 38.
 
-- **App:** `Builds/ChurchLive/ChurchLive.app` (macOS). Open it like any app.
-- **Build it again:** run `nice -n 19 .context/fdtd-teacher/venv/bin/python tools/path_live_church.py build` (guarded, built from the test runner's copy), or choose Acoustics > Build playable Church (macOS). Either writes the app above.
-- **Editor:** choose Acoustics > Play Church live (path method). It opens `Assets/Scenes/Church.unity` and enters Play mode with `PathLiveChurch` added.
-- **Controls:** WASD and the mouse to move and look, E to open and close the doors, N to switch the denoiser, H to show or hide the HUD, Escape to release the cursor (click to capture it again).
-- **HUD:** the rays in flight, the whole frame's GPU time and the audio underruns. Per-stage GPU times appear only in a development player.
-- **Options** (command line, e.g. `open Builds/ChurchLive/ChurchLive.app --args -pathPopulation 11000`):
-  - `-pathPopulation N`: the rays in flight; the default is 8,000.
-  - `-pathBudget MS`: the auto-budget (part 34). It needs a development player, because release players do not report the per-stage GPU times it reads.
-- **Smoke run:** `tools/path_live_church.py smoke --windowed` runs a scripted walk (stand, walk to the organ, open the doors, walk outside). It runs hidden and never takes the screen's focus.
-  - It writes the output to `.context/path-live/smoke-*/output.wav`, with frame times, GPU times and audio underruns in `smoke.json` and `timeline.csv`.
-  - The latest recording, at 8,000 rays, is in `.context/energy-audio/listen/` ("path, live player") and in the Agentworld gallery.
+| Scene | What plays | What to try |
+|---|---|---|
+| Church | The pipe organ, looping. | Walk up the nave toward the organ, then open the west doors (E) and step outside. |
+| Train station | The train's horn and the waiting room's signal, looping. | Open the waiting room's door (E) and go in; from the platform, hear the train leave and come round again. |
+
+- **App:** `Builds/LiveShowcase/LiveShowcase.app` (macOS).
+  Open it like any app.
+  It starts in the Church, at the back of the nave.
+- **Change scene:** press Escape for the menu and pick a scene.
+  Every scene starts at its first spawn point.
+- **Controls:** WASD and the mouse to move and look, E to open and close doors, N to switch the denoiser, H to show or hide the HUD and the source markers, Escape for the menu (click the scene to walk again).
+- **HUD:** the scene, the rays in flight, the denoiser's state, the frame time and the whole frame's GPU time, and the audio underruns.
+  Per-stage GPU times appear only in a development player.
+- **Build it again:** run `nice -n 19 .context/fdtd-teacher/venv/bin/python tools/path_live_church.py build` (guarded, built from the test runner's copy), or choose Acoustics > Build live showcase (macOS).
+  Either writes the app above.
+- **Editor:** choose Acoustics > Play live showcase (path method).
+  It plays the open scene if it is a showcase scene, and the Church otherwise, with `PathLive` added.
+- **Add a scene:** give its `SceneSession` a `PathLiveScene` (the sources that stay on, those that loop from the start, the rays per source and the smoke walk) and list the scene in `PathLive.Scenes`.
+  `ShowcaseAuthoring` (Acoustics > Author live showcase scenes) authors the two scenes' components.
+- **Rays in flight:** 8,000 per source in the Church.
+  The station has two sources, so it runs 4,000 per source: at 8,000 per source its smoke run lost 22,104 samples as the train came back past the platform.
+- **Options** (command line, for example `open Builds/LiveShowcase/LiveShowcase.app --args -pathPopulation 11000`):
+  - `-pathPopulation N`: the rays in flight per source, in every scene.
+  - `-pathBudget MS`: the auto-budget (part 34).
+    It needs a development player, because release players do not report the per-stage GPU times it reads.
+- **Smoke run:** `tools/path_live_church.py smoke --windowed --scenes Church TrainStation` walks each scene's scripted route in turn, loading each scene the way the menu does.
+  It runs hidden and never takes the screen's focus.
+  - Church: stand, walk to the organ, back to the doors, open them, walk out and along the facade.
+  - Train station: stand, walk to the waiting room's door, open it, walk in and out again, then wait at the platform's edge while the train leaves and comes back.
+  - It writes each scene's output to `.context/path-live/smoke-*/<scene>/output.wav`, with frame times, GPU times and audio underruns in `smoke.json` and `timeline.csv`.
+    With `--shots` it also saves a screenshot at each phase of the walk.
+  - The Church's handover recording, at 8,000 rays, is in `.context/energy-audio/listen/` ("path, live player") and in the Agentworld gallery.
+- **Stills:** `tools/path_live_church.py stills` renders every scene from its player camera, its first spawn point and its smoke walk's waypoints, without Play mode, to `.context/polish/stills`.

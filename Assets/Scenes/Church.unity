@@ -13379,6 +13379,7 @@ GameObject:
   - component: {fileID: 1893978477}
   - component: {fileID: 1893978476}
   - component: {fileID: 1893978483}
+  - component: {fileID: 1893978484}
   m_Layer: 0
   m_Name: Acoustic simulation
   m_TagString: Untagged
@@ -13501,6 +13502,7 @@ MonoBehaviour:
   directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
   directSettings:
     responseStepSamples: 2048
+    renderSeconds: 0
     speedOfSound: 343
     referenceDistance: 1
     minimumDistance: 0.1
@@ -13538,6 +13540,20 @@ MonoBehaviour:
     methodArrivalSlots: 64
     methodNearPlanes: 0
     methodMaxEvents: 65536
+    pathBinSeconds: 0.00025
+    pathFineBins: 64
+    pathSurvivalSeconds: 0.1
+    pathPersistent: 0
+    pathRaysInFlight: 0
+    pathBeamsOnly: 0
+    pathPopulation: 0
+    pathPopulationMaximum: 0
+    pathDenoise: 0
+    pathIterationCap: 0
+    pathIterationSurvival: 0.75
+    pathEdgeSliceUpdates: 1
+    pathHistogramExport: 
+    pathHistogramImport: 
     raysPerPair: 0
     diffractionFactor: 0
     airAbsorption: 1
@@ -14409,6 +14425,31 @@ MonoBehaviour:
     - {fileID: 2100000, guid: 1cbf250553dea4a8c85305cade8814cf, type: 2}
     - {fileID: 2100000, guid: 66fecfc5c60b94405a68f97da5c43966, type: 2}
     - {fileID: 2100000, guid: f7103255eeb854ffead7dc982755dfc8, type: 2}
+--- !u!114 &1893978484
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1893978475}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a20e64cc16014def997ac1be0299c4f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::PathLiveScene
+  sources:
+  - {fileID: 1545590770}
+  startLooped:
+  - {fileID: 1545590770}
+  population: 0
+  route:
+  - {x: -0.008678716, y: 1, z: 15.000012}
+  - {x: -0.14900365, y: 1, z: -33.50637}
+  - {x: -0.1756184, y: 1, z: -42.70633}
+  - {x: 7.8243484, y: 1, z: -42.729473}
+  interactAfter: 1
+  standSeconds: 5
+  holdSeconds: 2
 --- !u!1 &1899420383
 GameObject:
   m_ObjectHideFlags: 0

@@ -4,22 +4,32 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Profiling;
+using UnityEngine.SceneManagement;
 
-// The playable Church with the path method live (docs/benchmarks/path-denoise-2026-11-12, part 26; build and
-// controls in README.md, "Playable Church"). It turns the Church scene's session into: persistent rays under
-// population control traced every audio update on the GPU, the persistent-ray denoiser, and the path reverb
-// built and convolved on the GPU (GpuAudio.Path); the audio thread only copies finished PCM. One source, the
-// organ, plays in a loop; the doors open and close with E (SlidingDoor). Keys: N denoiser on/off, H HUD.
-// Added to the Church scene at load by the player build (scripting define PATH_LIVE_CHURCH) or, in the editor,
-// by Acoustics > Play Church live (path method). With -pathLiveSmoke DIR on the command line it runs the
-// scripted smoke walk instead of reading the player's input: it records the output to DIR/output.wav (the
-// session's monitor capture), frame times and audio underruns to DIR/smoke.json, then quits.
+// The live showcase: the path method running live in each of its scenes (docs/benchmarks/path-denoise-2026-11-12,
+// parts 26 and 38; build and controls in README.md, "Live showcase"). In a scene with a PathLiveScene it turns the
+// SceneSession into: persistent rays under population control traced every audio update on the GPU, the persistent-ray
+// denoiser, and the path reverb built and convolved on the GPU (GpuAudio.Path); the audio thread only copies finished
+// PCM. The scene's PathLiveScene names the sources that play. Key: N denoiser on/off (the HUD and the scene picker are
+// RaytraceControlPanel's). Added at every scene load by the player build (scripting define PATH_LIVE) or, in the editor,
+// by Acoustics > Play live showcase. With -pathLiveSmoke DIR it runs the scene's scripted smoke walk instead of reading
+// the player's input, for each scene of -pathLiveScenes A,B (default: the first scene) in turn: the output to
+// DIR/<scene>/output.wav (the session's monitor capture), frame times and audio underruns to smoke.json, then the next
+// scene or quit. -pathLiveShots also saves a screenshot at each phase of the walk.
 [DefaultExecutionOrder(-200)]
-public sealed class PathLiveChurch : MonoBehaviour
+public sealed class PathLive : MonoBehaviour
 {
-    // 8,000 rays in flight: smoke runs beside the Church's own rendering had no audio underrun at 8,000, but at 11,000 one
-    // of two runs lost 1,972 samples when the doors opened, and 16,000 and 23,000 lost more (README part 38).
-    // Command line: -pathPopulation N.
+    // The showcase's scenes, in the scene picker's order; the build includes these and starts with the first.
+    public static readonly (string title, string path)[] Scenes =
+    {
+        ("Church", "Assets/Scenes/Church.unity"),
+        ("Train station", "Assets/Scenes/TrainStation.unity"),
+    };
+    public static string Title(Scene scene) => Scenes.FirstOrDefault(s => s.path == scene.path).title ?? scene.name;
+
+    // 8,000 rays in flight per source: smoke runs beside the Church's own rendering had no audio underrun at 8,000, but at
+    // 11,000 one of two runs lost 1,972 samples when the doors opened, and 16,000 and 23,000 lost more (README part 38).
+    // A scene's PathLiveScene.population overrides it, and the command line both: -pathPopulation N.
     public int population = 8000;
     // The auto-budget (PathPopulationBudget, README part 34): the GPU milliseconds per update the tracer, the denoiser and
     // the reverb may take together; the population then moves within the denoiser's trained range. Zero: a fixed population.
@@ -30,11 +40,18 @@ public sealed class PathLiveChurch : MonoBehaviour
     public float horizonSeconds = 6;
     public int leadSamples = 6144;
     public bool denoise = true;
-    public bool hud = true;
+
+    // For the HUD: one line of live figures, and the per-stage GPU times when the player reports them (development only).
+    public string Stats { get; private set; } = "";
+    public string StageTimes { get; private set; } = "";
+    public bool IsSmokeRun => smoke != null;
+    public bool SmokeShowsMenu { get; private set; }   // the smoke run's last screenshot is of the menu
 
     SceneSession session;
+    PathLiveScene showcase;
     RayTraceManager manager;
     string smoke;
+    bool shots;
     float smokeStart = -1;
     readonly List<float> frameMs = new List<float>();
     readonly List<float> traceMs = new List<float>(), reverbMs = new List<float>(), denoiseMs = new List<float>(), gpuMs = new List<float>(), frameGpuMs = new List<float>();
@@ -44,38 +61,61 @@ public sealed class PathLiveChurch : MonoBehaviour
     Recorder traceRecorder, reverbRecorder, denoiseRecorder;
     long lastUpdates;
     float inFlightAt;
-    string status = "";
     bool finishing;
 
-    const string Define = "PATH_LIVE_CHURCH";
-    public const string EditorFlag = "PathLiveChurch.Play";
+    const string Define = "PATH_LIVE";
+    public const string EditorFlag = "PathLive.Play";
+    static readonly Queue<string> smokeScenes = new Queue<string>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
     {
         bool wanted = false;
-#if PATH_LIVE_CHURCH
+#if PATH_LIVE
         wanted = true;
 #endif
 #if UNITY_EDITOR
         wanted |= UnityEditor.SessionState.GetBool(EditorFlag, false);
 #endif
         if (!wanted) return;
-        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pathLiveSmoke") >= 0 && FindAnyObjectByType<Watchdog>() == null)
+        var args = Environment.GetCommandLineArgs();
+        if (Array.IndexOf(args, "-pathLiveSmoke") >= 0)
         {
-            var dog = new GameObject("Path live smoke watchdog"); DontDestroyOnLoad(dog); dog.AddComponent<Watchdog>();
+            int at = Array.IndexOf(args, "-pathLiveScenes");
+            var names = at >= 0 && at + 1 < args.Length ? args[at + 1].Split(',') : new[] {SceneManager.GetActiveScene().name};
+            foreach (string name in names)
+            {
+                var match = Scenes.FirstOrDefault(s => Path.GetFileNameWithoutExtension(s.path) == name.Trim());
+                if (match.path == null) { Debug.LogError($"{Define}: no showcase scene {name}"); Application.Quit(2); return; }
+                smokeScenes.Enqueue(match.path);
+            }
+            var dog = new GameObject("Path live smoke watchdog"); DontDestroyOnLoad(dog);
+            dog.AddComponent<Watchdog>().seconds = 180 * smokeScenes.Count;
         }
-        var session = FindAnyObjectByType<SceneSession>();
-        if (session == null || session.gameObject.scene.name != "Church") { Debug.LogWarning($"{Define}: no Church session in the loaded scene."); return; }
-        if (session.GetComponent<PathLiveChurch>() == null) session.gameObject.AddComponent<PathLiveChurch>();
+        SceneManager.sceneLoaded += (scene, _) => Attach(scene);
+        Attach(SceneManager.GetActiveScene());
+        if (smokeScenes.Count > 0 && SceneManager.GetActiveScene().path != smokeScenes.Peek()) SceneManager.LoadScene(smokeScenes.Peek());
+    }
+
+    // Runs before the scene's Start methods (sceneLoaded and AfterSceneLoad both follow Awake), so the session opens its
+    // take already configured.
+    static void Attach(Scene scene)
+    {
+        var showcase = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<PathLiveScene>()).FirstOrDefault();
+        var session = showcase != null ? showcase.GetComponent<SceneSession>() : null;
+        if (session == null) { Debug.LogWarning($"{Define}: {scene.name} has no PathLiveScene next to its SceneSession."); return; }
+        if (session.GetComponent<PathLive>() == null) session.gameObject.AddComponent<PathLive>();
     }
 
     void Awake()
     {
-        session = GetComponent<SceneSession>(); manager = session.manager;
+        session = GetComponent<SceneSession>(); showcase = GetComponent<PathLiveScene>(); manager = session.manager;
         var args = Environment.GetCommandLineArgs();
         int at = Array.IndexOf(args, "-pathLiveSmoke");
-        if (at >= 0 && at + 1 < args.Length) smoke = Path.GetFullPath(args[at + 1]);
+        if (at >= 0 && at + 1 < args.Length && smokeScenes.Count > 0 && smokeScenes.Peek() == gameObject.scene.path)
+            smoke = Path.Combine(Path.GetFullPath(args[at + 1]), gameObject.scene.name);
+        shots = Array.IndexOf(args, "-pathLiveShots") >= 0;
+        if (showcase.population > 0) population = showcase.population;
         int n = Array.IndexOf(args, "-pathPopulation");
         if (n >= 0 && n + 1 < args.Length) population = int.Parse(args[n + 1]);
         int b = Array.IndexOf(args, "-pathBudget");
@@ -84,16 +124,17 @@ public sealed class PathLiveChurch : MonoBehaviour
     }
 
     // The session's settings for the live path method (the offline Church recipe of church.py, binaural, at the
-    // output rate), one source (the organ) and the doors; the weather and voices of the authored scene are off.
+    // output rate), the showcase's sources, and the scene's actors but its scripted sequence (weather, voices).
     void Configure()
     {
-        var organ = manager.takeSources.Where(s => s != null).OrderBy(s => s.name == "Pipe organ" ? 0 : 1)
-            .ThenBy(s => (s.transform.position - new Vector3(0, 5, 18)).sqrMagnitude).First();
-        organ.loop = true;
-        foreach (var source in manager.takeSources.Where(s => s != null && s != organ)) source.gameObject.SetActive(false);
-        manager.takeSources = new List<RaytracedAudioSource> {organ};
-        session.startSounds = new[] {organ};
-        session.actors = session.actors.Where(a => a is SlidingDoor).ToArray();
+        var sources = showcase.sources.Where(s => s != null).Distinct().ToList();
+        if (sources.Count == 0) throw new InvalidOperationException($"{gameObject.scene.name}: PathLiveScene names no sources.");
+        foreach (var source in manager.takeSources.Where(s => s != null && !sources.Contains(s))) source.gameObject.SetActive(false);
+        manager.takeSources = sources;
+        session.startSounds = showcase.startLooped.Where(sources.Contains).ToArray();
+        foreach (var source in session.startSounds) source.loop = true;
+        session.actors = session.actors.Where(a => !(a is SceneSequenceActor)).ToArray();
+        session.SaveOnR = false;
         session.retainFullReference = smoke != null;   // the smoke run keeps the session's monitor output (output.wav)
         var s = manager.directSettings;
         s.method = TakeRender.Method.Path; s.transport = TakeRender.Transport.Raytraced; s.synthesis = TakeRender.Synthesis.Spectral;
@@ -113,75 +154,76 @@ public sealed class PathLiveChurch : MonoBehaviour
         traceRecorder = Recorder.Get(MethodTransport.TraceSample); reverbRecorder = Recorder.Get("Acoustics.GPU.PathKernels");
         denoiseRecorder = Recorder.Get(PathDenoiser.ProfilerSample);
         foreach (var r in new[] {traceRecorder, reverbRecorder, denoiseRecorder}) if (r.isValid) r.enabled = true;
+        // Every showcase scene marks where its sounds are (the HUD's H hides the marks with it).
+        var view = session.player.GetComponentInChildren<Camera>();
+        if (view != null && view.GetComponent<AudioSourceOverlay>() == null) view.gameObject.AddComponent<AudioSourceOverlay>().manager = manager;
     }
 
     void Start()
     {
-        if (smoke == null) return;
-        Directory.CreateDirectory(smoke);
+        // Every visit starts at the scene's first spawn point, the smoke run's start too.
         var spawn = session.gameObject.scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<Transform>(true)).FirstOrDefault(t => t.name == "Player spawn 0");
         if (spawn != null) { session.player.SetPositionAndRotation(spawn.position, spawn.rotation); Physics.SyncTransforms(); }
+        if (smoke == null) return;
+        Directory.CreateDirectory(smoke);
         session.ReadPlayerInput = false;
         session.SampleInput += Script;
         manager.audioManager.muteOutput = true;
         Application.runInBackground = true;   // the smoke run never takes focus; without this the player pauses
         // Evidence that the scene is drawn (the smoke run may be windowless, -batchmode): camera renders per frame.
-        Camera.onPostRender += _ => cameraRenders++;
-        UnityEngine.Rendering.RenderPipelineManager.endCameraRendering += (_, _) => cameraRenders++;
-        hud = false;
-        // Waypoints from the scene itself: the organ (stopping short of it), the doors' centre from inside, then out
-        // through them and along the facade.
-        var organ = manager.takeSources[0].transform.position;
-        var doors = session.actors.OfType<SlidingDoor>().ToArray();
-        var door = doors.Length > 0 ? doors.Aggregate(Vector3.zero, (a, d) => a + d.transform.position) / doors.Length : organ;
-        float y = session.player.position.y;
-        Vector3 Flat(Vector3 v) => new Vector3(v.x, y, v.z);
-        var inward = Flat(organ) - Flat(door); inward.y = 0; inward = inward.sqrMagnitude > 0 ? inward.normalized : Vector3.forward;
-        var along = Vector3.Cross(Vector3.up, inward);
-        route = new[] {Flat(organ) - inward * 3, Flat(door) + inward * 1.2f, Flat(door) - inward * 8, Flat(door) - inward * 8 + along * 8};
+        Camera.onPostRender += CountRender;
+        UnityEngine.Rendering.RenderPipelineManager.endCameraRendering += CountRender;
     }
-    Vector3[] route;
+    void CountRender(Camera _) => cameraRenders++;
+    void CountRender(UnityEngine.Rendering.ScriptableRenderContext _, Camera __) => cameraRenders++;
+    void OnDestroy()
+    {
+        Camera.onPostRender -= CountRender;
+        UnityEngine.Rendering.RenderPipelineManager.endCameraRendering -= CountRender;
+    }
     long cameraRenders;
     public string ScriptPhase { get; private set; } = "";
 
-    // The smoke walk: stand 5 s, walk to the organ, back to the doors, open them, walk out and along the facade. Each leg
-    // steers toward its waypoint (movement in the player's frame) and ends there or after its time limit; ticks of the
-    // session's fixed step.
-    long firstTick = -1, legStart;
+    // The smoke walk: stand, walk the scene's route (pressing E once after its interactAfter waypoint), then hold. Each
+    // leg steers toward its waypoint (movement in the player's frame) and ends there, or when it has not come 10 cm closer
+    // for 2 s (blocked: a step, a rail, a closed door); ticks of the session's fixed step.
+    long legStart = -1;
     int leg = -1;
     bool scriptDone, pressed;
     float best = float.MaxValue, bestAt;
     void Script(long tick)
     {
-        if (firstTick < 0) { firstTick = tick; legStart = tick; }
+        if (legStart < 0) { legStart = tick; Shot(); }
         float seconds = (tick - legStart) * Time.fixedDeltaTime;
         var movement = Vector2.zero; bool interact = false;
-        void Next() { leg++; legStart = tick; best = float.MaxValue; bestAt = 0; }
-        switch (leg)
+        var route = showcase.route;
+        void Next() { leg++; legStart = tick; best = float.MaxValue; bestAt = 0; pressed = false; Shot(); }
+        if (leg < 0) { ScriptPhase = "standing"; if (seconds >= showcase.standSeconds) Next(); }
+        else if (leg < route.Length && pressed) { ScriptPhase = "interacting"; if (seconds >= 3) Next(); }
+        else if (leg < route.Length)
         {
-            case -1: ScriptPhase = "standing"; if (seconds >= 5) Next(); break;
-            case 0: case 1: case 3: case 4:
+            ScriptPhase = $"to waypoint {leg + 1}";
+            var to = route[leg] - session.player.position; to.y = 0;
+            if (to.magnitude < best - .1f) { best = to.magnitude; bestAt = seconds; }
+            if (to.magnitude < .4f || seconds - bestAt > 2)
             {
-                int target = leg <= 1 ? leg : leg - 1;
-                ScriptPhase = new[] {"to the organ", "to the doors", "outside", "along the facade"}[target];
-                var to = route[target] - session.player.position; to.y = 0;
-                // A leg ends at its waypoint, or when it has not come 10 cm closer for 2 s (blocked: a step, a rail, a door).
-                if (to.magnitude < best - .1f) { best = to.magnitude; bestAt = seconds; }
-                if (to.magnitude < .4f || seconds - bestAt > 2) { Next(); break; }
+                if (leg == showcase.interactAfter) { pressed = interact = true; legStart = tick; }
+                else Next();
+            }
+            else
+            {
                 to.Normalize();
                 movement = new Vector2(Vector3.Dot(to, session.player.right), Vector3.Dot(to, session.player.forward));
-                break;
             }
-            case 2: ScriptPhase = "opening the doors"; interact = !pressed; pressed = true; if (seconds >= 3) Next(); break;
-            case 5: ScriptPhase = "done"; if (seconds >= 2) scriptDone = true; break;
         }
+        else { ScriptPhase = "holding"; if (seconds >= showcase.holdSeconds) scriptDone = true; }
         session.SubmitInput(movement, Vector2.zero, false, interact);
     }
+    void Shot() { if (shots) ScreenCapture.CaptureScreenshot(Path.Combine(smoke, $"shot-{leg + 1:D2}.png")); }
 
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.N) && manager.LiveRenderer != null) manager.LiveRenderer.PathDenoising = !manager.LiveRenderer.PathDenoising;
-        if (Input.GetKeyDown(KeyCode.H)) hud = !hud;
         var live = manager.LiveRenderer;
         if (live == null) return;
         var method = live.Method;
@@ -205,15 +247,14 @@ public sealed class PathLiveChurch : MonoBehaviour
         }
         if (Time.unscaledTime > inFlightAt) { method.RequestRaysInFlight(); inFlightAt = Time.unscaledTime + .5f; }
         var queue = manager.audioManager.OutputQueue;
-        string stages = traceMs.Count > 0 ? $"{Recent(traceMs):F1} ms per update (GPU tracer), reverb {Recent(reverbMs):F1} ms, denoiser {Recent(denoiseMs):F2} ms"
-                                          : "per-stage GPU times need a development player";
-        status = $"path method, persistent rays: {stages}; whole frame on the GPU {Recent(frameGpuMs):F1} ms\n" +
-                 $"rays in flight {method.LastRaysInFlight:N0} (population {method.Population:N0}{(budget != null ? $", auto-budget {budgetMs:F1} ms" : "")}, {method.NewRays:N0} new per update)\n" +
-                 $"denoiser {(live.HasPathDenoiser ? live.PathDenoising ? "on" : "off" : "not loaded")} (N)   frame {Recent(frameMs):F1} ms   " +
-                 $"audio underruns {queue?.UnderrunSamples ?? 0} samples   doors: E   HUD: H";
+        Stats = $"{(method.LastRaysInFlight >= 0 ? method.LastRaysInFlight.ToString("N0") : "–")} rays in flight{(budget != null ? $" (auto-budget {budgetMs:F1} ms)" : "")}   ·   " +
+                $"denoiser {(live.HasPathDenoiser ? live.PathDenoising ? "on" : "off" : "not loaded")}   ·   " +
+                $"frame {Ms(Recent(frameMs))}, GPU {Ms(Recent(frameGpuMs))}   ·   audio underruns {queue?.UnderrunSamples ?? 0}";
+        StageTimes = traceMs.Count > 0 ? $"GPU per update: tracer {Ms(Recent(traceMs))}, reverb {Ms(Recent(reverbMs))}, denoiser {Recent(denoiseMs):F2} ms" : "";
         if (smoke != null) Smoke(queue);
     }
 
+    static string Ms(float v) => float.IsNaN(v) ? "–" : $"{v:F1} ms";
     static float Recent(List<float> v) { if (v.Count == 0) return float.NaN; int n = Math.Min(30, v.Count); float s = 0; for (int i = v.Count - n; i < v.Count; i++) s += v[i]; return s / n; }
 
     [Serializable] sealed class SmokeReport
@@ -250,29 +291,38 @@ public sealed class PathLiveChurch : MonoBehaviour
         File.WriteAllText(Path.Combine(smoke, "smoke.json"), JsonUtility.ToJson(report, true));
         if (timeline != null) File.WriteAllText(Path.Combine(smoke, "timeline.csv"), timeline.ToString());
         manager.EndTakeRecording();
-        StartCoroutine(Quit(report));
+        StartCoroutine(Finish(report));
     }
 
-    System.Collections.IEnumerator Quit(SmokeReport report)
+    System.Collections.IEnumerator Finish(SmokeReport report)
     {
-        // The monitor capture closes on the AudioManager's updates; then its output.wav is copied next to the report.
+        // The monitor capture closes on the AudioManager's updates and the take drains; then its output.wav is copied
+        // next to the report.
         float until = Time.unscaledTime + 30;
-        while (manager.audioManager.OutputCapture != null && Time.unscaledTime < until) yield return null;
+        while ((manager.audioManager.OutputCapture != null || manager.Mode == RayTraceManager.SessionMode.Draining) && Time.unscaledTime < until) yield return null;
         string wav = Path.Combine(report.takePath ?? "", "monitor", "output.wav");
-        if (File.Exists(wav)) File.Copy(wav, report.outputWav, true);
+        // A capture still open after 30 s (no audio callbacks: no output device) leaves no output.wav; the run goes on.
+        try { if (File.Exists(wav)) File.Copy(wav, report.outputWav, true); }
+        catch (IOException e) { Debug.LogWarning($"PATH_LIVE_SMOKE no output.wav: {e.Message}"); }
         Debug.Log($"PATH_LIVE_SMOKE {JsonUtility.ToJson(report)}");
-        Application.Quit();
+        if (shots)
+        {
+            SmokeShowsMenu = true;
+            for (int i = 0; i < 3; i++) yield return null;   // the panel refreshes every 0.1 s
+            yield return new WaitForSecondsRealtime(.2f);
+            ScreenCapture.CaptureScreenshot(Path.Combine(smoke, "menu.png"));
+            yield return null; yield return null;
+        }
+        smokeScenes.Dequeue();
+        // The next scene loads the way the scene picker loads it.
+        if (smokeScenes.Count > 0) SceneManager.LoadScene(smokeScenes.Peek());
+        else Application.Quit();
     }
 
-    // The smoke run never outlives three minutes, whatever happens to the scene.
+    // The smoke run never outlives three minutes per scene, whatever happens to the scenes.
     sealed class Watchdog : MonoBehaviour
     {
-        void Update() { if (Time.realtimeSinceStartup > 180) { Debug.LogError("PATH_LIVE_SMOKE abandoned after 180 s"); Application.Quit(2); enabled = false; } }
-    }
-
-    void OnGUI()
-    {
-        if (!hud || string.IsNullOrEmpty(status)) return;
-        GUI.Label(new Rect(12, 12, 900, 80), status);
+        public float seconds = 180;
+        void Update() { if (Time.realtimeSinceStartup > seconds) { Debug.LogError($"PATH_LIVE_SMOKE abandoned after {seconds:F0} s"); Application.Quit(2); enabled = false; } }
     }
 }

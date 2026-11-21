@@ -6,7 +6,7 @@ using UnityEngine.UI;
 public sealed class AudioSourceOverlay : MonoBehaviour
 {
     public RayTraceManager manager;
-    [Tooltip("F6 toggles emitter positions. Markers do not indicate loudness or playback state.")]
+    [Tooltip("F6 (and the HUD's H) toggles emitter positions. Markers do not indicate loudness or playback state.")]
     public bool visible = true;
     Canvas canvas;
     Camera view;
@@ -63,8 +63,8 @@ public sealed class AudioSourceOverlay : MonoBehaviour
             rect.anchorMin = rect.anchorMax = anchor;
             rect.anchoredPosition = Vector2.zero;
             int distance = Mathf.RoundToInt(Vector3.Distance(transform.position, source.transform.position));
-            labels[i].text = mark + "  " + source.name + "\n" + distance + " m · " +
-                (source.streamed ? "voice emitter" : "clip emitter") + (p.z < 0 ? " · behind" : "");
+            labels[i].text = mark + "  " + source.name + "\n" + distance + " m" +
+                (source.streamed ? " · voice" : "") + (p.z < 0 ? " · behind" : "");
         }
     }
 

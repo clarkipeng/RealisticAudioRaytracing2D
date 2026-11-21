@@ -1,25 +1,27 @@
 using System;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
-// The playable Church with the path method live (PathLiveChurch; README.md, "Playable Church").
-//   Editor: Acoustics > Play Church live (path method).
-//   Build:  Acoustics > Build playable Church (macOS), or batch mode:
-//           Unity -batchmode -quit -projectPath . -executeMethod PathLiveChurchBuild.Build [-pathLiveOutput DIR]
-//           (default Builds/ChurchLive/ChurchLive.app).
-public static class PathLiveChurchBuild
+// The live showcase: the path method live in each of PathLive.Scenes (README.md, "Live showcase").
+//   Editor: Acoustics > Play live showcase (path method): the open scene if it is a showcase scene, else the first.
+//   Build:  Acoustics > Build live showcase (macOS), or batch mode:
+//           Unity -batchmode -quit -projectPath . -executeMethod PathLiveBuild.Build [-pathLiveOutput DIR]
+//           (default Builds/LiveShowcase/LiveShowcase.app).
+public static class PathLiveBuild
 {
-    const string Scene = "Assets/Scenes/Church.unity";
+    public const string DefaultOutput = "Builds/LiveShowcase/LiveShowcase.app";
 
-    [MenuItem("Acoustics/Play Church live (path method)")]
+    [MenuItem("Acoustics/Play live showcase (path method)")]
     static void Play()
     {
         if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
-        EditorSceneManager.OpenScene(Scene);
-        SessionState.SetBool(PathLiveChurch.EditorFlag, true);
+        string open = EditorSceneManager.GetActiveScene().path;
+        EditorSceneManager.OpenScene(PathLive.Scenes.Any(s => s.path == open) ? open : PathLive.Scenes[0].path);
+        SessionState.SetBool(PathLive.EditorFlag, true);
         EditorApplication.playModeStateChanged -= Clear; EditorApplication.playModeStateChanged += Clear;
         EditorApplication.EnterPlaymode();
     }
@@ -27,20 +29,21 @@ public static class PathLiveChurchBuild
     static void Clear(PlayModeStateChange change)
     {
         if (change != PlayModeStateChange.EnteredEditMode) return;
-        SessionState.EraseBool(PathLiveChurch.EditorFlag);
+        SessionState.EraseBool(PathLive.EditorFlag);
         EditorApplication.playModeStateChanged -= Clear;
     }
 
-    [MenuItem("Acoustics/Build playable Church (macOS)")]
+    [MenuItem("Acoustics/Build live showcase (macOS)")]
     public static void Build()
     {
         var args = Environment.GetCommandLineArgs();
         int at = Array.IndexOf(args, "-pathLiveOutput");
-        string output = Path.GetFullPath(at >= 0 && at + 1 < args.Length ? args[at + 1] : "Builds/ChurchLive/ChurchLive.app");
+        string output = Path.GetFullPath(at >= 0 && at + 1 < args.Length ? args[at + 1] : DefaultOutput);
         var options = new BuildPlayerOptions
         {
-            scenes = new[] {Scene}, locationPathName = output, target = BuildTarget.StandaloneOSX, targetGroup = BuildTargetGroup.Standalone,
-            extraScriptingDefines = new[] {"PATH_LIVE_CHURCH"}, options = BuildOptions.None
+            scenes = PathLive.Scenes.Select(s => s.path).ToArray(), locationPathName = output,
+            target = BuildTarget.StandaloneOSX, targetGroup = BuildTargetGroup.Standalone,
+            extraScriptingDefines = new[] {"PATH_LIVE"}, options = BuildOptions.None
         };
         // Frame timing stats: release players report the frame's GPU time through FrameTimingManager (the profiler's
         // per-sample GPU times are development-only); the HUD and the smoke run read it.
