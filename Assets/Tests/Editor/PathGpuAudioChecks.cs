@@ -9,12 +9,15 @@ using UnityEngine;
 // GPU) against the CPU reference (TakeRender.Mixer with PathReverb), on the same persistent-ray solves.
 public partial class TakeChecks
 {
-    [TestCase(TakeRender.ListenerOutput.Binaural)]
-    [TestCase(TakeRender.ListenerOutput.Mono)]
+    // moving: the source passes at 20 m/s, so the reflections' echoes slide at their delay rates (README part 40).
+    [TestCase(TakeRender.ListenerOutput.Binaural, false)]
+    [TestCase(TakeRender.ListenerOutput.Mono, false)]
+    [TestCase(TakeRender.ListenerOutput.Binaural, true)]
     [Category("GPU"), Category("Methods")]
-    public void GpuPathReverbMatchesTheCpuReference(TakeRender.ListenerOutput ears)
+    public void GpuPathReverbMatchesTheCpuReference(TakeRender.ListenerOutput ears, bool moving)
     {
         var shader = RequireGpu();
+        if (moving) ToleratePathDopplerUavMessage();
         const int rate = 8000, size = 256;
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
         var a = new Vector3(-20, 0, -20); var b = new Vector3(20, 0, -20); var c = new Vector3(20, 0, 20); var d = new Vector3(-20, 0, 20);
@@ -45,6 +48,7 @@ public partial class TakeChecks
         {
             long sample = frame * (long)size; bool cut = frame == 9;
             state[1].position.x = 3 + frame * .05f; state[1].rotation = Quaternion.Euler(0, frame * 11, 0);
+            if (moving) { state[0].velocity = new Vector3(20, 0, 0); state[0].flags |= AcousticTake.StateFlags.VelocityValid; state[0].position.x = -2 + 20 * frame * size / (float)rate; }
             solver.Solve(state, direct);
             cpu.SetResponse(sample, direct, state, cut, solver.RayPaths, 0, late: solver.Late(0));
             gpu.SetResponse(sample, cut, solver.RayBuffer, 0, scene, state, late: solver.Late(0));
@@ -62,7 +66,7 @@ public partial class TakeChecks
             }
         }
         double relative = Math.Sqrt(error / energy);
-        TestContext.WriteLine($"{ears}: GPU against CPU peak {peak:G3}, relative {relative:G3}, output energy {energy:G3}");
+        TestContext.WriteLine($"{ears}{(moving ? ", moving source" : "")}: GPU against CPU peak {peak:G3}, relative {relative:G3}, output energy {energy:G3}");
         Assert.That(late, Is.GreaterThan(1e-6), "the fixture is audible after the direct sound's onset");
         Assert.That(relative, Is.LessThan(2e-3), "the GPU path reverb renders what the CPU reference does");
     }

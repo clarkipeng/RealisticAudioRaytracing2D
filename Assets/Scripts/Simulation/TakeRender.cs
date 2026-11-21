@@ -118,6 +118,8 @@ public static partial class TakeRender
         public int pathPopulationMaximum;
         [Tooltip("Path method, persistent rays, GPU audio: denoise each update's histogram with the bundled persistent-ray denoiser (Resources/Acoustics/PathDenoise; docs/benchmarks/path-denoise-2026-11-12, part 25) before the reverb is built.")]
         public bool pathDenoise;
+        [Tooltip("Path method: Doppler on reflections (README part 40). The early part's slots slide at their bins' delay rates (the tracer's rate channel), so each echo is heard at its own Doppler shift. Off: the reflections stay at their bins' delays and only the direct sound is Doppler-shifted (a comparison).")]
+        public bool pathReflectionDoppler=true;
         [Min(0),Tooltip("Path method, persistent rays: past this many loop iterations of a ray within one update, each further reflection survives with probability pathIterationSurvival and the survivors are reweighted (unbiased). It bounds the update's long serial chains (rays caught between close surfaces), which set the update's time. Zero: off.")]
         public int pathIterationCap;
         [Range(.05f,1)] public float pathIterationSurvival=.75f;
@@ -666,7 +668,7 @@ public static partial class TakeRender
                 if(this.late!=null || pathLate!=null)
                 {
                     bool lateCut=cut;foreach(var s in state)lateCut|=(s.flags&AcousticTake.StateFlags.Cut)!=0;
-                    if(pathLate!=null)pathLate.SetResponse(sample,lateCut,PathReverb.Histogram(late),state,PathReverb.Counts(late));else this.late.SetResponse(sample,lateCut,late,state);
+                    if(pathLate!=null)pathLate.SetResponse(sample,lateCut,PathReverb.Histogram(late),state,PathReverb.Counts(late),PathReverb.Rates(late));else this.late.SetResponse(sample,lateCut,late,state);
                 }
                 responseSample=sample;initialized=true;return;
             }

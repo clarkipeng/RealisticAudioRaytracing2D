@@ -90,6 +90,13 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // future histograms, stored after the frames' histograms in the output and count buffers.
     readonly bool persistent;
     readonly int beginKernel = -1, ringKernel = -1, edgeCopyKernel = -1, sortCountKernel = -1, sortScanKernel = -1, sortScatterKernel = -1;
+    // Path: the delay rates (Doppler on reflections, MethodPath.hlsl "Delay rates") are compiled into the walk's
+    // PATH_DOPPLER kernels only, dispatched while anything in the dispatched states moves and, with persistent rays, for
+    // a horizon after (the rays in flight still carry the rates of what moved). A static scene runs the walk without them.
+    readonly int traceStatic = -1, traceDoppler = -1;
+    bool moving, doppler;
+    long dopplerUntil = -1;
+    public bool Doppler => doppler;
     // Population control (settings.pathPopulation, MethodPath.hlsl): N rays in flight per pair, PopulationNew of them
     // new each update; cohort counts per pair.
     readonly bool population;
@@ -119,7 +126,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     int ringCells;
     ulong flushMask;
     long persistentUpdates;
-    readonly int traceKernel, clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
+    int traceKernel; readonly int clearKernel, arrivalKernel = -1, selectKernel = -1, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, accumulateKernel = -1, outputCount, statsCount, frequencyBins, rate;
     // Late-field accumulation across solves (settings.lateAccumulationSeconds, audio only):
     // every solve draws a new walk seed and the late histogram is the exponential moving
     // average of the solves, so a static or slowly moving listener hears the average of many
@@ -131,6 +138,15 @@ internal sealed class MethodTransport : IDisposable, ILateField
     ComputeBuffer output; // persistent: reallocated with the ring at the first dispatch (EnsureRing)
     readonly ComputeBuffer arrivals, arrivalCounts, selected, primitivePlanes, planePrimitives, paths, edgeCdf;
     ComputeBuffer counts;
+    // Path: the rate channel (Doppler, MethodPath.hlsl "Delay rates"): per solve [moment 3][bin] cells, the energy-weighted
+    // first and second moments of the contributions' delay rates, after the histograms and the ring in `output`, then
+    // its own ring [pair][slot][moment 3][bin]. RateCells: the solves' cells; RateBase: the first cell.
+    readonly int rateCells;
+    public const int RateMoments = 3;   // energy x rate, energy x rate^2, energy x delay within the bin
+    int RateBase => (outputCount + 2 * Pairs * RingSlots * ringCells) / 2;
+    int OutputUints => outputCount + 2 * Pairs * RingSlots * ringCells + 2 * rateCells + (path ? 2 * Pairs * RingSlots * RateMoments * TimeBins.Count : 0);
+    public readonly uint[] Rates;   // measurement: the solve's rate channel (read with the histogram)
+    readonly uint[] lateRates;      // audio with CPU readback: the frames' rate channels
     // Path method: its histogram bins, the contribution counts (measurement readback) and solves so far (seeds).
     readonly bool path;
     public readonly PathBins TimeBins;
@@ -152,9 +168,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
     // CPU copies for the CPU reference audio (readback only when requested).
     public readonly RayTransport.Path[] Paths;
     readonly uint[] late;
-    AsyncGPUReadbackRequest pathRequest, lateRequest;
+    AsyncGPUReadbackRequest pathRequest, lateRequest, rateRequest, countRequest;
     bool pending, failed;
-    volatile bool pathsDone, lateDone;
+    volatile bool pathsDone, lateDone, ratesDone = true, countsDone = true;
     public double GpuSeconds { get; private set; }
     // Fraction of wall time the GPU may be busy (pacing between ray chunks, measurement).
     public double WorkFraction = 1;
@@ -204,6 +220,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             clearanceKernel = shader.FindKernel("PathClearance3D" + suffix);
             persistent = settings.pathPersistent;
             if (persistent) { beginKernel = shader.FindKernel("PathPersistentBeginKernel"); ringKernel = shader.FindKernel("PathRingKernel"); edgeCopyKernel = shader.FindKernel("PathEdgeCopyKernel"); }
+            traceStatic = traceKernel; traceDoppler = shader.FindKernel("TracePath3D" + suffix + "Doppler");
             if (population) { sortCountKernel = shader.FindKernel("PathSortCountKernel"); sortScanKernel = shader.FindKernel("PathSortScanKernel"); sortScatterKernel = shader.FindKernel("PathSortScatterKernel"); }
             if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
         }
@@ -345,6 +362,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                         : audio ? checked(2 * Frames * Pairs * (Directions + 1) * Bands * Math.Max(1, Bins))
                         : energy ? 2 * Directions * Bands * Bins : 2 * 2 * TrainBase * ((1 << Bands) - 1);
             countCells = path ? checked(Frames * Pairs * TimeBins.Count) : 1;
+            rateCells = path ? checked(Frames * Pairs * RateMoments * TimeBins.Count) : 0;
             ringCells = path ? Directions * Bands * TimeBins.Count : 0;
             clearance = new ComputeBuffer(1, 4);
             // Persistent pools, sized for the rays expected in flight: a cohort of age t keeps at most the fraction
@@ -395,11 +413,13 @@ internal sealed class MethodTransport : IDisposable, ILateField
             counts = new ComputeBuffer(countCells, 4);
             Counts = new uint[path ? countCells : 0];
             statsCount = Bands * Depths * StatStride + Counters;
-            output = new ComputeBuffer(outputCount, 4); stats = new ComputeBuffer(statsCount, 4);
+            output = new ComputeBuffer(OutputUints, 4); stats = new ComputeBuffer(statsCount, 4);
             accumulator = new ComputeBuffer(accumulate ? Math.Max(1, Pairs * (Directions + 1) * Bands * Bins) : 1, 4);
             emptyCapture = new ComputeBuffer(2, 16);
             Output = new uint[audio ? 0 : outputCount]; Stats = new uint[statsCount];
             late = new uint[audio && (readback || path) ? outputCount : 0];
+            Rates = new uint[path && !audio ? 2 * rateCells : 0];
+            lateRates = new uint[path && audio ? 2 * rateCells : 0];
             // The shader asset is shared by every solver of this method (one compile per
             // process; a per-solver instance recompiled it each time and the compiler's
             // memory accumulated), so all bindings are made again at every dispatch.
@@ -407,7 +427,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             bool anyTransmission = transmissive || volumeData.Length > 0;
             var kernels = new List<int> {traceKernel, clearKernel};
             if (energy) kernels.AddRange(new[] {arrivalKernel, selectKernel, expandKernel, edgeWeightKernel, edgeScanKernel});
-            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, clearanceKernel}); if (expandKernel >= 0) kernels.Add(expandKernel); if (persistent) kernels.AddRange(new[] {beginKernel, ringKernel, edgeCopyKernel}); if (population) kernels.AddRange(new[] {sortCountKernel, sortScanKernel, sortScatterKernel}); }
+            if (path) { kernels.AddRange(new[] {edgeWeightKernel, edgeScanKernel, clearanceKernel, traceDoppler}); if (expandKernel >= 0) kernels.Add(expandKernel); if (persistent) kernels.AddRange(new[] {beginKernel, ringKernel, edgeCopyKernel}); if (population) kernels.AddRange(new[] {sortCountKernel, sortScanKernel, sortScatterKernel}); }
             if (accumulate) kernels.Add(accumulateKernel);
             bind = () =>
             {
@@ -496,6 +516,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 shader.SetFloat("PathStep", PersistentStep);
                 shader.SetInt("PathFlush", 0);
                 shader.SetInt("PathEdgeOffset", 0); shader.SetInt("PathEdgeWeightBase", 0);
+                shader.SetInt("PathRateClearBase", 2 * RateBase); shader.SetInt("PathRateClearCount", 2 * rateCells);
                 return;
             }
             if (!energy) return;
@@ -524,9 +545,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
     public long CpuBytes => (long)(Output.Length + Stats.Length + late.Length) * 4 + Paths.Length * (long)RayTransport.PathStride;
     internal ComputeBuffer PathBuffer => Audio ? paths : null;
     // Diagnostics (MeasurePathPool): the rays pair 0's latest walk kept, before population control resampled them
-    // (population control only, where the walk writes to the scratch pool), as MethodPath.hlsl's PathRay: nine float4
-    // (36 floats per ray, the shader's own layout; the buffer's stride RayStride is larger).
-    public const int PathRayFloats = 36;
+    // (population control only, where the walk writes to the scratch pool), as MethodPath.hlsl's PathRay: ten float4
+    // (40 floats per ray, RayStride).
+    public const int PathRayFloats = 40;
     internal float[] ReadWalkPool(out int count)
     {
         count = 0;
@@ -553,6 +574,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
             shader.SetInt("MethodCountIndex", solve);
             shader.SetInt("MethodArrivalBase", solve);
             shader.SetInt("MethodPathBase", Audio ? frame * PathsPerFrame + layout.Ranges[pair].x : 0);
+            shader.SetInt("PathRateSolveBase", RateBase + solve * RateMoments * TimeBins.Count);
             return;
         }
         shader.SetInt("MethodState", frame * scene.objects.Length);
@@ -574,7 +596,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     }
     void Clear()
     {
-        int clear = Math.Max(Math.Max(Math.Max(outputCount, statsCount), Frames * Pairs), countCells);
+        int clear = Math.Max(Math.Max(Math.Max(Math.Max(outputCount, statsCount), Frames * Pairs), countCells), 2 * rateCells);
         for (int first = 0; first < clear; first += 65535 * 64)
         {
             shader.SetInt("MethodClearOffset", first);
@@ -651,6 +673,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         shader.SetInt("PathRingSlots", RingSlots); shader.SetInt("PathRingCells", ringCells);
         shader.SetInt("PathRingBase", outputCount / 2 + pair * RingSlots * ringCells); shader.SetInt("PathRingCountBase", countCells + pair * RingSlots * TimeBins.Count);
         shader.SetInt("PathRingSlot", ringSlot[pair]);
+        shader.SetInt("PathRateRingBase", RateBase + rateCells + pair * RingSlots * RateMoments * TimeBins.Count);
         if (flush) Ring(1, (long)RingSlots * ringCells);
         shader.SetInt("MethodRayCount", NewRays);
         shader.SetFloat("PathCohortTarget", NewRays); shader.SetFloat("PathLaunchScale", Rays / (float)NewRays);
@@ -770,11 +793,21 @@ internal sealed class MethodTransport : IDisposable, ILateField
         double reach = (settings.pathBeamsOnly ? 1 : 3) * RingSceneDiagonal * maximumIor / (settings.speedOfSound * PersistentStep);
         RingSlots = (int)Math.Min(WarmUpdates + 1, Math.Ceiling(reach) + 1);
         output.Dispose(); counts.Dispose();
-        output = new ComputeBuffer(checked(outputCount + 2 * Pairs * RingSlots * ringCells), 4);
+        output = new ComputeBuffer(checked(OutputUints), 4);
         counts = new ComputeBuffer(checked(countCells + Pairs * RingSlots * TimeBins.Count), 4);
         ringReady = true;
     }
     void Fence() => AsyncGPUReadback.Request(stats, 4, 0).WaitForCompletion();
+    // Before the walk: the PATH_DOPPLER variant while anything moves, and with persistent rays for a horizon of updates
+    // after. (Rays traced without it carry a zero rate, which is theirs: nothing moved.)
+    void SelectDoppler(int updates)
+    {
+        if (!path) return;
+        if (moving) dopplerUntil = persistent ? persistentUpdates + updates + WarmUpdates : 0;
+        bool want = moving || (persistent && persistentUpdates < dopplerUntil);
+        doppler = want;
+        traceKernel = doppler ? traceDoppler : traceStatic;
+    }
     // Profiling (measurement only): a fence after every phase, and seconds per phase
     // [edge distribution, walk, (unused since the beams replaced the chain connections), readback].
     // ProfileFlags (MethodPath.hlsl): bit 0 skips the histogram writes; it changes the result.
@@ -789,6 +822,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (Audio) throw new InvalidOperationException("Audio method transports dispatch with DispatchAudio.");
         EnsureRing(null); // (no states given: a ring for the whole horizon)
         bind();
+        SelectDoppler(persistent ? (PersistentSingleUpdate ? 1 : WarmUpdates) : 1);
         shader.SetInt("BvhNodeCount", bvhNodeCount);
         shader.SetBuffer(traceKernel, "MethodCapture", capture ?? emptyCapture);
         shader.SetInt("MethodCaptureRays", capture == null ? 0 : captureRays);
@@ -823,9 +857,9 @@ internal sealed class MethodTransport : IDisposable, ILateField
             if (WorkFraction < 1) System.Threading.Thread.Sleep((int)Math.Ceiling(busy * 1000 * (1 / WorkFraction - 1)));
         }
         long read = Stopwatch.GetTimestamp();
-        output.GetData(Output);
+        output.GetData(Output, 0, 0, Output.Length);
         stats.GetData(Stats);
-        if (path) counts.GetData(Counts);
+        if (path) { counts.GetData(Counts); output.GetData(Rates, 0, 2 * RateBase, Rates.Length); }
         PhaseSeconds[3] += TakeRender.Elapsed(read);
         shader.SetBuffer(traceKernel, "MethodCapture", emptyCapture);
     }
@@ -856,6 +890,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         output.GetData(Output, 0, 0, Output.Length); // the ring follows the frames' histograms
         stats.GetData(Stats);
         counts.GetData(Counts, 0, 0, Counts.Length);
+        output.GetData(Rates, 0, 2 * RateBase, Rates.Length);
         PhaseSeconds[3] += TakeRender.Elapsed(read);
     }
     // Audio: every pair of `frames` uploaded frames. The outputs stay on the GPU for
@@ -867,6 +902,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
         if (frames < 1 || frames > Frames) throw new ArgumentOutOfRangeException(nameof(frames));
         EnsureRing(null);
         bind();
+        SelectDoppler(frames);
         if (path) shader.SetInt("PathProfileFlags", ProfileFlags); // (profiling only; zero in use)
         shader.SetInt("BvhNodeCount", bvhNodeCount);
         long start = Stopwatch.GetTimestamp();
@@ -941,25 +977,45 @@ internal sealed class MethodTransport : IDisposable, ILateField
                 if (!value.hasError) Unity.Collections.NativeArray<uint>.Copy(value.GetData<uint>(), late, value.GetData<uint>().Length);
                 lateDone = true;
             });
-            // Path: the contribution counts too (histogram export for the denoiser), read with the histogram.
-            if (path && !string.IsNullOrEmpty(settings.pathHistogramExport)) counts.GetData(Counts, 0, 0, frames * Pairs * TimeBins.Count);
+            if (path)
+            {
+                ratesDone = false;
+                rateRequest = AsyncGPUReadback.Request(output, checked(frames * Pairs * RateMoments * TimeBins.Count * 2 * 4), checked(2 * RateBase * 4), value =>
+                {
+                    failed |= value.hasError;
+                    if (!value.hasError) Unity.Collections.NativeArray<uint>.Copy(value.GetData<uint>(), lateRates, value.GetData<uint>().Length);
+                    ratesDone = true;
+                });
+            }
+            // Path: the contribution counts too (the histogram export, and the early part's test of a shared rate in PathReverb).
+            if (path)
+            {
+                countsDone = false;
+                countRequest = AsyncGPUReadback.Request(counts, checked(frames * Pairs * TimeBins.Count * 4), 0, value =>
+                {
+                    failed |= value.hasError;
+                    if (!value.hasError) Unity.Collections.NativeArray<uint>.Copy(value.GetData<uint>(), Counts, value.GetData<uint>().Length);
+                    countsDone = true;
+                });
+            }
         }
         else
         {
             if (Paths.Length > 0) paths.GetData(Paths, 0, 0, frames * PathsPerFrame);
             output.GetData(late, 0, 0, frames * ReadbackUintsPerFrame);
-            if (path && !string.IsNullOrEmpty(settings.pathHistogramExport)) counts.GetData(Counts, 0, 0, frames * Pairs * TimeBins.Count);
+            if (path) output.GetData(lateRates, 0, 2 * RateBase, frames * Pairs * RateMoments * TimeBins.Count * 2);
+            if (path) counts.GetData(Counts, 0, 0, frames * Pairs * TimeBins.Count);
         }
     }
     public bool TryComplete(bool wait)
     {
         if (!pending) return true;
-        if (!pathsDone || !lateDone)
+        if (!pathsDone || !lateDone || !ratesDone || !countsDone)
         {
-            if (wait) { if (!pathsDone) pathRequest.WaitForCompletion(); lateRequest.WaitForCompletion(); }
-            else { if (!pathsDone) pathRequest.Update(); lateRequest.Update(); }
+            if (wait) { if (!pathsDone) pathRequest.WaitForCompletion(); lateRequest.WaitForCompletion(); if (!ratesDone) rateRequest.WaitForCompletion(); if (!countsDone) countRequest.WaitForCompletion(); }
+            else { if (!pathsDone) pathRequest.Update(); lateRequest.Update(); if (!ratesDone) rateRequest.Update(); if (!countsDone) countRequest.Update(); }
         }
-        if (!pathsDone || !lateDone) return false;
+        if (!pathsDone || !lateDone || !ratesDone || !countsDone) return false;
         pending = false;
         if (failed) throw new InvalidOperationException("Method response readback failed.");
         return true;
@@ -999,6 +1055,13 @@ internal sealed class MethodTransport : IDisposable, ILateField
     public void SelectNearPlanes(AcousticTake.State[] states, int frames)
     {
         EnsureRing(states);
+        if (path)
+        {
+            moving = false;
+            for (int i = 0; i < frames * scene.objects.Length && !moving; i++)
+                moving = (states[i].flags & (AcousticTake.StateFlags.VelocityValid | AcousticTake.StateFlags.Cut)) == AcousticTake.StateFlags.VelocityValid &&
+                         (states[i].velocity != Vector3.zero || states[i].angularVelocity != Vector3.zero);
+        }
         if (NearPlanes == 0 || path) return;
         int objects = scene.objects.Length;
         var score = new float[PlaneCount]; var order = new int[PlaneCount];
@@ -1055,6 +1118,18 @@ internal sealed class MethodTransport : IDisposable, ILateField
         int cell = ((frame * Pairs + pair) * Directions + direction) * Bands * TimeBins.Count + band * TimeBins.Count + bin;
         return (source[2 * cell + 1] + source[2 * cell] / 4294967296.0) / Rays;
     }
+    // The rate channel of one solve (measurement: frame 0, pair 0, from Rates; audio: from the readback of the latest
+    // dispatch): moment 0 is the sum of energy x delay rate, moment 1 of energy x rate^2, moment 2 of energy x delay from the
+    // bin's start (seconds), over the bin's contributions, in the histogram's units (direct-sound energy). The bin's mean
+    // rate is moment 0 over its energy (all directions and bands).
+    public double RateMoment(int frame, int pair, int moment, int bin)
+    {
+        var source = Audio ? lateRates : Rates;
+        int cell = ((frame * Pairs + pair) * RateMoments + moment) * TimeBins.Count + bin;
+        return (((long)(int)source[2 * cell + 1] << 32) | source[2 * cell]) / 4294967296.0 / Rays;
+    }
+    // GpuAudio: the uint offset of a frame's rate channel in LateBuffer ([pair][moment 3][bin] cells of two uints).
+    internal int PathRateOffset(int frame) => 2 * (RateBase + frame * Pairs * RateMoments * TimeBins.Count);
     public uint HistogramCount(int bin) => Counts[bin];
     public uint HistogramCount(int frame, int pair, int bin) => Counts[(frame * Pairs + pair) * TimeBins.Count + bin];
     public bool IsPath => path;
@@ -1089,7 +1164,7 @@ internal sealed class MethodTransport : IDisposable, ILateField
     public long Counter(int index) => Stats[Bands * Depths * StatStride + index];
     public void Dispose()
     {
-        if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); pending = false; }
+        if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); if (!ratesDone) rateRequest.WaitForCompletion(); if (!countsDone) countRequest.WaitForCompletion(); pending = false; }
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose(); accumulator?.Dispose();
         counts?.Dispose();

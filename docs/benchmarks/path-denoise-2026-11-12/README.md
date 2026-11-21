@@ -1922,3 +1922,87 @@ The default population stays at 8,000.
 The next step is one windowed run at 11,000 with an unlocked screen, then `FILE.stalls`. After that:
 - if the stall is in the scene's scripts, fix it there;
 - if not, a pipeline that can render ahead of a stall, at the cost of latency.
+
+## 40. Doppler on reflections
+
+Until now only the direct sound was Doppler-shifted, as an exact delayed path.
+Every reflection sat at its histogram bin's delay for one update and jumped to the next bin's delay at the next update.
+For a tone the reflection therefore had no pitch of its own: crossfading copies a few milliseconds apart gives a phase step at every update, not a shift.
+
+**Theory.**
+A path's travel time T changes with the time t at which it is heard.
+To first order, dT/dt = −v_source · s_emit + v_listener · s_arrive + Σ v_P · (s_in − s_out).
+Here s is a leg's slowness vector (its direction over its medium's speed), and v_P is the velocity of an event's point on its surface.
+- At a specular reflection, the tangential parts of s_in − s_out cancel by the reflection law, so only the normal velocity counts: 2 (v · n) cos θ.
+- At a refraction, Snell's law cancels them the same way.
+- A scattering point or an edge point moves with its surface, so for scattering and diffraction the whole velocity counts. That is the "properly worked out" scattering term: the scatterer is a material point.
+
+Exactly, each leg from a point moving at v_a to one moving at v_b scales the frequency by (1 − v_b · s) / (1 − v_a · s).
+So the tracer carries ρ = −ln of the product of these factors along the path, and the contribution's delay rate is r = 1 − exp(−ρ).
+To first order ρ is the sum above.
+At 30 m/s the first-order sum is 8% off in the shift itself, because the source's term is per emission time and the listener's per reception time.
+The product form is exact for constant velocities.
+
+**Tracer** (`MethodPath.hlsl`, "Delay rates"; `MethodTransport.RateMoment`).
+- Each ray carries its ρ in the ray state, which was padding before, so the stride is unchanged at 160 bytes.
+- The connection anchors (scattering points, the source) keep theirs.
+- The beams, the next-event connections and the edge connections (with mirror and edge points moving with their objects) each close their own ρ at the listener.
+- Per solve and bin, a new channel holds three energy-weighted moments of the contributions: Σ E r, Σ E r² and Σ E (τ − bin start), with E the energy summed over bands.
+- It is stored in signed 32.32 fixed point after the histograms and the ring, with a ring of its own for persistent rays.
+- A persistent update gathers what is heard within half a period of its time. A moving echo's delay drifts by r times that, so its delay is referred to the update's own time: τ − r (heard − update time).
+- All of it is compiled only into separate walk kernels, `TracePath3DDoppler` and `TracePath3DBvhDoppler` (a define, as `USE_BVH`).
+  - `MethodTransport` dispatches them while anything in the dispatched states moves, and with persistent rays for a horizon after, since the rays in flight still carry the rates of what moved.
+  - A static scene runs the walk as before. Rays traced without the rates carry ρ = 0, which is theirs.
+- **Why separate kernels.** The first version had the rate code in the one walk, behind the data: in a static scene no rate was ever deposited.
+  - Yet the static histograms changed in their last bits (3.5 × 10⁻⁹ of the total).
+  - They also changed from run to run in the same process. Persistent rays then diverged to 1 × 10⁻³ of the total, which failed `PersistentRaysAreTheFullSolveCutIntoUpdates` (0.0079 against its 0.002 limit; the coordinator's report).
+  - HEAD's walk gave the same hash on every run.
+  - This fits part 24's finding that Metal miscompiles this loop as it grows.
+  - With the rate code out of the static kernels, the static outputs are bit-identical to HEAD's. `MeasurePathHistogramHash` gives SHA-256 407F2A3B… for the full solve and 1C01E5D5… for persistent rays, both with HEAD's code and with this part's, over two runs each.
+  - The ray state gains a 16-byte field, `motion`, which was padding before. The static kernels write zero there.
+
+**Synthesis** (`PathReverb`, the CPU reference; `GpuAudio.Path` with `PathSlideSelect`, `PathBandInput` and `PathSlide`).
+- **Which bins are early.** A bin is a discrete echo while its contributions share one rate.
+  - It needs at least two contributions, because one cannot show that.
+  - Its mean rate must be nonzero.
+  - Its spread must be no larger than its mean shift (variance ≤ mean²).
+  - The early part ends at the first bin that holds energy and fails this test. That bin pools arrivals of different shifts, which no single rate represents, and it and every later bin stay in the convolution, as before. Their spread of shifts averages out.
+  - So where "early" ends is read from each update's data, not set by a constant.
+- **How an early bin is rendered.** It leaves the kernel and becomes one echo: an impulse at its mean delay τ, with the bin's ear energies per band.
+  - Its delay slides, τ + r (t − t_ref), read from a ring of the band-filtered input with the direct path's interpolation filter (windowed sinc, its cutoff lowered when the read runs faster than real time).
+  - t_ref is the end of the bank's crossfade in, where the update's state is.
+  - The time-varying delay gives the echo its pitch shift.
+  - With the tracer consistent, the old and new banks' echoes coincide through each crossfade.
+- **Why an impulse, not slots.** The first version slid each bin's noise slots instead. Its tone came out at 260.75 Hz against the expected 271.17 Hz: as the echo moved between bins it took other slots' random sequences, so its phase restarted at every update. A discrete echo is a delayed impulse; the noise slots stay for the dense field they were made for.
+- **Interpolation reach.** The filter reads up to its radius past its centre, and the band input reaches the current block's t − latency. So a slid delay is held at least that long: a few samples, i.e. a source within centimetres of the listener.
+- **A switch.** `settings.pathReflectionDoppler` (default on) turns the reflections' Doppler off for comparisons; the direct sound keeps its own.
+
+**Checks.**
+- `PathReflectionsCarryTheImageSourceDoppler`: a source at 30 m/s approaching past a rigid plane, persistent rays, 8 kHz, 32 ms updates, a 250 Hz tone.
+  - Rate channel against the image source's analytic Doppler, over 8 updates: worst relative error of the frequency ratio 3.5 × 10⁻⁴. The spread of rates in the reflection's bin was 1.6 × 10⁻³ against a mean of −0.08 to −0.09.
+  - The bins' mean delays, referred to the update's time, against the analytic retarded image delay: within 3 µs. Before the referral they were off by up to 1.1 ms.
+  - Rendered reflection over the last six updates: 271.25 Hz against the image's 271.17 Hz, an error of 0.08 Hz, inside the 0.25 Hz search grid. The shift is 21.2 Hz.
+  - Purity (power within ±4 Hz of the peak): 0.83 when slid, 0.68 without the rate channel. Without the rate channel the peak sat at 259.75 Hz.
+  - Static control: the rate channel stays exactly zero, and the reverb is bit-identical with and without it.
+- `PersistentRaysAreTheFullSolveCutIntoUpdates` passes: the sum of differences is 1.7–3.8 × 10⁻⁵ of the total per band.
+- `GpuPathReverbMatchesTheCpuReference`, now also with a source passing at 20 m/s:
+  - static cases: 3.75 × 10⁻⁵ binaural and 6.27 × 10⁻⁶ mono, the same as before this part;
+  - moving case: 6.1 × 10⁻⁵ binaural.
+
+**An open issue: a Unity validation message.**
+At its first dispatch in a process, each Doppler kernel logs "There are more uavs (10) than the maximum supported (8)".
+The static kernels bind the same buffers and never log it.
+Leaving out the rate deposit does not stop it, and the cause is not found.
+The kernels' outputs pass the analytic check and the GPU-against-CPU check, so the two Doppler checks tolerate that one message (`ToleratePathDopplerUavMessage`) and nothing else.
+
+**Demo: the train station** (`tools/doppler_station.py`).
+- The take is a live smoke run of the station. The horn is on the train, which leaves the platform 10 s in at up to 12 m/s, laps the loop and returns at 28–32 s. The listener stands on the platform about 8 m from the track.
+- It was rendered twice with the live settings (persistent rays, 11,000 in flight, binaural, GPU audio), once with `pathReflectionDoppler` off.
+- The renders differ only while something moves:
+  - −52 dB (relative to the render's level) while everything stands still;
+  - −11 to −20 dB while the listener walks;
+  - −5 dB as the train pulls away past the listener (12–14 s).
+- Listening: `.context/energy-audio/listen/station-direct-only.wav` and `station-doppler.wav` (10–22 s of the take, the same gain). `station-doppler-ab.wav` plays them back to back. The gallery has `raytracer/station-doppler-ab.m4a`.
+- Both renders were made with the first version, which had the rate code in every walk. Its static outputs varied in their last bits from run to run, so the −52 dB in the still parts is that, not the rates. They were not rendered again.
+- At 12 m/s the shift is ±3.5% (about 0.6 semitone): the direct sound and the wall's echo move in pitch by different amounts as the angles differ.
+

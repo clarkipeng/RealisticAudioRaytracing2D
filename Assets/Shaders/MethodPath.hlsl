@@ -107,11 +107,47 @@ uint PathBinOf(float time)
 // current one goes to slot (PathRingSlot + ahead), and after each update its slot becomes the update's
 // histogram (PathRing, mode 0). Mode 1 empties a pair's ring (a flush).
 uint PathRingSlots, PathRingBase, PathRingCountBase, PathRingSlot, PathRingCells, PathRingMode, PathRingOffset, PathRingFar;
+// Delay rates (Doppler, README part 40). Every contribution carries the rate of change of its travel time with the
+// time it is heard, r = dT/dt. To first order r = -v_source . s_emit + v_listener . s_arrive + sum over its events of
+// v_P . (s_in - s_out), with s the slowness vector of a leg (its direction over its medium's speed) and v_P the
+// velocity of the event's point on its moving surface (a scattering point or an edge point moves with its surface;
+// at a specular reflection or a refraction the tangential parts cancel by the reflection law and Snell's, so only the
+// normal velocity counts: 2 (v . n) cos theta for a mirror). Exactly, each leg from a point moving at v_a to one
+// moving at v_b scales the frequency by (1 - v_b . s) / (1 - v_a . s), so the path carries rho = -ln(product), the sum
+// of -ln(1 - v . s) at every receiving end and ln(1 - v . s) at every emitting end (PathReceive, PathEmit; each is
+// its first-order term above to first order), and r = 1 - exp(-rho). Per solve and bin the rate channel holds, weighted
+// by the contribution's energy (summed over the bands), the first two moments of r and the first of its delay within the
+// bin (from the bin's start; persistent rays: referred to the update's own time, tau - r * (when it is heard - that time),
+// since an update gathers what is heard within half a period of its time, over which a moving echo's delay drifts): [moment 3][bin], 32.32 signed fixed point, after the histograms and the ring in
+// MethodOutput, with a ring of its own (persistent rays). The synthesis renders a bin whose contributions share one
+// rate as one echo at that mean delay, sliding at that rate (PathReverb).
+// All of it is compiled only into the walk's PATH_DOPPLER kernels (TracePath3DDoppler; MethodTransport dispatches them
+// while anything in the scene moves, and for a horizon after): a static scene runs the walk without it, so its outputs stay bit-identical. (A
+// first version had the rate code in every walk: no rate was ever deposited in a static scene, yet the grown loop's
+// histograms changed in their last bits from run to run, as part 24 found Metal miscompiling this loop as it grows.)
+uint PathRateSolveBase, PathRateRingBase, PathRateClearBase, PathRateClearCount;
+float PathReceive(float3 velocity, float3 slowness) { return -log(1 - dot(velocity, slowness)); }
+float PathEmit(float3 velocity, float3 slowness) { return log(1 - dot(velocity, slowness)); }
+void PathAddSigned(uint cell, float value, uint key)
+{
+    if (!isfinite(value)) { MethodCount(CounterNonFinite); return; }
+    float whole = clamp(floor(value), -2147483648.0, 2147483520.0), part = (value - whole) * 4294967296.0 + (HashRay(key ^ HashRay(cell)) >> 8) * (1.0 / 16777216.0);
+    if (part >= 4294967296.0) { whole += 1; part -= 4294967296.0; }
+    uint low = (uint)part, high = (uint)(int)whole, old;
+    InterlockedAdd(MethodOutput[2 * cell], low, old);
+    if (old + low < old) high++;
+    if (high != 0) InterlockedAdd(MethodOutput[2 * cell + 1], high);
+}
 // Adds band energies arriving from `from` (listener towards the arrival) at `time`, `ahead` updates from now
 // (persistent rays; 0 otherwise). Directions split the energy over the six axes by the squared positive
 // components (they sum to one), so a moving arrival never jumps between direction bins. 32.32 fixed point
-// with an unbiased dither.
+// with an unbiased dither. `rate`: the contribution's delay rate (the rate channel above); `heard`: when it is heard,
+// relative to the time of the update it is added to (persistent rays; 0 otherwise).
+#if PATH_DOPPLER
+void PathDeposit(float3 from, float4 low, float4 high, float time, uint key, uint ahead, float rate, float heard)
+#else
 void PathDeposit(float3 from, float4 low, float4 high, float time, uint key, uint ahead)
+#endif
 {
     if ((PathProfileFlags & 1) != 0) return;
     if (!(time >= 0) || time > MethodHorizon) { MethodCount(CounterNonFinite); return; }
@@ -127,6 +163,17 @@ void PathDeposit(float3 from, float4 low, float4 high, float time, uint key, uin
     uint slot = (PathRingSlot + ahead) % max(PathRingSlots, 1u);
     uint cellBase = PathPersistent != 0 ? PathRingBase + slot * PathRingCells : MethodCellBase;
     InterlockedAdd(PathCounts[(PathPersistent != 0 ? PathRingCountBase + slot * PathBins : PathCountBase) + bin], 1u);
+#if PATH_DOPPLER
+    if (rate != 0)
+    {
+        float energy = dot(low + high, 1);
+        uint rates = (PathPersistent != 0 ? PathRateRingBase + slot * 3 * PathBins : PathRateSolveBase) + bin;
+        float fine = PathBin0 * PathFineBins, start = bin < PathFineBins ? bin * PathBin0 : fine * pow(1 + PathRatio, (float)(bin - PathFineBins));
+        PathAddSigned(rates, energy * rate, key ^ 0x3c6ef372u);
+        PathAddSigned(rates + PathBins, energy * rate * rate, key ^ 0xa54ff53au);
+        PathAddSigned(rates + 2 * PathBins, energy * (time - rate * heard - start), key ^ 0x510e527fu);
+    }
+#endif
     [loop] for (uint axis = 0; axis < 6; axis++)
     {
         float component = (axis & 1) != 0 ? -u[axis >> 1] : u[axis >> 1];
@@ -302,10 +349,19 @@ float PathUtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k, 
 }
 // Listener connection through one edge (D), one mirror and one edge (RD), or two parallel
 // edges (DD): EnergyEdgeConnection's kernels, with one UtdEnergy body per edge (bands in a loop).
+// rate: the connection's delay rate, from the anchor's (vRate: up to and including its incoming term; vVelocity: its
+// point's velocity) through the mirror and the edges (each point moving with its object) to the listener (vL).
+#if PATH_DOPPLER
+bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, float vRate, float3 vVelocity, float3 vL, inout uint rng, out float4 low, out float4 high, out float time, out float3 fromOut, out float rate)
+{
+    low = 0; high = 0;
+    time = 0; fromOut = 0; rate = 0;
+#else
 bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, inout uint rng, out float4 low, out float4 high, out float time, out float3 fromOut)
 {
     low = 0; high = 0;
     time = 0; fromOut = 0;
+#endif
     if (MethodEdgeCount == 0 || DiffractionFactor <= 0) return false;
     float pick, pick2 = 1;
     // From the source, draw the edge from the solve's distribution (PathEdgeWeights: edges between
@@ -396,6 +452,15 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     }
     low = sumLow; high = sumHigh;
     fromOut = normalize(last - L);
+#if PATH_DOPPLER
+    // Legs: anchor -> (mirror) -> edge -> (second edge) -> listener.
+    float3 w1 = normalize(first - v.position), w2 = image ? normalize(e - hit) : w1, w3 = pair ? normalize(e2 - e) : -fromOut;
+    float slowness = MethodSlowness(AirMedium);
+    float3 vEdge = PointVelocity(MethodState + Edges[edge].ids.x, e);
+    rate = vRate + PathEmit(vVelocity, w1 * slowness) + PathReceive(vEdge, w2 * slowness) + PathEmit(vEdge, w3 * slowness) + PathReceive(vL, -fromOut * slowness);
+    if (image) { float3 vMirror = PointVelocity(MethodState + Primitives[mirror].indices.x, hit); rate += PathReceive(vMirror, w1 * slowness) + PathEmit(vMirror, w2 * slowness); }
+    if (pair) { float3 vEdge2 = PointVelocity(MethodState + Edges[edge2].ids.x, e2); rate += PathReceive(vEdge2, w3 * slowness) + PathEmit(vEdge2, -fromOut * slowness); }
+#endif
     return true;
 }
 
@@ -447,6 +512,7 @@ struct PathRay // float4 fields only (160 bytes), so that every backend lays it 
     float4 plane;                 // the latest event's plane, outgoing side (beams): normal, offset
     float4 scalars;               // survival, chain's unfolded length, chain's origin time, distance since the segment's start
     uint4 meta;                   // reflections | flags << 24 (1 in a branch, 2 the segment's beam is scored, 4 at a surface: trace from zero distance) | chain kind << 27, medium, rng, events
+    float4 motion;                // x: the delay rate accumulated so far (the rate channel), yzw unused
 };
 RWStructuredBuffer<PathRay> PathRays;  // [pair][pool 2][PathCapacity]
 RWStructuredBuffer<uint> PathLive;     // [pair][pool 2]: rays in each pool; then [pair]: rays dropped by overflow, ever
@@ -633,11 +699,18 @@ void PathRing(uint index)
             uint count = PathRingCountBase + PathRingSlot * PathBins + i;
             PathCounts[PathCountBase + i] = PathCounts[count]; PathCounts[count] = 0;
         }
+        if (i < 3 * PathBins)
+        {
+            uint rate = PathRateRingBase + PathRingSlot * 3 * PathBins + i, solve = PathRateSolveBase + i;
+            MethodOutput[2 * solve] = MethodOutput[2 * rate]; MethodOutput[2 * solve + 1] = MethodOutput[2 * rate + 1];
+            MethodOutput[2 * rate] = 0; MethodOutput[2 * rate + 1] = 0;
+        }
         return;
     }
     if (i >= PathRingSlots * PathRingCells) return;
     MethodOutput[2 * (PathRingBase + i)] = 0; MethodOutput[2 * (PathRingBase + i) + 1] = 0;
     if (i < PathRingSlots * PathBins) PathCounts[PathRingCountBase + i] = 0;
+    if (i < PathRingSlots * 3 * PathBins) { MethodOutput[2 * (PathRateRingBase + i)] = 0; MethodOutput[2 * (PathRateRingBase + i) + 1] = 0; }
 }
 
 // One flat loop; every heavy helper has a single call site. Each iteration either deposits the
@@ -683,6 +756,13 @@ void TracePath(uint index)
     // Ray 0 makes the source's straight connection for every ray (it is deterministic).
     bool connectListener = ray == 0, connectEdge = PathBeamsOnly == 0, hasPending = false;
     float listenerScale = MethodTotalRays / launch, pendingTime = 0; // (the source's exact connection: launch cancels)
+    // Delay rates (the rate channel): the ray's rho so far (-ln of its frequency ratio, "Delay rates" above), and for the
+    // walk's vertex v and the connections' anchor c theirs up to and including the incoming leg and their point's
+    // velocity; vL the listener's.
+#if PATH_DOPPLER
+    float3 vL = Velocity(MethodState + MethodListenerObject), vVelocity = Velocity(MethodState + MethodSourceObject), cVelocity = vVelocity;
+    float rho = 0, vRate = 0, cRate = 0, pendingRate = 0, branchRate = 0;
+#endif
     float3 pendingFrom = 0;
     uint events = 0;
     bool edges = MethodEdgeCount > 0 && DiffractionFactor > 0, travelling = false, done = false, fluxPending = false, inBranch = false;
@@ -713,6 +793,9 @@ void TracePath(uint index)
         plane = r.plane; survival = r.scalars.x; sinceStart = r.scalars.w;
         chain.travelled = r.scalars.y; chain.time = r.scalars.z; chain.reflections = r.meta.x & 0xffffff; chain.kind = (r.meta.x >> 27) & 3;
         medium = r.meta.y; rng = r.meta.z; events = r.meta.w;
+#if PATH_DOPPLER
+        rho = r.motion.x;
+#endif
         inBranch = (r.meta.x & (1u << 24)) != 0; scored = (r.meta.x & (2u << 24)) != 0;
         offSurface = (r.meta.x & (4u << 24)) != 0;
         connectListener = false; connectEdge = false; travelling = true;
@@ -730,7 +813,13 @@ void TracePath(uint index)
             float aheadUpdates = PathPersistent != 0 ? max(0, ceil((pendingTime - target) / PathStep)) : 0;
             if (aheadUpdates > (float)PathRingSlots - 1 && pendingTime <= MethodHorizon) InterlockedAdd(PathLive[PathRingFar], 1u); // (later than the horizon: dropped)
             uint ahead = (uint)min(aheadUpdates, (float)PathRingSlots - 1);
+            // (This update's rays reach path time `target`; its own time is half a period before, PathStep later per slot ahead.)
+#if PATH_DOPPLER
+            float heard = PathPersistent != 0 ? pendingTime - (target - .5 * PathStep) - ahead * PathStep : 0;
+            PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead, 1 - exp(-pendingRate), heard);
+#else
             PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead);
+#endif
         }
         if (suspending) break;
         if (connectListener)
@@ -739,6 +828,9 @@ void TracePath(uint index)
             float length0;
             if ((PathProfileFlags & 4) != 0 && ray != 0) continue;
             hasPending = PathListener(c, cI, L, listenerScale, c.kind == 0, rng, pendingLow, pendingHigh, pendingTime, pendingFrom, length0);
+#if PATH_DOPPLER
+            pendingRate = cRate + PathEmit(cVelocity, -pendingFrom * MethodSlowness(AirMedium)) + PathReceive(vL, -pendingFrom * MethodSlowness(AirMedium));
+#endif
             if (hasPending && PathAudio != 0 && c.kind == 0)
             {
                 PathDirectArrival(S, L, pendingLow, pendingHigh, MethodTotalRays, pendingTime, length0); // exact, rendered as a delayed path
@@ -750,7 +842,11 @@ void TracePath(uint index)
         {
             connectEdge = false;
             if ((PathProfileFlags & 8) != 0) continue;
+#if PATH_DOPPLER
+            hasPending = PathEdgeConnection(c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, cRate, cVelocity, vL, rng, pendingLow, pendingHigh, pendingTime, pendingFrom, pendingRate);
+#else
             hasPending = PathEdgeConnection(c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, rng, pendingLow, pendingHigh, pendingTime, pendingFrom);
+#endif
             continue;
         }
         if (done)
@@ -763,6 +859,9 @@ void TracePath(uint index)
             [unroll] for (uint k2 = 0; k2 < MethodBands; k2++) { Phi0[k2] = branchF[k2] * branchSum / keep; C[k2] = 1; }
             p = branchP + branchPlane.xyz * RayEpsilon; offSurface = true;
             d = branchD; medium = branchMedium; tau = branchTau; Q = 1; survival = branchSurvival; plane = branchPlane;
+#if PATH_DOPPLER
+            rho = branchRate;
+#endif
             chain = branch;
             fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true; scored = false; sinceStart = 0;
             MethodCount(CounterBranches);
@@ -795,6 +894,10 @@ void TracePath(uint index)
                 float phi = RandomRay(rng) * angle;
                 d = normalize(u * cosBeta + edgeSinBeta * (f * cos(phi) + nn * sin(phi)));
                 edgeAngle = angle; edgeM = m;
+#if PATH_DOPPLER
+                float3 vEdge = PointVelocity(MethodState + Edges[edge].ids.x, e);
+                rho = vRate + PathEmit(vVelocity, w * MethodSlowness(AirMedium)) + PathReceive(vEdge, w * MethodSlowness(AirMedium)) + PathEmit(vEdge, d * MethodSlowness(AirMedium));
+#endif
                 tau = v.time + m * MethodSlowness(AirMedium);
                 p = e; Q = 1; fluxPending = true;
                 chain = PathStart(2, tau);
@@ -814,6 +917,9 @@ void TracePath(uint index)
                 [unroll] for (uint k5 = 0; k5 < MethodBands; k5++) Phi0[k5] = I[k5] * D / pdf;
                 Q = edgeRays ? 1 - MethodEdgeProbability : 1;
                 p = v.position; d = w0; tau = v.time;
+#if PATH_DOPPLER
+                rho = vRate + PathEmit(vVelocity, w0 * MethodSlowness(v.medium));
+#endif
                 if (v.kind == 1) { plane = float4(v.normal, dot(v.normal, p)); p += v.normal * RayEpsilon; offSurface = true; }
                 chain = PathStart(v.kind, v.time);
             }
@@ -886,6 +992,9 @@ void TracePath(uint index)
                 {
                     hasPending = true; pendingLow = sumLow; pendingHigh = sumHigh;
                     pendingTime = chain.time + lu * MethodSlowness(AirMedium); pendingFrom = -d;
+#if PATH_DOPPLER
+                    pendingRate = rho + PathReceive(vL, d * MethodSlowness(AirMedium));
+#endif
                 }
             }
         }
@@ -923,10 +1032,17 @@ void TracePath(uint index)
         }
         MethodAnchor x;
         x.position = p; x.normal = n; x.previous = p; x.kind = 1; x.edge = 0; x.primitive = hit; x.time = tau; x.medium = medium;
+#if PATH_DOPPLER
+        float3 hitVelocity = PointVelocity(MethodState + Primitives[hit].indices.x, p);
+        float rateIn = rho + PathReceive(hitVelocity, d * MethodSlowness(medium)); // (the outgoing term follows the event's choice)
+#endif
         if (mD > 0)
         {
             [unroll] for (uint k9 = 0; k9 < MethodBands; k9++) cI[k9] = Phi0[k9] * C[k9] / Q * eD[k9] / RayPi;
             c = x; listenerScale = 1;
+#if PATH_DOPPLER
+            cRate = rateIn; cVelocity = hitVelocity;
+#endif
             connectListener = connectEdge = PathBeamsOnly == 0;
         }
         float total = mT + mD + mS;
@@ -973,6 +1089,9 @@ void TracePath(uint index)
                 if (refracted && !(medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); partWeight = 1e30; }
             }
             [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
+#if PATH_DOPPLER
+            branchRate = rateIn + PathEmit(hitVelocity, branchD * MethodSlowness(branchMedium));
+#endif
             float3 bn = dot(branchD, n) > 0 ? n : -n;
             branchPlane = float4(bn, dot(bn, branchP));
         }
@@ -984,6 +1103,9 @@ void TracePath(uint index)
             if (keepAlive < 1 && RandomRay(rng) >= keepAlive) { MethodCount(CounterRoulette); done = true; continue; }
             [unroll] for (uint k12 = 0; k12 < MethodBands; k12++) I[k12] = cI[k12] * (total / mD) / min(1, keepAlive);
             v = x;
+#if PATH_DOPPLER
+            vRate = rateIn; vVelocity = hitVelocity;
+#endif
             travelling = false;
             MethodCount(CounterDiffuse);
             if (v.time > MethodHorizon) { MethodCount(CounterHorizon); done = true; }
@@ -1018,6 +1140,9 @@ void TracePath(uint index)
             PathEvent(chain, false);
             d = reflect(d, n);
         }
+#if PATH_DOPPLER
+        rho = rateIn + PathEmit(hitVelocity, d * MethodSlowness(medium));
+#endif
         float3 beamNormal = dot(d, n) > 0 ? n : -n;
         plane = float4(beamNormal, dot(beamNormal, p));
         p += beamNormal * RayEpsilon; offSurface = true;
@@ -1053,6 +1178,11 @@ void TracePath(uint index)
         r.wLow = float4(C[0], C[1], C[2], C[3]) / Q; r.wHigh = float4(C[4], C[5], C[6], C[7]) / Q;
         r.plane = plane; r.scalars = float4(survival, chain.travelled, chain.time, sinceStart);
         r.meta = uint4(chain.reflections | (inBranch ? 1u << 24 : 0u) | (scored ? 2u << 24 : 0u) | (offSurface ? 4u << 24 : 0u) | (chain.kind << 27), medium, rng, events);
+#if PATH_DOPPLER
+        r.motion = float4(rho, 0, 0, 0);
+#else
+        r.motion = 0; // (traced while nothing moved: no rate)
+#endif
         PathKeep(r);
         float keepBranchRay = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
         if (branchSum > 0 && RandomRay(rng) < keepBranchRay)
@@ -1064,6 +1194,11 @@ void TracePath(uint index)
             r.wLow = 1; r.wHigh = 1;
             r.plane = branchPlane; r.scalars = float4(branchSurvival, branch.travelled, branch.time, 0);
             r.meta = uint4(branch.reflections | 1u << 24 | 4u << 24 | (branch.kind << 27), branchMedium, HashRay(rng ^ 0x68e31da4u), events);
+#if PATH_DOPPLER
+            r.motion = float4(branchRate, 0, 0, 0);
+#else
+            r.motion = 0;
+#endif
             PathKeep(r);
         }
     }

@@ -64,8 +64,9 @@ internal sealed partial class GpuAudio : IDisposable
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
             lateEnvelope=Kernel("LateEnvelope");lateExtend=Kernel("LateExtend");lateBuild=Kernel("LateBuild");lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
             pathGroups=Kernel("PathGroups");pathFilter=Kernel("PathFilter");pathPieces=Kernel("PathPieces");pathPowers=Kernel("PathPowers");
+            pathSlideSelect=Kernel("PathSlideSelect");pathBandInput=Kernel("PathBandInput");pathSlide=Kernel("PathSlide");
             kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateExtend,lateBuild,lateInput,lateSum,lateInverse,lateWrite,
-                pathGroups,pathFilter,pathPieces,pathPowers};
+                pathGroups,pathFilter,pathPieces,pathPowers,pathSlideSelect,pathBandInput,pathSlide};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(slots*2+1);
             Buffer("AudioRanges",pairs,8).SetData(layout.Ranges);Buffer("AudioOwners",capacity,4).SetData(layout.Owners);

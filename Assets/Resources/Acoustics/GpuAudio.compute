@@ -27,6 +27,9 @@
 #pragma kernel PathFilter
 #pragma kernel PathPieces
 #pragma kernel PathPowers
+#pragma kernel PathSlideSelect
+#pragma kernel PathBandInput
+#pragma kernel PathSlide
 
 // CPU and GPU exchange scene inputs and finished PCM. Paths, filters, FFTs and
 // sums stay here. The small-transform fast path uses one workgroup per path;
@@ -802,6 +805,66 @@ float PathEarEnergy(uint pair,uint c,uint b,uint k)
     }
     return energy;
 }
+// Doppler on reflections (PathReverb.cs, README part 40): the early part's slots slide at their bins' delay rates.
+// PathSlideSelect (one thread per pair, before PathGroups) picks the slid bins from the raw histogram, its counts and
+// its rate channel, and gives each its echo: its mean delay and per-ear band amplitudes; PathGroups leaves the slid
+// bins out of the kernel; PathBandInput keeps the band-filtered input of each block in a ring; PathSlide adds each
+// bank's echoes to its output block.
+RWStructuredBuffer<float> PathSlideRates;       // [bank][pair][bin]: the slid bins' rates (0: not slid)
+RWStructuredBuffer<float> PathSlideDelays;      // [bank][pair][bin]: their mean delays, in samples
+RWStructuredBuffer<float> PathSlideAmplitudes;  // [bank][pair][bin][channel][band]
+RWStructuredBuffer<uint> PathSlideEnd;          // [bank][pair]: one past the last slid bin
+RWStructuredBuffer<float> PathBandHistory;      // [source][band][PathHistoryLength]
+StructuredBuffer<uint> PathBinCounts;           // the tracer's contributions per [frame][pair][bin] (PathCountOffset: the frame's)
+StructuredBuffer<float> PathBinStarts;          // [bin]: its start in samples
+uint PathRateOffset,PathCountOffset,PathHistoryLength,PathSincRadius,PathSincFilter,PathDoppler;
+int PathHistoryAt,PathSlideOffset;
+float PathRawEnergy(uint pair,uint k)
+{
+    float e=0;
+    for(uint d=0;d<LATE_DIRECTIONS;d++)for(uint b=0;b<LATE_BANDS;b++)
+    {
+        uint cell=((pair*LATE_DIRECTIONS+d)*LATE_BANDS+b)*PathBinsCount+k;
+        float x=(LateHistogram[2*(PathFixedOffset+cell)+1]+LateHistogram[2*(PathFixedOffset+cell)]/4294967296.0)/LateRays;
+        if(x>0)e+=x;
+    }
+    return e;
+}
+float PathRateMoment(uint pair,uint moment,uint k)
+{
+    uint cell=(pair*3+moment)*PathBinsCount+k;
+    return ((float)(int)LateHistogram[PathRateOffset+2*cell+1]+LateHistogram[PathRateOffset+2*cell]/4294967296.0)/LateRays;
+}
+// PathReverb.SlideRates: in time order a bin with energy slides while its contributions share one rate (at least two,
+// mean nonzero, variance <= mean^2); the first that does not ends the early part.
+[numthreads(64,1,1)]
+void PathSlideSelect(uint3 id:SV_DispatchThreadID)
+{
+    uint pair=id.x;if(pair>=AudioPairs)return;
+    bool open=PathDoppler!=0 && LateValid!=0 && PathPairActive(pair);uint end=0;
+    for(uint k=0;k<PathBinsCount;k++)
+    {
+        float rate=0;
+        if(open)
+        {
+            float e=PathRawEnergy(pair,k);
+            if(e>0)
+            {
+                float mean=PathRateMoment(pair,0,k)/e,variance=PathRateMoment(pair,1,k)/e-mean*mean;
+                if(PathBinCounts[PathCountOffset+pair*PathBinsCount+k]>=2 && mean!=0 && variance<=mean*mean)
+                {
+                    rate=mean;end=k+1;
+                    PathSlideDelays[(LateBank*AudioPairs+pair)*PathBinsCount+k]=PathBinStarts[k]+PathRateMoment(pair,2,k)/e*AudioRate;
+                    for(uint c=0;c<AudioChannels;c++)for(uint b=0;b<LATE_BANDS;b++)
+                    {float x=PathEarEnergy(pair,c,b,k);PathSlideAmplitudes[(((LateBank*AudioPairs+pair)*PathBinsCount+k)*AudioChannels+c)*LATE_BANDS+b]=x>0?sqrt(x):0;}
+                }
+                else open=false;
+            }
+        }
+        PathSlideRates[(LateBank*AudioPairs+pair)*PathBinsCount+k]=rate;
+    }
+    PathSlideEnd[LateBank*AudioPairs+pair]=end;
+}
 // Per group, band and channel: the slot energy (the group's histogram bins, ear-weighted) and its two sequences'
 // weights. The first AudioPairs threads also record which pairs are active for the convolution's kernels.
 [numthreads(64,1,1)]
@@ -813,8 +876,9 @@ void PathGroups(uint3 id:SV_DispatchThreadID)
     float2 w=0;
     if(PathPairActive(info.x))
     {
+        // (A slid bin's energy is its echo's, PathSlide; the kernel keeps the rest, as PathReverb.SetResponse.)
         float slot=0;
-        for(uint i=0;i<info.w;i++)slot+=PathEarEnergy(info.x,c,b,PathTermBins[info.z+i])*PathTermWeights[info.z+i];
+        for(uint i=0;i<info.w;i++){uint k=PathTermBins[info.z+i];if(PathSlideRates[(LateBank*AudioPairs+info.x)*PathBinsCount+k]==0)slot+=PathEarEnergy(info.x,c,b,k)*PathTermWeights[info.z+i];}
         if(slot>0)
         {
             float amplitude=sqrt(slot),a1=PathAlphaBeta[b].x,a2=AudioChannels==2?(c==0?PathAlphaBeta[b].y:-PathAlphaBeta[b].y):0;
@@ -823,6 +887,65 @@ void PathGroups(uint3 id:SV_DispatchThreadID)
         }
     }
     PathCoefficients[(c*LATE_BANDS+b)*PathGroupTotal+g]=w;
+}
+// One group per source and band: the band-filtered input of the current block (PathReverb.EnsureHistory), from the
+// block's input spectrum (LateInput): band filter, inverse transform, the second half into the ring.
+[numthreads(256,1,1)]
+void PathBandInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
+{
+    uint source=group.x/LATE_BANDS,b=group.x%LATE_BANDS,t=tid.x,size=2*LatePartition,ring=LateBlock%LateCount;
+    for(uint k=t;k<LateBins;k+=256)
+    {
+        float2 x=AudioMultiply(LateInputs[(source*LateCount+ring)*LateBins+k],PathFilters[b*size+k]);
+        AudioShared[k]=x;if(k>0 && k<LatePartition)AudioShared[size-k]=float2(x.x,-x.y);
+    }
+    GroupMemoryBarrierWithGroupSync();
+    AudioFftShared(size,true,t);
+    for(uint n=t;n<LatePartition;n+=256)PathBandHistory[(source*LATE_BANDS+b)*PathHistoryLength+(uint)((PathHistoryAt+(int)n)&(int)(PathHistoryLength-1))]=AudioShared[LatePartition+n].x;
+}
+static const float PATH_PI=3.14159265358979;
+float PathSinc(float x){return abs(x)<1e-6?1:sin(PATH_PI*x)/(PATH_PI*x);}
+// One thread per lane and sample of the block: bank (LateBank ^ LateWhich)'s echoes (PathReverb.SlideBlock), each an
+// impulse at the time-varying delay tau + r (t - t_ref) into the band-filtered input, read with the direct path's filter,
+// with its band amplitudes. Added to the bank's block after LateInverse, before PathPowers. PathHistoryAt: the block's
+// t - latency in the ring.
+[numthreads(64,1,1)]
+void PathSlide(uint3 id:SV_DispatchThreadID)
+{
+    uint lanes=AudioListeners*AudioChannels,n=id.x%LatePartition,lane=id.x/LatePartition;if(lane>=lanes)return;
+    uint listener=lane/AudioChannels,c=lane%AudioChannels,bank=LateBank^LateWhich,mask=PathHistoryLength-1;
+    float value=0;bool any=false;
+    for(uint pair=listener;pair<AudioPairs;pair+=AudioListeners)
+    {
+        if(LateActive[bank*AudioPairs+pair]==0)continue;uint source=pair/AudioListeners,bins=(bank*AudioPairs+pair)*PathBinsCount;
+        for(uint k=0;k<PathSlideEnd[bank*AudioPairs+pair];k++)
+        {
+            float r=PathSlideRates[bins+k];if(r==0)continue;
+            any=true;
+            float cutoff=PathSincFilter!=0?min(1.0,1.0/(1.0-r)):1;int extent=PathSincFilter!=0?(int)ceil(PathSincRadius/cutoff):1;
+            float u=(float)(PathHistoryAt+(int)n)-max((float)extent,PathSlideDelays[bins+k]+r*(float)(PathSlideOffset+(int)n));
+            int center=(int)floor(u);float phase=u-center;
+            float acc[8];for(uint b0=0;b0<LATE_BANDS;b0++)acc[b0]=0;
+            float sum=0;
+            if(PathSincFilter==0)
+            {
+                for(uint b1=0;b1<LATE_BANDS;b1++)
+                {
+                    uint row=(source*LATE_BANDS+b1)*PathHistoryLength;
+                    acc[b1]=PathBandHistory[row+((uint)center&mask)]*(1-phase)+PathBandHistory[row+((uint)(center+1)&mask)]*phase;
+                }
+                sum=1;
+            }
+            else for(int j=1-extent;j<=extent;j++)
+            {
+                float x=(j-phase)*cutoff;if(abs(x)>=(float)PathSincRadius)continue;
+                float w=PathSinc(x)*PathSinc(x/PathSincRadius)*cutoff;sum+=w;uint at=(uint)(center+j)&mask;
+                for(uint b2=0;b2<LATE_BANDS;b2++)acc[b2]+=w*PathBandHistory[(source*LATE_BANDS+b2)*PathHistoryLength+at];
+            }
+            for(uint b3=0;b3<LATE_BANDS;b3++)value+=PathSlideAmplitudes[((bins+k)*AudioChannels+c)*LATE_BANDS+b3]*acc[b3]/sum;
+        }
+    }
+    if(any)LateBlocks[(LateWhich*lanes+lane)*LatePartition+n]+=value;
 }
 // A partition through the band FFTs: sum over bands of FFT(band slot sequences) x band filter, then the inverse.
 void PathBandPartition(uint entry,uint t)

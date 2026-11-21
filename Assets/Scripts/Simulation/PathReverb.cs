@@ -29,6 +29,16 @@ using UnityEngine;
 // powers, which is what the histograms say; equal responses keep a gain of one.
 // Convolution: uniform partitioned overlap-save; each partition's kernel is a weighted sum of
 // fixed spectra of its impulse groups (no FFT per update).
+// Doppler on reflections (README part 40): the tracer's rate channel gives each bin the energy-weighted mean and
+// mean square of its contributions' delay rates and their mean delay. In the early part, where echoes are discrete, a
+// bin is one echo, an impulse at its mean delay tau with the bin's band energies per ear (the slots' noise would give it
+// a new random phase at every update), sliding at its mean rate: its delay is tau + r (t - t_ref), a time-varying
+// delay read from the band-filtered input with the direct path's interpolation filter, which gives the echo its own
+// pitch shift. A bin is early while its contributions
+// share one rate: at least two of them (one cannot show it), a nonzero mean, and a spread no larger than the mean shift
+// (variance <= mean^2). The early part ends at the first bin that holds energy and is not: there the bin pools
+// arrivals of different shifts, which one rate cannot represent, and it and every later bin stay in the convolution
+// (their spread of shifts averages out). A static scene has no rates, so nothing slides and the output is unchanged.
 internal sealed class PathReverb
 {
     const int Bands=TakeRender.Settings.LateBands,Directions=TakeRender.Settings.LateDirections;
@@ -57,6 +67,18 @@ internal sealed class PathReverb
     int bank,computedBlock=-1;
     long cursor,swap;
     bool initialized,blend;
+    // Doppler: per bank the bins' slide rates [bank][pair][bin] (0: not slid), their mean delays in samples and their
+    // per-ear band amplitudes [bank][pair][bin][channel][band], the output sample at which the bank's echoes sit at
+    // their mean delays, and per source and band a ring of the band-filtered input.
+    readonly float[] slideRates,slideDelays,slideAmplitudes;
+    readonly long[] slideReference=new long[2];
+    readonly bool[] sliding=new bool[2];
+    readonly float[] history; // [source][band][historyLength]
+    readonly int historyLength,sincRadius;
+    readonly bool sinc,doppler;   // doppler: settings.pathReflectionDoppler (off: the rates are ignored)
+    long historyEnd=long.MinValue;   // next band block to compute
+    readonly double[] rawEnergy,moment1,moment2;readonly uint[] binCounts;
+    internal int SlidBins;   // diagnostics: bins slid by the latest response
     internal long NumericBytes { get { long b=(kernels.LongLength+inputs.LongLength+work.Length+wide.Length+sum.Length)*8+(halves.Length+blocks.Length)*4L+energy.Length*8L; foreach(var s in spectra)b+=s.LongLength*8; foreach(var m in mixes)b+=m.LongLength*4; return b; } }
     internal long SupportSamples => (long)count*partition+latency;
 
@@ -86,6 +108,29 @@ internal sealed class PathReverb
         active=new bool[2*pairs];blocks=new float[2*listeners*channels*partition];powers=new double[3*listeners*channels];
         work=new Vector2[2*partition];wide=new Vector2[2*partition];sum=new Vector2[bins];
         energy=new double[channels*Bands*histogram.Count];
+        sincRadius=settings.sincRadius;sinc=settings.delayFilter==TakeRender.DelayFilter.WindowedSinc;doppler=settings.pathReflectionDoppler;
+        int B=histogram.Count;
+        slideRates=new float[2*pairs*B];slideDelays=new float[2*pairs*B];slideAmplitudes=new float[checked(2*pairs*B*channels*Bands)];
+        // History: the horizon, one step of drift either way, the interpolation's reach and two blocks.
+        int need=checked(count*partition+2*step+2*(sincRadius+2)*4+4*partition);
+        historyLength=1;while(historyLength<need)historyLength<<=1;
+        history=new float[checked(sources*Bands*historyLength)];
+        rawEnergy=new double[B];moment1=new double[B];moment2=new double[B];binCounts=new uint[B];
+    }
+    // The early part of one pair's response (README part 40): per bin its slide rate, or 0. energy(k): the bin's raw
+    // energy over every direction and band; m1, m2: its rate moments; count: its contributions. In time order a bin
+    // with energy slides while its contributions share one rate (at least two, mean nonzero, variance <= mean^2); the
+    // first that does not ends the early part.
+    internal static void SlideRates(int bins,Func<int,double> energy,Func<int,double> m1,Func<int,double> m2,Func<int,uint> count,float[] rates,int offset)
+    {
+        bool open=true;
+        for(int k=0;k<bins;k++)
+        {
+            rates[offset+k]=0;double e=energy(k);
+            if(!open || !(e>0))continue;
+            double mean=m1(k)/e,variance=m2(k)/e-mean*mean;
+            if(count(k)>=2 && mean!=0 && variance<=mean*mean)rates[offset+k]=(float)mean;else open=false;
+        }
     }
     // Amplitude-complementary band weights: cos^2(pi/2 log2(f/fc)) between neighbouring centres,
     // flat below 125 Hz and above 16 kHz; sum over bands is one at every frequency.
@@ -296,13 +341,23 @@ internal sealed class PathReverb
         return (p,d,b,k)=>record[((p*Directions+d)*Bands+b)*B+k];
     }
     // histogram(pair, direction, band, bin): energy in direct-sound units; null renders silence.
-    internal void SetResponse(long sample,bool cut,Func<int,int,int,int,double> histogram,AcousticTake.State[] states,Func<int,int,uint> counts=null)
+    // The rate channel of one solved frame (MethodTransport.RateMoment: pair, moment, bin), or null.
+    internal static Func<int,int,int,double> Rates(RayTransport.LateFrame late)
     {
+        if(!(late.Transport is MethodTransport m) || !m.IsPath)return null;
+        int frame=late.Frame;return (pair,moment,k)=>m.RateMoment(frame,pair,moment,k);
+    }
+    // rates (pair, moment, bin): the rate channel (Doppler on reflections); null slides nothing.
+    internal void SetResponse(long sample,bool cut,Func<int,int,int,int,double> histogram,AcousticTake.State[] states,Func<int,int,uint> counts=null,Func<int,int,int,double> rates=null)
+    {
+        var raw=histogram;
         histogram=Exchange(sample,histogram,counts);
         if(initialized && sample<swap)throw new ArgumentException("Path responses must be ordered.");
         bool valid=histogram!=null;
         if(valid && sample%partition!=0)throw new ArgumentException("Path responses change on partition boundaries.");
         blend=initialized && !cut;bank^=1;swap=sample;initialized=true;computedBlock=-1;
+        slideReference[bank]=sample+step;sliding[bank]=false;SlidBins=0;
+        Array.Clear(slideRates,bank*pairs*this.histogram.Count,pairs*this.histogram.Count);
         long bankSize=(long)pairs*channels*Bands*count*bins;
         Array.Clear(kernels,(int)(bank*bankSize),(int)bankSize);
         int B=this.histogram.Count;
@@ -319,6 +374,25 @@ internal sealed class PathReverb
                 for(int c=0;c<channels;c++)energy[(c*Bands+b)*B+k]+=earWeights[(d*2+c)*Bands+b]*e;
             }
             var list=groups[pair];var gb=groupBins[pair];var gw=groupWeights[pair];var spectrum=spectra[pair];var mix=mixes[pair];
+            int bins0=(bank*pairs+pair)*B;
+            if(doppler && rates!=null && counts!=null && raw!=null)
+            {
+                for(int k=0;k<B;k++)
+                {
+                    double e=0;for(int d=0;d<Directions;d++)for(int b=0;b<Bands;b++){double x=raw(pair,d,b,k);if(x>0)e+=x;}
+                    rawEnergy[k]=e;moment1[k]=rates(pair,0,k);moment2[k]=rates(pair,1,k);binCounts[k]=counts(pair,k);
+                }
+                SlideRates(B,k=>rawEnergy[k],k=>moment1[k],k=>moment2[k],k=>binCounts[k],slideRates,bins0);
+                // A slid bin is one echo at its contributions' mean delay, with the bin's ear energies per band.
+                for(int k=0;k<B;k++)
+                {
+                    if(slideRates[bins0+k]==0)continue;
+                    double offset=rates(pair,2,k)/rawEnergy[k];   // (referred to the update's time: it may lie a little outside the bin)
+                    slideDelays[bins0+k]=(float)((this.histogram.Start(k)+offset)*rate);sliding[bank]=true;SlidBins++;
+                    for(int c=0;c<channels;c++)for(int b=0;b<Bands;b++)
+                    {double e=energy[(c*Bands+b)*B+k];slideAmplitudes[((bins0+k)*channels+c)*Bands+b]=e>0?(float)Math.Sqrt(e):0;}
+                }
+            }
             for(int c=0;c<channels;c++)for(int b=0;b<Bands;b++)
             {
                 float a1=alpha[b],a2=channels==2?(c==0?beta[b]:-beta[b]):0;
@@ -326,7 +400,8 @@ internal sealed class PathReverb
                 for(int g=0;g<list.Count;g++)
                 {
                     var group=list[g];double slotEnergy=0;
-                    for(int i=0;i<group.terms;i++)slotEnergy+=energy[(c*Bands+b)*B+gb[group.first+i]]*gw[group.first+i];
+                    // (A slid bin's energy is its echo's, SlideBlock; the kernel keeps the rest.)
+                    for(int i=0;i<group.terms;i++){int k=gb[group.first+i];if(slideRates[bins0+k]==0)slotEnergy+=energy[(c*Bands+b)*B+k]*gw[group.first+i];}
                     if(!(slotEnergy>0))continue;
                     float amplitude=(float)Math.Sqrt(slotEnergy);
                     int o=(g*Bands+b)*3;
@@ -336,6 +411,76 @@ internal sealed class PathReverb
                 }
             }
         }
+    }
+    // Adds bank b0's slid slots to its output block: per sample a time-varying delay tau + r (t - t_ref) into the
+    // band-filtered input, read with the direct path's interpolation filter. t_ref: the end of the bank's crossfade in,
+    // where the response's state is (TakeRender.Live: the update's anchor is its sample + step - latency in take time,
+    // and the output lags take time by the latency).
+    void SlideBlock(int b0,int block)
+    {
+        EnsureHistory(block);
+        var acc=new double[Bands];int mask=historyLength-1,B=histogram.Count;
+        for(int l=0;l<listeners;l++)for(int s=0;s<sources;s++)
+        {
+            int pair=s*listeners+l;if(!active[b0*pairs+pair])continue;
+            int bins0=(b0*pairs+pair)*B;
+            for(int k=0;k<B;k++)
+            {
+                double r=slideRates[bins0+k];if(r==0)continue;
+                // Read speed 1 - r: reading faster than real time lowers the filter's cutoff (Doppler.Read).
+                double cutoff=sinc?Math.Min(1,1/(1-r)):1;int extent=sinc?(int)Math.Ceiling(sincRadius/cutoff):1;
+                for(int n=0;n<partition;n++)
+                {
+                    long t=(long)block*partition+n;
+                    // (The filter reads `extent` samples past its centre and the band input reaches t - latency, so a delay
+                    // is at least that: only an echo within centimetres of its source is held there.)
+                    double u=t-latency-Math.Max(extent,slideDelays[bins0+k]+r*(t-slideReference[b0]));long center=(long)Math.Floor(u);double phase=u-center;
+                    Array.Clear(acc,0,Bands);
+                    if(!sinc)for(int b=0;b<Bands;b++){int row=(s*Bands+b)*historyLength;acc[b]=history[row+(int)(center&mask)]*(1-phase)+history[row+(int)((center+1)&mask)]*phase;}
+                    else
+                    {
+                        double sum=0;
+                        for(int j=1-extent;j<=extent;j++)
+                        {
+                            double x=(j-phase)*cutoff;if(Math.Abs(x)>=sincRadius)continue;
+                            double w=SincValue(x)*SincValue(x/sincRadius)*cutoff;sum+=w;int index=(int)((center+j)&mask);
+                            for(int b=0;b<Bands;b++)acc[b]+=w*history[(s*Bands+b)*historyLength+index];
+                        }
+                        for(int b=0;b<Bands;b++)acc[b]/=sum;
+                    }
+                    for(int c=0;c<channels;c++)
+                    {
+                        double value=0;int a=((bins0+k)*channels+c)*Bands;
+                        for(int b=0;b<Bands;b++)value+=slideAmplitudes[a+b]*acc[b];
+                        blocks[(b0*listeners*channels+l*channels+c)*partition+n]+=(float)value;
+                    }
+                }
+            }
+        }
+    }
+    static double SincValue(double x)=>Math.Abs(x)<1e-12?1:Math.Sin(Math.PI*x)/(Math.PI*x);
+    // The band-filtered input of every source through band block `last` (block j: input samples [j P - latency, +P)),
+    // as Half computes it.
+    void EnsureHistory(long last)
+    {
+        long next=historyEnd,oldest=last+2-historyLength/partition;
+        if(next==long.MinValue || next<oldest){Array.Clear(history,0,history.Length);next=Math.Max(oldest,next==long.MinValue?oldest:next);}
+        var buffer=new Vector2[2*partition];var band=new Vector2[2*partition];int mask=historyLength-1;
+        for(;next<=last;next++)
+            for(int s=0;s<sources;s++)
+            {
+                long start=next*partition-latency+lookahead-partition;
+                for(int n=0;n<2*partition;n++)buffer[n]=new Vector2(start+n<0?0:signals[s].Read(start+n),0);
+                ImpulseResponseAudio.Fft(buffer,false);
+                for(int b=0;b<Bands;b++)
+                {
+                    for(int i=0;i<2*partition;i++){var x=buffer[i];var h=filters[b*2*partition+i];band[i]=new Vector2(x.x*h.x-x.y*h.y,x.x*h.y+x.y*h.x);}
+                    ImpulseResponseAudio.Fft(band,true);
+                    long first=next*partition-latency;
+                    for(int n=0;n<partition;n++)history[(s*Bands+b)*historyLength+(int)((first+n)&mask)]=band[partition+n].x;
+                }
+            }
+        historyEnd=next;
     }
     // Band-filtered source half block (P samples) for UPOLS block `block`: x_b over
     // [block P - latency, block P + P - latency), from x read P/2 samples ahead.
@@ -397,6 +542,7 @@ internal sealed class PathReverb
                 ImpulseResponseAudio.Fft(work,true);
                 for(int n=0;n<partition;n++)blocks[(b0*listeners*channels+l*channels+c)*partition+n]=work[partition+n].x;
             }
+            if(sliding[b0])SlideBlock(b0,block);
         }
         if(!both)return;
         for(int channel=0;channel<listeners*channels;channel++)

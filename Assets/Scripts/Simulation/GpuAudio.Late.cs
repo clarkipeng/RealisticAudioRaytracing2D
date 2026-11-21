@@ -81,11 +81,15 @@ internal sealed partial class GpuAudio
         long block=now/latePartition;Set("LateBlock",checked((int)block));
         commands.BeginSample("Acoustics.GPU.Late");
         commands.DispatchCompute(shader,lateInput,lateSources,1,1);
+        // Path method: the block's band-filtered input into the ring (PathBandInput), and each bank's slid slots added to
+        // its block (PathSlide; README part 40).
+        if(pathMode){Set("PathHistoryAt",(int)((now-settings.DspLatencySamples)&(pathHistoryLength-1)));commands.DispatchCompute(shader,pathBandInput,lateSources*TakeRender.Settings.LateBands,1,1);}
         for(int which=0;which<(lateBlend && now<lateSwap+settings.responseStepSamples?2:1);which++)
         {
             Set("LateWhich",which);
             commands.DispatchCompute(shader,lateSum,(latePartition+1+63)/64,LateTiles,listeners*channels);
             commands.DispatchCompute(shader,lateInverse,listeners*channels,1,1);
+            if(pathMode){Set("PathSlideOffset",checked((int)(now-pathSlideReference[lateBank^which])));commands.DispatchCompute(shader,pathSlide,(listeners*channels*latePartition+63)/64,1,1);}
         }
         if(pathMode && lateBlend && now<lateSwap+settings.responseStepSamples)commands.DispatchCompute(shader,pathPowers,listeners*channels,1,1);
         commands.EndSample("Acoustics.GPU.Late");

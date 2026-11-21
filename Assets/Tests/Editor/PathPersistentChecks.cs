@@ -120,6 +120,7 @@ public partial class TakeChecks
     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
     public void PersistentRaysHearAMovingSourceAtTheRetardedTime()
     {
+        ToleratePathDopplerUavMessage(); // (a moving source: the Doppler walk, README part 40)
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
         var a = new Vector3(-200, 0, -200); var b = new Vector3(200, 0, -200); var c = new Vector3(200, 0, 200); var d = new Vector3(-200, 0, 200);
         var geometry = new[] {new AcousticTake.Primitive {objectIndex = 2, a = a, b = c, c = b}, new AcousticTake.Primitive {objectIndex = 2, a = a, b = d, c = c}};

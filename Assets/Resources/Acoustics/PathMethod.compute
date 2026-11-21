@@ -7,6 +7,9 @@
 // PathSortScatter: the kept rays resampled and written in coherent order), then PathRingKernel (the update's histogram).
 #pragma kernel TracePath3D
 #pragma kernel TracePath3DBvh USE_BVH
+// With the delay rates (MethodPath.hlsl "Delay rates"), dispatched while anything moves (MethodTransport.Doppler).
+#pragma kernel TracePath3DDoppler PATH_DOPPLER
+#pragma kernel TracePath3DBvhDoppler USE_BVH PATH_DOPPLER
 #pragma kernel PathEdgeWeights3D
 #pragma kernel PathEdgeWeights3DBvh USE_BVH
 #pragma kernel PathEdgeScan
@@ -29,6 +32,8 @@
 
 [numthreads(64,1,1)] void TracePath3D(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DBvh(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DBvhDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(256,1,1)] void PathEdgeScan(uint3 t:SV_GroupThreadID) { EnergyEdgeScan(t.x); }
@@ -47,4 +52,5 @@
     uint i = id.x + MethodClearOffset;
     if (i < MethodCountCells) MethodArrivalCounts[i] = 0;
     if (i < PathCountCells) PathCounts[i] = 0;
+    if (i < PathRateClearCount) MethodOutput[PathRateClearBase + i] = 0;
 }
