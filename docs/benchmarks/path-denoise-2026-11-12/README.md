@@ -1873,3 +1873,52 @@ The old variant uses part 29's rule and one FFT stage per pass, but it already h
 **The path/energy toggle: left out.**
 Switching method needs the session to restart its take: the transports, the GPU audio and the denoisers are built per method at the take's start. That is not a cheap change.
 
+
+## 39. The door-opening glitch: what the pipeline trace shows (not fixed yet)
+
+**A pipeline trace** (`TakeRender.Live`, `LiveTrace`; `-liveTrace FILE` on the player's command line, passed by `tools/path_live_church.py smoke`).
+- `FILE` gets one row per pump, batch dispatch and GPU audio readback.
+  - Each row has the renderer's cursor, the output queue's read and written samples, and the dispatch's CPU time or the readback's latency.
+  - It also has the GC count and the latest frame's timings: main thread, its wait for presentation, render thread and GPU.
+- `FILE.stalls` lists every player-loop system that took more than 40 ms in a frame, found by a marker between every pair of systems.
+- The records go into a preallocated array, so tracing allocates nothing while it runs.
+
+**What it showed** (windowed smoke runs of the Church at 11,000 and 16,000 rays, the machine shared with other projects' jobs).
+
+| Run | underrun samples | longest frame | where |
+|---|---:|---:|---|
+| 11,000 | 35,356 | 362 ms | 28.6 s, standing outside |
+| 11,000 | 0 | 50 ms | |
+| 11,000 | 10,496 | 125 ms | 28.5 s |
+| 11,000 | 6,866 | 133 ms | 14.5 s |
+| 16,000 | 0 | 34 ms | |
+
+- **The slack is small.** At steady state the queue holds 2,000–4,000 samples (45–90 ms) beyond the read position, of the 6,144-sample lead.
+  - The device's read-ahead takes about 2,500 samples.
+  - The pipeline takes one or two frames: a batch is dispatched in one frame and its readback is collected in the next (median 13.5 ms, typically 25–30 ms when it lands a frame later).
+  - So any delay over 45–90 ms underruns.
+- **The underruns come from main-thread stalls of 125–362 ms.**
+  - The frame timings put them on the main thread itself: presentation wait 0.01 ms, render thread 2 ms.
+  - They are not garbage collection (the GC count did not change across them).
+  - They are not in the audio pipeline: the trace has no pump or dispatch inside them.
+  - They come at different moments of the walk, not only as the doors open.
+- **Recovery is slow.** After a stall each frame can render at most two updates, and everything it publishes is late until it has caught up.
+  - So a 362 ms stall cost 35,356 samples: 11,804 in the stall itself, then 1,000–2,000 per frame for half a second.
+- **At 16,000 and 23,000 rays (part 38),** the stalls about 9 s in came while the frame's GPU time ran at 25–37 ms near the organ, over a 60 Hz frame.
+  - The coordinator reports frame GPU times of 23–30 ms near the train in the station at 8,000 rays per source, which looks like the same GPU overload. It was not checked here.
+- **The suspects in the brief.**
+  - Moving geometry only refits the top of the scene's tree, uploading a few hundred bytes (`DirectBvh.Update`).
+  - No buffer is reallocated after the first update.
+  - The trace shows no allocation burst and no GPU readback longer than 63 ms.
+
+**Why it is not fixed yet.**
+The player-loop markers name the system that stalls, but they were added after these runs.
+From 14:10 the Mac's session was locked:
+- windowed players then waited for presentation for minutes (`WaitForLastPresentationAndUpdateTime`);
+- windowless ones drew nothing and their audio device did not consume (read position 0).
+
+So no valid smoke run could be made after the markers were in, and the stalling system is still unnamed.
+The default population stays at 8,000.
+The next step is one windowed run at 11,000 with an unlocked screen, then `FILE.stalls`. After that:
+- if the stall is in the scene's scripts, fix it there;
+- if not, a pipeline that can render ahead of a stall, at the cost of latency.

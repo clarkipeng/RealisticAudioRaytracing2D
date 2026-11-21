@@ -111,7 +111,7 @@ def smoke(extra=(), windowed=False, scenes=(), shots=False):
     # -batchmode: no window, so the run never takes the screen's focus; the player still draws the scene every frame
     # (smoke.json reports camera renders per frame) and still plays its audio callbacks (callbacks, underruns).
     command = [str(binary), '-batchmode', '-pathLiveSmoke', str(out), '-screen-width', '1280', '-screen-height', '720',
-               '-logFile', str(out / 'player.log'),
+               '-logFile', str(out / 'player.log'), '-liveTrace', str(out / 'pipeline.csv'),
                *(['-pathLiveScenes', ','.join(scenes)] if scenes else []), *(['-pathLiveShots'] if shots else []), *extra]
     if windowed:
         # A window, so that the scene is drawn and the profiler's GPU timings can be read: launched hidden and not

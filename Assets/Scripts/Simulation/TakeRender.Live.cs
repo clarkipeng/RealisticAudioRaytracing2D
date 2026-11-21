@@ -50,6 +50,9 @@ public static partial class TakeRender
         internal MethodTransport Method => solver.Method;
         public bool HasPathDenoiser => gpuAudio?.HasPathDenoiser??false;
         public bool PathDenoising {get=>gpuAudio!=null && gpuAudio.PathDenoising;set{if(gpuAudio!=null)gpuAudio.PathDenoising=value;}}
+        // Pipeline trace (diagnostics): with -liveTrace FILE on the command line, one record per pump and per batch
+        // event (dispatch with its CPU time, GPU audio ready with its latency, the pump's CPU time), written as CSV when the renderer is disposed.
+        readonly LiveTrace trace=LiveTrace.FromCommandLine();
         public Live(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,float[][] pcm,int rate,Settings settings,
             AudioManager.PcmQueue queue,int lead,int listener,ComputeShader shader=null,SourceStream[] streams=null)
         {
@@ -128,6 +131,14 @@ public static partial class TakeRender
             if(wait && queue==null && !Completed)throw new InvalidOperationException("Renderer did not complete during shutdown.");
         }
         public void Pump(bool wait=false)
+        {
+            if(trace==null){PumpCore(wait);return;}
+            long start=Stopwatch.GetTimestamp();
+            trace.Add(LiveTrace.Kind.Pump,Cursor,queue,pending,batchFirst,batchEnd,batchCount,0);
+            PumpCore(wait);
+            trace.Add(LiveTrace.Kind.PumpEnd,Cursor,queue,pending,batchFirst,batchEnd,batchCount,Elapsed(start)*1000);
+        }
+        void PumpCore(bool wait)
         {
             while(pending>0 || finalState!=null)
             {
@@ -233,12 +244,12 @@ public static partial class TakeRender
                 }
             return true;
         }
-        long audioFirst;
+        long audioFirst,dispatchedAt,preparedAt;
         bool RenderTo(Observation frame,bool wait)
         {
             while(Cursor<frame.end)
             {
-                if(!batchActive) {if(WritableEnd<=Cursor)return false;PrepareBatch();if(!batchActive)return false;}
+                if(!batchActive) {if(WritableEnd<=Cursor)return false;preparedAt=Stopwatch.GetTimestamp();PrepareBatch();if(!batchActive)return false;}
                 if(gpuAudio==null && !CompleteBatch(wait))return false;
                 if(gpuAudio!=null && !audioReady)
                 {
@@ -255,10 +266,12 @@ public static partial class TakeRender
                             int length=(int)Math.Min(batchEnd-sample,settings.responseStepSamples-sample%settings.responseStepSamples);
                             long start=Stopwatch.GetTimestamp();gpuAudio.QueueRender(sample,length);AudioSeconds+=Elapsed(start);sample+=length;
                         }
-                        gpuAudio.BeginReadback();audioQueued=true;
+                        gpuAudio.BeginReadback();audioQueued=true;dispatchedAt=Stopwatch.GetTimestamp();
+                        trace?.Add(LiveTrace.Kind.Dispatch,Cursor,queue,pending,batchFirst,batchEnd,batchCount,Elapsed(preparedAt)*1000);
                     }
                     long completion=Stopwatch.GetTimestamp();audioReady=gpuAudio.TryComplete(gpuBlock,wait);AudioSeconds+=Elapsed(completion);
                     if(!audioReady)return false;
+                    trace?.Add(LiveTrace.Kind.Ready,Cursor,queue,pending,batchFirst,batchEnd,batchCount,Elapsed(dispatchedAt)*1000);
                 }
                 if(gpuAudio!=null && !CompleteBatch(wait))return false;
                 if(gpuAudio==null && Cursor%settings.responseStepSamples==0)ApplyResponse(Cursor);
@@ -273,6 +286,83 @@ public static partial class TakeRender
             }
             return true;
         }
-        public void Dispose() { gpuAudio?.Dispose();solver.Dispose(); }
+        public void Dispose() { gpuAudio?.Dispose();solver.Dispose();trace?.Write(); }
+    }
+
+    // The live renderer's pipeline over time (diagnostics; TakeRender.Live, -liveTrace FILE): records in a preallocated
+    // array, so tracing allocates nothing while it runs; written as CSV at the end.
+    internal sealed class LiveTrace
+    {
+        public enum Kind : byte { Pump, PumpEnd, Dispatch, Ready }
+        struct Record { public long ticks,cursor,read,written,first,end; public int frame,pending,count,gc0,gc2; public float ms,main,present,render,gpu; public Kind kind; }
+        readonly Record[] records=new Record[1<<17];
+        readonly FrameTiming[] timing=new FrameTiming[1];
+        readonly string file;
+        readonly long origin=Stopwatch.GetTimestamp();
+        int used;
+        LiveTrace(string file){this.file=file;InstallLoopMarkers();}
+        // The player loop's own time: a marker between every pair of its systems records a timestamp; a system that
+        // takes longer than 40 ms in a frame is written to FILE.stalls (what the main thread did during a stall).
+        static readonly List<(string name,long ticks)> marks=new List<(string,long)>(512);
+        static readonly List<(long ticks,int frame,string name,double ms)> stalls=new List<(long,int,string,double)>();
+        static bool installed;
+        static void InstallLoopMarkers()
+        {
+            if(installed)return;installed=true;
+            var loop=UnityEngine.LowLevel.PlayerLoop.GetCurrentPlayerLoop();
+            var phases=loop.subSystemList;
+            for(int p=0;p<phases.Length;p++)
+            {
+                var systems=phases[p].subSystemList;if(systems==null)continue;
+                var marked=new List<UnityEngine.LowLevel.PlayerLoopSystem>();
+                for(int i=0;i<systems.Length;i++)
+                {
+                    string name=phases[p].type.Name+"."+systems[i].type?.Name;
+                    marked.Add(systems[i]);
+                    bool last=p==phases.Length-1 && i==systems.Length-1;
+                    marked.Add(new UnityEngine.LowLevel.PlayerLoopSystem{type=typeof(LiveTrace),updateDelegate=()=>Mark(name,last)});
+                }
+                phases[p].subSystemList=marked.ToArray();
+            }
+            loop.subSystemList=phases;UnityEngine.LowLevel.PlayerLoop.SetPlayerLoop(loop);
+        }
+        static long frameStart;
+        static void Mark(string name,bool last)
+        {
+            long now=Stopwatch.GetTimestamp();
+            long previous=marks.Count>0?marks[marks.Count-1].ticks:frameStart;
+            if((now-previous)*1000.0/Stopwatch.Frequency>40)
+                stalls.Add((now,Time.frameCount,name,(now-previous)*1000.0/Stopwatch.Frequency));
+            marks.Add((name,now));
+            if(last){frameStart=now;marks.Clear();}
+        }
+        public static LiveTrace FromCommandLine()
+        {
+            var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-liveTrace");
+            return at>=0 && at+1<args.Length?new LiveTrace(args[at+1]):null;
+        }
+        public void Add(Kind kind,long cursor,AudioManager.PcmQueue queue,int pending,long first,long end,int count,double ms)
+        {
+            if(used==records.Length)return;
+            // The latest frame's timings (frame timing stats: main thread, its wait for presentation, render thread, GPU).
+            bool timed=kind==Kind.Pump && FrameTimingManager.GetLatestTimings(1,timing)>0;
+            var t=timing[0];
+            records[used++]=new Record{main=timed?(float)t.cpuMainThreadFrameTime:float.NaN,present=timed?(float)t.cpuMainThreadPresentWaitTime:float.NaN,
+                render=timed?(float)t.cpuRenderThreadFrameTime:float.NaN,gpu=timed?(float)t.gpuFrameTime:float.NaN,ticks=Stopwatch.GetTimestamp(),frame=Time.frameCount,kind=kind,cursor=cursor,read=queue?.ReadSample??-1,written=queue?.WrittenSample??-1,
+                pending=pending,first=first,end=end,count=count,ms=(float)ms,gc0=GC.CollectionCount(0),gc2=GC.CollectionCount(2)};
+        }
+        public void Write()
+        {
+            var text=new System.Text.StringBuilder("seconds,frame,kind,cursor,read,written,pending,batchFirst,batchEnd,updates,ms,gc0,gc2,mainMs,presentWaitMs,renderThreadMs,gpuMs\n");
+            for(int i=0;i<used;i++)
+            {
+                var r=records[i];
+                text.Append(FormattableString.Invariant($"{(r.ticks-origin)/(double)Stopwatch.Frequency:F4},{r.frame},{r.kind},{r.cursor},{r.read},{r.written},{r.pending},{r.first},{r.end},{r.count},{r.ms:F2},{r.gc0},{r.gc2},{r.main:F2},{r.present:F2},{r.render:F2},{r.gpu:F2}\n"));
+            }
+            System.IO.File.WriteAllText(file,text.ToString());
+            var lines=new System.Text.StringBuilder("seconds,frame,system,ms\n");
+            foreach(var (ticks,frame,name,ms) in stalls)lines.Append(FormattableString.Invariant($"{(ticks-origin)/(double)Stopwatch.Frequency:F4},{frame},{name},{ms:F1}\n"));
+            System.IO.File.WriteAllText(file+".stalls",lines.ToString());
+        }
     }
 }
