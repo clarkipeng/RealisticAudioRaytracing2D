@@ -1,0 +1,94 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
+  m_Name: Station steel
+  m_EditorClassIdentifier: Acoustics::AudioMaterial
+  source: 'Waiting room roof, columns, lamp posts, rails, speaker housing: painted
+    steel, as the hardest tabulated sealed surface [reverb_chamber]; smooth; 0.7
+    mm steel sheet (Sharp)'
+  energyCurve:
+  - frequencyHz: 125
+    absorption: 0.01
+    scattering: 0
+  - frequencyHz: 250
+    absorption: 0.01
+    scattering: 0
+  - frequencyHz: 500
+    absorption: 0.01
+    scattering: 0
+  - frequencyHz: 1000
+    absorption: 0.02
+    scattering: 0
+  - frequencyHz: 2000
+    absorption: 0.02
+    scattering: 0
+  - frequencyHz: 4000
+    absorption: 0.04
+    scattering: 0
+  - frequencyHz: 8000
+    absorption: 0.04
+    scattering: 0
+  admittanceCurve: []
+  roughness: 0.5
+  density: 2400
+  modalYoungModulus: 2.5e+10
+  modalPoissonRatio: 0.2
+  modalLossFactor: 0.01
+  porosity: 0.1
+  rigidity: 0.9
+  overrideTrans: 0
+  overrideBands: 1
+  absorptionBands:
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  scatteringBands:
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  transmissionBands:
+  - 0.10730239
+  - 0.026825598
+  - 0.0067063994
+  - 0.001693708
+  - 0.000423427
+  - 0.0001080621
+  - 0.000027015525
+  - 0.000027015525
+  iorBands:
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  dampingBands:
+  - 0.055000007
+  - 0.06403708
+  - 0.0780366
+  - 0.09482369
+  - 0.11372307
+  - 0.1343665
+  - 0.1565154
+  - 0.18000002

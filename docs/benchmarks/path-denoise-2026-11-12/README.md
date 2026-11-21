@@ -2090,7 +2090,8 @@ The direct sound has the full HRTF, so a reflection from the side was lateralise
 **Code.** CPU reference: `PathReverb` (`EchoDirection`, per-ear delays in `SlideBlock`). GPU: `PathSlideSelect` reads the direction channels and the ITD grid (`PathItd`, a read-only buffer, so no new UAV), `PathSlideDelays` holds a delay per ear, and `PathSlide` reads its ear's.
 
 **The check** (`PathEchoesCarryTheHrtfInterauralDelay`).
-- One reflection off a rigid wall, binaural, persistent rays, 16 kHz, a noise source.
+- One reflection off a rigid wall 60 m square, binaural, persistent rays (16,384 new per update), 16 kHz, a noise source.
+  (A first version used a 400 m wall and 65,536 rays; its seven solvers' persistent pools, 215 MB each, pushed its batch of slow checks over the 4 GiB guard, so both were cut. The errors moved by at most 1 µs.)
 - The image source recedes from the listener at 10 m/s along a fixed line, so the echo slides and its direction stays put; the head turns so that the image lies at each azimuth in turn.
 - The echo's ITD is the lag of the peak of the cross-correlation of the reverb's two ears over the last six updates.
 - The reference is the direct path: the same noise through the HRTF blend the direct path uses for that head-frame direction, measured the same way.
@@ -2098,15 +2099,68 @@ The direct sound has the full HRTF, so a reflection from the side was lateralise
 
 | azimuth | echo, µs | direct path, static, µs | expected, µs | HRTF grid, µs | Woodworth (8.75 cm), µs |
 |---:|---:|---:|---:|---:|---:|
-| −90° | −754.9 | −736.3 | −757.8 | −735.4 | −655.8 |
+| −90° | −753.9 | −736.3 | −757.8 | −735.4 | −655.8 |
 | −60° | −531.3 | −515.6 | −530.7 | −516.6 | −488.1 |
 | −30° | −266.6 | −260.7 | −268.3 | −260.7 | −261.1 |
-| 0° | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
-| 30° | 265.6 | 260.7 | 268.3 | 260.7 | 261.1 |
-| 60° | 530.3 | 515.6 | 530.7 | 516.6 | 488.1 |
-| 90° | 754.9 | 736.3 | 757.8 | 735.4 | 655.8 |
+| 0° | −1.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| 30° | 264.6 | 260.7 | 268.3 | 260.7 | 261.1 |
+| 60° | 529.3 | 515.6 | 530.7 | 516.6 | 488.1 |
+| 90° | 753.9 | 736.3 | 757.8 | 735.4 | 655.8 |
 
-- The worst error is 2.9 µs (at ±90°), a twentieth of a sample at 16 kHz and below the smallest audible ITD change (about 10 µs). The check's limit is 10 µs.
+- The worst error is 3.9 µs (at ±90°), a sixteenth of a sample at 16 kHz and below the smallest audible ITD change (about 10 µs). The check's limit is 10 µs.
 - Before this part, every echo's ITD was 0.
 - `GpuPathReverbMatchesTheCpuReference` with the source passing at 20 m/s (binaural, so its echoes slide and carry the ITD on both sides) agrees to 6.1 × 10⁻⁵, as before; the static cases are unchanged (3.75 × 10⁻⁵ binaural, 6.27 × 10⁻⁶ mono).
 - `PathReflectionsCarryTheImageSourceDoppler` is unchanged (mono): 271.25 Hz against 271.17 Hz, and its static control bit-identical.
+
+## 43. Published acoustic materials for the train station
+
+Every surface of the station used the take's default material (`Assets/Materials/Material.asset`).
+Now each kind of surface has published octave-band data, as the Church's materials were sourced (docs/benchmarks/energy-audio-2026-11-09, "Materials").
+
+**How.** `tools/station_acoustics.py` (`inspect`, `plan`, `apply`, each guarded in the runner) and `Assets/Editor/StationAcoustics.cs`, as `church.py` and `ChurchAcoustics`.
+- `inspect` lists the take's 47 geometry objects (all box colliders) with the visual material each carries.
+- `plan` writes the materials and the rules: a visual material decides an object's acoustic material, and a few objects decide by name (the canopy, the train's acoustic proxies, the carriage's roof).
+- `apply` writes the material assets, puts an `AcousticSurface` with its material on every geometry object, makes the station's concrete the take's default, and saves the scene.
+- Each asset now carries its sources in a new documentation field, `AudioMaterial.source`.
+- The track's ballast bed was drawn but not acoustic: the train ran over grass. `apply` adds 38 thin slabs on the bed's footprint along the loop (4.2 m wide, from 0.34 to 0.25 m below the rails, `TakeDemo.StationLoop`'s mesh), as the Church's pew blocks.
+- The station's acoustic model has no glass: the waiting room is brick with a steel roof and a door, and the canopy is a slab. So no glass material is assigned.
+
+**Sources.**
+- Absorption: M. Vorländer, *Auralization* (Springer 2008), annex tables, as transcribed in the [pyroomacoustics material database](https://pyroomacoustics.readthedocs.io/en/latest/pyroomacoustics.materials.database.html) (keys in brackets); the classic table reproduced by [sengpielaudio](https://sengpielaudio.com/calculator-RT60Coeff.htm) (8 kHz repeats 4 kHz, as for the Church).
+- Ballast and grass: no octave table of railway ballast was found in print. Both come from the flow resistivity the outdoor and railway literature measures for them, through Miki's impedance model (Y. Miki, J. Acoust. Soc. Jpn (E) 11, 1990; physically admissible where Delany–Bazley is not), locally reacting, averaged over random incidence (Paris) and over the band's third octaves:
+  - ballast, 50 kPa s/m², the value X. Zhang, D. J. Thompson et al. use for ballast in "An engineering model for the sound radiation from railway track" (ISVR, Southampton); Broadbent et al. fitted 25–51 kPa s/m² to reverberation-room measurements;
+  - grass, 200 kPa s/m², the Nord2000 class D, "normal uncompacted ground: pasture, forest floor" (Plovsing 2006); Embleton, Piercy & Daigle (JASA 74, 1983) measured 150–300 kPa s/m² for grass.
+- Painted steel: no octave table either. The hardest sealed surface tabulated, reverberation-chamber walls [reverb_chamber], stands for it; a smooth painted steel skin absorbs no more. Its panel resonances are in its transmission.
+- Scattering: Kirchhoff's theory of a randomly rough surface (Beckmann & Spizzichino 1963; Ogilvy 1991) keeps exp(−(2kh cos θ)²) of the energy specular, h the rms height. Over random incidence the scattered share is s = 1 − (1 − e^−a)/a, a = (2kh)².
+  - The brick keeps the Church's calibrated stone-masonry values (Planells et al., ICA 2016).
+  - h for concrete is 1 mm (brushed concrete, about 1 mm macrotexture depth, EN 13036-1), for planed timber 1 mm, for steel and grass 0 (grass's roughness is not modelled).
+  - h for ballast, 10 mm, is an estimate: a quarter of the 40 mm mean stone of the EN 13450 31.5–50 mm grading.
+  - Shapes larger than the roughness are geometry, not scattering.
+- Transmission: Sharp's prediction for single leaves (`church_transmission.py`): 0.7 mm steel sheet (roof, columns, fittings), a 2 mm steel skin (the train body, the carriage's panels, the door; the lining behind it is not modelled), 25 mm timber (benches). Thin leaves modelled as closed boxes are partitions (acoustic index 1, their reduction applied once). Concrete, brick, ballast and ground are massive (65 dB, as the Church's walls).
+
+| Material (objects) | Source | α 125 | 250 | 500 | 1k | 2k | 4k | 8k | s 125 | 250 | 500 | 1k | 2k | 4k | 8k |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Station concrete (platform, boarding deck and steps, canopy slab; the take's default) | [rough_concrete]; Kirchhoff, h 1 mm | 0.02 | 0.03 | 0.03 | 0.03 | 0.04 | 0.07 | 0.07 | 0 | 0 | 0 | 0 | 0 | 0.01 | 0.04 |
+| Station brick (waiting room walls, door header) | Brick, unglazed (sengpielaudio); Planells et al. 2016 | 0.03 | 0.03 | 0.03 | 0.04 | 0.05 | 0.07 | 0.07 | 0.12 | 0.13 | 0.14 | 0.15 | 0.16 | 0.17 | 0.17 |
+| Station steel (waiting room roof, columns, lamp posts, rails, speaker housing) | [reverb_chamber]; smooth | 0.01 | 0.01 | 0.01 | 0.02 | 0.02 | 0.04 | 0.04 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Station steel panel (train body and cab, carriage sides, ends and roof, sliding door) | [reverb_chamber]; smooth | 0.01 | 0.01 | 0.01 | 0.02 | 0.02 | 0.04 | 0.04 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Station timber (benches, the carriage's floor and benches) | [wood_16mm] (as the Church's pews); Kirchhoff, h 1 mm | 0.18 | 0.12 | 0.10 | 0.09 | 0.08 | 0.07 | 0.07 | 0 | 0 | 0 | 0 | 0 | 0.01 | 0.04 |
+| Station ballast (track bed slabs) | Miki, 50 kPa s/m²; Kirchhoff, h 10 mm | 0.48 | 0.61 | 0.74 | 0.83 | 0.89 | 0.91 | 0.92 | 0 | 0 | 0.02 | 0.06 | 0.23 | 0.59 | 0.88 |
+| Station ground (terrain, grass) | Miki, 200 kPa s/m²; smooth | 0.25 | 0.36 | 0.48 | 0.61 | 0.74 | 0.83 | 0.89 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Sound reduction (Sharp), transmitted share τ at 125 / 500 / 2,000 Hz: steel sheet 0.11 / 6.7 × 10⁻³ / 4.2 × 10⁻⁴; steel skin 1.3 × 10⁻² / 8.2 × 10⁻⁴ / 5.2 × 10⁻⁵; timber 1.3 × 10⁻² / 1.1 × 10⁻² / 1.1 × 10⁻³.
+
+**Reverberation and level** (static impulse responses of the path method with `church.py`'s clean settings, 8,192 rays, from the train's horn standing at the platform; `StaticImpulseTake`, metrics as `realism.py`). The default material is a legacy one (no octave data; roughness 0.5).
+
+| Point | materials | level, dB | T30, s (125 / 250 / 500 / 1k / 2k / 4k / 8k Hz) | EDT, s (500 / 1k) | C80, dB (500 / 1k) |
+|---|---|---:|---|---|---|
+| under the canopy, 12 m from the horn | default | −26.4 | 0.18 / 0.19 / 0.22 / 0.21 / 0.20 / 0.18 / 0.18 | 0.33 / 0.36 | 12.5 / 9.8 |
+| under the canopy | published | −25.6 | 0.19 / 0.20 / 0.20 / 0.18 / 0.18 / 0.12 / 0.11 | 0.41 / 0.47 | 10.7 / 7.3 |
+| open platform, 8 m from the track | default | −26.2 | 0.24 / 0.27 / 0.21 / 0.23 / 0.23 / 0.21 / 0.20 | 0.26 / 0.26 | 20.9 / 18.7 |
+| open platform | published | −28.5 | 0.24 / 0.27 / 0.24 / 0.23 / 0.28 / 0.23 / 0.21 | 0.31 / 0.34 | 17.9 / 18.2 |
+
+- The station is open: a platform with a canopy slab and a small closed waiting room, on a loop in a field. Its decay is set by sound leaving the scene, not by its surfaces, so the materials move T30 little: 0.2–0.3 s, with the high bands shorter under the canopy.
+  That is plausible for an open-air platform; the long reverberation of a station comes from a train shed's roof, which this scene does not have.
+- The level on the open platform falls by 2.3 dB: the grass and the ballast now absorb 0.25–0.9 instead of the default's reflection.
+- Under the canopy it rises 0.8 dB and the early decay lengthens (EDT 0.33 → 0.41 s at 500 Hz): the concrete slab and platform now reflect more than the default did.
+- A cheaper station: the frame's GPU time at 4,000 rays per source fell from 10.3–10.4 ms median to 8.6 ms (shorter paths: more absorption outside).

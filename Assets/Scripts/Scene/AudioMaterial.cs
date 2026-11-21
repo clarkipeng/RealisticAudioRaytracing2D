@@ -22,6 +22,8 @@ public class AudioMaterial : ScriptableObject
         [Range(0, 1)] public float absorption, scattering;
     }
 
+    [Tooltip("Where the material's data comes from (published tables, models and their parameters). Documentation only.")]
+    [TextArea(2, 8)] public string source = "";
     [Tooltip("Optional ordered energy coefficients at any frequency knots. Empty preserves the legacy material. Linear interpolation in Hz, clamped at endpoints.")]
     public EnergyKnot[] energyCurve = new EnergyKnot[0];
     [System.Serializable] public struct AdmittanceKnot

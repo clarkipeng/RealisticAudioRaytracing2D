@@ -756,6 +756,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 114409064}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &117903965
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 117903966}
+  - component: {fileID: 117903968}
+  - component: {fileID: 117903967}
+  m_Layer: 0
+  m_Name: Track bed 22
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &117903966
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 117903965}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.976296, z: -0, w: 0.21643974}
+  m_LocalPosition: {x: -15.397174, y: -0.27499998, z: -34.946667}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &117903967
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 117903965}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &117903968
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 117903965}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &145946761
 GameObject:
   m_ObjectHideFlags: 0
@@ -1161,10 +1230,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   submeshMaterials: []
 --- !u!23 &245916463
 MeshRenderer:
@@ -1384,10 +1453,148 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e6c6a20ddb7bf40c2b713ee646213944, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StationLoop
   straightLength: 56
   radius: 16.5
+--- !u!1 &275141713
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 275141714}
+  - component: {fileID: 275141716}
+  - component: {fileID: 275141715}
+  m_Layer: 0
+  m_Name: Track bed 18
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &275141714
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 275141713}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.99904823, z: -0, w: -0.043619283}
+  m_LocalPosition: {x: -16.874664, y: -0.27499998, z: 29.432598}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &275141715
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 275141713}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &275141716
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 275141713}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.876139}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &288799935
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 288799936}
+  - component: {fileID: 288799938}
+  - component: {fileID: 288799937}
+  m_Layer: 0
+  m_Name: Track bed 34
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &288799936
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 288799935}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.30070585, z: -0, w: 0.95371693}
+  m_LocalPosition: {x: 12.964577, y: -0.27499998, z: -37.427998}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &288799937
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 288799935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &288799938
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 288799935}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761392}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &311544266
 GameObject:
   m_ObjectHideFlags: 0
@@ -1592,6 +1799,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 357723990}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &378285895
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 378285896}
+  - component: {fileID: 378285898}
+  - component: {fileID: 378285897}
+  m_Layer: 0
+  m_Name: Track bed 16
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &378285896
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 378285895}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.976296, z: -0, w: -0.21643974}
+  m_LocalPosition: {x: -15.397174, y: -0.27499998, z: 34.946667}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &378285897
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 378285895}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &378285898
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 378285895}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &383071737
 GameObject:
   m_ObjectHideFlags: 0
@@ -1709,7 +1985,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1303114736}
   clip: {fileID: 0}
@@ -1733,6 +2009,75 @@ Transform:
   m_Children: []
   m_Father: {fileID: 250148662}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &399262855
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 399262856}
+  - component: {fileID: 399262858}
+  - component: {fileID: 399262857}
+  m_Layer: 0
+  m_Name: Track bed 9
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &399262856
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 399262855}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.6755903, z: -0, w: 0.73727727}
+  m_LocalPosition: {x: 0.9325975, y: -0.27499998, z: 44.374664}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &399262857
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 399262855}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &399262858
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 399262855}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &402519277
 GameObject:
   m_ObjectHideFlags: 0
@@ -1776,7 +2121,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1303114736}
   clip: {fileID: 0}
@@ -1785,6 +2130,75 @@ MonoBehaviour:
   loop: 1
   gain: 1
   disableUnityAudioSources: 1
+--- !u!1 &404303352
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 404303353}
+  - component: {fileID: 404303355}
+  - component: {fileID: 404303354}
+  m_Layer: 0
+  m_Name: Track bed 2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &404303353
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 404303352}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.13052619, z: -0, w: 0.9914449}
+  m_LocalPosition: {x: 15.377129, y: -0.27499998, z: 32.254265}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &404303354
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 404303352}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &404303355
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 404303352}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761413}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &410743927
 GameObject:
   m_ObjectHideFlags: 0
@@ -1830,10 +2244,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
   submeshMaterials: []
 --- !u!23 &410743930
 MeshRenderer:
@@ -2438,6 +2852,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 542636835}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &542833365
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 542833366}
+  - component: {fileID: 542833368}
+  - component: {fileID: 542833367}
+  m_Layer: 0
+  m_Name: Track bed 20
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &542833366
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 542833365}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.99904823, z: -0, w: 0.043619283}
+  m_LocalPosition: {x: -16.874664, y: -0.27499998, z: -29.432598}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &542833367
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 542833365}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &542833368
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 542833365}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.876139}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &580642255
 GameObject:
   m_ObjectHideFlags: 0
@@ -2573,10 +3056,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
   submeshMaterials: []
 --- !u!23 &580778045
 MeshRenderer:
@@ -2656,6 +3139,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 580778042}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &618552957
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 618552958}
+  - component: {fileID: 618552960}
+  - component: {fileID: 618552959}
+  m_Layer: 0
+  m_Name: Track bed 13
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &618552958
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 618552957}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.88701105, z: -0, w: -0.4617482}
+  m_LocalPosition: {x: -9.927998, y: -0.27499998, z: 41.464577}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &618552959
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 618552957}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &618552960
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 618552957}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761408}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &654821369
 GameObject:
   m_ObjectHideFlags: 0
@@ -2746,6 +3298,213 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 654821369}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &659888520
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 659888521}
+  - component: {fileID: 659888523}
+  - component: {fileID: 659888522}
+  m_Layer: 0
+  m_Name: Track bed 23
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &659888521
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 659888520}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.95371693, z: -0, w: 0.30070585}
+  m_LocalPosition: {x: -13.964577, y: -0.27499998, z: -37.427998}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &659888522
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 659888520}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &659888523
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 659888520}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761392}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &684682898
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 684682899}
+  - component: {fileID: 684682901}
+  - component: {fileID: 684682900}
+  m_Layer: 0
+  m_Name: Track bed 3
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &684682899
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 684682898}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.21643974, z: -0, w: 0.976296}
+  m_LocalPosition: {x: 14.397174, y: -0.27499998, z: 34.946667}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &684682900
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 684682898}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &684682901
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 684682898}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &687982618
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 687982619}
+  - component: {fileID: 687982621}
+  - component: {fileID: 687982620}
+  m_Layer: 0
+  m_Name: Track bed 0
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &687982619
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 687982618}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 16, y: -0.27499998, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &687982620
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 687982618}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &687982621
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 687982618}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 56}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &689247495
 GameObject:
   m_ObjectHideFlags: 0
@@ -2777,6 +3536,144 @@ Transform:
   m_Children: []
   m_Father: {fileID: 942910199}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &691735416
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 691735417}
+  - component: {fileID: 691735419}
+  - component: {fileID: 691735418}
+  m_Layer: 0
+  m_Name: Track bed 21
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &691735417
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 691735416}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9914449, z: -0, w: 0.13052619}
+  m_LocalPosition: {x: -16.377129, y: -0.27499998, z: -32.254265}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &691735418
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 691735416}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &691735419
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 691735416}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761413}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &724878167
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 724878168}
+  - component: {fileID: 724878170}
+  - component: {fileID: 724878169}
+  m_Layer: 0
+  m_Name: Track bed 33
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &724878168
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 724878167}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.38268352, z: -0, w: 0.9238795}
+  m_LocalPosition: {x: 11.122864, y: -0.27499998, z: -39.622864}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &724878169
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 724878167}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &724878170
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 724878167}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761394}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &750901254
 GameObject:
   m_ObjectHideFlags: 0
@@ -2822,10 +3719,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   submeshMaterials: []
 --- !u!23 &750901257
 MeshRenderer:
@@ -2938,6 +3835,75 @@ Transform:
   - {fileID: 1632130623}
   m_Father: {fileID: 1458552693}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &801910287
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 801910288}
+  - component: {fileID: 801910290}
+  - component: {fileID: 801910289}
+  m_Layer: 0
+  m_Name: Track bed 19
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &801910288
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 801910287}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 1, z: -0, w: 0}
+  m_LocalPosition: {x: -17, y: -0.27499998, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &801910289
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 801910287}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &801910290
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 801910287}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 56}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &822184867
 GameObject:
   m_ObjectHideFlags: 0
@@ -3028,6 +3994,282 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 822184867}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &824195283
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 824195284}
+  - component: {fileID: 824195286}
+  - component: {fileID: 824195285}
+  m_Layer: 0
+  m_Name: Track bed 6
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &824195284
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 824195283}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.4617482, z: -0, w: 0.88701105}
+  m_LocalPosition: {x: 8.927998, y: -0.27499998, z: 41.464577}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &824195285
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 824195283}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &824195286
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 824195283}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761408}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &828213565
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 828213566}
+  - component: {fileID: 828213568}
+  - component: {fileID: 828213567}
+  m_Layer: 0
+  m_Name: Track bed 1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &828213566
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 828213565}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.043619283, z: -0, w: 0.99904823}
+  m_LocalPosition: {x: 15.874664, y: -0.27499998, z: 29.432598}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &828213567
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 828213565}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &828213568
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 828213565}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.876139}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &828513482
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 828513483}
+  - component: {fileID: 828513485}
+  - component: {fileID: 828513484}
+  m_Layer: 0
+  m_Name: Track bed 32
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &828513483
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 828513482}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.4617482, z: -0, w: 0.88701105}
+  m_LocalPosition: {x: 8.927998, y: -0.27499998, z: -41.464577}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &828513484
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 828513482}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &828513485
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 828513482}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761408}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &834304666
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 834304667}
+  - component: {fileID: 834304669}
+  - component: {fileID: 834304668}
+  m_Layer: 0
+  m_Name: Track bed 35
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &834304667
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 834304666}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.21643974, z: -0, w: 0.976296}
+  m_LocalPosition: {x: 14.397174, y: -0.27499998, z: -34.946667}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &834304668
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 834304666}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &834304669
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 834304666}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &837583147
 GameObject:
   m_ObjectHideFlags: 0
@@ -3409,6 +4651,7 @@ Transform:
   - {fileID: 946715714}
   - {fileID: 1288386189}
   - {fileID: 689247496}
+  - {fileID: 2062125143}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &946715713
@@ -3567,6 +4810,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 968371878}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &971034579
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 971034580}
+  - component: {fileID: 971034582}
+  - component: {fileID: 971034581}
+  m_Layer: 0
+  m_Name: Track bed 8
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &971034580
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 971034579}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.60876137, z: -0, w: 0.7933534}
+  m_LocalPosition: {x: 3.7542639, y: -0.27499998, z: 43.87713}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &971034581
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 971034579}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &971034582
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 971034579}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &983380612
 GameObject:
   m_ObjectHideFlags: 0
@@ -3726,10 +5038,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   submeshMaterials: []
 --- !u!23 &1014148742
 MeshRenderer:
@@ -3809,6 +5121,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1014148739}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1045470475
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1045470476}
+  - component: {fileID: 1045470478}
+  - component: {fileID: 1045470477}
+  m_Layer: 0
+  m_Name: Track bed 37
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1045470476
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045470475}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.043619283, z: -0, w: 0.99904823}
+  m_LocalPosition: {x: 15.874664, y: -0.27499998, z: -29.432598}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1045470477
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045470475}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1045470478
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1045470475}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.876139}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1055434486
 GameObject:
   m_ObjectHideFlags: 0
@@ -3852,7 +5233,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1303114736}
   clip: {fileID: 0}
@@ -4054,6 +5435,75 @@ Transform:
   - {fileID: 1588167120}
   m_Father: {fileID: 951549450}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1102563194
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1102563195}
+  - component: {fileID: 1102563197}
+  - component: {fileID: 1102563196}
+  m_Layer: 0
+  m_Name: Track bed 10
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1102563195
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1102563194}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.73727727, z: -0, w: 0.6755903}
+  m_LocalPosition: {x: -1.9325975, y: -0.27499998, z: 44.374664}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1102563196
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1102563194}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1102563197
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1102563194}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1124741405
 GameObject:
   m_ObjectHideFlags: 0
@@ -4144,6 +5594,144 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1124741405}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1125940690
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1125940691}
+  - component: {fileID: 1125940693}
+  - component: {fileID: 1125940692}
+  m_Layer: 0
+  m_Name: Track bed 26
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1125940691
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1125940690}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.8433913, z: -0, w: 0.5372998}
+  m_LocalPosition: {x: -7.4466662, y: -0.27499998, z: -42.897175}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1125940692
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1125940690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1125940693
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1125940690}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &1144891916
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1144891917}
+  - component: {fileID: 1144891919}
+  - component: {fileID: 1144891918}
+  m_Layer: 0
+  m_Name: Track bed 5
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1144891917
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1144891916}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.38268352, z: -0, w: 0.9238795}
+  m_LocalPosition: {x: 11.122864, y: -0.27499998, z: 39.622864}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1144891918
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1144891916}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1144891919
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1144891916}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761394}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1154191140
 GameObject:
   m_ObjectHideFlags: 0
@@ -4176,6 +5764,75 @@ Transform:
   - {fileID: 414867027}
   m_Father: {fileID: 1898691258}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1169944317
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1169944318}
+  - component: {fileID: 1169944320}
+  - component: {fileID: 1169944319}
+  m_Layer: 0
+  m_Name: Track bed 36
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1169944318
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1169944317}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.13052619, z: -0, w: 0.9914449}
+  m_LocalPosition: {x: 15.377129, y: -0.27499998, z: -32.254265}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1169944319
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1169944317}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1169944320
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1169944317}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761413}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1203916499
 GameObject:
   m_ObjectHideFlags: 0
@@ -4414,7 +6071,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RaytracedAudioSource
   rayTraceManager: {fileID: 1303114736}
   clip: {fileID: 8300000, guid: 7f547180c6c5d4144bf1cf3e9042c002, type: 3}
@@ -4438,6 +6095,75 @@ Transform:
   m_Children: []
   m_Father: {fileID: 942910199}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1284029446
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1284029447}
+  - component: {fileID: 1284029449}
+  - component: {fileID: 1284029448}
+  m_Layer: 0
+  m_Name: Track bed 24
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1284029447
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1284029446}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9238795, z: -0, w: 0.38268352}
+  m_LocalPosition: {x: -12.122864, y: -0.27499998, z: -39.622864}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1284029448
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1284029446}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1284029449
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1284029446}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761394}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1288386188
 GameObject:
   m_ObjectHideFlags: 0
@@ -4503,7 +6229,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8d4f7df1ef1c4a348a1c6747e02f0c40, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RaytraceControlPanel
   rayTraceManager: {fileID: 1303114736}
   session: {fileID: 1303114738}
@@ -4521,7 +6247,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 46794832026e640f98c91031ee6bf169, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::StationDemo
   id: train
   train: {fileID: 3628899432826401398}
@@ -4543,7 +6269,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7a2b430a59924455e84d12c6a2e3434d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AudioManager
   paused: 0
   muteOutput: 0
@@ -4557,7 +6283,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2913e124272014f598570cc1c30f24bc, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RayTraceManager
   audioManager: {fileID: 1303114735}
   sampleRate: 44100
@@ -4612,11 +6338,12 @@ MonoBehaviour:
     pathPopulation: 0
     pathPopulationMaximum: 0
     pathDenoise: 0
+    pathReflectionDoppler: 1
     pathIterationCap: 0
     pathIterationSurvival: 0.75
     pathEdgeSliceUpdates: 1
-    pathHistogramExport:
-    pathHistogramImport:
+    pathHistogramExport: 
+    pathHistogramImport: 
     raysPerPair: 0
     diffractionFactor: 1
     airAbsorption: 1
@@ -4626,7 +6353,7 @@ MonoBehaviour:
   monitorLeadSamples: 16384
   monitorCapacitySamples: 96000
   liveDiagnostics:
-    backend:
+    backend: 
     scope: producer stopped; callback counters sampled at stop
     sampleRate: 0
     responseCount: 0
@@ -4672,14 +6399,20 @@ MonoBehaviour:
     maximumCallbackSeconds: 0
   takeDimension: 1
   takeRoot: {fileID: 942910199}
-  takeDefaultMaterial: {fileID: 11400000, guid: ed4ccb841357f455bb36bde4c0036059, type: 2}
+  takeDefaultMaterial: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   takeCurveTolerance: 0.01
   takeObjects:
+  - id: 00380c48431a4c148274c40453e72321
+    transform: {fileID: 1284029447}
+    geometry: 1
   - id: 00f6c266bf8f4321bd6899e28d344864
     transform: {fileID: 1277931756}
     geometry: 0
   - id: 04e998d3dbec40848e63028daf49c7ed
     transform: {fileID: 2050670809}
+    geometry: 1
+  - id: 08bf67b827ef4c828d0d11b25df0883f
+    transform: {fileID: 2059012240}
     geometry: 1
   - id: 11fe512332724a4ba4c6d17cca8a44f3
     transform: {fileID: 4035493294275244951}
@@ -4687,8 +6420,14 @@ MonoBehaviour:
   - id: 132aa4e8507f4e34af8bbe4e7d96c6e4
     transform: {fileID: 3892060390105000464}
     geometry: 1
+  - id: 15af49cad45e462f93a3b1f18d181491
+    transform: {fileID: 2100383406}
+    geometry: 1
   - id: 1878bdaabbd749c5b3fcdb1ca69bc2fd
     transform: {fileID: 580778043}
+    geometry: 1
+  - id: 1adf54e93d5d416aab4ed71dc5df7ba1
+    transform: {fileID: 824195284}
     geometry: 1
   - id: 1cbcbfbad6f2463a8414f1d52b8a7488
     transform: {fileID: 4842219785776174600}
@@ -4699,8 +6438,14 @@ MonoBehaviour:
   - id: 1e3fcdb4caec4d87bc9998ba1b69cd19
     transform: {fileID: 3628899432826401398}
     geometry: 0
+  - id: 20d85aad8a584934a90071376dee9f4e
+    transform: {fileID: 1408163543}
+    geometry: 1
   - id: 230077786ba944fe83343be545fa8a73
     transform: {fileID: 6296322433930534888}
+    geometry: 1
+  - id: 23cea722d4894807a24028b6861fd544
+    transform: {fileID: 2124591750}
     geometry: 1
   - id: 259e27a629c0406c809fe0c3a21d8a8c
     transform: {fileID: 2890607967448237733}
@@ -4717,8 +6462,17 @@ MonoBehaviour:
   - id: 2cdf283bbdcd4e4bb5bc99c6627de4e8
     transform: {fileID: 1658659654293723028}
     geometry: 1
+  - id: 30315a41237541ae944d3cd4b6ffd286
+    transform: {fileID: 399262856}
+    geometry: 1
+  - id: 30c8bff4d02d4d6c8c153086d968e03f
+    transform: {fileID: 828213566}
+    geometry: 1
   - id: 32c5e847bc4f42b6b92f5e11f123ef33
     transform: {fileID: 3223735755507998203}
+    geometry: 1
+  - id: 39d39ff58cfa48c2b95ac3dbaca7f729
+    transform: {fileID: 971034580}
     geometry: 1
   - id: 3e57a7510aed45cdad798da54a5e45b8
     transform: {fileID: 7872391873909834030}
@@ -4726,23 +6480,56 @@ MonoBehaviour:
   - id: 407434904a6a4947976634564c8b1817
     transform: {fileID: 7109394137209961698}
     geometry: 1
+  - id: 41872ccfe09649a9b2042e73603b23f5
+    transform: {fileID: 1169944318}
+    geometry: 1
+  - id: 458f3161f614408b92a3da1e016fcc98
+    transform: {fileID: 117903966}
+    geometry: 1
   - id: 49c3b0c5745e4600a188d6004424b697
     transform: {fileID: 7603753757831146998}
     geometry: 1
   - id: 4c99ca0a12a84a558afd19d4902d983e
     transform: {fileID: 65355835426098873}
     geometry: 1
+  - id: 5094afd96a7d4f49bf7c8dcb226e3474
+    transform: {fileID: 724878168}
+    geometry: 1
+  - id: 5254f5aaed584472997baea05e58d54a
+    transform: {fileID: 1125940691}
+    geometry: 1
   - id: 5597668b03f54a3a9f97d262584629eb
     transform: {fileID: 3830028041771815016}
     geometry: 1
+  - id: 57add618d0284759b8dd203d0ff6dcfc
+    transform: {fileID: 834304667}
+    geometry: 1
+  - id: 5841d9a196394212ad2ab6d74e427970
+    transform: {fileID: 659888521}
+    geometry: 1
   - id: 59096b16b1eb4ad7bc40eb94bb5dfe9d
     transform: {fileID: 1532684917368761431}
+    geometry: 1
+  - id: 5999470e94f84474a3fddb4962444ac4
+    transform: {fileID: 2006537041}
+    geometry: 1
+  - id: 5c6d406cbabd4019bba45263d5fafd61
+    transform: {fileID: 2073852688}
+    geometry: 1
+  - id: 62336b1a2983407ca6647ba1c15de192
+    transform: {fileID: 1635249647}
     geometry: 1
   - id: 63db9f4f2fc84eec8e2c23bc4864aeda
     transform: {fileID: 1255208225608278622}
     geometry: 1
   - id: 6689395b72db4651845b2820740fd37d
     transform: {fileID: 4093923252083509841}
+    geometry: 1
+  - id: 712cb08cadc147f481ca62abaf34ebd3
+    transform: {fileID: 275141714}
+    geometry: 1
+  - id: 75c38b5b09714d23ae6ef4402c103861
+    transform: {fileID: 1102563195}
     geometry: 1
   - id: 778e8c30289f4975a8850ebf3788d807
     transform: {fileID: 250148662}
@@ -4753,14 +6540,26 @@ MonoBehaviour:
   - id: 7d766beaa1374971b519bcf40bfec070
     transform: {fileID: 3784735741589620066}
     geometry: 1
+  - id: 7f3be8372d5945569d6a437f5d4b0a1e
+    transform: {fileID: 828513483}
+    geometry: 1
   - id: 85059568b4e84eb286e96eea7db54dff
     transform: {fileID: 7055109102108088298}
     geometry: 1
   - id: 86ddb58d39d9420e931a4dee6f712f8d
     transform: {fileID: 410743928}
     geometry: 1
+  - id: 8a53f2774a60473a8f487841bd691dc2
+    transform: {fileID: 1766390607}
+    geometry: 1
+  - id: 8aa3e15d71d641f582bfeaaeb9f290f1
+    transform: {fileID: 1407167415}
+    geometry: 1
   - id: 8d2ec48243974b12a0826dd2bf040fa9
     transform: {fileID: 2793536291915878674}
+    geometry: 1
+  - id: 92a76d6fd06048bb923c46293c8183ab
+    transform: {fileID: 691735417}
     geometry: 1
   - id: 93db9a154f1a4fe1b8ddc225920978cf
     transform: {fileID: 3734198483305131990}
@@ -4768,6 +6567,15 @@ MonoBehaviour:
   - id: 93fe7e66090a41ed8484e2879909c662
     transform: {fileID: 1444714213}
     geometry: 0
+  - id: 9593b9184b114439bb7e88c077f2feb9
+    transform: {fileID: 288799936}
+    geometry: 1
+  - id: 9a53338c978a43fdaf1bc08aa8a8b1b6
+    transform: {fileID: 1528811359}
+    geometry: 1
+  - id: a2d302e75e87434ca411b05dfdc98022
+    transform: {fileID: 378285896}
+    geometry: 1
   - id: a7be0a25dd6b4811a755985b92096956
     transform: {fileID: 1279293999164475403}
     geometry: 1
@@ -4783,17 +6591,44 @@ MonoBehaviour:
   - id: b0dc7a0caf934523ba2edc6ecc47e731
     transform: {fileID: 245916461}
     geometry: 1
+  - id: b2a939cbc26a4a0e9e330bf2cad519ea
+    transform: {fileID: 801910288}
+    geometry: 1
   - id: b5a32eae8f0f494e8cad225c7ce90011
     transform: {fileID: 2089230996}
     geometry: 1
+  - id: bf57af396752406286eb2fd277cbdd48
+    transform: {fileID: 1045470476}
+    geometry: 1
+  - id: c14aa84cb4cb41aa9503556d62f41905
+    transform: {fileID: 684682899}
+    geometry: 1
+  - id: c6c1f5b6c851409eb3fa88e97721e088
+    transform: {fileID: 1322494565}
+    geometry: 1
   - id: c79bfe76c58947838d6f735e3229a463
     transform: {fileID: 2568055640743125606}
+    geometry: 1
+  - id: cbc21e8bd4034c29a2625bae1a66ef6c
+    transform: {fileID: 687982619}
+    geometry: 1
+  - id: cd1489326bc04140815192706be50796
+    transform: {fileID: 2056832094}
+    geometry: 1
+  - id: cf5de7ad353e4bb6aa91c7fb3f95e10d
+    transform: {fileID: 542833366}
+    geometry: 1
+  - id: d1553a6a78964d189abf7c7932d88d09
+    transform: {fileID: 618552958}
     geometry: 1
   - id: d33533c6536a4138ba9279414d3230d1
     transform: {fileID: 1283788926840481392}
     geometry: 0
   - id: d610423c141c4b4cb792fe353c9a69ff
     transform: {fileID: 2897181734452129229}
+    geometry: 1
+  - id: d86bb887526047f9b4baa80fb78f87a7
+    transform: {fileID: 404303353}
     geometry: 1
   - id: d97af28d541c4ce28d4354e5d810a51f
     transform: {fileID: 2079540439307944106}
@@ -4828,11 +6663,17 @@ MonoBehaviour:
   - id: eefb26ad38d04a16b2ce56e763cefc59
     transform: {fileID: 750901255}
     geometry: 1
+  - id: f202c74e8fc54d6e9d1f6b00b8b905ad
+    transform: {fileID: 1493096400}
+    geometry: 1
   - id: f5f23acbacba4c709f64df9124f4ddef
     transform: {fileID: 8689971384717310017}
     geometry: 1
   - id: fd3a2e9e20e647d0aaf455b44fe2f9a6
     transform: {fileID: 7513527443957593536}
+    geometry: 1
+  - id: ffee1140a0734673a9a09b1cb04175f7
+    transform: {fileID: 1144891917}
     geometry: 1
   - id: player-remote-0
     transform: {fileID: 932365014}
@@ -4868,11 +6709,11 @@ MonoBehaviour:
   takePath: /Users/clarkpeng/UnityGames/realisticaudioraytracing2d/Recordings/station-20261004-194631-729
   replaySeconds: 12.515555555555556
   SessionInfo:
-    scene:
-    sessionId:
-    clientId:
-    mode:
-    build:
+    scene: 
+    sessionId: 
+    clientId: 
+    mode: 
+    build: 
     slots: 0
     localSlot: 0
     serverTimeOrigin: 0
@@ -4901,7 +6742,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1c871ed719fb48a380f74d94e904c36d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::SceneSession
   manager: {fileID: 1303114736}
   player: {fileID: 1444714213}
@@ -4923,10 +6764,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 34a19a2aeb3ce431491c9ef2f33979c8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::MicrophoneInput
   source: {fileID: 391527488}
-  device:
+  device: 
   monitorSelf: 0
 --- !u!114 &1303114740
 MonoBehaviour:
@@ -4938,7 +6779,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0c9e9d8c272d4472f90178a67fcf6128, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::MultiplayerSession
   session: {fileID: 1303114738}
   microphone: {fileID: 1303114739}
@@ -4968,7 +6809,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4a20e64cc16014def997ac1be0299c4f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::PathLiveScene
   sources:
   - {fileID: 5123702278139013080}
@@ -4985,6 +6826,75 @@ MonoBehaviour:
   interactAfter: 0
   standSeconds: 5
   holdSeconds: 25
+--- !u!1 &1322494564
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1322494565}
+  - component: {fileID: 1322494567}
+  - component: {fileID: 1322494566}
+  m_Layer: 0
+  m_Name: Track bed 7
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1322494565
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1322494564}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.5372998, z: -0, w: 0.8433913}
+  m_LocalPosition: {x: 6.4466662, y: -0.27499998, z: 42.897175}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1322494566
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1322494564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1322494567
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1322494564}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1323180786
 GameObject:
   m_ObjectHideFlags: 0
@@ -5165,6 +7075,144 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1335711604}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1407167414
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1407167415}
+  - component: {fileID: 1407167417}
+  - component: {fileID: 1407167416}
+  m_Layer: 0
+  m_Name: Track bed 12
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1407167415
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1407167414}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.8433913, z: -0, w: 0.5372998}
+  m_LocalPosition: {x: -7.4466662, y: -0.27499998, z: 42.897175}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1407167416
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1407167414}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1407167417
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1407167414}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &1408163542
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1408163543}
+  - component: {fileID: 1408163545}
+  - component: {fileID: 1408163544}
+  m_Layer: 0
+  m_Name: Track bed 31
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1408163543
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1408163542}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.5372998, z: -0, w: 0.8433913}
+  m_LocalPosition: {x: 6.4466662, y: -0.27499998, z: -42.897175}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1408163544
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1408163542}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1408163545
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1408163542}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761387}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1414182040
 GameObject:
   m_ObjectHideFlags: 0
@@ -5702,6 +7750,144 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1472819210}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1493096399
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1493096400}
+  - component: {fileID: 1493096402}
+  - component: {fileID: 1493096401}
+  m_Layer: 0
+  m_Name: Track bed 15
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1493096400
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1493096399}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.95371693, z: -0, w: -0.30070585}
+  m_LocalPosition: {x: -13.964577, y: -0.27499998, z: 37.427998}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1493096401
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1493096399}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1493096402
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1493096399}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761392}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &1528811358
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1528811359}
+  - component: {fileID: 1528811361}
+  - component: {fileID: 1528811360}
+  m_Layer: 0
+  m_Name: Track bed 28
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1528811359
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1528811358}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.73727727, z: -0, w: 0.6755903}
+  m_LocalPosition: {x: -1.9325975, y: -0.27499998, z: -44.374664}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1528811360
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1528811358}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1528811361
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1528811358}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1574700958
 GameObject:
   m_ObjectHideFlags: 0
@@ -6090,6 +8276,75 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &1635249646
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1635249647}
+  - component: {fileID: 1635249649}
+  - component: {fileID: 1635249648}
+  m_Layer: 0
+  m_Name: Track bed 17
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1635249647
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1635249646}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9914449, z: -0, w: -0.13052619}
+  m_LocalPosition: {x: -16.377129, y: -0.27499998, z: 32.254265}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1635249648
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1635249646}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1635249649
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1635249646}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761413}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1652396380
 GameObject:
   m_ObjectHideFlags: 0
@@ -6630,6 +8885,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1751588159}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1766390606
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1766390607}
+  - component: {fileID: 1766390609}
+  - component: {fileID: 1766390608}
+  m_Layer: 0
+  m_Name: Track bed 25
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &1766390607
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1766390606}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.88701105, z: -0, w: 0.4617482}
+  m_LocalPosition: {x: -9.927998, y: -0.27499998, z: -41.464577}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1766390608
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1766390606}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &1766390609
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1766390606}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761408}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &1768027448
 GameObject:
   m_ObjectHideFlags: 0
@@ -6886,7 +9210,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::RaytracedAudioSource
   rayTraceManager: {fileID: 1303114736}
   clip: {fileID: 0}
@@ -7273,10 +9597,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
   submeshMaterials: []
 --- !u!23 &1898691260
 MeshRenderer:
@@ -7366,7 +9690,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8bc84f613ce244b883f940e91bc5642f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Acoustics::SlidingDoor
   id: waiting-room-door
   openOffset: {x: 2.2, y: 0, z: 0}
@@ -7508,10 +9832,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   submeshMaterials: []
 --- !u!23 &1913477724
 MeshRenderer:
@@ -7819,6 +10143,75 @@ Transform:
   - {fileID: 951549450}
   m_Father: {fileID: 942910199}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2006537040
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2006537041}
+  - component: {fileID: 2006537043}
+  - component: {fileID: 2006537042}
+  m_Layer: 0
+  m_Name: Track bed 30
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &2006537041
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2006537040}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.60876137, z: -0, w: 0.7933534}
+  m_LocalPosition: {x: 3.7542639, y: -0.27499998, z: -43.87713}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2006537042
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2006537040}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &2006537043
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2006537040}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2021961199
 GameObject:
   m_ObjectHideFlags: 0
@@ -7954,10 +10347,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   submeshMaterials: []
 --- !u!23 &2023509742
 MeshRenderer:
@@ -8352,10 +10745,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   submeshMaterials: []
 --- !u!23 &2050670811
 MeshRenderer:
@@ -8435,6 +10828,282 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2050670808}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &2056832093
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2056832094}
+  - component: {fileID: 2056832096}
+  - component: {fileID: 2056832095}
+  m_Layer: 0
+  m_Name: Track bed 14
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &2056832094
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2056832093}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9238795, z: -0, w: -0.38268352}
+  m_LocalPosition: {x: -12.122864, y: -0.27499998, z: 39.622864}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2056832095
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2056832093}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &2056832096
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2056832093}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761394}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &2059012239
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2059012240}
+  - component: {fileID: 2059012242}
+  - component: {fileID: 2059012241}
+  m_Layer: 0
+  m_Name: Track bed 29
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &2059012240
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2059012239}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.6755903, z: -0, w: 0.73727727}
+  m_LocalPosition: {x: 0.9325975, y: -0.27499998, z: -44.374664}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2059012241
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2059012239}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &2059012242
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2059012239}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!1 &2062125142
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2062125143}
+  m_Layer: 0
+  m_Name: Acoustic track bed
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2062125143
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2062125142}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 687982619}
+  - {fileID: 828213566}
+  - {fileID: 404303353}
+  - {fileID: 684682899}
+  - {fileID: 2073852688}
+  - {fileID: 1144891917}
+  - {fileID: 824195284}
+  - {fileID: 1322494565}
+  - {fileID: 971034580}
+  - {fileID: 399262856}
+  - {fileID: 1102563195}
+  - {fileID: 2100383406}
+  - {fileID: 1407167415}
+  - {fileID: 618552958}
+  - {fileID: 2056832094}
+  - {fileID: 1493096400}
+  - {fileID: 378285896}
+  - {fileID: 1635249647}
+  - {fileID: 275141714}
+  - {fileID: 801910288}
+  - {fileID: 542833366}
+  - {fileID: 691735417}
+  - {fileID: 117903966}
+  - {fileID: 659888521}
+  - {fileID: 1284029447}
+  - {fileID: 1766390607}
+  - {fileID: 1125940691}
+  - {fileID: 2124591750}
+  - {fileID: 1528811359}
+  - {fileID: 2059012240}
+  - {fileID: 2006537041}
+  - {fileID: 1408163543}
+  - {fileID: 828513483}
+  - {fileID: 724878168}
+  - {fileID: 288799936}
+  - {fileID: 834304667}
+  - {fileID: 1169944318}
+  - {fileID: 1045470476}
+  m_Father: {fileID: 942910199}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2073852687
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2073852688}
+  - component: {fileID: 2073852690}
+  - component: {fileID: 2073852689}
+  m_Layer: 0
+  m_Name: Track bed 4
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &2073852688
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2073852687}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.30070585, z: -0, w: 0.95371693}
+  m_LocalPosition: {x: 12.964577, y: -0.27499998, z: 37.427998}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2073852689
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2073852687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &2073852690
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2073852687}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761392}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2077537396
 GameObject:
   m_ObjectHideFlags: 0
@@ -8570,10 +11239,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AcousticSurface
   geometrySource: 2
-  material: {fileID: 0}
+  material: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
   submeshMaterials: []
 --- !u!23 &2089230998
 MeshRenderer:
@@ -8743,6 +11412,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2090381825}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &2100383405
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2100383406}
+  - component: {fileID: 2100383408}
+  - component: {fileID: 2100383407}
+  m_Layer: 0
+  m_Name: Track bed 11
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &2100383406
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100383405}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0.79335344, z: -0, w: 0.60876137}
+  m_LocalPosition: {x: -4.754264, y: -0.27499998, z: 43.87713}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2100383407
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100383405}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &2100383408
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100383405}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2105070565
 GameObject:
   m_ObjectHideFlags: 0
@@ -8923,6 +11661,75 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2117146141}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &2124591749
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2124591750}
+  - component: {fileID: 2124591752}
+  - component: {fileID: 2124591751}
+  m_Layer: 0
+  m_Name: Track bed 27
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 2147483647
+  m_IsActive: 1
+--- !u!4 &2124591750
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124591749}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.79335344, z: -0, w: 0.60876137}
+  m_LocalPosition: {x: -4.754264, y: -0.27499998, z: -43.87713}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2062125143}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2124591751
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124591749}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c81bb4ac1e6415d90ec45bfbe7cb67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Acoustics::AcousticSurface
+  geometrySource: 2
+  material: {fileID: 11400000, guid: 04154d2516cdb49ad9b80f9ff3a8c3fa, type: 2}
+  submeshMaterials: []
+--- !u!65 &2124591752
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2124591749}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4.2, y: 0.09, z: 2.8761396}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!1 &2126298485
 GameObject:
   m_ObjectHideFlags: 0
@@ -9231,6 +12038,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 942910199}
     m_Modifications:
+    - target: {fileID: 68141945112831958, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 260976967789574988, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
     - target: {fileID: 1011189119934393873, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
       propertyPath: m_LocalScale.x
       value: 400
@@ -9243,6 +12058,38 @@ PrefabInstance:
       propertyPath: m_Name
       value: Station architecture
       objectReference: {fileID: 0}
+    - target: {fileID: 2628563010288440278, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
+    - target: {fileID: 2975535461384201805, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 3034687769604959086, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 3440190144153283912, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 4131507904697953934, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: a62f900f21c60452da223caaa8fd02d4, type: 2}
+    - target: {fileID: 4582328890314492932, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: a62f900f21c60452da223caaa8fd02d4, type: 2}
+    - target: {fileID: 4699565503163435303, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 4845517592843210467, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
     - target: {fileID: 5400043142665754016, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -9283,6 +12130,62 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 5465271054610501220, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 5511615675991196414, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 5a6ed71ba6ec84a0b97a843859f5fe08, type: 2}
+    - target: {fileID: 5950178291683945203, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 5976575037204524437, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: a62f900f21c60452da223caaa8fd02d4, type: 2}
+    - target: {fileID: 6378315728543835648, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 6576651996058530345, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 7125384011191975775, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 7474461428060672403, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 74b687a1db5144c8d8b2498133ee4329, type: 2}
+    - target: {fileID: 7484502348687640121, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 8164434411221539684, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: a62f900f21c60452da223caaa8fd02d4, type: 2}
+    - target: {fileID: 8550294215716648751, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 6c3d74748e8654533a1ce1c8ed6212d6, type: 2}
+    - target: {fileID: 8770816407774765370, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: a62f900f21c60452da223caaa8fd02d4, type: 2}
+    - target: {fileID: 8823738387634282801, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 9209977859571032559, guid: bd47f1ba5359b417cac9ae07034651a4, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: a62f900f21c60452da223caaa8fd02d4, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:
@@ -9320,7 +12223,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a59f6fe879124c59be99b351d951d034, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RaytracedAudioSource
 --- !u!4 &5839937849591494840 stripped
 Transform:
@@ -9370,6 +12273,30 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 942910199}
     m_Modifications:
+    - target: {fileID: 285710534279280754, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
+    - target: {fileID: 403519316187637842, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
+    - target: {fileID: 1003948246232830346, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 1475776647800087254, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
+    - target: {fileID: 2461680903447514830, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
+    - target: {fileID: 2835158279116513614, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
     - target: {fileID: 3528092289723353188, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
       propertyPath: m_LocalPosition.x
       value: 16
@@ -9414,10 +12341,38 @@ PrefabInstance:
       propertyPath: m_Name
       value: Moving train
       objectReference: {fileID: 0}
+    - target: {fileID: 3671492292099491672, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 4728047794165213780, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
     - target: {fileID: 5021849911926152650, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
       propertyPath: rayTraceManager
-      value:
+      value: 
       objectReference: {fileID: 1303114736}
+    - target: {fileID: 5286237272938104566, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
+    - target: {fileID: 5863561417497113473, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
+    - target: {fileID: 7076936636967797271, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
+    - target: {fileID: 7112185991129696028, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 66502d2c29dd9493ca8ab77acd5692c4, type: 2}
+    - target: {fileID: 8474037767843949044, guid: 38e8fe73b16c04324807aab8905671e9, type: 3}
+      propertyPath: material
+      value: 
+      objectReference: {fileID: 11400000, guid: 7dc88eb82084347d3823e83508004acd, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects:

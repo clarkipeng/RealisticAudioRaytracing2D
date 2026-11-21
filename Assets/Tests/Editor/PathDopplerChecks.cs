@@ -150,11 +150,11 @@ public partial class TakeChecks
         ToleratePathDopplerUavMessage();
         const int rate = 16000, step = 512, window = 6 * step; const float v = 10, start = 8;
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
-        var a = new Vector3(0, -200, -200); var b = new Vector3(0, -200, 200); var c = new Vector3(0, 200, 200); var d = new Vector3(0, 200, -200);
+        var a = new Vector3(0, -30, -30); var b = new Vector3(0, -30, 30); var c = new Vector3(0, 30, 30); var d = new Vector3(0, 30, -30);   // (60 m: the persistent rays' ring scales with the scene)
         var geometry = new[] {new AcousticTake.Primitive {objectIndex = 2, a = a, b = c, c = b}, new AcousticTake.Primitive {objectIndex = 2, a = a, b = d, c = c}};
         scene.objects[2].primitiveCount = geometry.Length;
         var L = new Vector3(3, 1.5f, 0);
-        var settings = ControlSettings(TakeRender.Method.Path, 1 << 16, .25f); settings.useBvh = false;
+        var settings = ControlSettings(TakeRender.Method.Path, 1 << 14, .25f); settings.useBvh = false;   // (a quarter of the Doppler check's rays: seven solvers in one process)
         settings.transport = TakeRender.Transport.Raytraced; settings.synthesis = TakeRender.Synthesis.Spectral; settings.listenerOutput = TakeRender.ListenerOutput.Binaural;
         settings.pathPersistent = true; settings.responseStepSamples = step; settings.fftSize = step; settings.spectralHop = step / 4; settings.transitionSamples = step / 4;
         int latency = settings.DspLatencySamples;

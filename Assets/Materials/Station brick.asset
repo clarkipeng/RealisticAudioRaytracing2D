@@ -1,0 +1,93 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec8bc389ee7f6490eaa27047b6f2d582, type: 3}
+  m_Name: Station brick
+  m_EditorClassIdentifier: Acoustics::AudioMaterial
+  source: 'Waiting room walls: unglazed brick (sengpielaudio); scattering: stone
+    masonry (Planells et al. 2016, the Church''s); massive'
+  energyCurve:
+  - frequencyHz: 125
+    absorption: 0.03
+    scattering: 0.12
+  - frequencyHz: 250
+    absorption: 0.03
+    scattering: 0.13
+  - frequencyHz: 500
+    absorption: 0.03
+    scattering: 0.14
+  - frequencyHz: 1000
+    absorption: 0.04
+    scattering: 0.15
+  - frequencyHz: 2000
+    absorption: 0.05
+    scattering: 0.16
+  - frequencyHz: 4000
+    absorption: 0.07
+    scattering: 0.17
+  - frequencyHz: 8000
+    absorption: 0.07
+    scattering: 0.17
+  admittanceCurve: []
+  roughness: 0.5
+  density: 2400
+  modalYoungModulus: 2.5e+10
+  modalPoissonRatio: 0.2
+  modalLossFactor: 0.01
+  porosity: 0.1
+  rigidity: 0.9
+  overrideTrans: 0
+  overrideBands: 1
+  absorptionBands:
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  - 0.1
+  scatteringBands:
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  - 0.5
+  transmissionBands:
+  - 0.000000326008
+  - 0.000000326008
+  - 0.000000326008
+  - 0.00000032940392
+  - 0.00000033287134
+  - 0.00000034002986
+  - 0.00000034002986
+  - 0.00000034002986
+  iorBands:
+  - 0.06353909
+  - 0.063618414
+  - 0.06377706
+  - 0.06409436
+  - 0.06472896
+  - 0.06599815
+  - 0.06853654
+  - 0.07361332
+  dampingBands:
+  - 0.055000007
+  - 0.06403708
+  - 0.0780366
+  - 0.09482369
+  - 0.11372307
+  - 0.1343665
+  - 0.1565154
+  - 0.18000002
