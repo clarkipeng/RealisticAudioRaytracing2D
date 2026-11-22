@@ -806,18 +806,22 @@ float PathEarEnergy(uint pair,uint c,uint b,uint k)
     return energy;
 }
 // Doppler on reflections (PathReverb.cs, README part 40): the early part's slots slide at their bins' delay rates.
-// PathSlideSelect (one thread per pair, before PathGroups) picks the slid bins from the raw histogram, its counts and
-// its rate channel, and gives each its echo: its mean delay and per-ear band amplitudes; PathGroups leaves the slid
-// bins out of the kernel; PathBandInput keeps the band-filtered input of each block in a ring; PathSlide adds each
-// bank's echoes to its output block.
-RWStructuredBuffer<float> PathSlideRates;       // [bank][pair][bin]: the slid bins' rates (0: not slid)
+// PathSlideSelect (one thread per pair, before PathGroups) picks the echoes from the raw histogram, its counts, its
+// direction channels and its rate channel, and gives each its mean delay, slide rate and per-ear band amplitudes;
+// PathGroups leaves the echoes out of the kernel; PathBandInput keeps the band-filtered input of each block in a ring;
+// PathSlide adds each bank's echoes to its output block.
+RWStructuredBuffer<uint> PathSlideEchoes;       // [bank][pair][bin]: 1 for an echo
+StructuredBuffer<uint> PathSlideEchoesRead;     // (the same buffer, read only: PathGroups and PathSlide)
+RWStructuredBuffer<float> PathSlideRates;       // [bank][pair][bin]: the echoes' slide rates
 RWStructuredBuffer<float> PathSlideDelays;      // [bank][pair][bin][channel]: their mean delays per ear (with the ITD), in samples
 RWStructuredBuffer<float> PathSlideAmplitudes;  // [bank][pair][bin][channel][band]
 RWStructuredBuffer<uint> PathSlideEnd;          // [bank][pair]: one past the last slid bin
 RWStructuredBuffer<float> PathBandHistory;      // [source][band][PathHistoryLength]
 StructuredBuffer<uint> PathBinCounts;           // the tracer's contributions per [frame][pair][bin] (PathCountOffset: the frame's)
-StructuredBuffer<float> PathBinStarts;          // [bin]: its start in samples
-uint PathRateOffset,PathCountOffset,PathHistoryLength,PathSincRadius,PathSincFilter,PathDoppler;
+StructuredBuffer<float> PathBinStarts;          // [bin + 1]: its start in samples (the last: the horizon's end)
+// PathDoppler: settings.pathReflectionDoppler (0: the rates are ignored); PathDelayMoments: the walk computed the rate
+// channel (MethodTransport.Doppler), so its delay moment gives each echo's mean delay.
+uint PathRateOffset,PathCountOffset,PathHistoryLength,PathSincRadius,PathSincFilter,PathDoppler,PathDelayMoments;
 // Interaural delay of the echoes (PathReverb.EchoDirection, Hrtf.InterauralDelay; README part 42): the HRTF set's ITD in
 // seconds over head-frame directions, [elevation 91][azimuth 181] every 2 degrees, read bilinearly.
 StructuredBuffer<float> PathItd;
@@ -860,33 +864,32 @@ float PathRateMoment(uint pair,uint moment,uint k)
     uint cell=(pair*3+moment)*PathBinsCount+k;
     return ((float)(int)LateHistogram[PathRateOffset+2*cell+1]+LateHistogram[PathRateOffset+2*cell]/4294967296.0)/LateRays;
 }
-// PathReverb.SlideRates: in time order a bin with energy slides while its contributions share one rate (at least two,
-// mean nonzero, variance <= mean^2); the first that does not ends the early part.
+// PathReverb.SelectEchoes: in time order a bin with energy is an echo while its contributions share one arrival (at
+// least two, one rate: variance <= mean^2, one direction: 1 - |u|^2 <= |u|^2); the first that is not ends the early part.
 [numthreads(64,1,1)]
 void PathSlideSelect(uint3 id:SV_DispatchThreadID)
 {
     uint pair=id.x;if(pair>=AudioPairs)return;
-    bool open=PathDoppler!=0 && LateValid!=0 && PathPairActive(pair);uint end=0;
+    bool open=LateValid!=0 && PathPairActive(pair);uint end=0;
     for(uint k=0;k<PathBinsCount;k++)
     {
-        float rate=0;
+        float rate=0;uint echo=0;
         if(open)
         {
             float e=PathRawEnergy(pair,k);
             if(e>0)
             {
-                float mean=PathRateMoment(pair,0,k)/e,variance=PathRateMoment(pair,1,k)/e-mean*mean;
-                if(PathBinCounts[PathCountOffset+pair*PathBinsCount+k]>=2 && mean!=0 && variance<=mean*mean)
+                bool slide=PathDoppler!=0 && PathDelayMoments!=0;
+                float mean=slide?PathRateMoment(pair,0,k)/e:0,variance=slide?PathRateMoment(pair,1,k)/e-mean*mean:0;
+                float e0=PathRawDirectionEnergy(pair,0,k),e1=PathRawDirectionEnergy(pair,1,k),e2=PathRawDirectionEnergy(pair,2,k),e3=PathRawDirectionEnergy(pair,3,k),e4=PathRawDirectionEnergy(pair,4,k),e5=PathRawDirectionEnergy(pair,5,k);
+                float total=e0+e1+e2+e3+e4+e5;
+                float3 u=total>0?float3(sqrt(e0)-sqrt(e1),sqrt(e2)-sqrt(e3),sqrt(e4)-sqrt(e5))/sqrt(total):0;
+                float u2=dot(u,u);
+                if(PathBinCounts[PathCountOffset+pair*PathBinsCount+k]>=2 && variance<=mean*mean && 1-u2<=u2)
                 {
-                    rate=mean;end=k+1;
-                    float tau=PathBinStarts[k]+PathRateMoment(pair,2,k)/e*AudioRate,half=0;
-                    if(AudioChannels==2)
-                    {
-                        float e0=PathRawDirectionEnergy(pair,0,k),e1=PathRawDirectionEnergy(pair,1,k),e2=PathRawDirectionEnergy(pair,2,k),e3=PathRawDirectionEnergy(pair,3,k),e4=PathRawDirectionEnergy(pair,4,k),e5=PathRawDirectionEnergy(pair,5,k);
-                        float total=e0+e1+e2+e3+e4+e5;
-                        float3 u=total>0?float3(sqrt(e0)-sqrt(e1),sqrt(e2)-sqrt(e3),sqrt(e4)-sqrt(e5))/sqrt(total):0;
-                        half=.5*AudioRate*PathInterauralDelay(u);
-                    }
+                    rate=mean;echo=1;end=k+1;
+                    float tau=PathBinStarts[k]+(PathDelayMoments!=0?PathRateMoment(pair,2,k)/e*AudioRate:.5*(PathBinStarts[k+1]-PathBinStarts[k])),half=0;
+                    if(AudioChannels==2)half=.5*AudioRate*PathInterauralDelay(u);
                     for(uint c0=0;c0<AudioChannels;c0++)PathSlideDelays[((LateBank*AudioPairs+pair)*PathBinsCount+k)*AudioChannels+c0]=AudioChannels==2?(c0==0?tau+half:tau-half):tau;
                     for(uint c=0;c<AudioChannels;c++)for(uint b=0;b<LATE_BANDS;b++)
                     {float x=PathEarEnergy(pair,c,b,k);PathSlideAmplitudes[(((LateBank*AudioPairs+pair)*PathBinsCount+k)*AudioChannels+c)*LATE_BANDS+b]=x>0?sqrt(x):0;}
@@ -895,6 +898,7 @@ void PathSlideSelect(uint3 id:SV_DispatchThreadID)
             }
         }
         PathSlideRates[(LateBank*AudioPairs+pair)*PathBinsCount+k]=rate;
+        PathSlideEchoes[(LateBank*AudioPairs+pair)*PathBinsCount+k]=echo;
     }
     PathSlideEnd[LateBank*AudioPairs+pair]=end;
 }
@@ -909,9 +913,9 @@ void PathGroups(uint3 id:SV_DispatchThreadID)
     float2 w=0;
     if(PathPairActive(info.x))
     {
-        // (A slid bin's energy is its echo's, PathSlide; the kernel keeps the rest, as PathReverb.SetResponse.)
+        // (An echo's energy is its impulse's, PathSlide; the kernel keeps the rest, as PathReverb.SetResponse.)
         float slot=0;
-        for(uint i=0;i<info.w;i++){uint k=PathTermBins[info.z+i];if(PathSlideRates[(LateBank*AudioPairs+info.x)*PathBinsCount+k]==0)slot+=PathEarEnergy(info.x,c,b,k)*PathTermWeights[info.z+i];}
+        for(uint i=0;i<info.w;i++){uint k=PathTermBins[info.z+i];if(PathSlideEchoesRead[(LateBank*AudioPairs+info.x)*PathBinsCount+k]==0)slot+=PathEarEnergy(info.x,c,b,k)*PathTermWeights[info.z+i];}
         if(slot>0)
         {
             float amplitude=sqrt(slot),a1=PathAlphaBeta[b].x,a2=AudioChannels==2?(c==0?PathAlphaBeta[b].y:-PathAlphaBeta[b].y):0;
@@ -953,7 +957,7 @@ void PathSlide(uint3 id:SV_DispatchThreadID)
         if(LateActive[bank*AudioPairs+pair]==0)continue;uint source=pair/AudioListeners,bins=(bank*AudioPairs+pair)*PathBinsCount;
         for(uint k=0;k<PathSlideEnd[bank*AudioPairs+pair];k++)
         {
-            float r=PathSlideRates[bins+k];if(r==0)continue;
+            if(PathSlideEchoesRead[bins+k]==0)continue;float r=PathSlideRates[bins+k];
             any=true;
             float cutoff=PathSincFilter!=0?min(1.0,1.0/(1.0-r)):1;int extent=PathSincFilter!=0?(int)ceil(PathSincRadius/cutoff):1;
             float u=(float)(PathHistoryAt+(int)n)-max((float)extent,PathSlideDelays[(bins+k)*AudioChannels+c]+r*(float)(PathSlideOffset+(int)n));

@@ -29,23 +29,27 @@ using UnityEngine;
 // powers, which is what the histograms say; equal responses keep a gain of one.
 // Convolution: uniform partitioned overlap-save; each partition's kernel is a weighted sum of
 // fixed spectra of its impulse groups (no FFT per update).
-// Doppler on reflections (README part 40): the tracer's rate channel gives each bin the energy-weighted mean and
-// mean square of its contributions' delay rates and their mean delay. In the early part, where echoes are discrete, a
-// bin is one echo, an impulse at its mean delay tau with the bin's band energies per ear (the slots' noise would give it
-// a new random phase at every update), sliding at its mean rate: its delay is tau + r (t - t_ref), a time-varying
-// delay read from the band-filtered input with the direct path's interpolation filter, which gives the echo its own
-// pitch shift. A bin is early while its contributions
-// share one rate: at least two of them (one cannot show it), a nonzero mean, and a spread no larger than the mean shift
-// (variance <= mean^2). The early part ends at the first bin that holds energy and is not: there the bin pools
-// arrivals of different shifts, which one rate cannot represent, and it and every later bin stay in the convolution
-// (their spread of shifts averages out). A static scene has no rates, so nothing slides and the output is unchanged.
-// Interaural delay of the echoes (README part 42): a slid bin is one echo, so it has one arrival direction, and its ears
-// hear it at different times. The direction is read from the bin's six direction channels: the tracer splits each
-// arrival's energy over the axes by its squared components, so for one arrival u_axis = sqrt(E_+axis / E) -
-// sqrt(E_-axis / E) exactly (for several, an energy-weighted mean). The HRTF set's own ITD there (Hrtf.InterauralDelay,
-// the direct path's blend) splits the echo's delay symmetrically: the left ear's is tau + ITD / 2, the right's
-// tau - ITD / 2. The dense part keeps the diffuse field's interaural coherence, which already holds the ITDs of every
-// direction, so it gets none (it would count them twice).
+// Discrete echoes (docs/method.md, "Discrete echoes, Doppler and ITD"; README parts 40, 42 and 45). In the early part,
+// where echoes are discrete, a bin is one echo: an impulse at its mean delay tau with the bin's band energies per ear
+// (the slots' noise would give it a new random phase at every update), read from the band-filtered input with the
+// direct path's interpolation filter. A bin is one echo while its contributions share one arrival, i.e. one slowness
+// vector: at least two of them (one cannot show it); one delay rate, its spread no larger than its mean (variance <=
+// mean^2; the rates are all zero while nothing moves, which passes); and one direction, by the same rule on the arrival
+// direction: its spread 1 - |u|^2 no larger than |u|^2, u the energy-weighted mean direction. The early part ends at the
+// first bin that holds energy and is not one arrival: it pools arrivals of different shifts or directions, which one
+// impulse cannot represent, and it and every later bin stay in the convolution.
+// Doppler (part 40): the tracer's rate channel gives each bin the energy-weighted mean and mean square of its
+// contributions' delay rates and their mean delay. An echo slides at its mean rate: its delay is tau + r (t - t_ref),
+// which gives it its own pitch shift. A walk that does not compute the rate channel (nothing moved: the static walk)
+// gives no mean delay within the bin; the echo then sits at the bin's centre, the centroid of the uniform spread the
+// slots give a bin.
+// Interaural delay (part 42): an echo is one arrival, so it has one direction, and its ears hear it at different times,
+// whether or not anything moves (part 45). The direction is read from the bin's six direction channels: the tracer
+// splits each arrival's energy over the axes by its squared components, so for one arrival u_axis = sqrt(E_+axis / E) -
+// sqrt(E_-axis / E) exactly, |u| = 1 (for several, an energy-weighted mean; arrivals on opposite sides of an axis
+// shorten u). The HRTF set's own ITD there (Hrtf.InterauralDelay, the direct path's blend) splits the echo's delay
+// symmetrically: the left ear's is tau + ITD / 2, the right's tau - ITD / 2. The dense part keeps the diffuse field's
+// interaural coherence, which already holds the ITDs of every direction, so it gets none (it would count them twice).
 internal sealed class PathReverb
 {
     const int Bands=TakeRender.Settings.LateBands,Directions=TakeRender.Settings.LateDirections;
@@ -74,9 +78,10 @@ internal sealed class PathReverb
     int bank,computedBlock=-1;
     long cursor,swap;
     bool initialized,blend;
-    // Doppler: per bank the bins' slide rates [bank][pair][bin] (0: not slid), their mean delays in samples and their
-    // per-ear band amplitudes [bank][pair][bin][channel][band], the output sample at which the bank's echoes sit at
-    // their mean delays, and per source and band a ring of the band-filtered input.
+    // Echoes: per bank which bins are echoes and their slide rates [bank][pair][bin], their mean delays in samples and
+    // their per-ear band amplitudes [bank][pair][bin][channel][band], the output sample at which the bank's echoes sit
+    // at their mean delays, and per source and band a ring of the band-filtered input.
+    readonly bool[] echoes;
     readonly float[] slideRates,slideDelays,slideAmplitudes;   // slideDelays: [bank][pair][bin][channel], with the ITD
     readonly float[] itdGrid;   // binaural: the HRTF set's ITD over head-frame directions (Hrtf.InterauralDelayGrid)
     readonly long[] slideReference=new long[2];
@@ -86,7 +91,7 @@ internal sealed class PathReverb
     readonly bool sinc,doppler;   // doppler: settings.pathReflectionDoppler (off: the rates are ignored)
     long historyEnd=long.MinValue;   // next band block to compute
     readonly double[] rawEnergy,moment1,moment2;readonly uint[] binCounts;
-    internal int SlidBins;   // diagnostics: bins slid by the latest response
+    internal int EchoBins;   // diagnostics: the latest response's echoes
     internal long NumericBytes { get { long b=(kernels.LongLength+inputs.LongLength+work.Length+wide.Length+sum.Length)*8+(halves.Length+blocks.Length)*4L+energy.Length*8L; foreach(var s in spectra)b+=s.LongLength*8; foreach(var m in mixes)b+=m.LongLength*4; return b; } }
     internal long SupportSamples => (long)count*partition+latency;
 
@@ -118,26 +123,27 @@ internal sealed class PathReverb
         energy=new double[channels*Bands*histogram.Count];
         sincRadius=settings.sincRadius;sinc=settings.delayFilter==TakeRender.DelayFilter.WindowedSinc;doppler=settings.pathReflectionDoppler;
         int B=histogram.Count;
-        slideRates=new float[2*pairs*B];slideDelays=new float[2*pairs*B*channels];itdGrid=channels==2?Hrtf.Load(rate).InterauralDelayGrid:null;slideAmplitudes=new float[checked(2*pairs*B*channels*Bands)];
+        echoes=new bool[2*pairs*B];slideRates=new float[2*pairs*B];slideDelays=new float[2*pairs*B*channels];itdGrid=channels==2?Hrtf.Load(rate).InterauralDelayGrid:null;slideAmplitudes=new float[checked(2*pairs*B*channels*Bands)];
         // History: the horizon, one step of drift either way, the interpolation's reach and two blocks.
         int need=checked(count*partition+2*step+2*(sincRadius+2)*4+4*partition);
         historyLength=1;while(historyLength<need)historyLength<<=1;
         history=new float[checked(sources*Bands*historyLength)];
         rawEnergy=new double[B];moment1=new double[B];moment2=new double[B];binCounts=new uint[B];
     }
-    // The early part of one pair's response (README part 40): per bin its slide rate, or 0. energy(k): the bin's raw
-    // energy over every direction and band; m1, m2: its rate moments; count: its contributions. In time order a bin
-    // with energy slides while its contributions share one rate (at least two, mean nonzero, variance <= mean^2); the
-    // first that does not ends the early part.
-    internal static void SlideRates(int bins,Func<int,double> energy,Func<int,double> m1,Func<int,double> m2,Func<int,uint> count,float[] rates,int offset)
+    // The early part of one pair's response: per bin whether it is one echo, and its slide rate. energy(k): the bin's raw
+    // energy over every direction and band; m1, m2: its rate moments (null: no rates, all zero); count: its
+    // contributions; direction: its mean arrival direction (EchoDirection, not normalised). In time order a bin with
+    // energy is an echo while its contributions share one arrival: at least two, one rate (variance <= mean^2) and one
+    // direction (1 - |u|^2 <= |u|^2); the first that is not ends the early part.
+    internal static void SelectEchoes(int bins,Func<int,double> energy,Func<int,double> m1,Func<int,double> m2,Func<int,uint> count,Func<int,Vector3> direction,bool[] echoes,float[] rates,int offset)
     {
         bool open=true;
         for(int k=0;k<bins;k++)
         {
-            rates[offset+k]=0;double e=energy(k);
+            echoes[offset+k]=false;rates[offset+k]=0;double e=energy(k);
             if(!open || !(e>0))continue;
-            double mean=m1(k)/e,variance=m2(k)/e-mean*mean;
-            if(count(k)>=2 && mean!=0 && variance<=mean*mean)rates[offset+k]=(float)mean;else open=false;
+            double mean=m1==null?0:m1(k)/e,variance=m1==null?0:m2(k)/e-mean*mean,u2=direction(k).sqrMagnitude;
+            if(count(k)>=2 && variance<=mean*mean && 1-u2<=u2){echoes[offset+k]=true;rates[offset+k]=(float)mean;}else open=false;
         }
     }
     // Amplitude-complementary band weights: cos^2(pi/2 log2(f/fc)) between neighbouring centres,
@@ -349,13 +355,16 @@ internal sealed class PathReverb
         return (p,d,b,k)=>record[((p*Directions+d)*Bands+b)*B+k];
     }
     // histogram(pair, direction, band, bin): energy in direct-sound units; null renders silence.
-    // The rate channel of one solved frame (MethodTransport.RateMoment: pair, moment, bin), or null.
+    // The rate channel of one solved frame (MethodTransport.RateMoment: pair, moment, bin), or null when the walk did not
+    // compute it (nothing moved: MethodTransport.Doppler).
     internal static Func<int,int,int,double> Rates(RayTransport.LateFrame late)
     {
-        if(!(late.Transport is MethodTransport m) || !m.IsPath)return null;
+        if(!(late.Transport is MethodTransport m) || !m.IsPath || !m.Doppler)return null;
         int frame=late.Frame;return (pair,moment,k)=>m.RateMoment(frame,pair,moment,k);
     }
-    // rates (pair, moment, bin): the rate channel (Doppler on reflections); null slides nothing.
+    // counts (pair, bin): the bins' contributions; null renders every bin through the slots (no echoes).
+    // rates (pair, moment, bin): the rate channel (Doppler on reflections); null: nothing slides, and echoes sit at their
+    // bins' centres.
     internal void SetResponse(long sample,bool cut,Func<int,int,int,int,double> histogram,AcousticTake.State[] states,Func<int,int,uint> counts=null,Func<int,int,int,double> rates=null)
     {
         var raw=histogram;
@@ -364,7 +373,8 @@ internal sealed class PathReverb
         bool valid=histogram!=null;
         if(valid && sample%partition!=0)throw new ArgumentException("Path responses change on partition boundaries.");
         blend=initialized && !cut;bank^=1;swap=sample;initialized=true;computedBlock=-1;
-        slideReference[bank]=sample+step;sliding[bank]=false;SlidBins=0;
+        slideReference[bank]=sample+step;sliding[bank]=false;EchoBins=0;
+        Array.Clear(echoes,bank*pairs*this.histogram.Count,pairs*this.histogram.Count);
         Array.Clear(slideRates,bank*pairs*this.histogram.Count,pairs*this.histogram.Count);
         long bankSize=(long)pairs*channels*Bands*count*bins;
         Array.Clear(kernels,(int)(bank*bankSize),(int)bankSize);
@@ -383,22 +393,25 @@ internal sealed class PathReverb
             }
             var list=groups[pair];var gb=groupBins[pair];var gw=groupWeights[pair];var spectrum=spectra[pair];var mix=mixes[pair];
             int bins0=(bank*pairs+pair)*B;
-            if(doppler && rates!=null && counts!=null && raw!=null)
+            if(counts!=null && raw!=null)
             {
+                bool slide=doppler && rates!=null;
                 for(int k=0;k<B;k++)
                 {
                     double e=0;for(int d=0;d<Directions;d++)for(int b=0;b<Bands;b++){double x=raw(pair,d,b,k);if(x>0)e+=x;}
-                    rawEnergy[k]=e;moment1[k]=rates(pair,0,k);moment2[k]=rates(pair,1,k);binCounts[k]=counts(pair,k);
+                    rawEnergy[k]=e;moment1[k]=slide?rates(pair,0,k):0;moment2[k]=slide?rates(pair,1,k):0;binCounts[k]=counts(pair,k);
                 }
-                SlideRates(B,k=>rawEnergy[k],k=>moment1[k],k=>moment2[k],k=>binCounts[k],slideRates,bins0);
-                // A slid bin is one echo at its contributions' mean delay, with the bin's ear energies per band.
+                Vector3 Direction(int k)=>EchoDirection(d=>{double x=0;for(int b=0;b<Bands;b++){double v=raw(pair,d,b,k);if(v>0)x+=v;}return x;});
+                SelectEchoes(B,k=>rawEnergy[k],slide?k=>moment1[k]:null,k=>moment2[k],k=>binCounts[k],Direction,echoes,slideRates,bins0);
+                // An echo sits at its contributions' mean delay (without the rate channel, its bin's centre), with the
+                // bin's ear energies per band.
                 for(int k=0;k<B;k++)
                 {
-                    if(slideRates[bins0+k]==0)continue;
-                    double offset=rates(pair,2,k)/rawEnergy[k];   // (referred to the update's time: it may lie a little outside the bin)
-                    float tau=(float)((this.histogram.Start(k)+offset)*rate),half=itdGrid==null?0:.5f*rate*Hrtf.InterauralDelay(itdGrid,EchoDirection(d=>{double x=0;for(int b=0;b<Bands;b++){double v=raw(pair,d,b,k);if(v>0)x+=v;}return x;}));
+                    if(!echoes[bins0+k])continue;
+                    double offset=rates!=null?rates(pair,2,k)/rawEnergy[k]:.5*this.histogram.Width(k);   // (referred to the update's time: it may lie a little outside the bin)
+                    float tau=(float)((this.histogram.Start(k)+offset)*rate),half=itdGrid==null?0:.5f*rate*Hrtf.InterauralDelay(itdGrid,Direction(k));
                     for(int c=0;c<channels;c++)slideDelays[(bins0+k)*channels+c]=channels==2?(c==0?tau+half:tau-half):tau;
-                    sliding[bank]=true;SlidBins++;
+                    sliding[bank]=true;EchoBins++;
                     for(int c=0;c<channels;c++)for(int b=0;b<Bands;b++)
                     {double e=energy[(c*Bands+b)*B+k];slideAmplitudes[((bins0+k)*channels+c)*Bands+b]=e>0?(float)Math.Sqrt(e):0;}
                 }
@@ -410,8 +423,8 @@ internal sealed class PathReverb
                 for(int g=0;g<list.Count;g++)
                 {
                     var group=list[g];double slotEnergy=0;
-                    // (A slid bin's energy is its echo's, SlideBlock; the kernel keeps the rest.)
-                    for(int i=0;i<group.terms;i++){int k=gb[group.first+i];if(slideRates[bins0+k]==0)slotEnergy+=energy[(c*Bands+b)*B+k]*gw[group.first+i];}
+                    // (An echo's energy is its impulse's, SlideBlock; the kernel keeps the rest.)
+                    for(int i=0;i<group.terms;i++){int k=gb[group.first+i];if(!echoes[bins0+k])slotEnergy+=energy[(c*Bands+b)*B+k]*gw[group.first+i];}
                     if(!(slotEnergy>0))continue;
                     float amplitude=(float)Math.Sqrt(slotEnergy);
                     int o=(g*Bands+b)*3;
@@ -430,7 +443,7 @@ internal sealed class PathReverb
         if(!(total>0))return Vector3.zero;
         return new Vector3((float)((Math.Sqrt(e0)-Math.Sqrt(e1))/Math.Sqrt(total)),(float)((Math.Sqrt(e2)-Math.Sqrt(e3))/Math.Sqrt(total)),(float)((Math.Sqrt(e4)-Math.Sqrt(e5))/Math.Sqrt(total)));
     }
-    // Adds bank b0's slid slots to its output block: per sample a time-varying delay tau + r (t - t_ref) into the
+    // Adds bank b0's echoes to its output block: per sample a time-varying delay tau + r (t - t_ref) into the
     // band-filtered input, read with the direct path's interpolation filter. t_ref: the end of the bank's crossfade in,
     // where the response's state is (TakeRender.Live: the update's anchor is its sample + step - latency in take time,
     // and the output lags take time by the latency).
@@ -444,7 +457,7 @@ internal sealed class PathReverb
             int bins0=(b0*pairs+pair)*B;
             for(int k=0;k<B;k++)
             {
-                double r=slideRates[bins0+k];if(r==0)continue;
+                if(!echoes[bins0+k])continue;double r=slideRates[bins0+k];
                 // Read speed 1 - r: reading faster than real time lowers the filter's cutoff (Doppler.Read).
                 double cutoff=sinc?Math.Min(1,1/(1-r)):1;int extent=sinc?(int)Math.Ceiling(sincRadius/cutoff):1;
                 for(int c=0;c<channels;c++)for(int n=0;n<partition;n++)

@@ -60,7 +60,7 @@ public partial class TakeChecks
                 Array.Clear(block, 0, step); without.Render(n * (long)step, step, block); for (int i = 0; i < step; i++) stepped[n * step + i] = block[i];
                 if (moving && n >= m.WarmUpdates - 2)
                 {
-                    var line = new System.Text.StringBuilder($"update {n}: slid bins {withRates.SlidBins}; bins (start ms, energy, mean rate, sd, count):");
+                    var line = new System.Text.StringBuilder($"update {n}: echo bins {withRates.EchoBins}; bins (start ms, energy, mean rate, sd, count):");
                     for (int k = 0; k < m.TimeBins.Count; k++)
                     {
                         double e = 0; for (int dir = 0; dir < 6; dir++) for (int band = 0; band < 8; band++) e += m.HistogramEnergy(0, 0, dir, band, k);
@@ -131,17 +131,18 @@ public partial class TakeChecks
         Assert.That(slidPeak.purity, Is.GreaterThan(steppedPeak.purity), "sliding is purer than stepping the reflection from update to update");
     }
 
-    // Interaural delay of the echoes (README part 42): one reflection off a rigid wall, its image source receding from the
-    // listener at 10 m/s along a fixed line (so the echo slides and its direction stays put), binaural, persistent rays,
-    // 16 kHz, a noise source. The head turns so that the image lies at each azimuth in turn. The echo's interaural lag
-    // (the peak of the cross-correlation of the reverb's two ears) must be the direct path's: the same noise through the
-    // HRTF blend the direct path uses for that direction, measured the same way, stretched by the motion. (A source whose
-    // delay grows at r per second of reception reaches the far ear ITD later in travel time but ITD / (1 - r) later in
-    // reception time: p_L(t) = p_R(t - D) with D (1 - r) = ITD.)
-    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void PathEchoesCarryTheHrtfInterauralDelay()
+    // Interaural delay of the echoes (README parts 42 and 45): one reflection off a rigid wall, binaural, persistent rays,
+    // 16 kHz, a noise source; moving, its image source recedes from the listener at 10 m/s along a fixed line (so the echo
+    // slides and its direction stays put); static, everything stands still (the static walk, no rate channel). The head
+    // turns so that the image lies at each azimuth in turn. The echo's interaural lag (the peak of the cross-correlation
+    // of the reverb's two ears) must be the direct path's: the same noise through the HRTF blend the direct path uses for
+    // that direction, measured the same way, stretched by the motion. (A source whose delay grows at r per second of
+    // reception reaches the far ear ITD later in travel time but ITD / (1 - r) later in reception time: p_L(t) = p_R(t - D)
+    // with D (1 - r) = ITD.)
+    [TestCase(true), TestCase(false), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void PathEchoesCarryTheHrtfInterauralDelay(bool moving)
     {
-        const int rate = 16000, step = 512, window = 6 * step; const float v = 10, start = 8;
+        const int rate = 16000, step = 512, window = 6 * step; const float start = 8; float v = moving ? 10 : 0;
         var scene = Scene(2); scene.listeners = new[] {1}; scene.materials = new[] {RigidControl()};
         var a = new Vector3(0, -30, -30); var b = new Vector3(0, -30, 30); var c = new Vector3(0, 30, 30); var d = new Vector3(0, 30, -30);   // (60 m: the persistent rays' ring scales with the scene)
         var geometry = new[] {new AcousticTake.Primitive {objectIndex = 2, a = a, b = c, c = b}, new AcousticTake.Primitive {objectIndex = 2, a = a, b = d, c = c}};
@@ -163,7 +164,7 @@ public partial class TakeChecks
         // Image source: from the listener toward the wall (-x), `start` m away at t = 0, receding at v; the source is its mirror.
         Vector3 Image(double t) => L + Vector3.left * (start + v * (float)t);
         Vector3 Source(double t) { var i = Image(t); return new Vector3(-i.x, i.y, i.z); }
-        var report = new System.Text.StringBuilder("azimuth: echo ITD / direct path ITD (static) / expected, the direct path's moving / table / Woodworth (a = 8.75 cm), microseconds; slid bins\n");
+        var report = new System.Text.StringBuilder($"{(moving ? "moving" : "static")}: azimuth: echo ITD / direct path ITD (static) / expected, the direct path's moving / table / Woodworth (a = 8.75 cm), microseconds; echo bins\n");
         double worst = 0;
         foreach (float azimuth in new[] {-90f, -60f, -30f, 0f, 30f, 60f, 90f})
         {
@@ -174,7 +175,7 @@ public partial class TakeChecks
             signal.Append(new AcousticTake.VoiceEvent {action = AcousticTake.VoiceAction.Play, gain = 1, loop = true});
             var reverb = new PathReverb(scene, rate, settings, new[] {signal});
             var state = States(2); state[1].position = L; state[1].rotation = head; state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
-            state[0].velocity = new Vector3(v, 0, 0); state[0].flags |= AcousticTake.StateFlags.VelocityValid;
+            if (moving) { state[0].velocity = new Vector3(v, 0, 0); state[0].flags |= AcousticTake.StateFlags.VelocityValid; }
             var output = new float[updates * step * 2]; var block = new float[step * 2]; int slid = 0;
             for (int n = 0; n < updates; n++)
             {
@@ -184,9 +185,10 @@ public partial class TakeChecks
                 var late = solver.Late(0);
                 reverb.SetResponse(n * (long)step, n == 0, PathReverb.Histogram(late), state, PathReverb.Counts(late), PathReverb.Rates(late));
                 Array.Clear(block, 0, block.Length); reverb.Render(n * (long)step, step, block); Array.Copy(block, 0, output, n * step * 2, block.Length);
-                if (n >= updates - 6) slid = Math.Min(n == updates - 6 ? int.MaxValue : slid, reverb.SlidBins);
+                if (n >= updates - 6) slid = Math.Min(n == updates - 6 ? int.MaxValue : slid, reverb.EchoBins);
             }
             AssertNoOverflow(solver);
+            Assert.That(m.Doppler, Is.EqualTo(moving), "the static case runs the static walk (no rate channel)");
             int first = output.Length / 2 - window;
             double echo = Lag(i => output[2 * (first + i)], i => output[2 * (first + i) + 1], window);
             // The direct path from the image's direction at the window's middle (head frame), through the same HRTF blend.
@@ -199,7 +201,7 @@ public partial class TakeChecks
             double expected = direct / (1 - r);
             double table = Hrtf.InterauralDelay(hrtf.InterauralDelayGrid, local), lateral = Math.Asin(Mathf.Clamp(local.x, -1, 1)), woodworth = .0875 / 343 * (lateral + Math.Sin(lateral));
             report.AppendLine($"{azimuth,4:F0}: {echo * 1e6,7:F1} / {direct * 1e6,7:F1} / {expected * 1e6,7:F1} / {table * 1e6,7:F1} / {woodworth * 1e6,7:F1}; {slid}");
-            Assert.That(slid, Is.GreaterThan(0), $"azimuth {azimuth}: the echo slides (it is discrete), so it carries the ITD");
+            Assert.That(slid, Is.GreaterThan(0), $"azimuth {azimuth}: the echo is discrete, so it carries the ITD");
             if (Math.Abs(azimuth) >= 30) Assert.That(Math.Abs(direct), Is.GreaterThan(2e-4), "the check needs a lateral direct path");
             worst = Math.Max(worst, Math.Abs(echo - expected));
         }

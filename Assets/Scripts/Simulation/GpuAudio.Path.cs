@@ -37,7 +37,7 @@ internal sealed partial class GpuAudio
         pathMode=settings.method==TakeRender.Method.Path;
         foreach(var name in new[]{"PathHistogram","PathEarWeights","PathTermWeights","PathMix","LatePowers"})Buffer(name,1,4);
         foreach(var name in new[]{"PathAlphaBeta","PathSampleValues","PathFilters","PathCoefficients","PathFiltered"})Buffer(name,1,8);
-        foreach(var name in new[]{"PathSlideRates","PathSlideDelays","PathSlideAmplitudes","PathSlideEnd","PathBandHistory","PathBinCounts","PathBinStarts","PathItd"})Buffer(name,1,4);
+        foreach(var name in new[]{"PathSlideEchoes","PathSlideEchoesRead","PathSlideRates","PathSlideDelays","PathSlideAmplitudes","PathSlideEnd","PathBandHistory","PathBinCounts","PathBinStarts","PathItd"})Buffer(name,1,4);
         Buffer("PathGroupInfo",1,16);Buffer("PathTermBins",1,4);Buffer("PathSampleGroup",1,4);Buffer("PathFftPartitions",1,4);Buffer("PathSpectralPartitions",1,16);Buffer("PathSpectralGroups",1,4);Buffer("PathGroupSpectra",1,8);
         Set("LateAdvance",0);Set("LatePower",0);Set("PathFloat",0);
         if(!pathMode)return;
@@ -122,6 +122,8 @@ internal sealed partial class GpuAudio
         // Doppler: the slid bins and groups, their weights, and the band-filtered input over the horizon, one step of
         // drift either way, the interpolation's reach and two blocks (PathReverb's ring).
         int need=checked(lateCount*latePartition+2*settings.responseStepSamples+8*(settings.sincRadius+2)+4*latePartition);pathHistoryLength=1;while(pathHistoryLength<need)pathHistoryLength<<=1;
+        var echoes=Buffer("PathSlideEchoes",checked(2*pairs*pathBins),4);echoes.SetData(new uint[2*pairs*pathBins]);
+        foreach(int k in kernels)shader.SetBuffer(k,"PathSlideEchoesRead",echoes);   // (read-only view: no UAV)
         Buffer("PathSlideRates",checked(2*pairs*pathBins),4).SetData(new float[2*pairs*pathBins]);
         Buffer("PathSlideDelays",checked(2*pairs*pathBins*channels),4).SetData(new float[2*pairs*pathBins*channels]);
         // The echoes' interaural delay (PathReverb, README part 42): the HRTF set's ITD over head-frame directions.
@@ -130,8 +132,8 @@ internal sealed partial class GpuAudio
         Buffer("PathSlideAmplitudes",checked(2*pairs*pathBins*channels*TakeRender.Settings.LateBands),4);
         Buffer("PathSlideEnd",2*pairs,4).SetData(new uint[2*pairs]);
         Buffer("PathBandHistory",checked(lateSources*TakeRender.Settings.LateBands*pathHistoryLength),4).SetData(new float[lateSources*TakeRender.Settings.LateBands*pathHistoryLength]);
-        var starts=new float[pathBins];for(int k=0;k<pathBins;k++)starts[k]=(float)(histogram.Start(k)*lateRate);
-        Buffer("PathBinStarts",pathBins,4).SetData(starts);
+        var starts=new float[pathBins+1];for(int k=0;k<=pathBins;k++)starts[k]=(float)(histogram.Start(k)*lateRate);
+        Buffer("PathBinStarts",pathBins+1,4).SetData(starts);
         Set("PathHistoryLength",pathHistoryLength);Set("PathSincRadius",settings.sincRadius);Set("PathSincFilter",settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?1:0);
         lateReady=true;
     }
@@ -186,7 +188,7 @@ internal sealed partial class GpuAudio
         Set("LateValid",valid?1:0);Set("LateBank",lateBank);Set("LateBlend",lateBlend?1:0);Clock("LateSwap",sample);
         Set("PathFloat",denoise?1:0);Set("PathFixedOffset",fixedOffset);Set("LateRays",valid?method.LateRays:1);
         commands.BeginSample("Acoustics.GPU.PathKernels");
-        Set("PathDoppler",settings.pathReflectionDoppler?1:0);
+        Set("PathDoppler",settings.pathReflectionDoppler?1:0);Set("PathDelayMoments",valid && method.Doppler?1:0);
         commands.DispatchCompute(shader,pathSlideSelect,(pairs+63)/64,1,1);
         if((PathKernelSkip&1)==0)
             commands.DispatchCompute(shader,pathGroups,(Math.Max(pairs,checked(channels*TakeRender.Settings.LateBands*pathGroupCount))+63)/64,1,1);

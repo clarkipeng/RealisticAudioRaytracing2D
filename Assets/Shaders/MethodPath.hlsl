@@ -167,13 +167,17 @@ void PathDeposit(float3 from, float4 low, float4 high, float time, uint key, uin
     uint cellBase = PathPersistent != 0 ? PathRingBase + slot * PathRingCells : MethodCellBase;
     InterlockedAdd(PathCounts[(PathPersistent != 0 ? PathRingCountBase + slot * PathBins : PathCountBase) + bin], 1u);
 #if PATH_DOPPLER
-    if (rate != 0)
     {
+        // (The delay moment covers every contribution, moving or not, so that a bin's mean delay is over all its energy;
+        // the rate moments of a contribution at rest are zero.)
         float energy = dot(low + high, 1);
         uint rates = (PathPersistent != 0 ? PathRateRingBase + slot * 3 * PathBins : PathRateSolveBase) + bin;
         float fine = PathBin0 * PathFineBins, start = bin < PathFineBins ? bin * PathBin0 : fine * pow(1 + PathRatio, (float)(bin - PathFineBins));
-        PathAddSigned(rates, energy * rate, key ^ 0x3c6ef372u);
-        PathAddSigned(rates + PathBins, energy * rate * rate, key ^ 0xa54ff53au);
+        if (rate != 0)
+        {
+            PathAddSigned(rates, energy * rate, key ^ 0x3c6ef372u);
+            PathAddSigned(rates + PathBins, energy * rate * rate, key ^ 0xa54ff53au);
+        }
         PathAddSigned(rates + 2 * PathBins, energy * (time - rate * heard - start), key ^ 0x510e527fu);
     }
 #endif

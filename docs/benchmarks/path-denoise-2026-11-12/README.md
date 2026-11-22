@@ -2204,3 +2204,53 @@ Three windowed smoke runs of both scenes, one after the other, the screen unlock
 - While the train moves the difference is −3 to −14 dB of the render's level (−10.6 to −13.5 dB in 10–16 s, as it accelerates away).
   That is less than part 40's −5 dB at 12 m/s, though the shift is 2.5 times larger: the ballast and the grass now absorb 0.5–0.9 of what the ground used to reflect, so the echoes carry less of the sound.
 - Listening: `.context/energy-audio/listen/station-direct-only-fast.wav` and `station-doppler-fast.wav` (9–25 s of the take, the same gain), and `station-doppler-fast-ab.wav` and `.m4a` back to back, linked on `path.html`. The gallery has `raytracer/station-doppler-30ms-ab.m4a`.
+
+## 45. Finishing touches: the echoes' ITD in static scenes, the station at 8,000 rays per source
+
+### (a) Echoes, and their ITD, whether or not anything moves
+
+Until now a bin became a discrete echo only while something moved: the test of part 40 asked for a nonzero mean delay rate.
+So in a static scene there were no echoes, and with them no interaural delay (part 42).
+
+**The rule now.**
+A bin is one echo while its contributions share one arrival, i.e. one slowness vector at the listener.
+Part 40 tested the delay rate, the slowness vector's projection on the velocities; a static scene has no rates, so the vector itself is tested, by the same rule:
+- at least two contributions (unchanged);
+- one rate: variance ≤ mean² (unchanged, but a zero mean is allowed: while nothing moves every rate is zero, which passes);
+- one direction: with ū the energy-weighted mean arrival direction, its spread E|u − ū|² = 1 − |ū|² no larger than |ū|², i.e. |ū|² ≥ ½.
+
+The early part still ends at the first bin with energy that fails, so in a moving scene the early part can only get shorter than before.
+ū is part 42's estimate from the six direction channels (exact for one arrival, |u| = 1; arrivals on opposite sides of an axis shorten it; arrivals symmetric about an axis give exactly the mean resultant cos θ; arrivals within one octant read as one at their mean direction).
+No tracer output is added and the static walk is untouched, so static histograms stay bit-identical; only the synthesis changes.
+
+**The echo's delay without a rate channel.**
+The static walk computes no delay moment, so a static echo sits at its bin's centre: the centroid of the uniform spread the slots gave the bin before, and the position of smallest worst-case error (half a bin: 0.125 ms in the fine bins, 0.4 ms at 50 ms).
+
+**The delay moment, fixed for contributions at rest.**
+The Doppler walk deposited the rate channel only for contributions with a nonzero rate.
+So in a moving scene a bin's mean delay left out the energy of every contribution at rest (an echo off a static wall while only the train moves) while dividing by all of it, and a bin with no moving contribution had its echo at the bin's start.
+The delay moment is now deposited for every contribution (the rate moments of a contribution at rest are zero and still skipped).
+
+**Code.** `PathReverb.SelectEchoes` (CPU) and `PathSlideSelect` (GPU) apply the rule; an explicit echo flag per bin (`PathSlideEchoes`, read by `PathGroups` and `PathSlide` through a read-only view, so no UAV is added) replaces "rate ≠ 0"; `PathDelayMoments` tells the GPU whether the walk computed the rate channel (`MethodTransport.Doppler`), and `PathReverb.Rates` returns null when it did not.
+`settings.pathReflectionDoppler` off now ignores the rates (nothing slides) but keeps the echoes and their ITD.
+
+**Checks.**
+`PathEchoesCarryTheHrtfInterauralDelay` now runs twice, moving (as part 42) and static (nothing moves, the static walk, no rate channel), echo ITD against the direct path's through the same HRTF blend, µs:
+
+| azimuth | static: echo | static: direct path | moving: echo | moving: expected |
+|---:|---:|---:|---:|---:|
+| −90° | −734.4 | −736.3 | −753.9 | −757.8 |
+| −60° | −515.6 | −515.6 | −531.3 | −530.7 |
+| −30° | −262.7 | −260.7 | −266.6 | −268.3 |
+| 0° | 0.0 | 0.0 | −1.0 | 0.0 |
+| 30° | 260.7 | 260.7 | 264.6 | 268.3 |
+| 60° | 513.7 | 515.6 | 529.3 | 530.7 |
+| 90° | 734.4 | 736.3 | 753.9 | 757.8 |
+
+The worst static error is 2.0 µs, the moving 3.9 µs as before (limit 10 µs); before this part every static echo's ITD was 0.
+
+**Static outputs that change, deliberately.**
+Every path render with counts (the live renderer, the offline renders, the GPU-against-CPU check) now renders the first discrete reflections of a static scene as impulses with their ITD instead of slot noise; the histograms do not change.
+- `GpuPathReverbMatchesTheCpuReference`: binaural static 3.75 × 10⁻⁵ (unchanged: its listener moves, so the Doppler walk ran before too), mono static 4.18 × 10⁻⁶ (was 6.27 × 10⁻⁶: its echoes are now rendered), moving 6.13 × 10⁻⁵ (6.1 × 10⁻⁵).
+- `PathReflectionsCarryTheImageSourceDoppler`: the slid reflection is unchanged (271.25 Hz against 271.17 Hz, purity 0.825); the comparison "without the rate channel" now steps a discrete impulse from bin centre to bin centre instead of slot noise, 237.75 Hz with purity 0.52 (was 259.75 Hz, 0.68); sliding is still the purer, which is what the check asserts. Its static control stays bit-identical with and without the rate channel.
+- `PathReverbReproducesTheHistogram` and `PathReverbCrossfadeKeepsThePower` pass no counts and are unchanged (0.998).
