@@ -245,14 +245,14 @@ public sealed class PathLive : MonoBehaviour
         if (frameGpu > 0) frameGpuMs.Add(frameGpu);
         if (done > 0)
         {
-            float gpu = 0;
-            if (traceRecorder.isValid && traceRecorder.gpuElapsedNanoseconds > 0) { traceMs.Add(traceRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += traceMs[^1]; }
-            if (reverbRecorder.isValid && reverbRecorder.gpuElapsedNanoseconds > 0) { reverbMs.Add(reverbRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += reverbMs[^1]; }
-            if (denoiseRecorder.isValid && denoiseRecorder.gpuElapsedNanoseconds > 0) { denoiseMs.Add(denoiseRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += denoiseMs[^1]; }
+            float gpu = 0, trace = 0, reverb = 0, denoised = 0;
+            if (traceRecorder.isValid && traceRecorder.gpuElapsedNanoseconds > 0) { traceMs.Add(trace = traceRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += trace; }
+            if (reverbRecorder.isValid && reverbRecorder.gpuElapsedNanoseconds > 0) { reverbMs.Add(reverb = reverbRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += reverb; }
+            if (denoiseRecorder.isValid && denoiseRecorder.gpuElapsedNanoseconds > 0) { denoiseMs.Add(denoised = denoiseRecorder.gpuElapsedNanoseconds * 1e-6f / done); gpu += denoised; }
             if (gpu > 0) gpuMs.Add(gpu);
             if (budget != null && gpu > 0) method.Population = budget.Observe(gpu);
-            if (smoke != null && smokeStart >= 0) (timeline ??= new System.Text.StringBuilder("seconds,phase,population,gpuMs,frameMs,frameGpuMs,x,z,doorsOpen,underrunSamples\n")).Append(
-                FormattableString.Invariant($"{Time.unscaledTime - smokeStart:F3},{ScriptPhase},{method.Population},{gpu:F3},{Time.unscaledDeltaTime * 1000:F2},{frameGpu:F2},{session.player.position.x:F2},{session.player.position.z:F2},{session.actors.OfType<SlidingDoor>().Count(d => d.IsOpen)},{manager.audioManager.OutputQueue?.UnderrunSamples ?? 0}\n"));
+            if (smoke != null && smokeStart >= 0) (timeline ??= new System.Text.StringBuilder("seconds,phase,population,updates,gpuMs,traceMs,reverbMs,denoiseMs,frameMs,frameGpuMs,x,z,doorsOpen,underrunSamples\n")).Append(
+                FormattableString.Invariant($"{Time.unscaledTime - smokeStart:F3},{ScriptPhase},{method.Population},{done},{gpu:F3},{trace:F3},{reverb:F3},{denoised:F3},{Time.unscaledDeltaTime * 1000:F2},{frameGpu:F2},{session.player.position.x:F2},{session.player.position.z:F2},{session.actors.OfType<SlidingDoor>().Count(d => d.IsOpen)},{manager.audioManager.OutputQueue?.UnderrunSamples ?? 0}\n"));
         }
         if (Time.unscaledTime > inFlightAt) { method.RequestRaysInFlight(); inFlightAt = Time.unscaledTime + .5f; }
         var queue = manager.audioManager.OutputQueue;

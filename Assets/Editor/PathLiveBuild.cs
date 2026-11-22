@@ -10,7 +10,8 @@ using UnityEngine;
 //   Editor: Acoustics > Play live showcase (path method): the open scene if it is a showcase scene, else the first.
 //   Build:  Acoustics > Build live showcase (macOS), or batch mode:
 //           Unity -batchmode -quit -projectPath . -executeMethod PathLiveBuild.Build [-pathLiveOutput DIR]
-//           (default Builds/LiveShowcase/LiveShowcase.app).
+//           (default Builds/LiveShowcase/LiveShowcase.app). -pathLiveDevelopment builds a development player, whose
+//           profiler reports the per-stage GPU times (tracer, reverb, denoiser) that release players leave empty.
 public static class PathLiveBuild
 {
     public const string DefaultOutput = "Builds/LiveShowcase/LiveShowcase.app";
@@ -43,7 +44,7 @@ public static class PathLiveBuild
         {
             scenes = PathLive.Scenes.Select(s => s.path).ToArray(), locationPathName = output,
             target = BuildTarget.StandaloneOSX, targetGroup = BuildTargetGroup.Standalone,
-            extraScriptingDefines = new[] {"PATH_LIVE"}, options = BuildOptions.None
+            extraScriptingDefines = new[] {"PATH_LIVE"}, options = args.Contains("-pathLiveDevelopment") ? BuildOptions.Development : BuildOptions.None
         };
         // Frame timing stats: release players report the frame's GPU time through FrameTimingManager (the profiler's
         // per-sample GPU times are development-only); the HUD and the smoke run read it.

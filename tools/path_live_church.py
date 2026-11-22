@@ -2,8 +2,10 @@
 docs/benchmarks/path-denoise-2026-11-12, parts 26 and 38).
 
     PY=.context/fdtd-teacher/venv/bin/python
-    nice -n 19 $PY tools/path_live_church.py build    # guarded Unity build -> Builds/LiveShowcase/LiveShowcase.app
-    nice -n 19 $PY tools/path_live_church.py smoke --windowed [--scenes Church TrainStation] [--shots]
+    nice -n 19 $PY tools/path_live_church.py build [--development]
+                                                      # guarded Unity build -> Builds/LiveShowcase/LiveShowcase.app
+                                                      # (a development player -> Builds/LiveShowcaseDevelopment/: per-stage GPU times)
+    nice -n 19 $PY tools/path_live_church.py smoke --windowed [--scenes Church TrainStation] [--shots] [--development]
                                                       # guarded scripted run of the build -> .context/path-live/smoke-*/
     nice -n 19 $PY tools/path_live_church.py stills   # guarded still images of every scene -> .context/polish/stills
     nice -n 19 $PY tools/path_live_church.py author   # guarded ShowcaseAuthoring of the showcase scenes
@@ -31,6 +33,7 @@ import method_runs as mr  # noqa: E402
 
 WORK = ROOT / '.context/path-live'
 APP = ROOT / 'Builds/LiveShowcase/LiveShowcase.app'
+DEVELOPMENT_APP = ROOT / 'Builds/LiveShowcaseDevelopment/LiveShowcase.app'
 OLD_APP = ROOT / 'Builds/ChurchLive'   # the Church-only app this replaces; removed by the next build (disk space)
 # The scenes and their visual content. dlss_jobs syncs only code, shaders, tests and tools into the runner, so the
 # player build and the stills would otherwise use the runner's older copies of these.
@@ -81,19 +84,21 @@ def author():
     print('authored the showcase scenes')
 
 
-def build():
-    staged = WORK / 'build' / APP.name
+def build(development=False):
+    app = DEVELOPMENT_APP if development else APP
+    staged = WORK / 'build' / app.name
     shutil.rmtree(WORK / 'build', ignore_errors=True)
-    logs, resources = launch('build', ['-quit', '-executeMethod', 'PathLiveBuild.Build', '-pathLiveOutput', str(staged)])
+    logs, resources = launch('build', ['-quit', '-executeMethod', 'PathLiveBuild.Build', '-pathLiveOutput', str(staged),
+                                       *(['-pathLiveDevelopment'] if development else [])])
     if resources['exitCode'] != 0 or not staged.exists():
         raise SystemExit(f'build failed: see {logs}/unity.log')
-    if APP.exists():
-        shutil.rmtree(APP)
-    APP.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(staged, APP, symlinks=True)
+    if app.exists():
+        shutil.rmtree(app)
+    app.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(staged, app, symlinks=True)
     shutil.rmtree(WORK / 'build')
     shutil.rmtree(OLD_APP, ignore_errors=True)
-    print(f'built {APP}')
+    print(f'built {app}')
 
 
 def front_app():
@@ -104,10 +109,11 @@ def front_app():
     return info.split('=')[-1].strip().strip('"')
 
 
-def smoke(extra=(), windowed=False, scenes=(), shots=False):
+def smoke(extra=(), windowed=False, scenes=(), shots=False, development=False):
+    app = DEVELOPMENT_APP if development else APP
     out = WORK / time.strftime('smoke-%Y%m%d-%H%M%S')
     out.mkdir(parents=True)
-    binary = next((APP / 'Contents/MacOS').iterdir())
+    binary = next((app / 'Contents/MacOS').iterdir())
     # -batchmode: no window, so the run never takes the screen's focus; the player still draws the scene every frame
     # (smoke.json reports camera renders per frame) and still plays its audio callbacks (callbacks, underruns).
     command = [str(binary), '-batchmode', '-pathLiveSmoke', str(out), '-screen-width', '1280', '-screen-height', '720',
@@ -118,13 +124,13 @@ def smoke(extra=(), windowed=False, scenes=(), shots=False):
         # activated (open -g -j). The front application is watched throughout; if the player ever became frontmost it
         # is stopped at once (it must never take the screen's focus). Its footprint is not tracked (open's child).
         import subprocess, threading
-        command = ['open', '-g', '-j', '-n', '-W', '-a', str(APP), '--args'] + [c for c in command[1:] if c != '-batchmode']
+        command = ['open', '-g', '-j', '-n', '-W', '-a', str(app), '--args'] + [c for c in command[1:] if c != '-batchmode']
         before, stolen, done = front_app(), [], threading.Event()
         def watch():
             while not done.wait(.2):
                 name = front_app()
-                if name != before and (APP.stem in name or 'AudioRayTrace' in name):
-                    stolen.append(name); subprocess.run(['pkill', '-f', str(APP)]); return
+                if name != before and (app.stem in name or 'AudioRayTrace' in name):
+                    stolen.append(name); subprocess.run(['pkill', '-f', str(app)]); return
         threading.Thread(target=watch, daemon=True).start()
     resources = dj.Worker(command, dict(os.environ), lambda m: print(m, flush=True)).run()
     if windowed:
@@ -165,6 +171,7 @@ if __name__ == '__main__':
     p.add_argument('--windowed', action='store_true', help='smoke: with a window, launched hidden and unfocused (open -g -j)')
     p.add_argument('--scenes', nargs='+', default=[], help='smoke: the scenes to walk, in turn (default: the first)')
     p.add_argument('--shots', action='store_true', help='smoke: a screenshot at each phase of each walk')
+    p.add_argument('--development', action='store_true', help='build / smoke: the development player (per-stage GPU times)')
     a = p.parse_args()
-    {'build': build, 'smoke': lambda: smoke(a.player, a.windowed, a.scenes, a.shots), 'stills': lambda: stills(a.player),
+    {'build': lambda: build(a.development), 'smoke': lambda: smoke(a.player, a.windowed, a.scenes, a.shots, a.development), 'stills': lambda: stills(a.player),
      'author': author}[a.command]()
