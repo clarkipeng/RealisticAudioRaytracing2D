@@ -77,7 +77,7 @@ public static partial class TakeRender
         public int pathRaysInFlight;
         [Tooltip("Path method: beams only. No next-event connections at scattering points and no edge connections: every arrival but the exact direct sound is a ray segment passing the listener, scored by the beam kernel (README part 20 of docs/benchmarks/path-denoise-2026-11-12).")]
         public bool pathBeamsOnly;
-        [Tooltip("Path method: diffraction as an event of the walk. A ray whose beam passes an edge deposits on it, and the deposit becomes a UTD-diffracted ray (splitting, one per ray by a weighted reservoir); it replaces the source's edge rays and every edge connection. Static scenes only: no delay rates. Measured and not adopted (docs/benchmarks/bass-and-diffraction-2026-11-22/README-part-b.md).")]
+        [Tooltip("Path method: diffraction as an event of the walk. A ray whose beam passes an edge deposits on it, and the deposit becomes a UTD-diffracted ray (splitting, one per ray by a weighted reservoir); it replaces the source's edge rays and every edge connection. Static scenes only: no delay rates. Measured and not adopted (docs/benchmarks/bass-and-diffraction-2026-11-22/README.md, part B).")]
         public bool pathWalkDiffraction;
         [Min(0),Tooltip("Path method, persistent rays: population control. Hold this many rays in flight per source/listener pair, cohort by cohort (rays of age a: a share min(1, T_f / a), T_f the end of the fine bins), by splitting and weight lottery; the new rays per update follow from it and replace methodRays. Zero: off (survival in time and methodRays new rays).")]
         public int pathPopulation;

@@ -722,7 +722,7 @@ void PathRing(uint index)
 }
 
 #if PATH_WALK_EDGE
-// Walk diffraction (settings.pathWalkDiffraction; docs/benchmarks/bass-and-diffraction-2026-11-22/README-part-b.md): edge
+// Walk diffraction (settings.pathWalkDiffraction; docs/benchmarks/bass-and-diffraction-2026-11-22/README.md, part B): edge
 // diffraction as an event of the walk, in place of the source's edge rays and every edge connection.
 //  * Deposit. A ray piece of flux Phi whose line passes an edge at offset rho and angle gamma deposits Phi K1(rho) / sin(gamma)
 //    at its closest point on the edge, K1 = sqrt(2 / (pi w^2)) exp(-2 rho^2 / w^2) the beam kernel's 1-D marginal,

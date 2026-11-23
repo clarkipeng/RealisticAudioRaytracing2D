@@ -1,4 +1,4 @@
-"""Part B: diffraction as a walk event in the Church, at equal time per update (README-part-b.md).
+"""Part B: diffraction as a walk event in the Church, at equal time per update (README.md, part B).
 
     PY=.context/fdtd-teacher/venv/bin/python
     B=docs/benchmarks/bass-and-diffraction-2026-11-22

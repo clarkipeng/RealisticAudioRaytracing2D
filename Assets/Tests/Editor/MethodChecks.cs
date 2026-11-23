@@ -18,7 +18,7 @@ public partial class TakeChecks
         settings.pathWalkDiffraction = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_WALK_DIFFRACTION") == "1";
         return settings;
     }
-    // The Path method's diffraction as a walk event (docs/benchmarks/bass-and-diffraction-2026-11-22/README-part-b.md),
+    // The Path method's diffraction as a walk event (docs/benchmarks/bass-and-diffraction-2026-11-22/README.md, part B),
     // with shortcuts or beams only; "" leaves the settings.
     static void PathWalkMode(TakeRender.Settings settings, string walk)
     {
@@ -118,7 +118,7 @@ public partial class TakeChecks
 
     // Rigid half-plane, listener in the shadow: the path method's UTD band energy matches the
     // independent BTM band energy within 1.5 dB.
-    // Walk diffraction ("shortcuts", "beams"; docs/benchmarks/bass-and-diffraction-2026-11-22/README-part-b.md): every band
+    // Walk diffraction ("shortcuts", "beams"; docs/benchmarks/bass-and-diffraction-2026-11-22/README.md, part B): every band
     // 125 Hz-2 kHz within 1 dB (UTD is 0.3 dB above BTM here; the walk event reproduces UTD with the beam kernel's width).
     [TestCase(false), TestCase(true), TestCase(false, "shortcuts"), TestCase(false, "beams"), TestCase(true, "shortcuts"),
      Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]

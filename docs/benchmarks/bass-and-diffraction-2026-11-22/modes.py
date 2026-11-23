@@ -114,7 +114,7 @@ def truncation(sid):
               f'RMS per band ' + ' '.join(f'{v:.3f}' for v in np.sqrt(np.mean(lev ** 2, 0))) + ' dB', flush=True)
 
 
-def score(methods=('path', 'path-modal', 'modal', 'energy'), bands=(125.0, 250.0, 500.0)):
+def score(methods=('path', 'path-modal', 'modal', 'path-modal-x353.553', 'path-modal-coupled', 'baseline-static-ir'), bands=(125.0, 250.0, 500.0)):
     """The suite's scorer on the closed rooms: per scene and band, and pooled, level / bias / EDT / T30 / ETC."""
     rep = mc.score(mc.DEFAULT_ROOT, None, methods=list(methods))
     rows = [r for r in rep['rows'] if r['closed'] and r['group'] == 'all']
@@ -122,8 +122,8 @@ def score(methods=('path', 'path-modal', 'modal', 'energy'), bands=(125.0, 250.0
     table = {}
     for m in methods:
         sel_m = [r for r in rows if r['method'] == m]
-        if m != 'modal':
-            sel_m = [r for r in sel_m if r['budget'] == ('r02048' if m != 'energy' else 'r02048')]
+        if m.startswith('path'):
+            sel_m = [r for r in sel_m if r['budget'] == 'r02048']
         for b in bands:
             for scene in sorted({r['scene'] for r in rows}) + ['closed']:
                 sel = [r for r in sel_m if r['band'] == b and (scene == 'closed' or r['scene'] == scene)]
