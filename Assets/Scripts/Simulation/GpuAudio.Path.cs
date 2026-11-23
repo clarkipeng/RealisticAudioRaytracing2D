@@ -157,7 +157,7 @@ internal sealed partial class GpuAudio
         PathDenoising=true;
     }
 
-    void SetPathResponse(long sample,bool cut,RayTransport.LateFrame late)
+    void SetPathResponse(long sample,bool cut,RayTransport.LateFrame late,AcousticTake.Scene scene,AcousticTake.State[] states)
     {
         var method=late.Transport;
         bool valid=method!=null;
@@ -185,6 +185,7 @@ internal sealed partial class GpuAudio
         Set("LateValid",valid?1:0);Set("LateBank",lateBank);Set("LateBlend",lateBlend?1:0);Clock("LateSwap",sample);
         Set("PathFloat",denoise?1:0);Set("PathFixedOffset",fixedOffset);Set("LateRays",valid?method.LateRays:1);
         commands.BeginSample("Acoustics.GPU.PathKernels");
+        bool modal=SetModes(scene,states,valid,!SkipPathKernels || !lateInitializedOnce);
         Set("PathDoppler",settings.pathReflectionDoppler?1:0);Set("PathDelayMoments",valid && method.Doppler?1:0);
         commands.DispatchCompute(shader,pathSlideSelect,(pairs+63)/64,1,1);
         if((PathKernelSkip&1)==0)
@@ -196,6 +197,7 @@ internal sealed partial class GpuAudio
             commands.SetComputeBufferParam(shader,pathFilter,"PathFftPartitions",PathGroupSpectraOff?pathAllBuffer:pathFftBuffer);
             Set("PathFftDispatch",fft);Set("PathSpectralFirst",0);
             if(fft+spectralCount>0)commands.DispatchCompute(shader,pathFilter,fft+spectralCount,1,1);
+            if(modal)AddModes();
             if((PathKernelSkip&8)==0)commands.DispatchCompute(shader,pathPieces,checked(pairs*lateCount),1,1);
         }
         lateInitializedOnce=true;

@@ -27,6 +27,10 @@
 #pragma kernel PathSlideSelect
 #pragma kernel PathBandInput
 #pragma kernel PathSlide
+#pragma kernel RoomModeSynthesis
+#pragma kernel RoomModeFft
+#pragma kernel RoomModeCross
+#pragma kernel RoomModeAdd
 
 // CPU and GPU exchange scene inputs and finished PCM. Paths, filters, FFTs and
 // sums stay here. The small-transform fast path uses one workgroup per path;
@@ -700,6 +704,10 @@ RWStructuredBuffer<float2> PathCoefficients;    // [channel][band][group]
 RWStructuredBuffer<float2> PathFiltered;        // [pair][partition][2P]: both channels' filtered partition
 StructuredBuffer<uint> PathFftPartitions;        // pair * count + partition, for the band FFTs
 uint PathFloat,PathGroupTotal,PathBinsCount,PathFixedOffset;
+// Room modes (RoomModes.cs): per pair and band the share g_b of the histogram's energy left to the path method (1
+// outside the bank's room).
+StructuredBuffer<float> RoomModeShare;          // [response slot][pair][band]
+uint RoomModeOffset;                            // the response's slot in the batch (AudioPoseOffset's)
 bool PathPairActive(uint pair){return LateValid!=0 && AudioFilterPairs[pair]>=0 && AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x!=0;}
 // Ear energy of channel c, band b at histogram bin k of a pair (the directions weighted by the ear's response).
 float PathEarEnergy(uint pair,uint c,uint b,uint k)
@@ -711,7 +719,7 @@ float PathEarEnergy(uint pair,uint c,uint b,uint k)
         float e=PathFloat!=0?PathHistogram[cell]:(LateHistogram[2*(PathFixedOffset+cell)+1]+LateHistogram[2*(PathFixedOffset+cell)]/4294967296.0)/LateRays;
         if(e>0)energy+=PathEarWeights[(d*2+c)*LATE_BANDS+b]*e;
     }
-    return energy;
+    return energy*RoomModeShare[(RoomModeOffset*AudioPairs+pair)*LATE_BANDS+b];
 }
 // Doppler on reflections (PathReverb.cs, README part 40): the early part's slots slide at their bins' delay rates.
 // PathSlideSelect (one thread per pair, before PathGroups) picks the echoes from the raw histogram, its counts, its
@@ -891,6 +899,68 @@ void PathSlide(uint3 id:SV_DispatchThreadID)
         }
     }
     if(any)LateBlocks[(LateWhich*lanes+lane)*LatePartition+n]+=value;
+}
+// Room modes (RoomModes.Synthesize is the CPU reference): per pair inside the bank's room, the modal difference
+// dh = W_m (h_modal - h_direct). RoomModeSynthesis samples h_modal at the decimated rate over the kernel; RoomModeFft
+// (radix-2 Stockham, one stage per dispatch, ping-pong) transforms it; RoomModeCross applies W_m and subtracts the
+// direct pulse (its spectrum, exact); the inverse transform follows; RoomModeAdd interpolates dh to the output rate with
+// the renderer's windowed sinc and adds it to both ears' filtered partitions (between PathFilter and PathPieces), at
+// the band FIRs' delay: kernel sample round(t rate) + P/2.
+StructuredBuffer<float4> RoomModeTable;         // [mode]: decay per sample, the poles' difference per sample (overdamped), 1/w_d or 1/rate, overdamped
+StructuredBuffer<uint> RoomModePhases;          // [mode]: phase step, 32-bit fixed-point cycles
+StructuredBuffer<float> RoomModeAmplitudes;     // [response slot][pair][mode]: 4 pi c^2 psi(s) psi(r)
+StructuredBuffer<uint4> RoomModePairs;          // [response slot][pair]: active, direct gain x decimated rate (float bits), direct phase per bin (fixed)
+StructuredBuffer<float> RoomModeWeights;        // [N/2 + 1]: W_m at the decimated transform's bins
+StructuredBuffer<float> RoomModeInterpolation;  // [n % ratio][2 radius]: the windowed sinc's normalised taps (RoomModes.Interpolation)
+RWStructuredBuffer<float2> RoomModeSource,RoomModeTarget;   // [pair][N]
+uint RoomModeCount,RoomModeLength,RoomModeSize,RoomModeStage,RoomModeInverse,RoomModeRatio,RoomModeRadius;
+float RoomModeScale;                            // 1 / (N x output rate): the inverse transform's 1/N, and kernel samples
+static const float ROOM_MODE_CYCLE=2.3283064365386963e-10;   // 2^-32
+bool RoomModeActive(uint pair){if(pair>=AudioPairs)return false;return RoomModePairs[RoomModeOffset*AudioPairs+pair].x!=0;}
+[numthreads(64,1,1)]
+void RoomModeSynthesis(uint3 id:SV_DispatchThreadID)
+{
+    uint pair=id.x/RoomModeSize,j=id.x%RoomModeSize;if(!RoomModeActive(pair))return;
+    float v=0,t=(float)j;
+    if(j<RoomModeLength)for(uint n=0;n<RoomModeCount;n++)
+    {
+        float a=RoomModeAmplitudes[(RoomModeOffset*AudioPairs+pair)*RoomModeCount+n];if(a==0)continue;
+        float4 m=RoomModeTable[n];
+        if(m.w!=0){float x=m.y*t;v+=a*m.z*exp(-m.x*t)*t*(x<.01?1-x/2+x*x/6:(1-exp(-x))/x);}   // RoomModes.Phi
+        else v+=a*m.z*exp(-m.x*t)*sin(2*PATH_PI*(float)(RoomModePhases[n]*j)*ROOM_MODE_CYCLE);
+    }
+    RoomModeTarget[pair*RoomModeSize+j]=float2(v,0);
+}
+[numthreads(64,1,1)]
+void RoomModeFft(uint3 id:SV_DispatchThreadID)
+{
+    uint halfSize=RoomModeSize/2,pair=id.x/halfSize,j=id.x%halfSize;if(!RoomModeActive(pair))return;
+    uint ns=RoomModeStage,k=j%ns,origin=pair*RoomModeSize;
+    float2 v0=RoomModeSource[origin+j],v1=RoomModeSource[origin+j+halfSize];
+    float angle=(RoomModeInverse!=0?PATH_PI:-PATH_PI)*(float)k/(float)ns;
+    v1=AudioMultiply(v1,float2(cos(angle),sin(angle)));
+    uint o=origin+(j/ns)*2*ns+k;
+    RoomModeTarget[o]=v0+v1;RoomModeTarget[o+ns]=v0-v1;
+}
+[numthreads(64,1,1)]
+void RoomModeCross(uint3 id:SV_DispatchThreadID)
+{
+    uint pair=id.x/RoomModeSize,k=id.x%RoomModeSize;if(!RoomModeActive(pair))return;
+    int kk=k<=RoomModeSize/2?(int)k:(int)k-(int)RoomModeSize;uint4 p=RoomModePairs[RoomModeOffset*AudioPairs+pair];
+    float phase=-2*PATH_PI*(float)(p.z*(uint)kk)*ROOM_MODE_CYCLE;
+    float2 x=RoomModeTarget[pair*RoomModeSize+k]-asfloat(p.y)*float2(cos(phase),sin(phase));
+    RoomModeTarget[pair*RoomModeSize+k]=RoomModeWeights[abs(kk)]*x;
+}
+[numthreads(64,1,1)]
+void RoomModeAdd(uint3 id:SV_DispatchThreadID)
+{
+    uint total=LateCount*LatePartition,pair=id.x/total,T=id.x%total;if(!RoomModeActive(pair))return;
+    int n=(int)T-(int)(LatePartition/2);if(n<0)return;   // (the precursor before emission is dropped, as on the CPU)
+    uint taps=2*RoomModeRadius,o=((uint)n%RoomModeRatio)*taps;int first=n/(int)RoomModeRatio-(int)RoomModeRadius+1;float sum=0;
+    for(uint i=0;i<taps;i++)sum+=RoomModeInterpolation[o+i]*RoomModeSource[pair*RoomModeSize+(uint)(first+(int)i+(int)RoomModeSize)%RoomModeSize].x;
+    float v=sum*RoomModeScale;
+    uint at=(pair*LateCount+T/LatePartition)*2*LatePartition+T%LatePartition;
+    float2 x=PathFiltered[at];x.x+=v;if(AudioChannels==2)x.y+=v;PathFiltered[at]=x;
 }
 // A partition through the band FFTs: sum over bands of FFT(band slot sequences) x band filter, then the inverse.
 void PathBandPartition(uint entry,uint t)

@@ -90,6 +90,8 @@ public static partial class TakeRender
         [Range(.05f,1)] public float pathIterationSurvival=.75f;
         [Min(1),Tooltip("Path method, persistent rays, one source-listener pair: refresh the edge-ray distribution (a slice of 2,048 edge weights, then the distribution) every this many updates; in between the last one stays. Unbiased at any value: the weights only steer the sampling.")]
         public int pathEdgeSliceUpdates=1;
+        [Tooltip("Path method: room modes below the Schroeder frequency, crossed over with the histogram (RoomModes.cs): a bank exported by tools/room_modes.py, as a path or relative to StreamingAssets, with an optional sidecar <bank>.json naming the geometry and object poses it was baked for. Applied while both ends are in the bank's air and its objects at their baked poses. Empty: off.")]
+        public string roomModesBank="";
         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
         public string pathHistogramExport="";
         [Tooltip("Path method, offline: render with the histograms of this directory's histogram.f32 (e.g. denoised) instead of the tracer's, response by response.")]
@@ -531,6 +533,7 @@ public static partial class TakeRender
         readonly Hrtf hrtf;
         readonly SpectralAudio spectral;
         readonly PathReverb pathLate;
+        internal PathReverb PathLate => pathLate;
         readonly TakeRender.DelayFilter delayFilter;
         readonly int sincRadius;
         readonly Hrtf.Blend[] earBlend,oldEarBlend;

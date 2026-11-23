@@ -86,6 +86,9 @@ public partial class TakeChecks
         public bool seedPerReceiver, airAbsorption;
         public float pathSurvivalSeconds = -1; // < 0: the settings' default
         public bool pathBeamsOnly;
+        // Method "path-modal": the path method combined with the room modes of this bank (an exported RMB1 file,
+        // RoomModes.cs) as tools/room_modes.py combine does; written band-limited.
+        public string roomModesBank = "";
     }
     [Serializable] sealed class MethodJobList { public MethodJob[] jobs; }
     [Serializable] sealed class MethodRunRecord
@@ -94,6 +97,7 @@ public partial class TakeChecks
         public int budget, seed, receivers, bins, primitives, edges, droppedEdges, lateRays, completeRouteSamples, methodRays, histogramBins;
         public float detectionRadius, rouletteFloor, maximumDelaySeconds, workFraction, binSeconds;
         public float[] frequencies, solveSeconds;
+        public bool bandLimited;   // energy.f32 is band-limited (path-modal; the path histogram is not)
         public double busySeconds, gpuSeconds, analysisSeconds, wallSeconds;
         public string[] counterNames;
         public long[] counters;
@@ -175,7 +179,8 @@ public partial class TakeChecks
             foreach (string name in job.methods)
             {
                 var method = TakeRender.Method.Path;
-                Assert.That(name, Is.EqualTo("path"), "The path method is the only one (the hybrid, pressure and energy methods were removed).");
+                Assert.That(name, Is.EqualTo("path").Or.EqualTo("path-modal"), "The path method is the only one (the hybrid, pressure and energy methods were removed); path-modal adds the room modes.");
+                Assert.That(name != "path-modal" || !string.IsNullOrEmpty(job.roomModesBank), "path-modal needs the job's roomModesBank");
                 for (int b = 0; b < job.budgets.Length; b++)
                     foreach (int seed in job.seeds)
                     {
@@ -205,6 +210,7 @@ public partial class TakeChecks
         var stats = new float[receivers * 8 * MethodTransport.Depths * 4];
         var magnitudes = new float[8 * MethodTransport.Depths * MethodTransport.Magnitudes]; // summed over receivers
         var counters = new long[MethodTransport.Counters];
+        var visible = new double[receivers];   // the path method renders a direct sound there
         var record = new MethodRunRecord {sceneId = spec.sceneId, sceneSha256 = spec.sceneSha256, method = name, budget = budget, seed = seed,
             backend = SystemInfo.graphicsDeviceName, unityVersion = Application.unityVersion, codeSha256 = code, receivers = receivers, bins = bins,
             primitives = baked.geometry.Length, binSeconds = MethodTransport.BinSeconds, maximumDelaySeconds = job.maximumDelaySeconds,
@@ -225,6 +231,7 @@ public partial class TakeChecks
                 long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                 solver.Solve(state, direct);
                 double work = TakeRender.Elapsed(t0);
+                visible[p] = direct[0].pressureGain > 0 ? 1 : 0;
                 record.solveSeconds[p] = (float)work; record.busySeconds += work;
                 long a0 = System.Diagnostics.Stopwatch.GetTimestamp();
                 var m = solver.Method;
@@ -250,9 +257,22 @@ public partial class TakeChecks
             }
             record.gpuSeconds = solver.Method.GpuSeconds - gpuBefore;
         }
+        if (name == "path-modal")
+        {
+            // The path method's energies (direct sound included) combined with the bank's modes (room_modes.combine).
+            long m0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            var modes = RoomModesFor(spec, job.roomModesBank);
+            var path = new double[energy.Length]; for (int i = 0; i < path.Length; i++) path[i] = energy[i];
+            var combined = RoomModeOffline.Combine(modes, WaveVector(spec.source), Points(spec.points), visible, path, out var touched);
+            for (int i = 0; i < energy.Length; i++) energy[i] = (float)combined[i];
+            direction = null; record.bandLimited = true;
+            analysis += TakeRender.Elapsed(m0);
+            record.notes = $"path method combined with the room modes of {Path.GetFileName(job.roomModesBank)} ({modes.Bank.Modes} modes, Schroeder {modes.SchroederHz:F1} Hz, bands {string.Join(",", touched)}): " +
+                           "the coherent part (W_m H_modal + (1 - W_m) H_direct) band-limited, plus g_b times the histogram less its direct sound, smoothed by each band's energy kernel (tools/room_modes.py combine)";
+        }
         record.analysisSeconds = analysis;
         MethodWrite(Path.Combine(partial, "energy.f32"), energy);
-        MethodWrite(Path.Combine(partial, "direction.f32"), direction);
+        if (direction != null) MethodWrite(Path.Combine(partial, "direction.f32"), direction);
         MethodWrite(Path.Combine(partial, "stats.f32"), stats);
         MethodWrite(Path.Combine(partial, "magnitudes.f32"), magnitudes); // [band, depth, floor(log2|c|)+40]
         if (native != null)
@@ -264,10 +284,23 @@ public partial class TakeChecks
             record.histogramBins = pathBins.Count;
         }
         record.wallSeconds = TakeRender.Elapsed(started);
-        record.notes = "arrival energies (not band-limited), resampled to 1 ms from the native histogram (histogram.f32, counts.u32, bin-edges.f32)";
+        record.notes ??= "arrival energies (not band-limited), resampled to 1 ms from the native histogram (histogram.f32, counts.u32, bin-edges.f32)";
         File.WriteAllText(Path.Combine(partial, "run.json"), JsonUtility.ToJson(record, true));
         if (Directory.Exists(output)) Directory.Delete(output, true);
         Directory.Move(partial, output);
         Debug.Log($"Method {name} {spec.sceneId} r{budget} s{seed}: {record.busySeconds:F2} s busy, {record.wallSeconds:F1} s wall");
+    }
+    // A suite scene's room modes: the bank's materials from the scene's (admittance from absorption + transmission).
+    static RoomModes RoomModesFor(MethodSceneSpec spec, string bankPath)
+    {
+        var bank = RoomModeBank.Load(bankPath); var admittance = new double[bank.Materials.Length][];
+        for (int m = 0; m < admittance.Length; m++)
+        {
+            int at = Array.IndexOf(spec.materialNames, bank.Materials[m]);
+            Assert.That(at, Is.GreaterThanOrEqualTo(0), "Bank material " + bank.Materials[m] + " is not in the scene.");
+            admittance[m] = new double[8];
+            for (int b = 0; b < 8; b++) admittance[m][b] = RoomModes.AdmittanceFromAbsorption(spec.absorption[at * 8 + b] + spec.transmission[at * 8 + b]);
+        }
+        return new RoomModes(bank, admittance, spec.speedOfSound, 1, 8000, 16000, 16);
     }
 }

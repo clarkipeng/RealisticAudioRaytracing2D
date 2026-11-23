@@ -341,6 +341,13 @@ The GPU matches the CPU reference to a relative 3.75 × 10⁻⁵ binaural and 6.
 
 The CPU cannot do this in real time: it spent 432 ms building one Church update's kernels against an update period of 21 ms.
 
+**Room modes below the Schroeder frequency (opt-in, `settings.roomModesBank`).**
+Below the Schroeder frequency a closed room's response is its modes, which an energy tracer cannot carry.
+A per-scene bank holds the rigid room's eigenmodes on a rectilinear grid, their wavenumbers and their wall integrals per material, so each mode's damping follows the scene's materials at its own frequency.
+Per update and pair inside the bank's room, the modal response is synthesised at a decimated rate, crossed over at the Schroeder frequency measured from the bank (amplitude-complementary against the exact direct sound, power-complementary against the histogram, whose band energies are scaled by their share above the crossover), and added to the reverb's kernel (`RoomModes.cs`, `GpuAudio.Modes.cs`).
+The bank applies only while both ends are in its air and every object is at its baked pose; elsewhere the reverb is unchanged.
+The method, its validation against the wave ground truth and its cost are in [docs/benchmarks/bass-and-diffraction-2026-11-22/README.md](benchmarks/bass-and-diffraction-2026-11-22/README.md).
+
 ## 10. The auto-budget
 
 In a game the audio cannot have the whole GPU, so N follows a budget B in milliseconds per update (`-pathBudget MS`), within 4,000–23,000, the denoiser's trained range.
@@ -434,7 +441,7 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 
 - **Diffraction outside the Church is heavy-tailed per update.** A listener who sees no surface inside receives all interior sound diffracted by the porch's edges, and the single-edge connections from interior points whose line to the listener grazes an edge carry the UTD peak rarely and with large weight. The level agrees with the energy method within its noise, but a single update plays close to the median, about 9 dB below the mean. Listener-side sampling was built and did not fix it; diffraction as an event of the walk is the open route.
 - **Beams and UTD near reflection boundaries.** The beam's smoothing and UTD's transition still add just beyond a reflection boundary, by 3–4 times on a level 10–20 dB below the lit side, and the lit side reads 25–30% low; UTD's reflection-boundary terms are weighted by the beam (section 6.3), but there is no coherent reference to settle the lit side.
-- **Energy, not pressure.** Interference, modes and the coherent sum at a reflection boundary are not modelled; low-frequency room modes are absent.
+- **Energy, not pressure.** Interference, modes and the coherent sum at a reflection boundary are not modelled; low-frequency room modes come only from an opt-in room-mode bank (section 9), in closed rooms in their baked configuration.
 - **UTD on short edges.** UTD assumes edges long against the wavelength; 71% of the Church's edges are shorter than a wavelength at 250 Hz, and the bias against BTM for such edges is not measured.
 - **The early decay at realtime budgets.** EDT errors on the wave suite are large for every variant, and the denoiser's decay curves in the Church are worse than its window errors.
 - **Connections are checked against the scene when made.** Geometry moving during a connection's flight (tens of milliseconds) is seen as it was when the connection was made.
@@ -457,8 +464,9 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 | dispatch, pools, ring, Doppler kernels | `Assets/Scripts/Simulation/MethodTransport.cs`, `Assets/Scripts/Simulation/TransportSolver.cs` |
 | histogram bins | `Assets/Scripts/Simulation/PathBins.cs` |
 | synthesis: CPU reference and GPU | `Assets/Scripts/Simulation/PathReverb.cs`, `Assets/Scripts/Simulation/GpuAudio.Path.cs`, `Assets/Resources/Acoustics/GpuAudio.compute` |
+| room modes (opt-in) | `Assets/Scripts/Simulation/RoomModes.cs`, `Assets/Scripts/Simulation/GpuAudio.Modes.cs`, `tools/room_modes.py`, `tools/room_modes_unity.py` |
 | denoiser | `Assets/Scripts/Simulation/PathDenoiser.cs`, `Assets/Resources/Acoustics/PathDenoise.compute`, `tools/path_persistent_denoise.py` |
 | auto-budget | `Assets/Scripts/Simulation/PathPopulationBudget.cs` |
 | live showcase | `Assets/Scripts/Demo/PathLive.cs`, `tools/path_live_church.py` |
-| checks | `Assets/Tests/Editor/PathChecks.cs`, `PathPersistentChecks.cs`, `PathDopplerChecks.cs`, `PathGpuAudioChecks.cs`, `PathDenoiseChecks.cs` |
+| checks | `Assets/Tests/Editor/PathChecks.cs`, `PathPersistentChecks.cs`, `PathDopplerChecks.cs`, `PathGpuAudioChecks.cs`, `PathDenoiseChecks.cs`, `RoomModeChecks.cs` |
 | wave ground truth and scoring | `tools/fdtd_wave.py`, `tools/method_compare.py`, `docs/benchmarks/energy-audio-2026-11-09/scoreboard.py` |

@@ -126,13 +126,14 @@ def scene_spec(scene_dir, out):
 
 
 def make_jobs(name, scenes, methods, budgets, seeds, root=COMPARE, capture=-1, receivers=-1, materials=None, radius=.25, capture_scenes=None,
-              preset_scattering=False, roulette_floor=1e-6, suffix=None):
+              preset_scattering=False, roulette_floor=1e-6, suffix=None, room_modes=None):
     """Write .context/methods-2026-11-06/jobs/NAME.json. `materials` optionally overrides
     scattering (e.g. {"scattering": 0.3}) for the divergence study; such scenes get a suffix.
     `suffix` names a settings variant (e.g. a roulette floor) of an unchanged scene, so its raw
-    outputs sit beside the suite's and are not packed. `methods` must be ['path'], the only method."""
-    if list(methods) != ['path']:
-        raise ValueError(f'Only the path method exists (got {methods}).')
+    outputs sit beside the suite's and are not packed. `methods`: ['path'] (the only method) and, with `room_modes` (a
+    directory of exported room mode banks <scene>.roommodes.bytes), 'path-modal'."""
+    if not set(methods) <= {'path', 'path-modal'} or ('path-modal' in methods and not room_modes):
+        raise ValueError(f'Only the path method exists, and path-modal with room mode banks (got {methods}).')
     jobs = []
     for scene_id in scenes:
         scene_dir = Path(root) / scene_id
@@ -162,7 +163,8 @@ def make_jobs(name, scenes, methods, budgets, seeds, root=COMPARE, capture=-1, r
             spec.write_text(json.dumps(data) + '\n')
         jobs.append(dict(sceneFile=str(spec), output=str(RAW), methods=methods, budgets=budgets, seeds=seeds,
                          maximumDelaySeconds=2.0, detectionRadius=radius, rouletteFloor=roulette_floor, receivers=receivers,
-                         captureReceiver=capture if capture_scenes is None or scene_id in capture_scenes else -1))
+                         captureReceiver=capture if capture_scenes is None or scene_id in capture_scenes else -1,
+                         roomModesBank=str(Path(room_modes).resolve() / f'{scene_id}.roommodes.bytes') if room_modes else ''))
     path = WORK / 'jobs' / f'{name}.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dict(jobs=jobs), indent=1) + '\n')
@@ -178,7 +180,7 @@ def render(name, work_fraction=hg.WORK_FRACTION):
     failures = []
     for job in jobs:
         scene = json.loads(Path(job['sceneFile']).read_text())['sceneId']
-        if all((RAW / scene / 'path' / f'r{b:05d}' / str(s) / 'run.json').exists() for b in job['budgets'] for s in job['seeds']):
+        if all((RAW / scene / m / f'r{b:05d}' / str(s) / 'run.json').exists() for m in job['methods'] for b in job['budgets'] for s in job['seeds']):
             continue
         part = WORK / 'jobs' / f'{name}.{scene}.json'
         part.write_text(json.dumps(dict(jobs=[job]), indent=1) + '\n')
@@ -216,7 +218,7 @@ def read_raw(folder):
 def pack_one(folder, root=COMPARE):
     import method_compare as mc
     run, data = read_raw(folder)
-    if run['method'] != 'path':
+    if run['method'] not in ('path', 'path-modal'):
         return None   # a removed method's run; its packed output (if any) is kept as is
     scene_id = run['sceneId']
     if not (root / scene_id / 'scene.json').exists():
@@ -231,10 +233,11 @@ def pack_one(folder, root=COMPARE):
     direction = data['direction']
     if direction is not None and T < mc.TIME_BINS:
         direction = np.concatenate([direction, np.zeros(direction.shape[:2] + (mc.TIME_BINS - T, 6))], 2)
-    meta = dict(method='path', budget=f"r{run['budget']:05d}", seed=run['seed'], budgetValue=run['budget'], budgetUnit='rays (all bands per ray)',
-                sceneId=scene_id, sceneSha256=run['sceneSha256'], code=dict(name='MethodPath.hlsl', sha256=run['codeSha256']),
+    modal = run['method'] == 'path-modal'   # the path method with the room modes (RoomModes.cs): band-limited
+    meta = dict(method=run['method'], budget=f"r{run['budget']:05d}", seed=run['seed'], budgetValue=run['budget'], budgetUnit='rays (all bands per ray)',
+                sceneId=scene_id, sceneSha256=run['sceneSha256'], code=dict(name='MethodPath.hlsl' + ('+RoomModes.cs' if modal else ''), sha256=run['codeSha256']),
                 wallSeconds=run['busySeconds'], gpuSeconds=run['gpuSeconds'] or None, validSeconds=run['maximumDelaySeconds'],
-                bandLimited=False, wallModel='absorption',
+                bandLimited=run.get('bandLimited', False), wallModel='admittance (first order in the modes)' if modal else 'absorption',
                 notes=run['notes'] + f"; one path tracer, chain detection region {run['detectionRadius']} m (unbiased: measured share), "
                                      f"roulette floor {run.get('rouletteFloor', 1)}")
     if meta['gpuSeconds'] is None:
@@ -332,7 +335,8 @@ def main(argv=None):
     j = sub.add_parser('jobs')
     j.add_argument('name')
     j.add_argument('--scenes', nargs='+', required=True)
-    j.add_argument('--methods', nargs='+', choices=['path'], default=['path'], help='path (the only method; kept for old command lines)')
+    j.add_argument('--methods', nargs='+', choices=['path', 'path-modal'], default=['path'], help='path (the only method), path-modal (with --room-modes)')
+    j.add_argument('--room-modes', help='directory of exported room mode banks <scene>.roommodes.bytes (path-modal)')
     j.add_argument('--budgets', nargs='+', type=int, default=[128, 512, 2048, 8192])
     j.add_argument('--seeds', nargs='+', type=int, default=[0, 1, 2])
     j.add_argument('--capture', type=int, default=-1)
@@ -360,7 +364,7 @@ def main(argv=None):
         make_jobs(args.name, args.scenes, args.methods, args.budgets, args.seeds, capture=args.capture, receivers=args.receivers,
                   materials=None if args.scattering is None else dict(scattering=args.scattering), radius=args.radius,
                   capture_scenes=args.capture_scenes, preset_scattering=args.preset_scattering,
-                  roulette_floor=args.roulette_floor, suffix=args.suffix)
+                  roulette_floor=args.roulette_floor, suffix=args.suffix, room_modes=args.room_modes)
     elif args.command == 'render':
         render(args.name, args.work_fraction)
     elif args.command == 'pack':

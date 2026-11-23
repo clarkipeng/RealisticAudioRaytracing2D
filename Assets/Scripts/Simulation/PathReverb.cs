@@ -91,6 +91,16 @@ internal sealed class PathReverb
     readonly bool sinc,doppler;   // doppler: settings.pathReflectionDoppler (off: the rates are ignored)
     long historyEnd=long.MinValue;   // next band block to compute
     readonly double[] rawEnergy,moment1,moment2;readonly uint[] binCounts;
+    // Room modes (RoomModes.cs): per update and pair inside the bank's room, the histogram's band energies scaled by g_b
+    // and the modal difference dh added to every band's kernel (the band filters sum to a delayed unit impulse, so the
+    // band-split input convolved with dh in each band is the input convolved with dh), the same for both ears (the head
+    // is small against the wavelengths below the crossover's top).
+    readonly RoomModes modes;
+    readonly double[] modeAmplitudes,modeResponse,unitShare={1,1,1,1,1,1,1,1};
+    readonly Vector2[] modePiece;
+    readonly float minimumDistance;
+    internal int ModalPairs;   // diagnostics: pairs given the modes by the latest response
+    internal RoomModes Modes => modes;
     internal int EchoBins;   // diagnostics: the latest response's echoes
     internal long NumericBytes { get { long b=(kernels.LongLength+inputs.LongLength+work.Length+wide.Length+sum.Length)*8+(halves.Length+blocks.Length)*4L+energy.Length*8L; foreach(var s in spectra)b+=s.LongLength*8; foreach(var m in mixes)b+=m.LongLength*4; return b; } }
     internal long SupportSamples => (long)count*partition+latency;
@@ -129,6 +139,8 @@ internal sealed class PathReverb
         historyLength=1;while(historyLength<need)historyLength<<=1;
         history=new float[checked(sources*Bands*historyLength)];
         rawEnergy=new double[B];moment1=new double[B];moment2=new double[B];binCounts=new uint[B];
+        modes=RoomModes.ForScene(scene,settings,rate,count*partition);minimumDistance=settings.minimumDistance;
+        if(modes!=null){modeAmplitudes=new double[modes.Bank.Modes];modeResponse=new double[count*partition];modePiece=new Vector2[2*partition];}
     }
     // The early part of one pair's response: per bin whether it is one echo, and its slide rate. energy(k): the bin's raw
     // energy over every direction and band; m1, m2: its rate moments (null: no rates, all zero); count: its
@@ -379,16 +391,20 @@ internal sealed class PathReverb
         long bankSize=(long)pairs*channels*Bands*count*bins;
         Array.Clear(kernels,(int)(bank*bankSize),(int)bankSize);
         int B=this.histogram.Count;
+        bool room=valid && modes!=null && modes.Applies(states);ModalPairs=0;
         for(int pair=0;pair<pairs;pair++)
         {
             int listener=pair%listeners;
             active[bank*pairs+pair]=valid && scene.sources[pair/listeners].mutedListenerPlusOne!=listener+1 &&
                 TakeRender.Enabled(states[scene.listeners[listener]],AcousticTake.StateFlags.Listener);
             if(!active[bank*pairs+pair])continue;
+            double direct=0,delay=0;
+            bool modal=room && modes.Pair(states[scene.sources[pair/listeners].objectIndex].position,states[scene.listeners[listener]].position,minimumDistance,modeAmplitudes,out direct,out delay);
+            var share=modal?modes.Share:unitShare;
             Array.Clear(energy,0,energy.Length);
             for(int d=0;d<Directions;d++)for(int b=0;b<Bands;b++)for(int k=0;k<B;k++)
             {
-                double e=histogram(pair,d,b,k);if(!(e>0))continue;
+                double e=histogram(pair,d,b,k)*share[b];if(!(e>0))continue;
                 for(int c=0;c<channels;c++)energy[(c*Bands+b)*B+k]+=earWeights[(d*2+c)*Bands+b]*e;
             }
             var list=groups[pair];var gb=groupBins[pair];var gw=groupWeights[pair];var spectrum=spectra[pair];var mix=mixes[pair];
@@ -432,6 +448,24 @@ internal sealed class PathReverb
                     long kernel=baseKernel+(long)group.partition*bins;int v1=(g*2)*bins,v2=v1+bins;
                     for(int i=0;i<bins;i++)kernels[kernel+i]+=spectrum[v1+i]*w1+spectrum[v2+i]*w2;
                 }
+            }
+            if(modal){AddModes(pair,direct,delay);ModalPairs++;}
+        }
+    }
+    // dh of one pair into every band's and ear's kernel, partition by partition (each P samples zero-padded to 2P).
+    void AddModes(int pair,double direct,double delay)
+    {
+        modes.Synthesize(modeAmplitudes,direct,delay,modeResponse);
+        for(int q=0;q<count;q++)
+        {
+            bool any=false;
+            for(int n=0;n<partition;n++){float v=(float)modeResponse[q*partition+n];modePiece[n]=new Vector2(v,0);modePiece[partition+n]=Vector2.zero;any|=v!=0;}
+            if(!any)continue;
+            SpectralAudio.Fft(modePiece,false);
+            for(int c=0;c<channels;c++)for(int b=0;b<Bands;b++)
+            {
+                long kernel=(((long)(bank*pairs+pair)*channels+c)*Bands+b)*count*bins+(long)q*bins;
+                for(int i=0;i<bins;i++)kernels[kernel+i]+=modePiece[i];
             }
         }
     }

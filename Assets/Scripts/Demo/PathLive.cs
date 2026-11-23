@@ -40,6 +40,11 @@ public sealed class PathLive : MonoBehaviour
     public float horizonSeconds = 6;
     public int leadSamples = 6144;
     public bool denoise = true;
+    // Opt-in: room modes below the Schroeder frequency (RoomModes.cs). A bank file (tools/room_modes_unity.py church
+    // exports the Church's to .context/bass-and-diffraction/church.roommodes.bytes; a build ships it in StreamingAssets
+    // and names it relative to that), with its sidecar keying it to the scene's geometry hash and baked door poses, so in
+    // another scene, or with a door open, it stays off. Command line: -roomModes PATH.
+    public string roomModesBank = "";
 
     // For the HUD: one line of live figures, and the per-stage GPU times when the player reports them (development only).
     public string Stats { get; private set; } = "";
@@ -134,6 +139,8 @@ public sealed class PathLive : MonoBehaviour
         if (n >= 0 && n + 1 < args.Length) population = int.Parse(args[n + 1]);
         int b = Array.IndexOf(args, "-pathBudget");
         if (b >= 0 && b + 1 < args.Length) budgetMs = float.Parse(args[b + 1], System.Globalization.CultureInfo.InvariantCulture);
+        int r = Array.IndexOf(args, "-roomModes");
+        if (r >= 0 && r + 1 < args.Length) roomModesBank = args[r + 1];
         Configure();
     }
 
@@ -163,6 +170,7 @@ public sealed class PathLive : MonoBehaviour
         s.methodRays = 512; s.methodRouletteFloor = 1e-6f; s.methodEdgeProbability = .5f; s.specularDetectionRadius = 2;
         s.delayFilter = TakeRender.DelayFilter.WindowedSinc; s.sincRadius = 16; s.airAbsorption = true;
         s.pathHistogramExport = s.pathHistogramImport = "";
+        s.roomModesBank = roomModesBank;
         manager.monitorLive = true; manager.monitorLeadSamples = leadSamples;
         manager.monitorCapacitySamples = Math.Max(manager.monitorCapacitySamples, 4 * leadSamples);
         // The station's train (smoke and listening runs): -stationTrainSpeed V and -stationTrainAcceleration A (m/s, m/s^2)
