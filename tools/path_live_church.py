@@ -7,6 +7,10 @@ docs/benchmarks/path-denoise-2026-11-12, parts 26 and 38).
                                                       # (a development player -> Builds/LiveShowcaseDevelopment/: per-stage GPU times)
     nice -n 19 $PY tools/path_live_church.py smoke --windowed [--scenes Church TrainStation] [--shots] [--development]
                                                       # guarded scripted run of the build -> .context/path-live/smoke-*/
+    nice -n 19 $PY tools/path_live_church.py capture --scenes Church TrainStation [-- player arguments]
+                                                      # the smoke walks at a fixed timestep, every frame and the output
+                                                      # -> .context/path-live/capture-*/<scene>/ (frames/, output.wav, capture.json)
+    $PY tools/path_live_church.py video CAPTURE_DIR OUT.mp4   # the captured walks as one H.264/AAC film, and OUT-thumb.jpg
     nice -n 19 $PY tools/path_live_church.py stills   # guarded still images of every scene -> .context/polish/stills
     nice -n 19 $PY tools/path_live_church.py author   # guarded ShowcaseAuthoring of the showcase scenes
 
@@ -109,14 +113,16 @@ def front_app():
     return info.split('=')[-1].strip().strip('"')
 
 
-def smoke(extra=(), windowed=False, scenes=(), shots=False, development=False):
+def smoke(extra=(), windowed=False, scenes=(), shots=False, development=False, capture=False):
     app = DEVELOPMENT_APP if development else APP
-    out = WORK / time.strftime('smoke-%Y%m%d-%H%M%S')
+    out = WORK / time.strftime(('capture' if capture else 'smoke') + '-%Y%m%d-%H%M%S')
     out.mkdir(parents=True)
     binary = next((app / 'Contents/MacOS').iterdir())
     # -batchmode: no window, so the run never takes the screen's focus; the player still draws the scene every frame
     # (smoke.json reports camera renders per frame) and still plays its audio callbacks (callbacks, underruns).
-    command = [str(binary), '-batchmode', '-pathLiveSmoke', str(out), '-screen-width', '1280', '-screen-height', '720',
+    size = ['1920', '1080'] if capture else ['1280', '720']
+    command = [str(binary), '-batchmode', '-pathLiveSmoke', str(out), '-screen-width', size[0], '-screen-height', size[1],
+               *(['-screen-fullscreen', '0', '-pathLiveCapture', '-pathLiveCaptureFps', '60'] if capture else []),
                '-logFile', str(out / 'player.log'), '-liveTrace', str(out / 'pipeline.csv'),
                *(['-pathLiveScenes', ','.join(scenes)] if scenes else []), *(['-pathLiveShots'] if shots else []), *extra]
     if windowed:
@@ -150,6 +156,51 @@ def smoke(extra=(), windowed=False, scenes=(), shots=False, development=False):
         print(f'{max(1, len(scenes)) - len(reports)} scene(s) without a report; see {out}/player.log')
 
 
+def video(capture_dir, out, seconds=None):
+    """The captured walks (capture_dir/<scene>/frames, output.wav, capture.json), one after another, as one film:
+    1920x1080 H.264 High, yuv420p, BT.709, CRF 18, AAC 192 kbit/s; and a 1280x720 thumbnail beside it. Each scene's sound
+    is its own binaural output, aligned to its pictures by capture.json (frame f shows take sample first + f rate / fps,
+    heard at output sample that + lead). One gain for the whole film brings the loudest peak to -1 dBFS."""
+    import subprocess
+    capture_dir, out = Path(capture_dir).resolve(), Path(out).expanduser()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    order = [s for s in ['Church', 'TrainStation'] if (capture_dir / s / 'capture.json').exists()]
+    if not order:
+        raise SystemExit(f'no captured scene in {capture_dir}')
+    # One gain for every scene (their relative levels kept): the loudest peak to -1 dBFS.
+    def peak(wav):
+        text = subprocess.run(['ffmpeg', '-hide_banner', '-i', str(wav), '-af', 'volumedetect', '-f', 'null', '-'],
+                              capture_output=True, text=True).stderr
+        return float(text.split('max_volume:')[1].split('dB')[0])
+    gain = -1 - max(peak(capture_dir / s / 'output.wav') for s in order)
+    parts, fps = [], None
+    for scene in order:
+        meta = json.loads((capture_dir / scene / 'capture.json').read_text())
+        fps, rate = meta['fps'], meta['sampleRate']
+        offset = (meta['firstTakeSample'] + meta['leadSamples']) / rate
+        frames = meta['frames']
+        part = capture_dir / f'{scene}.mp4'
+        color = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
+                 '-x264-params', 'colorprim=bt709:transfer=bt709:colormatrix=bt709']   # (in the stream, so it survives the concatenation)
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-framerate', str(fps), '-i', str(capture_dir / scene / 'frames/frame-%06d.jpg'),
+                        '-ss', f'{offset:.6f}', '-i', str(capture_dir / scene / 'output.wav'),
+                        '-t', f'{frames / fps:.6f}', '-map', '0:v', '-map', '1:a',
+                        '-vf', 'scale=1920:1080:flags=lanczos:out_color_matrix=bt709,format=yuv420p,fade=t=in:st=0:d=0.5,'
+                               f'fade=t=out:st={frames / fps - .5:.3f}:d=0.5',
+                        '-af', f'volume={gain:.2f}dB,afade=t=in:st=0:d=0.5,afade=t=out:st={frames / fps - .5:.3f}:d=0.5',
+                        '-c:v', 'libx264', '-profile:v', 'high', '-crf', '18', '-preset', 'slow', *color,
+                        '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', str(part)], check=True)
+        parts.append(part)
+    listing = capture_dir / 'parts.txt'
+    listing.write_text(''.join(f"file '{p}'\n" for p in parts))
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', str(listing), '-c', 'copy',
+                    '-movflags', '+faststart', str(out)], check=True)
+    thumb = out.with_name(out.stem + '-thumb.jpg')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', '12', '-i', str(out), '-frames:v', '1', '-vf', 'scale=1280:720:flags=lanczos',
+                    '-q:v', '2', str(thumb)], check=True)
+    print(f'wrote {out} and {thumb}')
+
+
 def stalls(path):
     """The main-thread stalls of the run (-liveTrace FILE.stalls, README part 41), each with its kind: computing (the
     main thread's CPU time is most of it), paging (blocked, with page faults that needed I/O), or blocked (waiting or
@@ -166,12 +217,14 @@ def stalls(path):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('command', choices=['build', 'smoke', 'stills', 'author'])
+    p.add_argument('command', choices=['build', 'smoke', 'capture', 'video', 'stills', 'author'])
     p.add_argument('player', nargs='*', help='smoke: extra player arguments (after --); stills: scene names')
     p.add_argument('--windowed', action='store_true', help='smoke: with a window, launched hidden and unfocused (open -g -j)')
     p.add_argument('--scenes', nargs='+', default=[], help='smoke: the scenes to walk, in turn (default: the first)')
     p.add_argument('--shots', action='store_true', help='smoke: a screenshot at each phase of each walk')
     p.add_argument('--development', action='store_true', help='build / smoke: the development player (per-stage GPU times)')
     a = p.parse_args()
-    {'build': lambda: build(a.development), 'smoke': lambda: smoke(a.player, a.windowed, a.scenes, a.shots, a.development), 'stills': lambda: stills(a.player),
+    {'build': lambda: build(a.development), 'smoke': lambda: smoke(a.player, a.windowed, a.scenes, a.shots, a.development),
+     'capture': lambda: smoke(a.player, True, a.scenes, False, a.development, capture=True),
+     'video': lambda: video(*a.player[:2]), 'stills': lambda: stills(a.player),
      'author': author}[a.command]()

@@ -52,6 +52,11 @@ public sealed class PathLive : MonoBehaviour
     RayTraceManager manager;
     string smoke;
     bool shots;
+    // Capture (-pathLiveCapture [-pathLiveCaptureFps F]): the smoke walk at a fixed timestep (Time.captureFramerate), every
+    // frame saved to DIR/<scene>/frames and the output consumed frame by frame in game time (RayTraceManager.ManualClock,
+    // AudioManager.manualConsumption), each frame's samples rendered first, so picture and sound stay in step whatever
+    // the capture's speed; DIR/<scene>/capture.json maps frames to output.wav. No HUD or source markers.
+    bool capture; int captureFps = 60, captureFrames; long captureConsumed, captureFirstTakeSample = -1; float[] captureBuffer;
     float smokeStart = -1;
     readonly List<float> frameMs = new List<float>();
     readonly List<float> traceMs = new List<float>(), reverbMs = new List<float>(), denoiseMs = new List<float>(), gpuMs = new List<float>(), frameGpuMs = new List<float>();
@@ -115,6 +120,15 @@ public sealed class PathLive : MonoBehaviour
         if (at >= 0 && at + 1 < args.Length && smokeScenes.Count > 0 && smokeScenes.Peek() == gameObject.scene.path)
             smoke = Path.Combine(Path.GetFullPath(args[at + 1]), gameObject.scene.name);
         shots = Array.IndexOf(args, "-pathLiveShots") >= 0;
+        capture = smoke != null && Array.IndexOf(args, "-pathLiveCapture") >= 0;
+        int fps = Array.IndexOf(args, "-pathLiveCaptureFps");
+        if (fps >= 0 && fps + 1 < args.Length) captureFps = int.Parse(args[fps + 1]);
+        if (capture)
+        {
+            Time.captureFramerate = captureFps;
+            manager.ManualClock = true; manager.audioManager.manualConsumption = true;
+            foreach (var dog in FindObjectsByType<Watchdog>(FindObjectsSortMode.None)) dog.seconds = float.MaxValue;   // (a capture is slower than real time)
+        }
         if (showcase.population > 0) population = showcase.population;
         int n = Array.IndexOf(args, "-pathPopulation");
         if (n >= 0 && n + 1 < args.Length) population = int.Parse(args[n + 1]);
@@ -182,7 +196,44 @@ public sealed class PathLive : MonoBehaviour
         // Evidence that the scene is drawn (the smoke run may be windowless, -batchmode): camera renders per frame.
         Camera.onPostRender += CountRender;
         UnityEngine.Rendering.RenderPipelineManager.endCameraRendering += CountRender;
+        if (capture) { Directory.CreateDirectory(Path.Combine(smoke, "frames")); StartCoroutine(Capture()); }
     }
+    // Capture: before each frame is drawn, the HUD and the source markers are hidden; after it, the frame is saved (from
+    // the walk's start) and the frame's output samples are consumed, once the renderer has published them.
+    void LateUpdate()
+    {
+        if (!capture) return;
+        foreach (var canvas in FindObjectsByType<Canvas>(FindObjectsSortMode.None)) canvas.enabled = false;
+        foreach (var overlay in FindObjectsByType<AudioSourceOverlay>(FindObjectsSortMode.None)) overlay.visible = false;
+    }
+    System.Collections.IEnumerator Capture()
+    {
+        var end = new WaitForEndOfFrame();
+        // Frames until the walk ends; the output until its capture closes (the take drains its tail first).
+        while (!finishing || manager.audioManager.OutputCapture != null || manager.Mode == RayTraceManager.SessionMode.Draining)
+        {
+            yield return end;
+            var queue = manager.audioManager.OutputQueue;
+            if (queue == null) continue;
+            if (smokeStart >= 0 && !finishing)
+            {
+                if (captureFirstTakeSample < 0) captureFirstTakeSample = manager.LiveSample;
+                var shot = ScreenCapture.CaptureScreenshotAsTexture();
+                File.WriteAllBytes(Path.Combine(smoke, "frames", $"frame-{captureFrames:D6}.jpg"), shot.EncodeToJPG(95));
+                Destroy(shot); captureFrames++;
+            }
+            // This frame's samples in game time, rendered before they are consumed (the device consumes nothing).
+            long target = (long)Math.Round(Time.timeAsDouble * manager.sampleRate) - captureStartSample;
+            if (captureStartSample < 0) { captureStartSample = (long)Math.Round(Time.timeAsDouble * manager.sampleRate); continue; }
+            int count = (int)Math.Max(0, target - captureConsumed);
+            if (count == 0) continue;
+            for (int i = 0; i < 64 && queue.WrittenSample < queue.ReadSample + count; i++) manager.LiveRenderer?.Pump(true);
+            if (captureBuffer == null || captureBuffer.Length != count * 2) captureBuffer = new float[count * 2];
+            queue.Consume(captureBuffer, 2, false, double.NaN, true);
+            captureConsumed += count;
+        }
+    }
+    long captureStartSample = -1;
     void CountRender(Camera _) => cameraRenders++;
     void CountRender(UnityEngine.Rendering.ScriptableRenderContext _, Camera __) => cameraRenders++;
     void OnDestroy()
@@ -226,7 +277,25 @@ public sealed class PathLive : MonoBehaviour
             }
         }
         else { ScriptPhase = "holding"; if (seconds >= showcase.holdSeconds) scriptDone = true; }
-        session.SubmitInput(movement, Vector2.zero, false, interact);
+        session.SubmitInput(movement, capture ? Follow() : Vector2.zero, false, interact);
+    }
+    // Capture only: while holding, the view turns toward the fastest-moving source (the train), at most at a head's
+    // turning speed, so the film shows what is heard passing; the smoke runs keep their fixed view.
+    readonly Dictionary<RaytracedAudioSource, Vector3> lastSourcePositions = new Dictionary<RaytracedAudioSource, Vector3>();
+    Vector2 Follow()
+    {
+        RaytracedAudioSource fastest = null; float speed = .001f;
+        foreach (var source in showcase.sources)
+        {
+            if (source == null) continue;
+            var p = source.transform.position;
+            if (lastSourcePositions.TryGetValue(source, out var last) && (p - last).magnitude > speed) { speed = (p - last).magnitude; fastest = source; }
+            lastSourcePositions[source] = p;
+        }
+        if (ScriptPhase != "holding" || fastest == null) return Vector2.zero;
+        var to = fastest.transform.position - session.player.position; to.y = 0;
+        float error = Vector3.SignedAngle(Vector3.ProjectOnPlane(session.player.forward, Vector3.up), to, Vector3.up), most = 120 * Time.fixedDeltaTime;
+        return new Vector2(Mathf.Clamp(error, -most, most), 0);
     }
     void Shot() { if (shots) ScreenCapture.CaptureScreenshot(Path.Combine(smoke, $"shot-{leg + 1:D2}.png")); }
 
@@ -266,6 +335,7 @@ public sealed class PathLive : MonoBehaviour
     static string Ms(float v) => float.IsNaN(v) ? "–" : $"{v:F1} ms";
     static float Recent(List<float> v) { if (v.Count == 0) return float.NaN; int n = Math.Min(30, v.Count); float s = 0; for (int i = v.Count - n; i < v.Count; i++) s += v[i]; return s / n; }
 
+    [Serializable] sealed class CaptureReport { public int fps, frames, sampleRate, leadSamples; public long firstTakeSample; }
     [Serializable] sealed class SmokeReport
     {
         public string scene, takePath, outputWav;
@@ -279,8 +349,9 @@ public sealed class PathLive : MonoBehaviour
 
     void Smoke(AudioManager.PcmQueue queue)
     {
-        if (smokeStart < 0 && manager.IsRecordingTake) smokeStart = Time.unscaledTime;
-        if (smokeStart < 0 || finishing || !scriptDone && Time.unscaledTime - smokeStart < 120) return;
+        float now = capture ? Time.time : Time.unscaledTime;   // (a capture runs in game time)
+        if (smokeStart < 0 && manager.IsRecordingTake) smokeStart = now;
+        if (smokeStart < 0 || finishing || !scriptDone && now - smokeStart < 120) return;
         finishing = true;
         var live = manager.LiveRenderer; var method = live.Method;
         float P(List<float> v, double q) { if (v.Count == 0) return float.NaN; var s = v.Skip(Math.Min(v.Count - 1, 60)).OrderBy(x => x).ToArray(); return s[Math.Min(s.Length - 1, (int)(q * s.Length))]; }
@@ -298,6 +369,10 @@ public sealed class PathLive : MonoBehaviour
             denoiser = live.PathDenoising, takePath = manager.takePath, outputWav = Path.Combine(smoke, "output.wav")
         };
         File.WriteAllText(Path.Combine(smoke, "smoke.json"), JsonUtility.ToJson(report, true));
+        // Frame f shows take sample firstTakeSample + f sampleRate / fps; the output plays take sample s at output.wav
+        // sample s + leadSamples (the queue's samples from its start).
+        if (capture) File.WriteAllText(Path.Combine(smoke, "capture.json"), JsonUtility.ToJson(new CaptureReport
+            {fps = captureFps, frames = captureFrames, sampleRate = manager.sampleRate, leadSamples = leadSamples, firstTakeSample = captureFirstTakeSample}, true));
         if (timeline != null) File.WriteAllText(Path.Combine(smoke, "timeline.csv"), timeline.ToString());
         manager.EndTakeRecording();
         StartCoroutine(Finish(report));

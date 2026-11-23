@@ -207,10 +207,14 @@ public class AudioManager : MonoBehaviour
         src.Play();
     }
 
+    // A capture at a fixed timestep (PathLive -pathLiveCapture): the device plays silence and consumes nothing; the main
+    // thread consumes each frame's samples itself (PcmQueue.Consume), so the recorded output follows game time.
+    public volatile bool manualConsumption;
+
     void OnAudioFilterRead(float[] data, int channels)
     {
         var queue = Volatile.Read(ref pcmQueue);
-        if (queue == null) Array.Clear(data, 0, data.Length);
+        if (queue == null || manualConsumption) Array.Clear(data, 0, data.Length);
         else queue.Consume(data, channels, paused, AudioSettings.dspTime, muteOutput);
     }
 

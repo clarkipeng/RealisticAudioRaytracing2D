@@ -96,6 +96,10 @@ public class RayTraceManager : MonoBehaviour
     int captureRate;
     internal SceneSession simulation;
     long simulationOrigin;
+    // The take's clock: the audio device's (dspTime), or with ManualClock the game's own time (Time.timeAsDouble), for a
+    // capture at a fixed timestep (PathLive -pathLiveCapture) whose output is consumed frame by frame on the main thread.
+    public bool ManualClock;
+    double ClockSeconds => ManualClock ? Time.timeAsDouble : AudioSettings.dspTime;
     internal long PoseSample => simulation!=null?checked((long)Math.Round((simulation.Tick-simulationOrigin)*(double)Time.fixedDeltaTime*sampleRate)):LiveSample;
 
     [Header("Take recording / replay")]
@@ -263,7 +267,7 @@ public class RayTraceManager : MonoBehaviour
         captureRate=sampleRate; captureScene=scene;
         liveDiagnostics=new LiveDiagnostics {sampleRate=sampleRate,leadSamples=monitorLeadSamples,queueCapacity=monitorCapacitySamples};
         AudioSettings.GetDSPBufferSize(out liveDiagnostics.deviceBufferSamples,out var deviceBufferCount);
-        takeClockOrigin = AudioSettings.dspTime; takeOutputRate = AudioSettings.outputSampleRate;
+        takeClockOrigin = ClockSeconds; takeOutputRate = AudioSettings.outputSampleRate;
         previousTakeSample = lastSourceEventSample = -1;
         try
         {
@@ -299,7 +303,7 @@ public class RayTraceManager : MonoBehaviour
             if(takeWriter!=null) RecordingStarted?.Invoke(takePath);
             CaptureTakeState(0);liveDirect?.Prepare(takeState);
             liveDiagnostics.preparationSeconds=TakeRender.Elapsed(preparationStart);
-            takeClockOrigin=AudioSettings.dspTime;
+            takeClockOrigin=ClockSeconds;
             simulationOrigin=simulation!=null?simulation.Tick:0;
             if (playbackCapture!=null) playbackCapture.Metadata.inputDspOriginSeconds=takeClockOrigin;
             if (monitorQueue!=null) sessionAudio.StartPcmStream(monitorQueue);
@@ -394,9 +398,9 @@ public class RayTraceManager : MonoBehaviour
 
     long TakeSampleNow()
     {
-        if (sampleRate != captureRate || AudioSettings.outputSampleRate != takeOutputRate || AudioSettings.dspTime < takeClockOrigin)
+        if (sampleRate != captureRate || AudioSettings.outputSampleRate != takeOutputRate || ClockSeconds < takeClockOrigin)
             throw new InvalidOperationException("Audio clock changed; this take is incomplete.");
-        return checked((long)Math.Floor((AudioSettings.dspTime - takeClockOrigin) * sampleRate));
+        return checked((long)Math.Floor((ClockSeconds - takeClockOrigin) * sampleRate));
     }
 
     long CaptureSampleNow()
@@ -535,7 +539,7 @@ public class RayTraceManager : MonoBehaviour
             }
             if (replayTake != null)
             {
-                if (replayPlaying) replaySeconds = AudioSettings.dspTime-takeClockOrigin;
+                if (replayPlaying) replaySeconds = ClockSeconds-takeClockOrigin;
                 long clockSample=(long)Math.Round(replaySeconds*replayTake.Metadata.sampleRate);
                 long sample=Math.Max(0,Math.Min(clockSample,replayTake.Metadata.durationSamples));
                 if(replayAudio!=null)PumpReplayAudio(sample);
@@ -600,7 +604,7 @@ public class RayTraceManager : MonoBehaviour
                 }
             }
             foreach (var writer in replayMotionWriters) Suspend(writer);
-            replayTake=loaded; replaySeconds=0; replayPlaying=play; takeClockOrigin=AudioSettings.dspTime;
+            replayTake=loaded; replaySeconds=0; replayPlaying=play; takeClockOrigin=ClockSeconds;
             replayTake.Evaluate(0,takeState); ApplyTakeState(takeState);
             if(audio)BeginReplayAudio();
             TakeStatus=(audio?"Replaying scene and recorded source audio: ":"Replaying recorded poses: ")+directory;
@@ -620,7 +624,7 @@ public class RayTraceManager : MonoBehaviour
         replayAudio=new TakeRender.Live(meta.scene,replayTake.Geometry,pcm,meta.sampleRate,directSettings,monitorQueue,monitorLeadSamples,monitorListener,directShader,streams);
         replayAudioLeft=new AcousticTake.State[meta.scene.objects.Length];replayAudioRight=new AcousticTake.State[meta.scene.objects.Length];
         replayTake.ReadStoredFrame(0,replayAudioLeft);replayFrame=1;replayEvent=0;replayAudioFinished=false;
-        takeClockOrigin=AudioSettings.dspTime;sessionAudio.StartPcmStream(monitorQueue);
+        takeClockOrigin=ClockSeconds;sessionAudio.StartPcmStream(monitorQueue);
     }
     void PumpReplayAudio(long sample)
     {
@@ -647,7 +651,7 @@ public class RayTraceManager : MonoBehaviour
         if (replayTake == null) throw new InvalidOperationException("Open a take before playing it.");
         if (double.IsNaN(replaySeconds) || double.IsInfinity(replaySeconds)) throw new ArgumentException("Invalid replay time.");
         replaySeconds=Math.Max(0,Math.Min(replaySeconds,(double)replayTake.Metadata.durationSamples/replayTake.Metadata.sampleRate));
-        takeClockOrigin=AudioSettings.dspTime-replaySeconds;
+        takeClockOrigin=ClockSeconds-replaySeconds;
         replayPlaying=play;
     }
 

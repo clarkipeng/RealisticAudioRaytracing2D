@@ -497,4 +497,6 @@ Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 2
     Run it with the screen unlocked: a locked Mac neither presents nor plays the player.
     With `--shots` it also saves a screenshot at each phase of the walk.
   - The Church's handover recording, at 8,000 rays, is in `.context/energy-audio/listen/` ("path, live player") and in the Agentworld gallery.
+- **Film:** `tools/path_live_church.py capture --scenes Church TrainStation` runs the smoke walks at a fixed timestep (60 frames per second of game time), saving every frame and the player's own output in step with it; `tools/path_live_church.py video DIR OUT.mp4` makes one H.264/AAC film of them (part 45).
+  The current one is `~/Movies/site-long-cuts/audio-raytracer-long.mp4`.
 - **Stills:** `tools/path_live_church.py stills` renders every scene from its player camera, its first spawn point and its smoke walk's waypoints, without Play mode, to `.context/polish/stills`.
