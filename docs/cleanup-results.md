@@ -1,5 +1,8 @@
 # Cleanup validation and measured bottlenecks
 
+> **Removed code (2026-11-23):** the hybrid renderer (RayTransport's GPU solver, `Transport.compute`, complete early routes, the late energy field, family gains, impulse-response synthesis, the 2D ray debugger), the energy and pressure methods and their offline tools, which much of this document describes, were removed in commit `f430c13`; they live in Git history.
+> The persistent-ray path method ([method](method.md)) is the renderer now.
+
 ## Full-wave result after first-image integration — 2026-10-27
 
 [Fresh canopy comparison and evidence](benchmarks/wave-first-images-2026-10-27/README.md): at 125 Hz and two rays/bin, whole-map complex-pressure error improves **55.92% → 50.05%**, but blocked-region error remains **100.19%**, with 257/1,166 zero-pressure points. At 128 rays with diffraction enabled, error is **294.03%**. This is the independent wave comparison; the earlier 1.03% PCM control only contained direct and first-image paths. The same refined 7,904-triangle BEM field, geometry, receivers and scales are retained. 9,328 finite-output measurements complete under the resource guard. No runtime changes or full-wave fidelity claim.

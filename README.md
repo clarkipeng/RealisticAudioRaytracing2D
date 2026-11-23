@@ -1,12 +1,12 @@
 # Acoustic ray tracing
 
-Unity **6000.4.1f1 (Unity 6.4)**, C# and HLSL. The shared renderer runs directional acoustic transport in 2D and 3D, live and offline. Compact station recordings retain inputs/events and the matching scene/code identity.
+Unity **6000.4.1f1 (Unity 6.4)**, C# and HLSL. The renderer runs the persistent-ray path method ([docs/method.md](docs/method.md)) in 3D, live and offline, with a CPU direct-sound reference in 2D and 3D. Compact station recordings retain inputs/events and the matching scene/code identity.
 
-**Implemented now:** editable 3D station and church with asset/voice sources and a binaural listener, train service with station stops and walking aboard, sliding door and walkthrough controls, strict take capture, live directional spectral monitoring, pose replay/scrubbing, CPU/HLSL direct solvers for 2D/3D, offline WAV/response export, bounded asynchronous GPU batches, captured output PCM/timing, configurable fractional-delay FIR, binaural headphone rendering, and a native comparison window with synchronized audio, plots and recorded scene views. Live and offline share interpolation, the source timeline and scheduling. Raytraced DSP has a GPU implementation and a selectable CPU reference. The direct/opaque baseline still has matching CPU/GPU implementations. The GPU spectral preview adds reflections, scattering, transmission/refraction, material/air attenuation and deterministic sampling of signed edge diffraction, with per-arrival head orientation.
+**Implemented now:** editable 3D station and church with asset/voice sources and a binaural listener, train service with station stops and walking aboard, sliding door and walkthrough controls, strict take capture, live directional spectral monitoring, pose replay/scrubbing, CPU/HLSL direct solvers for 2D/3D, offline WAV/response export, bounded asynchronous GPU batches, captured output PCM/timing, configurable fractional-delay FIR, binaural headphone rendering, and a native comparison window with synchronized audio, plots and recorded scene views. Live and offline share interpolation, the source timeline and scheduling. Raytraced DSP has a GPU implementation and a selectable CPU reference. The direct/opaque baseline runs on the CPU. The path method traces reflections, scattering, transmission/refraction, material/air attenuation and UTD edge diffraction on the GPU, with per-arrival head orientation.
 
-**Still planned:** LakeForest, validated/converged indirect transport, training-example curation and learned reconstruction. Church, microphone sources, LAN/Relay multiplayer and offline client replay are implemented. All four scenes use the current renderer; the obsolete 2D renderer is retained in Git history. The geometric preview is not a validated high-fidelity training teacher.
+**Still planned:** LakeForest, validated/converged indirect transport, training-example curation and learned reconstruction. Church, microphone sources, LAN/Relay multiplayer and offline client replay are implemented. The Church and the train station render with the path method; the hybrid, energy and pressure methods it replaced are in Git history (commit `f430c13` removed them). The geometric preview is not a validated high-fidelity training teacher.
 
-**Audit repairs:** [current implementation and remaining limits](docs/simulation-contracts.md#renderer-repairs-2026-10-05). CPU IR synthesis uses partitioned linear convolution; GPU IR evaluates equivalent delayed short filters; the optional spectral synthesis uses continuous path clocks for Doppler and short spectral/ear filters. Both retain sample-by-sample response fades, complete per-frequency ray budgets and first-order image-source reflections. Compact recording failures invalidate the save. Independent convolution/reflection/replay checks cover the repaired errors; diffuse transport and diffraction still need physical validation before training.
+**Audit repairs:** [current implementation and remaining limits](docs/simulation-contracts.md#renderer-repairs-2026-10-05). The spectral synthesis uses continuous path clocks for Doppler and short spectral/ear filters, with sample-by-sample response fades. Compact recording failures invalidate the save. Independent convolution/reflection/replay checks cover the repaired errors; diffuse transport and diffraction still need physical validation before training.
 
 [The consolidated design contract](docs/simulation-contracts.md) covers scene/assets, Unity/HLSL data, live/offline execution, IR/complex/spectrogram reconstruction, temporal upscaling, training, multiplayer and acceptance gates. This README covers running the implemented code; [cleanup results](docs/cleanup-results.md) records current station benchmarks and historical measurements.
 
@@ -16,28 +16,18 @@ The [next-work specification](docs/simulation-contracts.md#runtime-cleanup-and-s
 
 Open **Assets/Scenes/Church.unity** and press Play. Walk with WASD/mouse, jump with Space, use **E** near the two entrance doors, **R** to save and **Esc** to release the cursor and expose microphone / Host / Join controls. Click the Game view to resume walking. The imported medieval church has relief-textured stonework, stained glass, carved pews, a detailed altar and organ façade, candle-ring chandeliers and cool window lighting in a darker dusk setting. Walkable ground extends beyond the courtyard. Tower bells and an original sampled-organ passage play automatically on separate 30-second loops. Walk into the courtyard to hear the bells; the nave is screened by masonry. The scene shares its player and recording/replay path with TrainStation. **Tools → Acoustics → Build church** rebuilds the scene and replaces edits, so use the existing scene for normal work.
 
-Church uses separate illustrative stone/wood/glass/ground acoustic materials, **first images, 512 late energy rays per band, 32 bounces, a 1.25 s horizon, GPU spectral synthesis and mono output** for speakers. Reflections and the late energy reverberation are enabled (the 32-bounce cap and 1.25 s horizon end the stone church's late field after about a second); experimental diffraction remains off. Object vibration and acoustic radiation are deferred; the standalone mechanical bake tools are not connected to scene playback. Choose Binaural for headphones. Architecture and doors use a simplified collision/acoustic mesh; tiny decorative details are visual only. This is an editable acoustic demo, not measured church acoustics or an approved training reference. The bell, rain and thunder recordings retain their original environmental acoustics. The organ uses samples from an organ emulator with no additional reverb. The dry diagnostic clap remains available separately. Zero bounces remains an optional diagnostic setting. [Asset sources, CC0 licenses and processing](Assets/External/Church/README.md).
+Church uses separate illustrative stone/wood/glass/ground acoustic materials, **the path method, 32 bounces, a 1.25 s horizon, GPU spectral synthesis and mono output** for speakers; diffraction is off in this preset. The live showcase (below) plays it with persistent rays and binaural output. Object vibration and acoustic radiation are deferred; the standalone mechanical bake tools are not connected to scene playback. Choose Binaural for headphones. Architecture and doors use a simplified collision/acoustic mesh; tiny decorative details are visual only. This is an editable acoustic demo, not measured church acoustics or an approved training reference. The bell, rain and thunder recordings retain their original environmental acoustics. The organ uses samples from an organ emulator with no additional reverb. The dry diagnostic clap remains available separately. Zero bounces remains an optional diagnostic setting. [Asset sources, CC0 licenses and processing](Assets/External/Church/README.md).
 
 The [multiplayer capture/training plan](docs/simulation-contracts.md#turning-multiplayer-captures-into-training-examples) saves each client's actual presented poses plus separate decoded, pre-acoustic voice streams and their availability/loss timing. Low/High will use identical received speech; recording a mixed output alone cannot supply those training inputs. The streamed-take format now saves those inputs; it does not automatically enroll speech in a training dataset.
 
 ## Diffraction
 
-Diffraction is part of the phase-exact early sound: with **Complete Route Samples > 0** the renderer integrates the signed rigid-wedge D, DD, RD, DR and RR routes (see [tuned complete early routes](docs/simulation-contracts.md#tuned-complete-early-routes-v12)).
-Each route sample carries signed pressure, travel time and arrival direction; moving interactions use the incoming and outgoing directions for Doppler.
-**Diffraction Factor** scales edge pressure: **1** uses the rigid-wedge model, **0** disables it.
-The late energy field has no diffraction, and higher-order edge chains (D³ and longer) are not modelled.
+Diffraction is part of the path method: UTD edge rays leave the source, and scattering points connect to the listener through an edge ([docs/method.md](docs/method.md)).
+**Diffraction Factor** 1 uses the rigid-wedge UTD energy kernel; 0 disables it.
+It is an energy model, not a validated wave reference; `MethodsMatchTheHalfPlaneReference` and `MethodsReachTheFarSideOfASolid` check it against independent BTM band energies.
 
-This remains an unvalidated training teacher. Mixed diffuse/surface weights are approximate; exact specular–edge connections, general impedance wedges and vertex corrections are incomplete. More rays reduce sampling noise but do not establish physical accuracy. Planar geometry represents an infinite extrusion perpendicular to XY with spherical point sources. [Model and limitations](docs/simulation-contracts.md#integrated-edge-trial).
-
-For independent pressure maps behind walls, use the [silent wave-reference comparison](docs/cleanup-results.md#independent-wave-pressure-maps--2026-10-18). It compares the actual GPU transport with a 3D Helmholtz boundary-element solution, checks the reference against an analytic sphere, and exports shared-scale maps, route plots, complex pressures and mesh-refinement measurements.
-
-The optional [planar wave lab](docs/cleanup-results.md#planar-wave-reference--2026-10-18) adds cheap 2D analytic controls and a 2.5D FEM reference matched to `Planar2D`: free space, a barrier and staggered walls. The [contracts and next steps](docs/simulation-contracts.md#wave-reference-suite-research-and-implementation-plan) distinguish implemented checks from future material, scene and training coverage.
-
-The [transport candidate audit](docs/cleanup-results.md#transport-candidate-audit--2026-10-20) measures pressure-weight fixes, additional mirror/edge connections, residual integration, weak-path roulette, axial resonance and local wave scattering. Only the pressure-weight/debug fix is enabled in Unity; the other candidates remain opt-in offline experiments.
-
-The [research experiment protocol](docs/simulation-contracts.md#ray-transport-and-learned-reconstruction-experiment) specifies kernel candidates, staged parameter searches and a 25-scene benchmark. `compare_wave_field.py suite` generates its fixtures; `score` reports balanced complex-pressure error with equal scene-family weights.
-
-The [material/room/motion extension](docs/simulation-contracts.md#materials-enclosed-spaces-and-motion) specifies the next physical cases. A [silent early-reflection control](docs/cleanup-results.md#material-enclosed-room-and-motion-controls--2026-10-18) already checks synthetic absorption and receiver movement in enclosed 2D/3D boxes (`renderer --room-control`).
+The wave-reference suite (`tools/fdtd_wave.py`, `tools/compare_wave_field.py`, the [method comparison](docs/benchmarks/methods-2026-11-06/README.md)) supplies the ground truth the path method is scored against.
+The earlier hybrid renderer's complete early routes, transport-candidate audit and renderer comparisons are in [cleanup results](docs/cleanup-results.md) and Git history.
 
 ## Microphone and multiplayer
 
@@ -126,7 +116,7 @@ The official `com.unity.pipeline` editor bridge starts with this project. `unity
 
 For a working starting scene, choose **Tools → Acoustics → Create 3D walkthrough**. It creates native walls, a moving occluder, a walking listener and an emitter using the existing audio/material assets. Save the scene, enter Play, select the simulation manager, record, and start the emitter through its context menu. WASD/mouse move the listener. The scene stays editable through ordinary Unity components.
 
-1. Add/use a `RayTraceManager` on a separate, always-active GameObject. Set **Take Root** to the root of the objects you want to capture. Enable **Monitor Live** and assign an `AudioManager` for audible output. **Direct Shader** can be empty for CPU, or `Assets/Shaders/Transport.compute` for GPU. Disable Monitor Live for silent capture.
+1. Add/use a `RayTraceManager` on a separate, always-active GameObject. Set **Take Root** to the root of the objects you want to capture. Enable **Monitor Live** and assign an `AudioManager` for audible output. **Direct Shader** is the path method's compute shader (`Assets/Resources/Acoustics/PathMethod.compute`), which raytraced transport needs; the direct transport (CPU) ignores it. Disable Monitor Live for silent capture.
 2. Create ordinary Unity objects. For 3D, add `AcousticSurface` to acoustic geometry: Auto uses `MeshFilter.sharedMesh` first, then a supported collider. For 2D, choose **Planar2D**, use Collider2D shapes in the XY plane, and add `AcousticSurface`. List geometry outside Take Root explicitly in **Take Objects**.
 3. Assign an `AudioMaterial` on each surface, or **Take Default Material** as a fallback. Optional submesh overrides share one material table. `AudioMaterial.energyCurve` accepts any number of ordered frequency knots; an empty curve preserves the existing material. Coefficients use linear interpolation in Hz and clamp outside the authored range. The direct baseline records these curves but treats all geometry as opaque.
 4. Add `RaytracedAudioSource` components with clips and a manager reference under Take Root, or list them explicitly in **Take Sources**. Clips must be readable/preloaded (Decompress On Load). Preparation for the new path happens once when capture/preview starts. List walking camera/player receiver transforms in **Take Listeners**.
@@ -166,11 +156,10 @@ yield return new WaitUntil(() => manager.Mode == RayTraceManager.SessionMode.Idl
 manager.BeginTakeReplay(newTakeDirectory, play: false);
 ```
 
-## Inspect 2D ray propagation
+## 2D rooms
 
-Open `Assets/Scenes/SmollRoom.unity` (or Big Room), then **Acoustics → 2D Ray Debugger**. Choose the scene manager, source/listener pair, frequency bin and probe ray count, and click **Capture**. Use **Play** or **Travel ms** to follow propagation. Select a path or click a segment for its material, delay and signed weight; scroll to zoom and drag to pan. The field to the right of the time slider sets the displayed time range in milliseconds.
-
-This captures a frozen geometry probe from the actual GPU transport, including direct, mirror, surface and edge paths. Scene motion is paused for the probe; no audio playback is required. Capturing again picks up your scene edits. Rejected proposals are optional dotted lines. Ordinary playback has no debug buffers or readback. [Capture layout and limitations](docs/simulation-contracts.md#2d-propagation-debugger).
+`Assets/Scenes/SmollRoom.unity` and `Big Room.unity` are planar scenes from the removed hybrid renderer.
+The path method is 3D only, so they no longer render raytraced audio, and the 2D ray debugger was removed with the hybrid.
 
 ## Live scheduling and diagnostics
 
@@ -188,7 +177,7 @@ Live GPU rendering batches response samples across the queued, known motion inte
 
 **Static geometry BVH** optionally accelerates CPU/HLSL direct intersections in both 2D and 3D. Geometry starts in the tree; when an object's pose first changes, its primitives leave the tree and use direct tests for the rest of that solver session, including when the object stops. Only that membership change rebuilds the tree; ongoing motion needs no refits. GPU batches share one static tree. No new scene tags or recording fields are required. The station enables it for multi-bounce tracing; new generic settings retain the direct baseline with BVH off. Toggle it in offline render settings or **Direct Settings → Use Bvh**. [Measured Low/High offline totals, preserved Git revisions and benchmark instructions](docs/cleanup-results.md) compare this split with the earlier moving-geometry BVH and brute force.
 
-The default station lead is 16,384 sample frames (371.5 ms at 44.1 kHz), plus device latency. The station assigns `Transport.compute`. Spectral synthesis adds 1,024 samples (23.22 ms at 44.1 kHz) of declared DSP latency, plus path/HRIR delay. Measure completion time and deadline counters when selecting a lead.
+The default station lead is 16,384 sample frames (371.5 ms at 44.1 kHz), plus device latency. The station assigns the path method's compute shader (`Resources/Acoustics/PathMethod.compute`). Spectral synthesis adds 1,024 samples (23.22 ms at 44.1 kHz) of declared DSP latency, plus path/HRIR delay. Measure completion time and deadline counters when selecting a lead.
 
 The manager exposes **Idle**, **Live**, **Recording**, **Replay** and **Draining** states. One session owns the bounded PCM queue and output driver. **Monitor Live** controls audible monitoring during capture; disabling it records silently.
 
@@ -206,44 +195,19 @@ On the manager Inspector, choose a saved take and click **Render saved take to r
 
 One listener stays one scene object and yields one WAV: mono or interleaved left/right. Source clips remain mono. Live binaural output requires Unity's stereo speaker configuration. Queue capacities, lead and counters always count sample frames, regardless of channel count. Old take files can render either output mode. Batch settings use `"listenerOutput": 1` for binaural, or omit it for mono; comparisons must use the same mode. Run/output manifests identify channel count, HRTF hash/taps and DSP contract. Direct response and output-capture manifests now use format version 3: each pair stores six floats (delay, gain, direction XYZ, delay rate in seconds/second). Comparison still reads v1/v2 reports. Take/input recording formats are unchanged.
 
-**Transport → Raytraced** requires `Transport.compute` and uses the same scene/state and source-event pipeline. It supports segments in XY and full 3D triangles, including moving objects. Every arrival retains delay, frequency and world direction until its left/right KEMAR filters are applied. Sources/listeners use the existing source-major/listener-minor indexing; ears are output channels, not additional scene listeners.
+**Transport → Raytraced** runs the path method; it requires the path method's compute shader (`Resources/Acoustics/PathMethod.compute`) and uses the same scene/state and source-event pipeline. It supports full 3D triangles, including moving objects, and point sources (plane sources such as rain are left out of captures with a warning). Every arrival retains delay, frequency and world direction until its left/right KEMAR filters are applied. Sources/listeners use the existing source-major/listener-minor indexing; ears are output channels, not additional scene listeners.
 
-The station starts at five bounces, acoustic FFT size 1,024, convolution block 256 and a 1,024-sample response step. **Late Rays** (energy rays per octave band and source/listener pair, default 512), **Late Receiver Radius**, sampling seed, bounces, frequency grid and block length are configurable. **Rays Per Bin** now only sets the `PrimitiveBaseline` mirror samples and the floor of the First Images candidate budget; old serialized total-ray budgets still migrate to it. Acoustic FFT size must be a power of two; the block divides it and is at most half its size; response steps are whole blocks. CPU IR synthesis uses separate zero-padded transforms of twice the block length. Spectral synthesis pads for the short acoustic filter plus the full HRIR and block; neither truncates the HRIR. Frequency bins follow the acoustic FFT, without a new fixed-band representation. Existing material controls supply absorption, scattering, transmission, IOR and damping curves sampled onto that grid. Take format v2 authenticates the additional curves. V1 takes remain readable, with absent transmission/damping zero and IOR one.
+The station starts at five bounces, acoustic FFT size 1,024, convolution block 256 and a 1,024-sample response step. **Method Rays**, the path settings (`path*`), sampling seed, bounces, frequency grid and block length are configurable. Acoustic FFT size must be a power of two; the block divides it and is at most half its size; response steps are whole blocks. Spectral synthesis pads for the short acoustic filter plus the full HRIR and block, without truncating the HRIR. Existing material controls supply absorption, scattering, transmission, IOR and damping curves. Take format v2 authenticates the additional curves. V1 takes remain readable, with absent transmission/damping zero and IOR one.
 
 Raytraced travel time sums `distance * IOR / airSpeed` separately for every medium traversed; `IOR = airSpeed / materialSpeed`. Interior pressure attenuation is `exp(-damping * distance)` and air attenuation applies only in air. Closed, consistently wound triangles/2D loops supply thickness; open surfaces remain zero-thickness sheets. Sources may start inside a solid, and nested solids restore the enclosing medium on exit. Each closed object must share IOR/damping across its surface materials. Among overlapping solids the smaller enclosed volume takes priority (ties follow object order); this is a deterministic authoring rule, not a mixed-material physical model.
 
-**Transition Samples** crossfades the old and new convolved output sample by sample. The station uses 512 samples (11.6 ms at 44.1 kHz); zero switches responses immediately, as do cuts. Disabling a listener fades its output to silence once. Source Stop ends emission, preserving sound already in flight and the filter tail. No delay derivative is inferred from reused indirect-path slots. In Spectral mode, delay rates come from endpoint and surface velocities; source-time resampling produces Doppler even with crossfades disabled. IR mode crossfades frozen filters and does not implement continuous Doppler. Neither mode is a general retarded-time moving-boundary solver.
+**Transition Samples** crossfades the old and new convolved output sample by sample. The station uses 512 samples (11.6 ms at 44.1 kHz); zero switches responses immediately, as do cuts. Disabling a listener fades its output to silence once. Source Stop ends emission, preserving sound already in flight and the filter tail. No delay derivative is inferred from reused indirect-path slots. Delay rates come from endpoint and surface velocities; source-time resampling produces Doppler even with crossfades disabled. It is not a general retarded-time moving-boundary solver.
 
-The renderer is a hybrid (solver v14).
-Early sound is phase-exact: deterministic direct/transmitted frequency bins, bounded **first-order image-source paths** using the unscattered reflection coefficient, and optionally the complete early routes.
-The **late field** is incoherent energy: stochastic rays per octave band whose weights never grow (deterministic absorption and air loss; transmission, diffuse and specular continuations chosen by energy fraction), detected by diffuse rain and a receiver sphere into a per-pair, six-direction energy histogram.
-Paths the early part already holds (direct/transmitted-only and unobstructed specular paths up to the early image order) are excluded.
-The histogram shapes fixed, seeded band-split noise (Polack), with the KEMAR diffuse-field interaural coherence for binaural output, which is convolved with each source's emitted signal by partitioned convolution in both IR and Spectral synthesis, live and offline.
-The late field converges as one over the ray count and decays at the Eyring rate in diffuse rooms; it has no Doppler, diffraction or wave effects, and rare branches (transmission into closed rooms) stay noisy at small budgets.
-[Contract](docs/simulation-contracts.md#late-energy-field-v14) · [evidence](docs/benchmarks/late-energy-2026-11-04/README.md).
-The transmitted direct connection stays straight; late rays refract at interfaces.
+The renderer is the path method ([docs/method.md](docs/method.md), MethodPath.hlsl): one energy path tracer whose rays stay in flight across updates (persistent rays), scored at the listener by a Gaussian beam kernel into a per-pair histogram (six head-frame directions, eight octave bands).
+The exact direct arrival plays as a delayed path through the spectral synthesis; everything else plays from the histogram through the path reverb (`PathReverb`, `GpuAudio.Path`), optionally after the persistent-ray denoiser.
+The hybrid renderer (phase-exact early routes and a late energy field), the energy method and the pressure method it replaced were removed; they are in Git history (commit `f430c13`).
 
-**Method → Energy** (opt-in; **Hybrid** stays the default) renders audio from the single energy loop of the [method comparison](docs/benchmarks/methods-2026-11-06/README.md), which had the smallest level error against the wave ground truth.
-Each solve splits the loop into exact discrete arrivals — direct sound, reflections up to second order and edge diffraction (D, DD, RD, DR) from the source, each with its delay, band energies, direction and Doppler delay rate — and a diffuse energy histogram holding every other path, so nothing is counted twice.
-The strongest **Method Arrival Slots** arrivals per pair (64) play as delayed paths with gain √(band energy) and no phase, through the same continuous path clocks, HRTF and Spectral synthesis as the hybrid's arrivals; the histogram plays through the hybrid's late noise field.
-**Method Rays**, **Method Roulette Floor** (1e-6: paths keep going over the first 60 dB of decay) and **Specular Detection Radius** (the walk's receiver sphere) set its cost and noise.
-It needs raytraced transport, 3D and point sources.
-[Contract](docs/simulation-contracts.md#energy-method-audio-v1) · [evidence and listening render](docs/benchmarks/energy-audio-2026-11-09/README.md).
-
-**Reflection Sampling → First Images** keeps first-order mirror candidates as separate delayed arrivals in both live and offline audio. It enumerates scenes up to the candidate budget (128 primitives by default); larger scenes use compensated candidate sampling, with a budget that also grows with rays per bin. GPU filter storage shares frequency records whose geometry is guaranteed identical; dispersive speeds retain the needed separate capacity. This does not integrate or validate the offline prototype’s complete multi-edge and mixed mirror/edge solver.
-
-**Family Gains** (off by default) scales the sampled early families before the audio stage: first-order images and the complete D/DD/RD/DR/RR routes, each by `(1 + k·rho)^-1/2`, where `rho` is that family's candidate routes per sample.
-It keeps each family's expected energy while removing most low-budget spikes.
-Direct sound and the late energy field are unchanged.
-It needs **Complete Route Samples > 0** and **First Images**, so validation rejects it with the current Church and TrainStation presets, which use first images only.
-The `k` table and its provenance live in `Assets/Resources/Acoustics/FamilyGains.json`.
-Offline reports record its hash as `familyGainsHash`.
-The gains bias the estimator toward its expected level and do not recover diffracted detail in shadow.
-[Fit, shadow analysis and decision](docs/benchmarks/family-gains-2026-11-03/README.md).
-
-**Synthesis → Impulse Response** uses frozen responses. The CPU reference retains the partitioned scene-IR convolver with overlap-add and circular source-spectrum history; the GPU evaluates the equivalent sum of delayed path filters with overlap-save. This remains the default for existing settings. Propagation, fractional delay, material response and the complete per-arrival ear filter are composed into a scene FIR. It is suitable for stationary response rendering; crossfading snapshots does not make moving Doppler exact.
-
-**Synthesis → Spectral** enables continuous Doppler on either audio backend. Each physical path reads the source at a continuously varying emission time, then applies short material and ear spectra with overlap-save. It does not build a propagation-length scene IR. Those short filters are still convolution mathematically. Direct paths and first planar mirrors account for emission/interaction time under locally constant velocity; sampled indirect geometry and other occluders remain frozen at solve time. Topology hashes separate path groups, and each solve refreshes the physical emission-time anchor. Accelerating/rotating general scenes still need validation. CPU per-path synthesis is expensive; the GPU version processes path FFTs in parallel. Neither offline throughput nor numerical agreement establishes realtime deadlines.
+The spectral synthesis gives continuous Doppler on either audio backend. Each physical path reads the source at a continuously varying emission time, then applies short material and ear spectra with overlap-save. It does not build a propagation-length scene IR. Those short filters are still convolution mathematically. Direct paths and first planar mirrors account for emission/interaction time under locally constant velocity; sampled indirect geometry and other occluders remain frozen at solve time. Topology hashes separate path groups, and each solve refreshes the physical emission-time anchor. Accelerating/rotating general scenes still need validation. CPU per-path synthesis is expensive; the GPU version processes path FFTs in parallel. Neither offline throughput nor numerical agreement establishes realtime deadlines.
 
 Both routes declare the acoustic FFT size as DSP latency, plus sinc radius when selected. `responseSupportSamples` reports observed filter/delay support; it is not an exact bound for arbitrary continued motion. The output tail holds the final scene pose with zero velocity and emits no new source audio. The one-second station tail is configurable and does not cover every possible ten-second path. [Motion contract and limitations](docs/simulation-contracts.md#continuous-doppler-and-synthesis-methods-2026-10-06).
 
@@ -276,7 +240,7 @@ For a batch job, save this JSON next to your data directory; paths are relative 
   -logFile /absolute/path/render.log
 ```
 
-Use an output directory that does not exist. The process exits 0 on completion and 1 on failure. CPU direct rendering works with `-nographics`; raytraced transport requires a graphics device. A shell/Python loop can invoke jobs sequentially; there is no separate orchestration service. To use the GPU, add `"shader": "Assets/Shaders/Transport.compute"` to the job and omit `-nographics`. A missing or unsupported shader fails explicitly.
+Use an output directory that does not exist. The process exits 0 on completion and 1 on failure. CPU direct rendering works with `-nographics`; raytraced transport requires a graphics device. A shell/Python loop can invoke jobs sequentially; there is no separate orchestration service. To use the GPU, add `"shader": "Assets/Resources/Acoustics/PathMethod.compute"` to the job and omit `-nographics`. A missing or unsupported shader fails explicitly.
 
 To compare budgets, click **Compare two response budgets** in the Inspector, or add a `comparison` settings object to the job. The main `settings` object describes the coarser run; `comparison.responseStepSamples` must be smaller, with all other settings identical. For the example above:
 
@@ -372,11 +336,11 @@ Writers mark the manifest complete only after payloads are closed and hashed. Re
 
 ```text
 CPU: compile scene once; upload object states for each response batch
-GPU: evaluate direct/mirror sound and complete early routes → trace late energy rays into a histogram
-GPU: synthesize IR or spectral early audio + late noise convolution → read back PCM
+GPU: path method (PathMethod.compute): edge distribution → persistent rays traced one update → histogram ring + exact direct arrival
+GPU: spectral synthesis of the direct arrival + path reverb (histogram kernels, partitioned convolution) → read back PCM
 ```
 
-Normal GPU playback uses PCM completion to fence the response batch. Diagnostic probes are dispatched/read back only when requested; offline reports retain them. `Geometry.hlsl` owns intersection and BVH traversal, `Transport.hlsl` owns acoustic calculations, and `Transport.compute` holds the entry points. The CPU reference provides direct transport and audio synthesis; it is not a second full raytracer. Frequency-dependent transport still evaluates each configured FFT bin. No new runtime dependencies were added.
+Normal GPU playback uses PCM completion to fence the response batch. Diagnostic probes are the CPU direct solve, read back only when requested. `Geometry.hlsl` owns intersection and BVH traversal, `Transport.hlsl` and `MethodCommon.hlsl` own the shared acoustic calculations, `MethodPath.hlsl` the path method, and `Resources/Acoustics/PathMethod.compute` holds its entry points. The CPU reference provides direct transport and audio synthesis (`TakeRender.Mixer`, `SpectralAudio`, `PathReverb`); it is not a second raytracer.
 
 ## Repository map
 
@@ -384,19 +348,21 @@ Normal GPU playback uses PCM completion to fence the response batch. Diagnostic 
 Assets/
   Scripts/
     Scene/        AcousticSurface, AudioMaterial, SceneToTake
-    Simulation/   RayTraceManager, Take, TakeRender + Live partial,
-                  TransportSolver, DirectBvh, RayTransport, GpuAudio, Doppler, SpectralAudio, ImpulseResponseAudio,
-                  TakeComparison
+    Simulation/   RayTraceManager, Take, TakeRender + Live partial, TakeComparison,
+                  TransportSolver, MethodTransport (the path method), PathBins, PathReverb, PathDenoiser,
+                  DirectBvh, RayTransport (shared layouts and tables), GpuAudio + Late/Path partials,
+                  Doppler, SpectralAudio, LateBasis
     Audio/        AudioManager, RaytracedAudioSource, Hrtf
     Demo/         SceneSession, SceneRecording, StationDemo, StationLoop, SlidingDoor, PlayerController,
                   MouseLook, Oscillator, RaytraceControlPanel
-  Shaders/        Transport.compute, Geometry.hlsl, Transport.hlsl, WorldText.shader
+  Shaders/        Geometry.hlsl, Transport.hlsl, MethodCommon.hlsl, MethodPath.hlsl, WorldText.shader
   Audio/          source clips and DefaultMixer
   Materials/      acoustic material assets
-  Resources/      Acoustics/GpuAudio.compute; bundled KEMAR filters and attribution
-  Editor/         SceneReplay, TakeEditor, TakeDemo, TakeComparisonWindow + helpers,
-                  DirectBenchmark
-  Tests/Editor/   TakeChecks + numerical/transport checks, GpuAudioChecks, DirectBvhChecks
+  Resources/      Acoustics/PathMethod.compute, GpuAudio.compute, PathDenoise.compute + weights;
+                  bundled KEMAR filters and attribution
+  Editor/         SceneReplay, TakeEditor, TakeDemo, TakeComparisonWindow + helpers, PathLiveBuild
+  Tests/Editor/   TakeChecks + path method checks (MethodChecks, Path*Checks), spectral and GPU audio
+                  checks, DirectBvhChecks, opt-in measurements
   Scenes/         editable scenes and their baked lighting
   Prefabs/        project prefabs
   External/       imported train assets
@@ -416,21 +382,13 @@ Folders group responsibilities; the runtime, editor and test assembly definition
 | [SceneToTake.cs](Assets/Scripts/Scene/SceneToTake.cs) | Reuses authoring snapshots and comparison storage, deduplicates shared meshes/materials, and detects in-place changes without per-observation scene export. |
 | [RayTraceManager.cs](Assets/Scripts/Simulation/RayTraceManager.cs) | Defines exclusive session states and retains ownership while output drains. One renderer serves live monitoring, capture and replay. |
 | [AudioManager.cs](Assets/Scripts/Audio/AudioManager.cs) | Consumes the bounded PCM queue and optionally captures output and callback diagnostics. |
-| [TransportSolver.cs](Assets/Scripts/Simulation/TransportSolver.cs), [Transport.compute](Assets/Shaders/Transport.compute), [DirectBvh.cs](Assets/Scripts/Simulation/DirectBvh.cs) | Batches live/offline response frames with explicit resource ownership; optional static CPU/HLSL BVH plus direct tests for moving geometry. Reports completion latency, classification/rebuild costs and traversal workload bounds. |
-| [RayTransport.cs](Assets/Scripts/Simulation/RayTransport.cs), [Transport.hlsl](Assets/Shaders/Transport.hlsl), [SpectralAudio.cs](Assets/Scripts/Simulation/SpectralAudio.cs) | Directional 2D/3D spectral transport, bounded GPU arrival buffers, material curves, image-source first reflections and selectable IR/spectral binaural synthesis. |
+| [TransportSolver.cs](Assets/Scripts/Simulation/TransportSolver.cs), [MethodTransport.cs](Assets/Scripts/Simulation/MethodTransport.cs), [DirectBvh.cs](Assets/Scripts/Simulation/DirectBvh.cs) | Batches live/offline response frames with explicit resource ownership; optional static CPU/HLSL BVH plus direct tests for moving geometry. Reports completion latency, classification/rebuild costs and traversal workload bounds. |
+| [RayTransport.cs](Assets/Scripts/Simulation/RayTransport.cs), [Transport.hlsl](Assets/Shaders/Transport.hlsl), [SpectralAudio.cs](Assets/Scripts/Simulation/SpectralAudio.cs) | Shared arrival layouts, material curves, media and edge tables, and the spectral binaural synthesis of exact arrivals. |
 | [GpuAudio.cs](Assets/Scripts/Simulation/GpuAudio.cs), [GpuAudio.compute](Assets/Resources/Acoustics/GpuAudio.compute) | Own GPU source history, path filters/FFTs, per-ear synthesis and asynchronous PCM batches; CPU DSP remains the reference. |
 | [TakeRender.cs](Assets/Scripts/Simulation/TakeRender.cs), [TakeRender.Live.cs](Assets/Scripts/Simulation/TakeRender.Live.cs) | Bounds event/cut/observation history and shares configurable linear/windowed-sinc delay filtering between live and offline rendering. |
 | [Take.cs](Assets/Scripts/Simulation/Take.cs), [TakeComparison.cs](Assets/Scripts/Simulation/TakeComparison.cs) | Records implementation/settings provenance and optionally gates temporal training pairs against a third, finer direct-model run. |
 
-The next transport work is physical validation, reducing GPU path/filter cost and converged ray-budget comparisons. The separate prototype renderer is removed; its previous implementation remains in Git. All five scenes use the current renderer. General reflection training and learned reconstruction are not implemented by these cleanups.
-
-The offline `tools/edge_integral.py --samples N --route-budget` diagnostic spends **N pure-edge height samples per receiver**, using complete-route sampling without enumerating an unbounded route tree. Its mirror/mixed connection stage is measured separately and remains enumerated. This is a stationary, rigid, infinitely extruded 2D research tool; it does not replace the realtime shader. [Algorithm, controls and measured accuracy](docs/cleanup-results.md#bounded-complete-route-monte-carlo--2026-10-21).
-
-`tools/gpu_routes.py` prepares and checks a matching offline HLSL integrator. Route planning stays shared with the CPU; height sampling, signed pressure/phase and reduction run on the GPU. [2D maps, parity checks, timings and reproduction](docs/cleanup-results.md#complete-route-gpu-integration--2026-10-21) include 65,536 and 1,048,576 samples per receiver. Direct/mirror/mixed computation remains a separate CPU stage; the live renderer is unchanged.
-
-`--proposal-scale .25` tests narrower edge-height sampling with the exact matching PDF. The [tuning report](docs/cleanup-results.md#gpu-sampling-tuning--2026-10-21) compares seven candidates, held-out positions/four seeds and full 2D maps at equal sample budgets. Gains are modest and mixed; the default remains `1`.
-
-The current GPU stores one material spectrum per path group and response bank, shared by both ears. Each bank retains its own head blend for crossfades. Unchanged filters skip both small and large FFT construction. The station benchmark reserves **564 MB versus 916 MB** before this change; matched layout controls have similar wall times. A new `DirectBenchmark.MeasureReciprocity(planar, rays, scattering, seeds)` probe checks source/receiver reversal on a finite wall. The diffuse preview fails this necessary physical check even with 65,536 rays/bin, while the mirror control agrees. More rays are not a fix for this bias. [Measurements and limitations](docs/cleanup-results.md#gpu-response-storage-and-diagnostics--2026-10-07).
+The next transport work is physical validation of the path method and reducing its GPU cost. The hybrid renderer, its offline route tools (`edge_integral.py`, `gpu_routes.py`, `transport_candidates.py`) and the energy and pressure methods are removed; their implementation and measurements remain in Git history and [cleanup results](docs/cleanup-results.md).
 
 ## Checks
 
@@ -449,7 +407,7 @@ Open **Window → General → Test Runner → EditMode → Acoustics.Tests**. Te
 | Category | Coverage |
 | --- | --- |
 | `Core` | Formats, materials, geometry, independent DSP oracles and queue contracts |
-| `GPU` | Shader execution, CPU/GPU agreement, transport and readback ownership |
+| `GPU` | Shader execution, CPU/GPU agreement, the path method and readback ownership |
 | `Integration` | Streaming/offline agreement, response batching and audio files |
 | `Voice` | Source persistence, resampling, Opus order/loss, self-monitor masks and tail draining |
 | `EndToEnd` | Offline comparison; church/station recording/reconstruction/replay; explicit realtime delivery |
@@ -489,7 +447,7 @@ For CI with the project **closed**:
 
 Use a closed project or a disposable snapshot when the working Editor is open. Keep audio and graphics enabled; run one worker at reduced priority (`nice -n 15` on macOS), adding `-job-worker-count 2` to limit its CPU workers. The command selects atomic checks, a small offline comparison and the short silent callback check. Heavy scene/deadline tests and microphone tests require explicit selection. Require expected cases to execute; reject failures, unexpected skips and missing/incomplete XML. Device-clock tests need active audio and graphics; offline renders cannot replace them. An external process watchdog is still needed for native/driver hangs.
 
-No new test package: Unity Test Framework handles selection, coroutines and reports. Three assembly definitions isolate runtime, editor and tests; friend declarations expose internal DSP to tests without expanding the public API. `DirectBenchmark` remains the offline Low/High timing harness. [Measured results](docs/cleanup-results.md) exclude cold import/build costs; DirectX and standalone Player test runs remain separate validation work.
+No new test package: Unity Test Framework handles selection, coroutines and reports. Three assembly definitions isolate runtime, editor and tests; friend declarations expose internal DSP to tests without expanding the public API. [Measured results](docs/cleanup-results.md) exclude cold import/build costs; DirectX and standalone Player test runs remain separate validation work.
 
 ## Standalone entry point
 

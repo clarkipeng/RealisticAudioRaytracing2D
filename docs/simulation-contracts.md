@@ -1,5 +1,8 @@
 # Acoustic simulation and reconstruction: design contract
 
+> **Removed code (2026-11-23):** the hybrid renderer (RayTransport's GPU solver, `Transport.compute`, complete early routes, the late energy field, family gains, impulse-response synthesis, the 2D ray debugger), the energy and pressure methods and their offline tools, which much of this document describes, were removed in commit `f430c13`; they live in Git history.
+> The persistent-ray path method ([method](method.md)) is the renderer now.
+
 Updated 2026-10-24 against main-repo checkpoint `b16ab86`; individual sections retain their implementation dates. This is the single design specification for runtime cleanup, scenes, microphone/clip sources, simulation, capture, comparison, multiplayer, datasets and learned reconstruction. It replaces the separate architecture, comparison, remaining-work, scene-assets and training plans. Examples describe proposed contracts unless explicitly marked implemented.
 
 [README](../README.md) remains the operating guide for actual APIs and workflows. [Cleanup results](cleanup-results.md) contains the current station offline benchmarks and explicitly dated historical measurements.
