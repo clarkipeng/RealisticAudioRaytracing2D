@@ -1,23 +1,30 @@
-"""Checks for the audio-DLSS scene generator and dataset packer; run with unittest.
+"""Checks for the procedural box-scene generator (tools/dlss_scenes.py); run with unittest.
 
-No Unity or GPU is needed: tracer payloads are synthesised in the exact byte
-layout TakeChecks.MeasureDatasetScenes writes.
+No Unity or GPU is needed.
 """
 import hashlib
 import json
 from pathlib import Path
-import tempfile
 import unittest
 
 import numpy as np
 
-import dlss_baselines as bl
-import dlss_dataset as dd
-import dlss_jobs as dj
 import dlss_scenes as ds
 import fdtd_wave as fw
 
 FIXTURE = Path(__file__).with_name('fixtures') / 'dlss-scenes-v2.json'
+
+
+def union_volume(walls, spacing):
+    """Exact union volume of lattice boxes by rasterising at `spacing`."""
+    low, high = ds.box_arrays(walls)
+    origin = low.min(0)
+    lo = np.round((low - origin) / spacing).astype(int)
+    hi = np.round((high - origin) / spacing).astype(int)
+    grid = np.zeros(hi.max(0), bool)
+    for l, h in zip(lo, hi):
+        grid[l[0]:h[0], l[1]:h[1], l[2]:h[2]] = True
+    return float(grid.sum() * spacing ** 3)
 
 
 class Generator(unittest.TestCase):
@@ -48,8 +55,10 @@ class Generator(unittest.TestCase):
                     self.assertEqual(float(np.float32(v)), v)
 
     def test_fdtd_voxels_reproduce_the_box_union_exactly(self):
+        overlapping = [dict(center=[.5, .5, .5], half=[.5, .5, .5]), dict(center=[1, .5, .5], half=[.5, .5, .5])]
+        self.assertAlmostEqual(union_volume(overlapping, ds.LATTICE), 1.5)
         for scene in self.scenes.values():
-            exact, _ = dd.union_volume(scene['walls'], ds.LATTICE)
+            exact = union_volume(scene['walls'], ds.LATTICE)
             for h in (ds.LATTICE, ds.FDTD_SPACING):
                 low, high = fw.scene_bounds(scene, ds.FDTD_MARGIN)
                 grid = fw.make_grid(low, high, h, 2)
@@ -102,145 +111,6 @@ class Generator(unittest.TestCase):
             for i, row in enumerate(n):
                 for j in row:
                     self.assertIn(i, n[j])
-
-
-def synthesise_tracer(folder, scene, variant='tracer', rng=None, label_noise=1e-3):
-    """Write payloads in the C# byte layout with a known field plus seed noise."""
-    rng = rng or np.random.default_rng(0)
-    out = folder / variant
-    out.mkdir()
-    families = ['direct', 'R', 'D', 'DD', 'RD', 'DR', 'RR', 'walk']
-    P, Q, F = len(scene['points']) // 3, len(scene['frequencies']), len(families)
-    truth = rng.normal(size=(P, Q, F)) + 1j * rng.normal(size=(P, Q, F))
-    budgets = []
-    for b in scene['render']['budgets']:
-        S = len(b['seeds'])
-        scale = label_noise if b['name'] == 'label' else .1
-        values = truth[None] + scale * (rng.normal(size=(S, P, Q, F)) + 1j * rng.normal(size=(S, P, Q, F)))
-        np.stack([values.real, values.imag], -1).astype('<f4').tofile(out / f'responses-{b["name"]}.f32')
-        np.full((S, P, Q, F), 3, '<i8').tofile(out / f'counts-{b["name"]}.i64')
-        np.abs(values).astype('<f4').tofile(out / f'peaks-{b["name"]}.f32')
-        np.full((S, P), .01, '<f4').tofile(out / f'seconds-{b["name"]}.f32')
-        budgets.append(dict(name=b['name'], raysPerBin=b['raysPerBin'], completeRouteSamples=b['completeRouteSamples'],
-                            seeds=b['seeds'], pathsPerSolve=1, busySeconds=1, wallSeconds=5))
-    np.array(scene['lineOfSight'], '|u1').tofile(out / 'direct-visible.u8')
-    (out / 'boundary.json').write_text('{}')
-    run = dict(schema='dlss-tracer-run-v1', sceneId=scene['sceneId'],
-               sceneSha256=hashlib.sha256((folder / 'scene.json').read_bytes()).hexdigest(), variant=variant,
-               families=families, frequencies=scene['frequencies'], points=P, budgets=budgets)
-    (out / 'run.json').write_text(json.dumps(run))
-    return truth
-
-
-class Packer(unittest.TestCase):
-    def setUp(self):
-        self.folder = tempfile.TemporaryDirectory()
-        self.data = Path(self.folder.name)
-        rng = np.random.default_rng(1)
-        self.truth = {}
-        for family in ['shoebox', 'canopy', 'corridor']:
-            scene = ds.generate(family, 0)
-            scene['points'] = scene['points'][:12]          # 4 receivers keep the fixture small
-            scene['lineOfSight'] = scene['lineOfSight'][:4]
-            scene['frequencies'] = scene['frequencies'][:3]
-            folder = self.data / 'scenes' / scene['sceneId']
-            folder.mkdir(parents=True)
-            (folder / 'scene.json').write_bytes(ds.dumps(scene))
-            self.truth[scene['sceneId']] = synthesise_tracer(folder, scene, rng=rng)
-
-    def tearDown(self):
-        self.folder.cleanup()
-
-    def test_pack_verify_and_load_round_trip(self):
-        target = dd.pack(self.data, 'fixture')
-        report = dd.verify(target)
-        self.assertEqual(report['bundles'], 3)
-        self.assertEqual(report['heldOutFamilies'], ['canopy'])
-        self.assertEqual(report['examples'], 3 * 4 * len(ds.INPUT_FRACTIONS) * ds.INPUT_SEEDS)
-        manifest, bundles, base = dd.open_dataset(target)
-        for bundle in bundles:
-            data = dd.load_bundle(base, bundle, check=True)
-            truth = self.truth[bundle['bundle_id']][..., :7].sum(2)   # early-field target excludes the walk
-            self.assertLess(np.abs(data['target'] - truth).max(), 1e-2)
-            self.assertTrue(data['valid'].all())
-            self.assertEqual(data['inputs']['input-1-4'].shape, (ds.INPUT_SEEDS, 4, 3, 8))
-            self.assertTrue(bundle['quality']['accepted'])
-
-    def test_identity_volumes(self):
-        v = [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1]
-        t = [0, 2, 3, 0, 3, 1, 4, 5, 7, 4, 7, 6, 0, 1, 5, 0, 5, 4, 2, 6, 7, 2, 7, 3, 0, 4, 6, 0, 6, 2, 1, 3, 7, 1, 7, 5]
-        self.assertAlmostEqual(abs(dd.mesh_volume(dict(vertices=v, triangles=t))), 1.0)
-        walls = [dict(center=[.5, .5, .5], half=[.5, .5, .5]), dict(center=[1, .5, .5], half=[.5, .5, .5])]
-        self.assertAlmostEqual(dd.union_volume(walls, ds.LATTICE)[0], 1.5)
-
-    def test_render_verification_ignores_runner_and_catches_bad_payloads(self):
-        folder = next((self.data / 'scenes').glob('canopy-*'))
-        self.assertEqual(dj.verify_render(folder), [])
-        payload = folder / 'tracer/counts-input-1-64.i64'
-        payload.write_bytes(payload.read_bytes()[:-8])
-        self.assertTrue(any('counts-input-1-64' in r for r in dj.verify_render(folder)))
-        bad = folder / 'tracer/responses-label.f32'
-        values = np.fromfile(bad, '<f4')
-        values[3] = np.nan
-        values.tofile(bad)
-        self.assertTrue(any('non-finite' in r for r in dj.verify_render(folder)))
-        scene = folder / 'scene.json'
-        scene.write_bytes(scene.read_bytes() + b' ')
-        self.assertIn('run was rendered from different scene bytes', dj.verify_render(folder))
-        self.assertTrue(dj.verify_render(folder, 'tracer-rigid'))
-
-    def test_label_statistics_are_unbiased(self):
-        runs = np.zeros((3, 1, 1, 1, 2), np.float32)
-        runs[:, 0, 0, 0, 0] = [1, 2, 6]
-        mean, variance, k = dd.label_statistics(runs)
-        self.assertAlmostEqual(mean[0, 0].real, 3)
-        self.assertAlmostEqual(variance[0, 0], 7)   # ((-2)^2 + (-1)^2 + 3^2) / 2
-        self.assertEqual(k, 3)
-
-    def test_tampered_payload_fails_verification(self):
-        target = dd.pack(self.data, 'fixture')
-        payload = next((self.data / 'scenes').glob('*/tracer/responses-input-1-16.f32'))
-        raw = bytearray(payload.read_bytes())
-        raw[0] ^= 1
-        payload.write_bytes(bytes(raw))
-        with self.assertRaisesRegex(ValueError, 'SHA-256'):
-            dd.verify(target)
-
-    def test_changed_scene_bytes_break_identity(self):
-        scene = next((self.data / 'scenes').glob('*/scene.json'))
-        scene.write_bytes(scene.read_bytes() + b' ')
-        with self.assertRaisesRegex(ValueError, 'different scene bytes'):
-            dd.pack(self.data, 'fixture')
-
-    def test_noisy_labels_are_rejected_and_reported(self):
-        folder = next((self.data / 'scenes').glob('shoebox-*'))
-        scene = json.loads((folder / 'scene.json').read_text())
-        import shutil
-        shutil.rmtree(folder / 'tracer')
-        synthesise_tracer(folder, scene, rng=np.random.default_rng(5), label_noise=10)
-        target = dd.pack(self.data, 'fixture')
-        generation = json.loads((target / 'generation.json').read_text())
-        self.assertEqual(generation['rejectedByFamily']['shoebox'], 1)
-        report = dd.verify(target)
-        self.assertEqual(report['rejected'], 1)
-
-
-class Baselines(unittest.TestCase):
-    def test_metrics_and_baselines(self):
-        target = np.ones((4, 2), complex)
-        self.assertAlmostEqual(bl.relative_error_squared(np.full((3, 4, 2), 2 + 0j), target), 1.0)
-        runs = np.arange(8, dtype=float).reshape(4, 2) + 0j
-        self.assertTrue(np.allclose(bl.seed_mean(runs, 2), [[1, 2], [5, 6]]))
-        totals = np.array([[[1.], [3.], [5.]]], complex)          # S=1, P=3, Q=1
-        out = bl.neighbour_mean(totals, [[1], [0, 2], [1]])
-        self.assertTrue(np.allclose(out[0, :, 0], [2, 3, 4]))
-        spiky = np.ones((1, 5, 1, 2), complex)
-        spiky[0, 2, 0, 1] = 100
-        clamped = bl.family_clamp(spiky)
-        self.assertAlmostEqual(clamped[0, 2, 0].real, 4.0)        # 1 + 3 x median 1
-        self.assertTrue(np.allclose(clamped[0, [0, 1, 3, 4], 0], 2))
-        masks = bl.band_masks([125, 500, 625, 4000])
-        self.assertEqual(masks['low'].tolist(), [True, True, False, False])
 
 
 if __name__ == '__main__':

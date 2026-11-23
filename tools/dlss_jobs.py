@@ -1,5 +1,5 @@
-"""Guarded workers for the audio-DLSS dataset: scene generation, Unity tracer
-renders and the FDTD wave subset.
+"""Guarded workers shared by the Unity and wave tools: the heavy-job worker, the
+isolated Unity runner, scene generation and the FDTD wave subset.
 
 Every heavy job runs at nice 19 with one worker, 50% work pacing, a memory guard
 and a pause while the Mac runs on battery (the FDTD study's power hook; Unity
@@ -8,7 +8,6 @@ under the data root (default .context/audio-dlss-data), never in Assets/.
 
     PY=.context/fdtd-teacher/venv/bin/python
     nice -n 19 $PY tools/dlss_jobs.py generate --count 12
-    nice -n 19 $PY tools/dlss_jobs.py render --batch 6
     nice -n 19 $PY tools/dlss_jobs.py fdtd --select 24
 """
 import argparse
@@ -182,7 +181,7 @@ class Worker:
         raise KeyboardInterrupt
 
 
-# ---------------------------------------------------------------- Unity tracer
+# ---------------------------------------------------------------- Unity runner
 
 def sync_runner(runner):
     """Copy runtime, shader, test and tool sources into the isolated runner."""
@@ -206,107 +205,6 @@ def sync_runner(runner):
     return files
 
 
-def verify_render(folder, variant='tracer'):
-    """Reasons a scene's render is unusable (empty when complete and valid).
-
-    Checks the run binds the exact scene bytes and budgets, and that every payload
-    has the size its shape implies and finite values. The test runner's exit code
-    alone is not trusted: unrelated editor logs can fail a run whose outputs are fine.
-    """
-    out = folder / variant
-    try:
-        run = json.loads((out / 'run.json').read_text())
-        scene = json.loads((folder / 'scene.json').read_text())
-    except (OSError, ValueError) as error:
-        return [f'run.json or scene.json unreadable: {error}']
-    reasons = []
-    if run.get('sceneSha256') != sha256(folder / 'scene.json'):
-        reasons.append('run was rendered from different scene bytes')
-    P, Q, F = len(scene['points']) // 3, len(scene['frequencies']), len(run.get('families', []))
-    if run.get('points') != P or run.get('frequencies') != scene['frequencies'] or F != 8:
-        reasons.append('run shape differs from the scene')
-    expected = {b['name']: b for b in scene['render']['budgets']}
-    if [b['name'] for b in run.get('budgets', [])] != list(expected):
-        reasons.append('budgets differ from the scene recipe')
-    for name, budget in expected.items():
-        S = len(budget['seeds'])
-        for stem, ext, dtype, shape in [('responses', 'f32', '<f4', (S, P, Q, F, 2)), ('counts', 'i64', '<i8', (S, P, Q, F)),
-                                        ('peaks', 'f32', '<f4', (S, P, Q, F)), ('seconds', 'f32', '<f4', (S, P))]:
-            path = out / f'{stem}-{name}.{ext}'
-            if not path.exists() or path.stat().st_size != np.prod(shape) * np.dtype(dtype).itemsize:
-                reasons.append(f'{path.name} missing or wrong size')
-            elif dtype == '<f4' and not np.all(np.isfinite(np.fromfile(path, dtype))):
-                reasons.append(f'{path.name} has non-finite values')
-    for path, size in [(out / 'direct-visible.u8', P), (out / 'boundary.json', None)]:
-        if not path.exists() or (size is not None and path.stat().st_size != size):
-            reasons.append(f'{path.name} missing or wrong size')
-    return reasons
-
-
-def render(data, scenes, batch, work_fraction, variant='tracer', runner=RUNNER, unity=UNITY, rss_limit=4 * GIB,
-           attempts=2):
-    """Render pending scenes in batches; each batch is one Unity launch.
-
-    A scene is accepted when verify_render finds nothing wrong, whatever the test
-    runner reported. Invalid outputs are set aside and the scene is retried; a
-    scene that still fails after `attempts` launches stops the queue.
-    """
-    logs = data / 'logs'
-    logs.mkdir(parents=True, exist_ok=True)
-    tries = {}
-    while True:
-        for s in scenes:      # Set aside outputs from interrupted or invalid renders.
-            if (s / variant).exists() and verify_render(s, variant):
-                (s / variant).rename(s / f'{variant}.invalid-{time.strftime("%Y%m%d-%H%M%S")}')
-        pending = [s for s in scenes if not (s / variant).exists()]
-        if not pending:
-            return
-        failed = [s.name for s in pending if tries.get(s, 0) >= attempts]
-        if failed:
-            raise RuntimeError(f'Scenes failed {attempts} renders: {failed}')
-        print(f'{len(pending)} scenes pending', flush=True)
-        group = pending[:batch]
-        for s in group:
-            tries[s] = tries.get(s, 0) + 1
-        render_batch(logs, group, work_fraction, variant, runner, unity, rss_limit)
-        time.sleep(20)
-
-
-def render_batch(logs, group, work_fraction, variant, runner, unity, rss_limit):
-    wait_for_mains()
-    name = time.strftime('render-%Y%m%d-%H%M%S')
-    out = logs / name
-    out.mkdir()
-    provenance = dict(files=sync_runner(runner), runner=str(runner), unity=str(unity),
-                      scenes={s.name: sha256(s / 'scene.json') for s in group})
-    (out / 'provenance.json').write_text(json.dumps(provenance, indent=1) + '\n')
-    jobs = out / 'jobs.txt'
-    jobs.write_text(''.join(f'{s.resolve()}\t{variant}\n' for s in group))
-    command = ['nice', '-n', '19', str(unity), '-batchmode', '-force-metal', '-disable-audio',
-               '-job-worker-count', '1', '-projectPath', str(runner), '-runTests', '-testPlatform', 'EditMode',
-               '-testFilter', 'TakeChecks.MeasureDatasetScenes', '-testResults', str(out / 'tests.xml'),
-               '-logFile', str(out / 'unity.log')]
-    env = dict(os.environ, ACOUSTIC_DATASET_JOBS=str(jobs), ACOUSTIC_DATASET_WORK_FRACTION=str(work_fraction),
-               ACOUSTIC_TEST_WORK_FRACTION=str(work_fraction), ACOUSTIC_SOLID_PYTHON=str(SOLID_PYTHON))
-    print(f'{name}: {variant}, {len(group)} scenes {[s.name for s in group]}', flush=True)
-    resources = Worker(command, env, lambda m: print(m, flush=True), rss_limit).run()
-    passed = (out / 'tests.xml').exists() and xml.parse(out / 'tests.xml').getroot().get('result') == 'Passed'
-    valid = {s.name: verify_render(s, variant) if (s / variant).exists() else ['not rendered'] for s in group}
-    resources.update(passed=passed, workFraction=work_fraction, scenes=valid)
-    (out / 'resources.json').write_text(json.dumps(resources, indent=1) + '\n')
-    for s in group:
-        if not valid[s.name] and not (s / variant / 'provenance.json').exists():
-            record = dict(batch=name, provenanceSha256=sha256(out / 'provenance.json'),
-                          resourcesSha256=sha256(out / 'resources.json'), testRunnerPassed=passed)
-            (s / variant / 'provenance.json').write_text(json.dumps(record, indent=1) + '\n')
-    good = sum(not v for v in valid.values())
-    print(f'{name}: exit {resources["exitCode"]}, test runner passed={passed}, {good}/{len(group)} scenes verified, '
-          f'{resources["wallSeconds"]:.0f} s, peak footprint {resources["peakTreeFootprintBytes"] / GIB:.2f} GiB', flush=True)
-    for scene, reasons in valid.items():
-        if reasons:
-            print(f'{name}: {scene} invalid: {reasons[:3]}', flush=True)
-
-
 def run_test(name, filter_, work_fraction, runner=RUNNER, unity=UNITY):
     """Run focused Unity checks in the isolated runner under the same guards."""
     out = DATA / 'logs' / time.strftime(f'{name}-%Y%m%d-%H%M%S')
@@ -322,26 +220,6 @@ def run_test(name, filter_, work_fraction, runner=RUNNER, unity=UNITY):
     summary = {k: root.get(k) for k in ['result', 'total', 'passed', 'failed', 'skipped']} if root is not None else None
     print(json.dumps(dict(log=str(out), summary=summary), indent=1))
     return summary
-
-
-def reproduce(data, names, work_fraction):
-    """Re-render scenes from their exact scene.json bytes; payloads must match bit for bit.
-
-    Timing files and run.json (which records wall time) are excluded from the comparison.
-    """
-    copy = data / 'repro'
-    for name in names:
-        target = copy / 'scenes' / name
-        target.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(data / 'scenes' / name / 'scene.json', target / 'scene.json')
-    render(copy, [copy / 'scenes' / n for n in names], len(names), work_fraction)
-    report = {}
-    for name in names:
-        first, second = data / 'scenes' / name / 'tracer', copy / 'scenes' / name / 'tracer'
-        files = sorted(p.name for p in first.iterdir() if not p.name.startswith(('seconds-', 'run.json', 'provenance')))
-        report[name] = {f: sha256(first / f) == sha256(second / f) for f in files}
-    (copy / 'reproduce.json').write_text(json.dumps(report, indent=1) + '\n')
-    return report
 
 
 # ---------------------------------------------------------------- FDTD subset
@@ -424,15 +302,6 @@ def main():
     g.add_argument('--count', type=int, default=12, help='scenes per family')
     g.add_argument('--families', nargs='+', default=list(ds.FAMILIES))
     g.add_argument('--start', type=int, default=0, help='first scene index (calibration uses a disjoint range)')
-    r = sub.add_parser('render')
-    r.add_argument('--batch', type=int, default=6)
-    r.add_argument('--scenes', nargs='*')
-    r.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
-    r.add_argument('--variant', choices=['tracer', 'tracer-rigid'], default='tracer')
-    r.add_argument('--fdtd-subset', type=int, help='render only the FDTD-selected scenes')
-    q = sub.add_parser('reproduce')
-    q.add_argument('scenes', nargs='+')
-    q.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
     t = sub.add_parser('test')
     t.add_argument('filter')
     t.add_argument('--work-fraction', type=float, default=hg.WORK_FRACTION)
@@ -448,13 +317,6 @@ def main():
     if a.command == 'generate':
         manifest = generate(data, {family: a.count for family in a.families}, a.start)
         print(json.dumps({k: v for k, v in manifest.items() if k != 'scenes'}, indent=1))
-    elif a.command == 'render':
-        folders = [data / 'scenes' / s for s in a.scenes] if a.scenes else \
-            fdtd_select(data, a.fdtd_subset) if a.fdtd_subset else scene_dirs(data)
-        render(data, folders, a.batch, a.work_fraction, a.variant)
-    elif a.command == 'reproduce':
-        report = reproduce(data, a.scenes, a.work_fraction)
-        print(json.dumps({n: all(v.values()) for n, v in report.items()}, indent=1))
     elif a.command == 'test':
         run_test('test', a.filter, a.work_fraction)
     elif a.command == 'fdtd':

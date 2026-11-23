@@ -42,7 +42,7 @@ def render(take, tag=''):
         name += tag
         output = WORK / name
         shutil.rmtree(output, ignore_errors=True)
-        job = dict(take=str(Path(take).resolve()), output=str(output), shader='Assets/Shaders/Transport.compute', settings=settings, workFraction=.5)
+        job = dict(take=str(Path(take).resolve()), output=str(output), shader='Assets/Resources/Acoustics/PathMethod.compute', settings=settings, workFraction=.5)
         path = WORK / f'{name}.job.json'
         path.write_text(json.dumps(job, indent=1) + '\n')
         logs, resources = mr.launch(name, ['-executeMethod', 'TakeBatch.Render', '-takeJob', str(path)])

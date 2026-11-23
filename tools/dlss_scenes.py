@@ -1,8 +1,8 @@
 """Seeded procedural box scenes for the audio-DLSS denoiser dataset.
 
-One `scene.json` drives both the Unity tracer (TakeChecks.MeasureDatasetScenes,
-through the automatic rigid solid bake) and FDTD voxelisation
-(tools/fdtd_wave.py). Both read the same `walls` list of axis-aligned boxes
+One `scene.json` drives both the Unity path method (tools/path_dataset.py,
+tools/method_compare_suite.py, through the automatic rigid solid bake) and FDTD
+voxelisation (tools/fdtd_wave.py). Both read the same `walls` list of axis-aligned boxes
 [{center, half}], `source` and flat `points` (metres, y up). Every box face lies
 on a 1/16 m lattice. That is exact in float32, so the Unity solid bake sees the
 same corners as the JSON (a 5 cm lattice produced sliver triangles), and FDTD
@@ -37,8 +37,9 @@ MAX_BOUNCES = 32
 MAXIMUM_DELAY = 1.25
 SPEED_OF_SOUND = 343.0
 
-# Budgets: the label is the converged tracer, K independent seeds at identical
-# settings; inputs are separate runs at fractions of one label run.
+# Budgets of the removed hybrid tracer's dataset: the label is the converged tracer, K independent
+# seeds at identical settings; inputs are separate runs at fractions of one label run. Frozen
+# into every scene's `render` entry (and so its bytes and fixture hashes); nothing renders them now.
 LABEL_BUDGET = dict(raysPerBin=512, completeRouteSamples=65536)
 LABEL_SEEDS = 8        # v1 used 2; its early-field labels failed acceptance (calibration)
 INPUT_FRACTIONS = (256, 64, 16, 4)

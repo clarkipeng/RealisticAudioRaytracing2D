@@ -176,7 +176,7 @@ def church_job():
                     fftSize=1024, spectralHop=256, maxBounces=64, method=3, methodRays=LOW['rays'], specularDetectionRadius=CHURCH_RADIUS,
                     methodRouletteFloor=1e-6, methodEdgeProbability=.5)
     out = RAW / 'church-walk' / 'path'
-    job = dict(take=str(CHURCH_TAKE), output=str(out), shader='Assets/Shaders/Transport.compute', settings=settings)
+    job = dict(take=str(CHURCH_TAKE), output=str(out), shader='Assets/Resources/Acoustics/PathMethod.compute', settings=settings)
     path = WORK / 'jobs' / 'church.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(job, indent=1) + '\n')
