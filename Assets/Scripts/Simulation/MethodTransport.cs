@@ -17,7 +17,7 @@ using UnityEngine.Rendering;
 // RayTransport.Path entries (one per FFT bin) in the RayTransport.Layout of the method.
 internal sealed class MethodTransport : IDisposable
 {
-    public const int Bands = 8, Directions = 6, Depths = 64, Counters = 16, CaptureVectors = 2, Magnitudes = 64, StatStride = 66;
+    public const int Bands = 8, Directions = 6, Depths = 64, Counters = 16, Magnitudes = 64, StatStride = 66;
     public const float BinSeconds = .001f;
     public const string ShaderResource = TransportSolver.PathShaderResource;
     public const int ArrivalStride = 64;
@@ -50,7 +50,7 @@ internal sealed class MethodTransport : IDisposable
         set { if (population) NewRays = Math.Max(1, Math.Min(maximumNewRays, (int)Math.Round(value / PopulationShares))); }
     }
     int maximumNewRays;
-    public readonly int Bins, EdgeCount, DroppedEdges, PlaneCount, Frames, Pairs, PathsPerFrame;
+    public readonly int Bins, EdgeCount, DroppedEdges, Frames, Pairs, PathsPerFrame;
     readonly AcousticTake.Scene scene;
     readonly TakeRender.Settings settings;
     readonly RayTransport.Layout layout;
@@ -105,9 +105,9 @@ internal sealed class MethodTransport : IDisposable
     ulong flushMask;
     long persistentUpdates;
     int traceKernel; readonly int clearKernel, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, outputCount, statsCount, frequencyBins, rate;
-    readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, stats, emptyCapture;
+    readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, stats;
     ComputeBuffer output; // persistent: reallocated with the ring at the first dispatch (EnsureRing)
-    readonly ComputeBuffer arrivals, arrivalCounts, primitivePlanes, paths, edgeCdf;
+    readonly ComputeBuffer arrivals, arrivalCounts, paths, edgeCdf;
     ComputeBuffer counts;
     // Path: the rate channel (Doppler, MethodPath.hlsl "Delay rates"): per solve [moment 3][bin] cells, the energy-weighted
     // first and second moments of the contributions' delay rates, after the histograms and the ring in `output`, then
@@ -136,8 +136,7 @@ internal sealed class MethodTransport : IDisposable
     public const int ChunkRays = 1024;
 
     public MethodTransport(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry, TakeRender.Settings settings,
-                           ComputeBuffer primitives, ComputeBuffer states, ComputeBuffer sources,
-                           ComputeBuffer listeners, ComputeBuffer bvhNodes, ComputeBuffer bvhIndices,
+                           ComputeBuffer primitives, ComputeBuffer states, ComputeBuffer bvhNodes, ComputeBuffer bvhIndices,
                            bool audio = false, int sampleRate = 48000, int maximumFrames = 1, bool readback = false)
     {
         if (settings.method != TakeRender.Method.Path)
@@ -219,26 +218,6 @@ internal sealed class MethodTransport : IDisposable
             edgeRanges = new ComputeBuffer(ranges.Length, 8); edgeRanges.SetData(ranges);
             edgeIndices = new ComputeBuffer(Math.Max(1, indices.Count), 4);
             if (indices.Count > 0) edgeIndices.SetData(indices);
-            // Mirror planes: coplanar primitives of one object share a plane (a wall split into
-            // triangles is one mirror).
-            var planeOf = new uint[Math.Max(1, geometry.Length)];
-            var representatives = new List<uint>();
-            var keys = new Dictionary<(int, long, long, long, long), uint>();
-            for (int i = 0; i < geometry.Length; i++)
-            {
-                var g = geometry[i];
-                Vector3 normal = Vector3.Cross(g.b - g.a, g.c - g.a);
-                if (normal.sqrMagnitude <= 0) { planeOf[i] = uint.MaxValue; continue; }
-                normal.Normalize();
-                float sign = normal.x != 0 && Mathf.Abs(normal.x) > 1e-6f ? Mathf.Sign(normal.x) : Mathf.Abs(normal.y) > 1e-6f ? Mathf.Sign(normal.y) : Mathf.Sign(normal.z);
-                normal *= sign;
-                var key = (g.objectIndex, (long)Math.Round(normal.x * 1e5), (long)Math.Round(normal.y * 1e5), (long)Math.Round(normal.z * 1e5),
-                           (long)Math.Round(Vector3.Dot(normal, g.a) * 1e4));
-                if (!keys.TryGetValue(key, out uint plane)) { plane = (uint)representatives.Count; keys.Add(key, plane); representatives.Add((uint)i); }
-                planeOf[i] = plane;
-            }
-            PlaneCount = representatives.Count;
-            primitivePlanes = new ComputeBuffer(planeOf.Length, 4); primitivePlanes.SetData(planeOf);
             int solves = Frames * Pairs;
             arrivals = new ComputeBuffer(solves, ArrivalStride);   // one per solve: the exact direct arrival
             arrivalCounts = new ComputeBuffer(Math.Max(1, solves), 4);
@@ -309,7 +288,6 @@ internal sealed class MethodTransport : IDisposable
             Counts = new uint[countCells];
             statsCount = Bands * Depths * StatStride + Counters;
             output = new ComputeBuffer(OutputUints, 4); stats = new ComputeBuffer(statsCount, 4);
-            emptyCapture = new ComputeBuffer(2, 16);
             Output = new uint[audio ? 0 : outputCount]; Stats = new uint[statsCount];
             late = new uint[audio ? outputCount : 0];
             Rates = new uint[!audio ? 2 * rateCells : 0];
@@ -328,14 +306,13 @@ internal sealed class MethodTransport : IDisposable
             foreach (int kernel in kernels)
             {
                 shader.SetBuffer(kernel, "Primitives", primitives); shader.SetBuffer(kernel, "States", states);
-                shader.SetBuffer(kernel, "Sources", sources); shader.SetBuffer(kernel, "Listeners", listeners);
                 shader.SetBuffer(kernel, "MethodMaterials", materials); shader.SetBuffer(kernel, "Edges", edgeBuffer);
                 shader.SetBuffer(kernel, "EdgeRanges", edgeRanges); shader.SetBuffer(kernel, "EdgeIndices", edgeIndices);
                 shader.SetBuffer(kernel, "Volumes", volumes); shader.SetBuffer(kernel, "MethodOutput", output);
-                shader.SetBuffer(kernel, "MethodStats", stats); shader.SetBuffer(kernel, "MethodCapture", emptyCapture);
+                shader.SetBuffer(kernel, "MethodStats", stats);
                 if (bvhNodes != null) { shader.SetBuffer(kernel, "BvhNodes", bvhNodes); shader.SetBuffer(kernel, "BvhIndices", bvhIndices); }
                 shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
-                shader.SetBuffer(kernel, "MethodPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "RayPaths", paths);
+                shader.SetBuffer(kernel, "RayPaths", paths);
                 shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "MethodEdgeCdfRead", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
                 shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathClearanceRead", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
                 shader.SetBuffer(kernel, "PathEdgeWeight", edgeWeights); shader.SetBuffer(kernel, "PathCohortCount", cohortCounts);
@@ -359,8 +336,6 @@ internal sealed class MethodTransport : IDisposable
             shader.SetInt("MethodTotalRays", Rays);
             shader.SetInt("MethodBins", Bins);
             shader.SetInt("MethodMaxEvents", settings.methodMaxEvents);
-            shader.SetInt("MethodCaptureRays", 0);
-            shader.SetInt("MethodCaptureEvents", 0);
             shader.SetInt("MethodAnyTransmission", anyTransmission ? 1 : 0);
             shader.SetInt("MethodOutputCount", outputCount);
             shader.SetInt("MethodStatsCount", statsCount);
@@ -631,23 +606,18 @@ internal sealed class MethodTransport : IDisposable
     public int ProfileFlags;
     public readonly double[] PhaseSeconds = new double[4];
 
-    // Measurement: trace every ray of one solve and read the outputs back. With a capture
-    // buffer, rays below captureRays record up to captureEvents events (two float4 each).
-    public void Dispatch(int bvhNodeCount, ComputeBuffer capture = null, int captureRays = 0, int captureEvents = 0)
+    // Measurement: trace every ray of one solve and read the outputs back.
+    public void Dispatch(int bvhNodeCount)
     {
         if (Audio) throw new InvalidOperationException("Audio method transports dispatch with DispatchAudio.");
         EnsureRing(null); // (no states given: a ring for the whole horizon)
         bind();
         SelectDoppler(persistent ? (PersistentSingleUpdate ? 1 : WarmUpdates) : 1);
         shader.SetInt("BvhNodeCount", bvhNodeCount);
-        shader.SetBuffer(traceKernel, "MethodCapture", capture ?? emptyCapture);
-        shader.SetInt("MethodCaptureRays", capture == null ? 0 : captureRays);
-        shader.SetInt("MethodCaptureEvents", capture == null ? 0 : captureEvents);
         Clear();
         if (persistent)
         {
             DispatchPersistent();
-            shader.SetBuffer(traceKernel, "MethodCapture", emptyCapture);
             return;
         }
         SetSolve(0, 0);
@@ -673,7 +643,6 @@ internal sealed class MethodTransport : IDisposable
         stats.GetData(Stats);
         counts.GetData(Counts); output.GetData(Rates, 0, 2 * RateBase, Rates.Length);
         PhaseSeconds[3] += TakeRender.Elapsed(read);
-        shader.SetBuffer(traceKernel, "MethodCapture", emptyCapture);
     }
     // Measurement, persistent: a flush and WarmUpdates updates of the static frame (or one update, see
     // PersistentSingleUpdate); the histogram is the last update's (each update replaces it with its ring slot),
@@ -895,9 +864,9 @@ internal sealed class MethodTransport : IDisposable
     {
         if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); if (!ratesDone) rateRequest.WaitForCompletion(); if (!countsDone) countRequest.WaitForCompletion(); pending = false; }
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
-        output?.Dispose(); stats?.Dispose(); emptyCapture?.Dispose();
+        output?.Dispose(); stats?.Dispose();
         counts?.Dispose();
-        arrivals?.Dispose(); arrivalCounts?.Dispose(); primitivePlanes?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); mirrorCdf?.Dispose();
+        arrivals?.Dispose(); arrivalCounts?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); mirrorCdf?.Dispose();
         pathRays?.Dispose(); pathLive?.Dispose(); edgeWeights?.Dispose(); cohortCounts?.Dispose(); sortBuckets?.Dispose(); sortEntries?.Dispose();
     }
 }

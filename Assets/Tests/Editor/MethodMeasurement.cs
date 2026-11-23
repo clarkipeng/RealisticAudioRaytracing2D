@@ -80,7 +80,7 @@ public partial class TakeChecks
         public string[] methods;
         public int[] budgets, seeds;
         public float maximumDelaySeconds = 2, detectionRadius = .25f, diffractionFactor = 1, edgeProbability = .5f, rouletteFloor = 1e-6f;
-        public int receivers = -1, captureReceiver = -1, captureRays = 48, captureEvents = 192;
+        public int receivers = -1;
         // Dataset runs (tools/path_dataset.py): a new seed per receiver (frames of a moving listener
         // get independent noise, as live solves do), and air absorption.
         public bool seedPerReceiver, airAbsorption;
@@ -181,15 +181,14 @@ public partial class TakeChecks
                     {
                         string output = Path.Combine(job.output, spec.sceneId, name, $"r{job.budgets[b]:00000}", seed.ToString());
                         if (File.Exists(Path.Combine(output, "run.json"))) continue;
-                        bool capture = job.captureReceiver >= 0 && b == 0 && seed == job.seeds[0];
-                        RenderMethod(spec, baked, method, name, job, job.budgets[b], seed, receivers, output, shader, fraction, code, capture);
+                        RenderMethod(spec, baked, method, name, job, job.budgets[b], seed, receivers, output, shader, fraction, code);
                     }
             }
         }
         finally { foreach (var m in materials.Values) UnityEngine.Object.DestroyImmediate(m); }
     }
     void RenderMethod(MethodSceneSpec spec, DatasetSolid baked, TakeRender.Method method, string name, MethodJob job, int budget, int seed,
-                      int receivers, string output, ComputeShader shader, double fraction, string code, bool capture)
+                      int receivers, string output, ComputeShader shader, double fraction, string code)
     {
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
         string partial = output + ".partial";
@@ -250,12 +249,6 @@ public partial class TakeChecks
                 analysis += TakeRender.Elapsed(a0);
             }
             record.gpuSeconds = solver.Method.GpuSeconds - gpuBefore;
-            if (capture && job.captureReceiver < receivers)
-            {
-                state[1].position = WaveVector(spec.points, 3 * job.captureReceiver);
-                File.WriteAllText(Path.Combine(partial, "capture.json"), MethodCaptureJson(solver.CaptureMethod(state, job.captureRays, job.captureEvents), job.captureRays, job.captureEvents,
-                                        job.captureReceiver, state[0].position, state[1].position));
-            }
         }
         record.analysisSeconds = analysis;
         MethodWrite(Path.Combine(partial, "energy.f32"), energy);
@@ -276,28 +269,5 @@ public partial class TakeChecks
         if (Directory.Exists(output)) Directory.Delete(output, true);
         Directory.Move(partial, output);
         Debug.Log($"Method {name} {spec.sceneId} r{budget} s{seed}: {record.busySeconds:F2} s busy, {record.wallSeconds:F1} s wall");
-    }
-    static string Json(Vector3 v) => FormattableString.Invariant($"[{v.x:R},{v.y:R},{v.z:R}]");
-    // Captured events: per ray, kind / position / weight / contribution / time / extra.
-    static string MethodCaptureJson(Vector4[] data, int rays, int events, int receiver, Vector3 source, Vector3 listener)
-    {
-        var text = new StringBuilder();
-        text.Append("{\"schema\":\"methods-capture-v1\",\"receiver\":").Append(receiver).Append(",\"source\":").Append(Json(source))
-            .Append(",\"listener\":").Append(Json(listener)).Append(",\"kinds\":{\"1\":\"source\",\"2\":\"specular\",\"3\":\"diffuse\",\"4\":\"transmission\",\"5\":\"edge\",")
-            .Append("\"6\":\"connection\",\"7\":\"chain\",\"8\":\"escape\",\"9\":\"end\",\"10\":\"edgeConnection\"},\"rays\":[");
-        for (int r = 0; r < rays; r++)
-        {
-            text.Append(r == 0 ? "[" : ",[");
-            bool first = true;
-            for (int e = 0; e < events; e++)
-            {
-                var a = data[2 * (r * events + e)]; var b = data[2 * (r * events + e) + 1];
-                if (a.w == 0) break;
-                text.Append(first ? "" : ",").Append(FormattableString.Invariant($"[{(int)a.w},{a.x:R},{a.y:R},{a.z:R},{b.x:R},{b.y:R},{b.z:R},{b.w:R}]"));
-                first = false;
-            }
-            text.Append("]");
-        }
-        return text.Append("]}").ToString().Replace("NaN", "null").Replace("Infinity", "1e39");
     }
 }

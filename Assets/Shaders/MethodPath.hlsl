@@ -22,7 +22,7 @@
 //   persistent (PathPersistent, see "Persistent rays" below): the same loop, stopped after one update
 //     period of path time and resumed at the next update, with new rays launched every update.
 //
-// Uses MethodCommon.hlsl and the UTD and edge-sampling helpers of MethodEnergy.hlsl.
+// Uses MethodCommon.hlsl, with its UTD and edge-sampling helpers.
 #ifndef ACOUSTIC_METHOD_PATH
 #define ACOUSTIC_METHOD_PATH
 // Time bins: PathBin0 wide up to PathFineBins * PathBin0, then constant relative resolution
@@ -1062,7 +1062,7 @@ void TracePath(uint index)
         [unroll] for (uint k10 = 0; k10 < MethodBands; k10++) { part[k10] = Phi0[k10] * C[k10] * eT[k10] / Q; partWeight = max(partWeight, part[k10]); }
         if (split && partWeight > 0)
         {
-            // Small transmitted share: a reservoir candidate (MethodEnergy.hlsl header), not a draw.
+            // Small transmitted share: a reservoir candidate (MethodCommon.hlsl), not a draw.
             branchSum += partWeight;
             keepBranch = RandomRay(rng) * branchSum < partWeight;
         }

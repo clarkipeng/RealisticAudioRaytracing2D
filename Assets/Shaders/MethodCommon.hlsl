@@ -1,16 +1,12 @@
-// Shared support for the two single-loop measurement methods, MethodPressure.hlsl
-// and MethodEnergy.hlsl (docs/benchmarks/methods-2026-11-06). Static 3D scenes, one
-// point source (Sources[0]) and one listener (Listeners[0]) per solve; all eight
-// octave bands (125 Hz * 2^b) are carried by every ray as a vector, so the bands
-// share one geometric path and its random numbers. Uses Geometry.hlsl and
-// Transport.hlsl (media, edges, wedge kernels); no state is shared with the hybrid.
+// Shared support of the path method (MethodPath.hlsl, docs/method.md): 3D scenes, one source and one listener
+// per solve; all eight octave bands (125 Hz * 2^b) are carried by every ray as a vector, so the bands share one
+// geometric path and its random numbers. Uses Geometry.hlsl and Transport.hlsl (media, edges, wedge kernels).
 #ifndef ACOUSTIC_METHOD_COMMON
 #define ACOUSTIC_METHOD_COMMON
 static const uint MethodBands = 8, MethodDepths = 64, MethodCounters = 16, MethodMagnitudes = 64, MethodStatStride = 66;
 StructuredBuffer<RayMaterial> MethodMaterials; // [material * 8 + band] at band centres
 RWStructuredBuffer<uint> MethodOutput;         // (low, high) 32.32 fixed-point sums: energy cells or signed pressure train samples
 RWStructuredBuffer<uint> MethodStats;          // [band][depth][count, max|c| bits, 64 log2|c| buckets], then counters
-RWStructuredBuffer<float4> MethodCapture;      // two float4 per captured event
 uint MethodTotalRays, MethodRayOffset, MethodRayCount, MethodBins, MethodTrainBase, MethodMaxEvents;
 uint MethodCaptureRays, MethodCaptureEvents, MethodAnyTransmission, MethodEdgeCount, MethodOutputCount, MethodStatsCount, MethodClearOffset;
 float MethodBinSeconds, MethodHorizon, MethodDetectRadius, MethodTrainRate0, MethodLeadSeconds, MethodEdgeProbability;
@@ -22,9 +18,6 @@ uint MethodState, MethodCellBase, MethodHeadFrame, MethodListenerObject;
 static const uint CounterRays = 0, CounterEvents = 1, CounterEscapes = 2, CounterRoulette = 3, CounterHorizon = 4,
                   CounterEventCap = 5, CounterNonFinite = 6, CounterDetections = 7, CounterChains = 8,
                   CounterOverflow = 9, CounterEdgeConnections = 10, CounterDiffuse = 11, CounterEdgeEvents = 12;
-// Captured event kinds (Assets/Tests/Editor/MethodMeasurement.cs mirrors them).
-static const uint CaptureSource = 1, CaptureSpecular = 2, CaptureDiffuse = 3, CaptureTransmission = 4, CaptureEdge = 5,
-                  CaptureConnection = 6, CaptureChain = 7, CaptureEscape = 8, CaptureEnd = 9, CaptureEdgeConnection = 10;
 
 // The latest vertex that is not a delta event: the start of the current straight
 // (unfolded) chain and of every listener connection.
@@ -54,89 +47,6 @@ float MethodSlowness(uint medium) { return MethodIor(medium, 3) / SpeedOfSound; 
 void MethodCount(uint counter, uint amount = 1)
 {
     InterlockedAdd(MethodStats[MethodBands * MethodDepths * MethodStatStride + counter], amount);
-}
-// Only integer atomics: float compare-exchange loops (a loop whose exit depends on a
-// buffer read) make the HLSL compiler expand each call site, and the pressure kernel
-// has dozens of them. Sums are 32.32 fixed point (low word, high word) with a dither
-// whose expectation makes the rounding unbiased; they are exact and order independent.
-void MethodAddFixed(uint index, float value, uint key)
-{
-    if (value == 0) return;
-    if (!isfinite(value) || abs(value) >= 2147483000.0) { MethodCount(CounterOverflow); return; }
-    float whole = floor(value), part = (value - whole) * 4294967296.0 + (HashRay(key ^ HashRay(index)) >> 8) * (1.0 / 16777216.0);
-    if (part >= 4294967296.0) { whole += 1; part -= 4294967296.0; }
-    uint low = (uint)part, high = (uint)(int)whole, old;
-    InterlockedAdd(MethodOutput[2 * index], low, old);
-    if (old + low < old) high++;
-    if (high != 0) InterlockedAdd(MethodOutput[2 * index + 1], high);
-}
-// Per band and interaction depth: count, max |c| and a histogram of floor(log2 |c|)
-// (2^-40 ... 2^23) of every listener contribution before the 1/N average. The growth
-// of E|c| with depth, and the tail of |c|, are the divergence measurement.
-void MethodStatistic(uint band, uint depth, float magnitude)
-{
-    if (!(magnitude > 0)) return;
-    magnitude = isfinite(magnitude) ? magnitude : 3.0e38;
-    uint cell = (band * MethodDepths + min(depth, MethodDepths - 1)) * MethodStatStride;
-    InterlockedAdd(MethodStats[cell], 1u);
-    InterlockedMax(MethodStats[cell + 1], asuint(magnitude));
-    int bucket = clamp((int)floor(log2(magnitude)) + 40, 0, (int)MethodMagnitudes - 1);
-    InterlockedAdd(MethodStats[cell + 2 + bucket], 1u);
-}
-
-// ---- debug capture: rays below MethodCaptureRays record their events ----
-void MethodCaptureEvent(uint ray, inout uint slot, uint kind, float3 position, float weight, float contribution,
-                        float time, float extra = 0)
-{
-    if (ray >= MethodCaptureRays || slot >= MethodCaptureEvents) return;
-    uint at = 2 * (ray * MethodCaptureEvents + slot++);
-    MethodCapture[at] = float4(position, kind);
-    MethodCapture[at + 1] = float4(weight, contribution, time, extra);
-}
-
-// ---- outputs ----
-// Energy histogram [direction(6)][band][bin] at MethodCellBase, 32.32 fixed point; shares
-// are summed over rays and divided by MethodTotalRays (as LateEnergy.hlsl, whose layout
-// [frame][pair][direction][band][bin] the audio solves share).
-void MethodDepositEnergy(float3 arrivalFrom, uint band, float time, float share, uint key)
-{
-    if (!(share > 0) || !isfinite(share) || time < 0) return;
-    uint bin = (uint)floor(time / MethodBinSeconds);
-    if (bin >= MethodBins) return;
-    if (MethodHeadFrame != 0)
-    {
-        float4 head = States[MethodState + MethodListenerObject].rotation;
-        arrivalFrom = Rotate(float4(-head.xyz, head.w), arrivalFrom);
-    }
-    uint cell = MethodCellBase + (LateDirection(arrivalFrom) * MethodBands + band) * MethodBins + bin;
-    float whole = floor(share), part = (share - whole) * 4294967296.0 + (HashRay(key ^ HashRay(cell)) >> 8) * (1.0 / 16777216.0);
-    if (part >= 4294967296.0) { whole += 1; part -= 4294967296.0; }
-    uint low = (uint)part, high = (uint)min(whole, 4294967295.0), old;
-    InterlockedAdd(MethodOutput[2 * cell], low, old);
-    if (old + low < old) high++;
-    if (high != 0) InterlockedAdd(MethodOutput[2 * cell + 1], high);
-}
-// Pressure band trains: band b is sampled at MethodTrainRate0 * 2^b (16 samples per
-// centre-frequency period), MethodTrainBase << b samples, real then imaginary train,
-// with MethodLeadSeconds of lead. Deposits use 4-tap cubic Lagrange interpolation
-// (MethodBands.Deposit on the CPU is identical): its response error is below 0.1% up
-// to 2 fc, where a linear split loses up to 10% of the energy depending on where
-// the delay falls between samples. The CPU applies the band filters. Values are / N.
-void MethodDepositPressure(uint band, float time, float2 value, uint key)
-{
-    if (!all(isfinite(value)) || (value.x == 0 && value.y == 0) || time < 0) return;
-    uint length = MethodTrainBase << band, offset = 2 * MethodTrainBase * ((1u << band) - 1);
-    float u = (time + MethodLeadSeconds) * (MethodTrainRate0 * (float)(1u << band));
-    uint i0 = (uint)floor(u);
-    if (i0 < 1 || i0 + 2 >= length) return;
-    float w = u - i0;
-    float4 c = float4(-w * (w - 1) * (w - 2) / 6, (w + 1) * (w - 1) * (w - 2) / 2, -(w + 1) * w * (w - 2) / 2, (w + 1) * w * (w - 1) / 6);
-    [loop] for (uint t = 0; t < 4; t++)
-    {
-        uint at = offset + i0 - 1 + t;
-        MethodAddFixed(at, value.x * c[t], key + 2 * t);
-        MethodAddFixed(at + length, value.y * c[t], key + 2 * t + 1);
-    }
 }
 
 // Whether the hit object is a refracting medium (closed, acoustic index not 1): not a partition.
@@ -196,82 +106,6 @@ bool MethodConnect(float3 a, float3 b, uint medium, bool energy, inout float fac
     time += remaining * MethodSlowness(medium);
     [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] *= exp(-(energy ? 2 : 1) * MethodLoss(medium, k) * remaining);
     return true;
-}
-
-// ---- unfolding of specular chains ----
-// U maps real space after the latest reflection into the straight (unfolded) space
-// of the ray that left the anchor: U(y) = A y + c. Reflection at the plane n.y = d
-// composes U with the mirror: A' = A - 2 (A n) n^T, c' = c + 2 d (A n).
-void MethodUnfoldReflect(inout float3x3 A, inout float3 c, float3 n, float d)
-{
-    float3 an = mul(A, n);
-    A -= 2 * float3x3(an.x * n, an.y * n, an.z * n);
-    c += 2 * d * an;
-}
-float3x3 MethodIdentity() { return float3x3(1, 0, 0, 0, 1, 0, 0, 0, 1); }
-
-// Exact specular chain from the anchor towards the listener image `target` (in the
-// anchor's unfolded space): retrace `hits` interactions, reflecting except where the
-// walk transmitted (bit i of `transmitted`, first 64 interactions), and require that
-// the last leg reaches the real listener unobstructed. Any plane sequence with the
-// same image is the same arrival; it is evaluated with its own exact coefficients.
-// pressure[b] and energy[b] receive the products of the exact coefficients.
-bool MethodRetraceChain(float3 anchor, float3 target, float3 listener, uint hits, uint2 transmitted,
-                        out float2 pressure[8], out float energy[8], out float lengthTotal, out float3 arrivalFrom)
-{
-    [unroll] for (uint k = 0; k < MethodBands; k++) { pressure[k] = float2(1, 0); energy[k] = 1; }
-    lengthTotal = length(target - anchor);
-    arrivalFrom = 0;
-    if (lengthTotal <= 2 * RayEpsilon) return false;
-    float3 p = anchor, d = (target - anchor) / lengthTotal;
-    float travelled = 0;
-    [loop] for (uint i = 0; i < hits; i++)
-    {
-        uint hit; float distance; float3 normal;
-        if (!NearestHit(MethodState, p, d, lengthTotal - travelled - RayEpsilon, false, hit, distance, normal)) return false;
-        travelled += distance;
-        p += d * distance;
-        float3 n = dot(d, normal) < 0 ? normal : -normal;
-        float cosine = abs(dot(d, n));
-        bool through = i < 64 && ((i < 32 ? transmitted.x >> i : transmitted.y >> (i - 32)) & 1) != 0;
-        [unroll] for (uint k = 0; k < MethodBands; k++)
-        {
-            RayMaterial m = MethodSurface(hit, k);
-            if (through)
-            {
-                float t = m.medium.w != 0 ? 0 : saturate((1 - m.surface.x) * m.surface.z);
-                pressure[k] *= sqrt(t); energy[k] *= t;
-            }
-            else if (m.medium.w != 0)
-            {
-                float2 r = ReflectionPressure(m, cosine);
-                pressure[k] = ComplexProduct(pressure[k], r); energy[k] *= dot(r, r);
-            }
-            else
-            {
-                float s = saturate((1 - m.surface.x) * (1 - m.surface.z) * (1 - m.surface.y));
-                pressure[k] *= sqrt(s); energy[k] *= s;
-            }
-        }
-        if (!through) d = reflect(d, n);
-    }
-    float remaining = lengthTotal - travelled;
-    if (remaining <= RayEpsilon) return false;
-    float3 end = p + d * remaining;
-    if (length(end - listener) > 1e-3 * max(1, lengthTotal)) return false;
-    if (!Visible(MethodState, p, listener, false)) return false;
-    arrivalFrom = -d;
-    return true;
-}
-// Probability that a ray drawn at the anchor passes within MethodDetectRadius of a
-// point at distance `distance` in direction w: the cone of half-angle asin(r/distance).
-// kind 0: uniform sphere; kind 1: cosine hemisphere about normal n (exact while the
-// cone lies inside the hemisphere: integral of cos/pi over the cone is (w.n) sin^2).
-float MethodConeProbability(uint kind, float3 w, float distance, float3 n)
-{
-    float s = MethodDetectRadius / distance, s2 = s * s;
-    if (kind == 1) return max(0, dot(w, n)) * s2;
-    return .5 * s2 / (1 + sqrt(max(0, 1 - s2))); // (1 - cos)/2 without cancellation
 }
 
 // ---- edges ----
@@ -347,17 +181,177 @@ float MethodEdgeOpacity(uint edge, uint band)
     RayMaterial m = MethodSurface(Edges[edge].ids.y, band);
     return 1 - sqrt(saturate((1 - m.surface.x) * m.surface.z));
 }
-// Pressure-random phase of a diffusely scattering surface cell (MethodPressure.hlsl):
-// square cells of side wavelength/sqrt(pi) on the primitive's plane.
-float MethodCellPhase(uint primitive, float3 position, float3 normal, uint band)
-{
-    float3 t = abs(normal.x) < .9 ? normalize(cross(normal, float3(1, 0, 0))) : normalize(cross(normal, float3(0, 1, 0)));
-    float3 b = cross(normal, t);
-    float cell = 2 * RayPi / MethodWavenumber(band) / sqrt(RayPi);
-    int2 ij = int2(floor(float2(dot(position, t), dot(position, b)) / cell));
-    uint plane = HashRay(asuint(round(dot(normal, position) * 1000)) ^ HashRay(asuint(round(normal.x * 1000)) +
-                 HashRay(asuint(round(normal.y * 1000)) + HashRay(asuint(round(normal.z * 1000))))));
-    return 2 * RayPi * (HashRay(plane ^ HashRay((uint)ij.x * 0x9e3779b9u + HashRay((uint)ij.y + band * 0x85ebca6bu))) >> 8) / 16777216.0;
-}
 float3 MethodCosineDirection(float3 n, inout uint rng) { return LateLambert(n, rng, false); }
+// Energy kernels of the path method's walk (MethodPath.hlsl), from the energy method that the path method
+// replaced (removed; Git history): energies use the direct-sound convention (ReferenceDistance / r)^2, every
+// listener contribution is (integrand) / (density), and all eight bands ride on one ray.
+//   - edge: the uniform theory of diffraction (Kouyoumjian & Pathak 1974, rigid
+//     faces) used as an energy kernel, |D|^2 (Tsingos et al. 2001): the diffracted
+//     ray leaves on Keller's cone with energy flux per unit edge length and azimuth
+//     |D(phi, phi', beta; kL)|^2 sin^2(beta) I_in, whose ray-tube spreading gives
+//     |D|^2 I_in m / (l (m + l)) at distance l. |D|^2 is non-negative and finite at
+//     the shadow and reflection boundaries (Fresnel transition functions), which a
+//     signed pressure kernel (BTM, BEDRF arXiv 2306.01974) is not, so it can be
+//     transported as energy.
+//   - a small transmitted share (under half of the continuing energy: a wall, a door, a window) is split off
+//     instead of drawn and kept as a one-slot weighted reservoir candidate (MethodPath.hlsl), with Russian
+//     roulette relative to a source ray's energy (EnergyBranchFloor).
+// Russian roulette: survival min(1, max over bands of energy factor / (probability * floor)):
+// paths whose throughput is above MethodRouletteFloor always continue, so the number of
+// paths stays constant over the decay instead of falling with the energy.
+float MethodRouletteFloor;
+// The exact direct arrival of a solve (MethodPath.hlsl PathDirectArrival) and the solve's endpoints.
+struct EnergyArrival
+{
+    float4 direction;   // xyz: listener-to-arrival (world); w: delay rate, 1 - received/emitted frequency
+    float4 low, high;   // band energies 125 Hz ... 16 kHz, direct-sound convention
+    float delay;        // seconds, retarded for a moving source
+    uint identity;      // stable across solves: plane multiset or edge/plane indices
+    uint family;        // EnergyFamily* | interaction depth << 8
+    float length;       // geometric path length (m)
+};
+static const uint EnergyFamilyDirect = 0, EnergyFamilySpecular = 1, EnergyFamilyD = 2, EnergyFamilyDD = 3, EnergyFamilyRD = 4,
+                  EnergyFamilyDR = 5;
+static const uint CounterArrivalOverflow = 13, CounterBranches = 14;
+static const float EnergyBranchFloor = .05;
+RWStructuredBuffer<EnergyArrival> MethodArrivals;
+RWStructuredBuffer<uint> MethodArrivalCounts, MethodSelected;
+uint MethodSourceObject, MethodArrivalFamilies, MethodArrivalOrder, MethodPlaneCount;
+uint MethodArrivalBase, MethodArrivalCapacity, MethodArrivalSlots, MethodArrivalDeposit, MethodCountIndex, MethodSelectedBase;
+uint MethodPathBase, MethodFrequencyBins, MethodFftSize, MethodCountCells;
+float MethodSampleRate;
+// Edge rays leave the source only, importance-sampled per solve (EnergyEdgeWeights/EnergyEdgeScan):
+// edge e is chosen with probability proportional to angle_e * integral of 1/m^2 along it,
+// angle_e * (atan((L - z0)/r) - atan(-z0/r)) / r for a source at distance r from the edge line
+// (foot of the perpendicular at z0), times 1 if a quick visibility test sees it, else
+// MethodEdgeHidden; the point on the edge is drawn with density proportional to 1/m^2 (a
+// Cauchy law about z0). The ray's flux is then |D|^2 sin^2(beta) I times the total weight over
+// the visibility factor: bounded, where uniform edge and point choices multiplied it by the
+// edge count and 1/m^2 (the Church's reverb-tail bursts, docs/benchmarks/energy-audio-2026-11-09).
+RWStructuredBuffer<float> MethodEdgeCdf;   // per edge, then its running sum (EnergyEdgeScan)
+// The readers' view of it: the path shader's Doppler walks read it through a read-only buffer bound to the same data
+// (PathMethod.compute), so they do not count it among their UAVs (README part 44).
+#ifndef METHOD_EDGE_CDF_READ
+#define METHOD_EDGE_CDF_READ MethodEdgeCdf
+#endif
+static const float MethodEdgeHidden = .1;
+float EnergyEdgeSpan(float3 a, float3 u, float extent, float3 x, out float z0, out float r)
+{
+    float3 s = x - a;
+    z0 = dot(s, u);
+    r = max(1e-4, length(s - z0 * u));
+    return atan((extent - z0) / r) - atan(-z0 / r);
+}
+groupshared float EnergyScanParts[256];
+void EnergyEdgeScan(uint thread)
+{
+    uint n = MethodEdgeCount, per = (n + 255) / 256, first = thread * per, last = min(n, first + per);
+    float sum = 0;
+    [loop] for (uint i = first; i < last; i++) sum += MethodEdgeCdf[i];
+    EnergyScanParts[thread] = sum;
+    GroupMemoryBarrierWithGroupSync();
+    if (thread == 0)
+    {
+        float run = 0;
+        [loop] for (uint j = 0; j < 256; j++) { float v = EnergyScanParts[j]; EnergyScanParts[j] = run; run += v; }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    float run = EnergyScanParts[thread];
+    [loop] for (uint k = first; k < last; k++) { run += MethodEdgeCdf[k]; MethodEdgeCdf[k] = run; }
+}
+uint EnergySampleEdge(float u, out float probability)
+{
+    float total = METHOD_EDGE_CDF_READ[MethodEdgeCount - 1], target = u * total;
+    uint lo = 0, hi = MethodEdgeCount - 1;
+    [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (METHOD_EDGE_CDF_READ[mid] > target) hi = mid; else lo = mid + 1; }
+    probability = (METHOD_EDGE_CDF_READ[lo] - (lo > 0 ? METHOD_EDGE_CDF_READ[lo - 1] : 0)) / total;
+    return lo;
+}
+float EnergyDirectivity(MethodAnchor v, float3 w) { return v.kind == 1 ? max(0, dot(w, v.normal)) : 1; }
+float EnergySpecular(RayMaterial m, float cosine)
+{
+    if (m.medium.w != 0) { float2 r = ReflectionPressure(m, cosine); return dot(r, r); }
+    return saturate((1 - m.surface.x) * (1 - m.surface.z) * (1 - m.surface.y));
+}
+// Kouyoumjian-Pathak transition function F(X) = 2i sqrt(X) e^{iX} int_sqrt(X)^inf e^{-i t^2} dt
+// = sqrt(2 pi X) (f(z) + i g(z)), z = sqrt(2X/pi), with the Fresnel auxiliary
+// functions f, g of Abramowitz & Stegun 7.3.32-33 (|error| <= 2e-3).
+float2 UtdTransition(float X)
+{
+    X = max(X, 0);
+    float z = sqrt(2 * X / RayPi);
+    float f = (1 + .926 * z) / (2 + 1.792 * z + 3.104 * z * z), g = 1 / (2 + 4.142 * z + 3.492 * z * z + 6.670 * z * z * z);
+    return sqrt(2 * RayPi * X) * float2(f, g);
+}
+// |D|^2 of a rigid wedge with exterior angle n*pi (Kouyoumjian & Pathak 1974, eq. 25-29).
+float UtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k, float distance)
+{
+    float2 sum = 0;
+    [unroll] for (uint i = 0; i < 4; i++)
+    {
+        float sign = (i & 1) == 0 ? 1 : -1, x = i < 2 ? phiOut - phiIn : phiOut + phiIn;
+        float argument = (RayPi + sign * x) / (2 * n);
+        if (abs(sin(argument)) < 1e-5) { x += sign * 4e-5 * n; argument = (RayPi + sign * x) / (2 * n); }
+        float N = round((x + sign * RayPi) / (2 * RayPi * n)), c = cos(n * RayPi * N - .5 * x);
+        sum += (cos(argument) / sin(argument)) * UtdTransition(k * distance * 2 * c * c);
+    }
+    return dot(sum, sum) / (8 * RayPi * k * n * n * sinBeta * sinBeta);
+}
+// Keller's stationary point between two points, on the finite edge only.
+bool UtdApex(uint edge, float3 from, float3 to, out float3 e)
+{
+    float3 a, u, f, n; float extent, angle;
+    EdgeFrame(edge, MethodState, false, a, u, f, n, extent, angle);
+    float3 s = from - a, r = to - a;
+    float zs = dot(s, u), zr = dot(r, u), rs = length(s - zs * u), rr = length(r - zr * u);
+    e = a;
+    if (rs + rr <= 1e-6) return false;
+    float z = (zs * rr + zr * rs) / (rs + rr);
+    e = a + z * u;
+    return z >= 0 && z <= extent;
+}
+bool UtdAngles(uint edge, float3 from, float3 e, float3 to, out float n, out float phiIn, out float phiOut, out float sinBeta)
+{
+    float3 a, u, f, nn; float extent, angle;
+    EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
+    float3 s = from - e, r = to - e;
+    phiIn = TunedEdgeAngle(s, f, nn, angle); phiOut = TunedEdgeAngle(r, f, nn, angle);
+    n = angle / RayPi;
+    sinBeta = length(s - dot(s, u) * u) / max(1e-12, length(s));
+    return phiIn <= angle && phiOut <= angle && sinBeta > 1e-4 && length(r) > RayEpsilon;
+}
+// Keller's stationary path over two parallel edges (every wall end and slab of the
+// box scenes): one common slope along the edges in the unfolded transverse plane.
+// Skew edge pairs are not connected (no closed form; not present in box scenes).
+bool UtdApexPair(uint first, uint second, float3 from, float3 to, out float3 p1, out float3 p2)
+{
+    float3 a1, u1, f1, n1, a2, u2, f2, n2; float e1, w1, e2, w2;
+    EdgeFrame(first, MethodState, false, a1, u1, f1, n1, e1, w1);
+    EdgeFrame(second, MethodState, false, a2, u2, f2, n2, e2, w2);
+    p1 = a1; p2 = a2;
+    if (first == second || abs(dot(u1, u2)) < .9999) return false;
+    float3 s = from - a1, r = to - a1, g = a2 - a1;
+    float zs = dot(s, u1), zr = dot(r, u1), zg = dot(g, u1);
+    float rs = length(s - zs * u1), d = length(g - zg * u1), rr = length((to - a2) - dot(to - a2, u1) * u1);
+    float total = rs + d + rr;
+    if (d <= RayEpsilon || total <= 1e-6) return false;
+    float z1 = zs + (zr - zs) * rs / total, z2 = zs + (zr - zs) * (rs + d) / total;
+    float t2 = (z2 - zg) * sign(dot(u1, u2));
+    p1 = a1 + z1 * u1; p2 = a2 + t2 * u2;
+    return z1 >= 0 && z1 <= e1 && t2 >= 0 && t2 <= e2;
+}
+
+// Deposit one arrival into the histogram (measurement output, or audio arrivals that do
+// not fit the path slots). Shares are multiplied by the ray count the readout divides by.
+float EnergyBand(EnergyArrival a, uint band) { float4 v = band < 4 ? a.low : a.high; return v[band & 3]; }
+// Band energies at frequency f: the comparison's power-complementary raised-cosine
+// bands (cos^2(pi/2 log2(f/fc)) between neighbouring centres), flat outside 125 Hz-16 kHz.
+float EnergyAt(EnergyArrival a, float f)
+{
+    float x = clamp(log2(max(f, 1) / 125.0), 0, 7);
+    uint b = min(6u, (uint)floor(x));
+    float t = x - b, w = cos(.5 * RayPi * t);
+    float lower = EnergyBand(a, b), upper = EnergyBand(a, b + 1);
+    return w * w * lower + (1 - w * w) * upper;
+}
 #endif

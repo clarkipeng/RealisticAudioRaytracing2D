@@ -48,7 +48,7 @@ public sealed class TransportSolver : IDisposable
     internal int RayPathsPerFrame => method != null && method.Audio ? method.PathsPerFrame : 0;
     internal RayTransport.LateFrame Late(int frame) => method != null && method.Audio ? new RayTransport.LateFrame(method, frame) : default;
     ComputeBuffer bvhNodes, bvhIndices;
-    ComputeBuffer primitives, states, sources, listeners;
+    ComputeBuffer primitives, states;
     readonly TakeRender.DirectPath[] completedPaths;
     bool pending, disposed, readDirect = true;
     bool completed;
@@ -67,7 +67,6 @@ public sealed class TransportSolver : IDisposable
         method == null
             ? 0
             : (long)Math.Max(1, geometry.Length) * 64 + (long)scene.objects.Length * 80 * maximumFrames +
-                  (long)(scene.sources.Length + scene.listeners.Length) * 4 +
                   (bvh == null
                        ? 0
                        : (long)Math.Max(1, bvh.Nodes.Length) * 48 + (long)Math.Max(1, geometry.Length) * 4) +
@@ -121,20 +120,12 @@ public sealed class TransportSolver : IDisposable
             primitives.SetData(data);
             packed = new GpuState[checked(scene.objects.Length * maximumFrames)];
             states = new ComputeBuffer(packed.Length, 80);
-            var indices = new int[scene.sources.Length];
-            for (int i = 0; i < indices.Length; i++)
-                indices[i] = scene.sources[i].objectIndex;
-            sources = new ComputeBuffer(indices.Length, 4);
-            sources.SetData(indices);
-            listeners = new ComputeBuffer(scene.listeners.Length, 4);
-            listeners.SetData(scene.listeners);
             if (bvh != null)
             {
                 bvhNodes = new ComputeBuffer(Math.Max(1, bvh.Nodes.Length), 48);
                 bvhIndices = new ComputeBuffer(Math.Max(1, geometry.Length), 4);
             }
-            method = new MethodTransport(scene, geometry, settings, primitives, states, sources,
-                                         listeners, bvhNodes, bvhIndices, methodAudio, sampleRate, maximumFrames, readbackPaths);
+            method = new MethodTransport(scene, geometry, settings, primitives, states, bvhNodes, bvhIndices, methodAudio, sampleRate, maximumFrames, readbackPaths);
         }
         catch
         {
@@ -170,21 +161,6 @@ public sealed class TransportSolver : IDisposable
             DispatchReadbackSeconds += TakeRender.Elapsed(start);
             CountSolve();
         }
-    }
-    // Measurement: solve once more with the first `rays` rays recording up to `events`
-    // events each (two float4 per event, see MethodCommon.hlsl).
-    internal Vector4[] CaptureMethod(AcousticTake.State[] state, int rays, int events)
-    {
-        if (disposed || pending || method == null)
-            throw new InvalidOperationException("Method capture requires an idle path method solver.");
-        var data = new Vector4[checked(2 * rays * events)];
-        using var buffer = new ComputeBuffer(Math.Max(2, data.Length), 16);
-        buffer.SetData(data);
-        Upload(state, 1);
-        method.PrepareFrames(state, 1);
-        method.Dispatch(bvh?.NodeCount ?? 0, buffer, rays, events);
-        buffer.GetData(data);
-        return data;
     }
     void CountSolve()
     {
@@ -315,11 +291,9 @@ public sealed class TransportSolver : IDisposable
         pending = false;
         primitives?.Dispose();
         states?.Dispose();
-        sources?.Dispose();
-        listeners?.Dispose();
         bvhNodes?.Dispose();
         bvhIndices?.Dispose();
         bvhNodes = bvhIndices = null;
-        primitives = states = sources = listeners = null;
+        primitives = states = null;
     }
 }

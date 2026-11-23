@@ -131,7 +131,6 @@ internal sealed partial class GpuAudio : IDisposable
             Set("AudioPairs",pairs);Set("AudioListeners",listeners);Set("AudioChannels",channels);Set("AudioCapacity",capacity);Set("AudioHashSize",hash);
             Set("AudioSize",settings.fftSize);Set("AudioFft",fft);Set("AudioBins",bins);Set("AudioHop",settings.spectralHop);Set("AudioRate",rate);Set("AudioHrir",taps);Set("AudioHistory",history);
             Set("AudioWorkStride",workStride);
-            Set("AudioTransition",settings.transitionSamples);Set("AudioSpectral",settings.synthesis==TakeRender.Synthesis.Spectral?1:0);
             Set("AudioRadius",settings.sincRadius);Set("AudioSinc",settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?1:0);
             Set("AudioLatency",settings.fftSize/2+(settings.delayFilter==TakeRender.DelayFilter.WindowedSinc?settings.sincRadius:0));shader.SetFloat("AudioMaximumDelay",settings.maximumDelaySeconds);
             NumericBytes+=(long)download.Length*4+poses.Length*16L+audibleSources.Length+filterOffsets.Length*4L+
@@ -172,7 +171,7 @@ internal sealed partial class GpuAudio : IDisposable
         for(int l=0;l<listeners;l++)
         {
             var state=headStates[scene.listeners[l]];bool enabled=TakeRender.Enabled(states[scene.listeners[l]],AcousticTake.StateFlags.Listener);
-            var velocity=channels==2 && settings.synthesis==TakeRender.Synthesis.Spectral?Hrtf.HeadVelocity(state):Vector3.zero;
+            var velocity=channels==2?Hrtf.HeadVelocity(state):Vector3.zero;
             var rotation=channels==2?new Vector4(state.rotation.x,state.rotation.y,state.rotation.z,state.rotation.w):new Vector4(0,0,0,1);
             var motion=new Vector4(enabled?1:0,velocity.x,velocity.y,velocity.z);
             changed|=!poses[l].Equals(rotation) || !poses[listeners+l].Equals(motion) || velocity.sqrMagnitude>0?1:0;
@@ -186,7 +185,7 @@ internal sealed partial class GpuAudio : IDisposable
         commands.BeginSample("Acoustics.GPU.Compare");
         commands.DispatchCompute(shader,reset,(pairs+63)/64,1,1);commands.DispatchCompute(shader,compare,(capacity+63)/64,1,1);commands.DispatchCompute(shader,commit,1,1,1);
         commands.EndSample("Acoustics.GPU.Compare");
-        commands.BeginSample("Acoustics.GPU.Group");commands.DispatchCompute(shader,groups,pairs,1,1);if(settings.synthesis==TakeRender.Synthesis.Spectral)commands.DispatchCompute(shader,match,pairs,1,1);commands.EndSample("Acoustics.GPU.Group");
+        commands.BeginSample("Acoustics.GPU.Group");commands.DispatchCompute(shader,groups,pairs,1,1);commands.DispatchCompute(shader,match,pairs,1,1);commands.EndSample("Acoustics.GPU.Group");
         commands.BeginSample("Acoustics.GPU.Filters");
         Set("AudioWhich",0);Set("AudioBuildingFilter",1);
         for(int pair=0;pair<pairs;pair++)
@@ -274,8 +273,6 @@ internal sealed partial class GpuAudio : IDisposable
                 Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(Math.Max(uploaded,sample+count)-block)));
                 for(int which=0;which<2;which++)
                 {
-                    // No sample in this hop can use the previous response after its fade ends.
-                    if(which!=0 && settings.synthesis!=TakeRender.Synthesis.Spectral && block-responseSample>=settings.transitionSamples)continue;
                     Set("AudioWhich",which);
                     commands.BeginSample("Acoustics.GPU.InputFFT");
                     for(int pair=0;pair<pairs;pair++)

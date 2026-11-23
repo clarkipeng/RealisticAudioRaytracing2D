@@ -11,14 +11,6 @@ struct State
 };
 StructuredBuffer<Primitive> Primitives;
 StructuredBuffer<State> States;
-StructuredBuffer<uint> Sources, Listeners;
-struct DirectPath
-{
-    float4 direction;
-    float2 response;
-    float2 padding;
-};
-RWStructuredBuffer<DirectPath> Responses;
 uint PrimitiveCount, PairCount, ListenerCount, ObjectCount, FrameCount;
 float SpeedOfSound, ReferenceDistance, MinimumDistance;
 
@@ -39,11 +31,6 @@ float3 PointVelocity(uint index, float3 location, float lag = 0)
            ((s.flags.x & 48) == 32
                 ? cross(s.angularVelocity.xyz, location - (s.position.xyz - Velocity(index) * lag))
                 : float3(0, 0, 0));
-}
-float RetardedDelay(float3 displacement, float3 velocity, float speed)
-{
-    float a = speed * speed - dot(velocity, velocity), b = dot(displacement, velocity);
-    return a > 0 ? (b + sqrt(max(0, b * b + a * dot(displacement, displacement)))) / a : asfloat(0x7fc00000);
 }
 static const float RayEpsilon = 0.0001, RayPi = 3.141592653589793;
 float3 PastPoint(State state, float3 local, float lag)
