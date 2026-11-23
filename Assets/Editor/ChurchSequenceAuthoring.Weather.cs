@@ -89,7 +89,7 @@ public static partial class ChurchSequenceAuthoring
         // temporal/frequency resolution and the 1.25 s path horizon are a preview.
         var settings=session.manager.directSettings;settings.fftSize=128;settings.spectralHop=32;
         settings.responseStepSamples=2048;settings.maximumDelaySeconds=1.25f;settings.maximumResponsesPerBatch=1;
-        settings.raysPerBin=2;settings.raysPerPair=0;settings.maxBounces=32;settings.tailSamples=2*session.manager.sampleRate;
+        settings.maxBounces=32;settings.tailSamples=2*session.manager.sampleRate;
         EditorSceneManager.MarkSceneDirty(session.gameObject.scene);EditorSceneManager.SaveScene(session.gameObject.scene);
         var comparison=ScriptableObject.CreateInstance<SceneSequence>();comparison.name="Weather shelter comparison";
         comparison.seed=actor.sequence.seed;comparison.duration=36;

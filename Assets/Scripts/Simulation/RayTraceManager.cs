@@ -66,6 +66,8 @@ public class RayTraceManager : MonoBehaviour
     [UnityEngine.Serialization.FormerlySerializedAs("useTakeRenderer")]
     [Tooltip("Render audio while capturing. Disable for silent data collection.")]
     public bool monitorLive;
+    // The path method's compute shader (Resources/Acoustics/PathMethod.compute), which raytraced transport needs; the
+    // direct transport (the CPU direct-sound reference) ignores it.
     public ComputeShader directShader;
     public TakeRender.Settings directSettings=new TakeRender.Settings();
     [Min(0)] public int monitorListener;
@@ -233,11 +235,14 @@ public class RayTraceManager : MonoBehaviour
         if (sampleRate<=0) throw new InvalidOperationException("Recording requires a positive sample rate.");
         ValidateTakeBindings();
         var sources = new List<Transform>(); var clips = new List<AudioClip>();
+        int planeSources = 0;
         foreach (var audio in takeSources)
         {
+            if (SkippedPlaneSource(audio != null ? audio.transform : null)) { planeSources++; continue; }
             if (audio == null || (!audio.streamed && audio.clip == null) || sources.Contains(audio.transform)) throw new InvalidOperationException("Take sources must be unique and have prepared clips or stream bindings.");
             sources.Add(audio.transform); clips.Add(audio.streamed?null:audio.clip);
         }
+        if (planeSources > 0) Debug.LogWarning($"{planeSources} plane source(s) (AudioSourcePlane, e.g. rain) left out of the take: the path method renders point sources only.", this);
         var receivers = new List<Transform>(takeListeners);
         var scene = SceneToTake.Compile(takeObjects, takeDimension, takeCurveTolerance, takeDefaultMaterial,
             sources.ToArray(), clips.ToArray(), receivers.ToArray(), out var geometry);
@@ -483,10 +488,17 @@ public class RayTraceManager : MonoBehaviour
         if(e.sample<0 || e.sample<previousTakeSample || e.sample<lastSourceEventSample)
             throw new InvalidOperationException("Source events must precede their observation and be ordered by sample.");
         int index=Array.IndexOf(captureSources,target);
+        if (index < 0 && SkippedPlaneSource(target)) return; // left out of the take (StartCapture)
         if (index < 0) throw new InvalidOperationException("Source is not registered in this take.");
         e.sourceIndex=index;AcousticTake.ValidateEvent(e,captureScene);
         takeWriter?.Append(e); liveDirect?.Append(e);
         lastSourceEventSample=e.sample;
+    }
+    // Plane sources (an enabled AudioSourcePlane, e.g. rain) are not rendered by the path method: captures leave them out.
+    static bool SkippedPlaneSource(Transform source)
+    {
+        var plane = source != null ? source.GetComponent<AudioSourcePlane>() : null;
+        return plane != null && plane.enabled;
     }
     public void AppendReplaySound(AcousticTake.VoiceEvent value)
     {

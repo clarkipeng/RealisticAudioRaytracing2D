@@ -153,7 +153,7 @@ MonoBehaviour:
   audioManager: {fileID: 128884548}
   sampleRate: 48000
   monitorLive: 1
-  directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
+  directShader: {fileID: 7200000, guid: 0c101fe48bfc423b9a2f22165f0bd64d, type: 3}
   directSettings:
     responseStepSamples: 1024
     speedOfSound: 343

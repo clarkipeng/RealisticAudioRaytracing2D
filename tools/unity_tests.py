@@ -33,8 +33,8 @@ LOGS = ROOT / '.context/unity-tests'
 QUICK = [(r'TakeChecks\.[A-L]', '!Slow'), (r'TakeChecks\.[M-P]', '!Slow'), (r'TakeChecks\.[Q-Z]', '!Slow')]
 # The slow cases likewise: renderer cases and method checks, each in two processes (one process of each reached
 # 3.2 and 4.0 GiB).
-SLOW = [(r'TakeChecks\.(?!Methods|EnergyMethod|PathMethod|PathDetection)[A-L]', 'Slow'),
-        (r'TakeChecks\.(?!Methods|EnergyMethod|PathMethod|PathDetection)[M-Z]', 'Slow'),
+SLOW = [(r'TakeChecks\.(?!Methods|PathMethod|PathDetection)[A-L]', 'Slow'),
+        (r'TakeChecks\.(?!Methods|PathMethod|PathDetection)[M-Z]', 'Slow'),
         (r'TakeChecks\.[A-M]', 'Methods'), (r'TakeChecks\.[N-Z]', 'Methods')]
 TIERS = {'quick': QUICK, 'full': QUICK + SLOW}
 

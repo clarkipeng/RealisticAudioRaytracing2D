@@ -188,7 +188,7 @@ public static partial class TakeRender
             if(batchEnd<=Cursor)return;
             if(!prepared && Cursor==0 && settings.ResponseSample(0)>0)
             {
-                EvaluateObserved(0,evaluated);solver.PrepareEmissions(signals,0,1,EvaluateObserved);solver.Solve(evaluated,paths);
+                EvaluateObserved(0,evaluated);solver.Solve(evaluated,paths);
                 if(gpuAudio!=null){gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,evaluated,0,late:solver.Late(0));gpuAudio.CompletePreparation();}
                 else mixer.SetResponse(0,paths,evaluated,true,solver.RayPaths,0,0,late:solver.Late(0));
                 prepared=true;
@@ -204,7 +204,7 @@ public static partial class TakeRender
             if(batchCount>0)
             {
                 batchDiagnostics=gpuAudio==null || ResponseApplied!=null;
-                long start=Stopwatch.GetTimestamp();solver.PrepareEmissions(signals,batchFirst,batchCount,EvaluateObserved);solver.BeginSolve(batchStates,batchCount,batchDiagnostics);
+                long start=Stopwatch.GetTimestamp();solver.BeginSolve(batchStates,batchCount,batchDiagnostics);
                 double elapsed=Elapsed(start);SolveSeconds+=elapsed;MaximumSolveSeconds=Math.Max(MaximumSolveSeconds,elapsed);
             }
             batchActive=true;batchReady=batchCount==0;audioQueued=audioReady=false;

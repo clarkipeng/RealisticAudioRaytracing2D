@@ -16,9 +16,6 @@
 #pragma kernel AudioSaveGlobal
 #pragma kernel AudioBitReverse
 #pragma kernel AudioButterfly
-#pragma kernel LateEnvelope
-#pragma kernel LateExtend
-#pragma kernel LateBuild
 #pragma kernel LateInput
 #pragma kernel LateSum
 #pragma kernel LateInverse
@@ -599,108 +596,22 @@ void AudioButterfly(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)
     }
 }
 
-// Late field (LateReverb.cs is the CPU reference). Kernels of the current bank are
-// LateBasis noise shaped by the histogram envelope; each source's emitted signal,
-// delayed by the DSP latency, is convolved by uniform partitioned overlap-save in
-// blocks of LatePartition samples, and the previous bank fades out over one step.
+// Late field: the path reverb's kernels (LateKernels, built per update by the Path kernels below) convolve each
+// source's emitted signal, delayed by the DSP latency, by uniform partitioned overlap-save in blocks of
+// LatePartition samples, and the previous bank fades out over one step.
 StructuredBuffer<uint> LateHistogram;
-StructuredBuffer<uint4> LateEmissionRanges,LateEmissionClocks;
-StructuredBuffer<float4> LateEmissionPoints;
-StructuredBuffer<float2> LateBasisSpectra;
-StructuredBuffer<float> LateEarWeights,LateEnvelopeWeights;
-StructuredBuffer<uint> LateOffsets;
-RWStructuredBuffer<float> LateGains,LateBlocks;
+RWStructuredBuffer<float> LateBlocks;
 RWStructuredBuffer<float2> LateKernels,LateInputs,LateSums;
 RWStructuredBuffer<uint> LateActive;
-uint LatePartition,LateCount,LateSimulated,LateRoomBase,LateBasisCount,LateBins,LateBank,LateHistogramOffset,LateRays,LateEmissionRow,LateValid,LateTiles,LateWhich,LateBlend,LateStep,LateBlock;
+uint LatePartition,LateCount,LateBins,LateBank,LateRays,LateValid,LateTiles,LateWhich,LateBlend,LateStep,LateBlock;
 uint LateAdvance,LatePower;   // the path method: input read P/2 ahead (its band filters' delay), power-corrected crossfades
 RWStructuredBuffer<float> LatePowers;   // [lane][3]: new, old and cross power of a crossfaded block
 uint2 LateSwap;
 static const uint LATE_BANDS=8,LATE_DIRECTIONS=6;
-[numthreads(64,1,1)]
-void LateEnvelope(uint3 id:SV_DispatchThreadID)
-{
-    uint count=AudioPairs*AudioChannels*LATE_BANDS*LateCount;if(id.x>=count)return;
-    uint k=id.x%LateCount,b=(id.x/LateCount)%LATE_BANDS,c=(id.x/(LateCount*LATE_BANDS))%AudioChannels,pair=id.x/(LateCount*LATE_BANDS*AudioChannels);
-    bool active=LateValid!=0 && AudioFilterPairs[pair]>=0 && AudioHeadsPose[AudioPoseOffset+AudioListeners+pair%AudioListeners].x!=0;
-    if(id.x%(LateCount*LATE_BANDS*AudioChannels)==0)LateActive[LateBank*AudioPairs+pair]=active?1:0;
-    float energy=0;
-    if(active && k<LateSimulated)for(uint d=0;d<LATE_DIRECTIONS;d++)
-    {
-        uint cell=LateHistogramOffset/2+((pair*LATE_DIRECTIONS+d)*LATE_BANDS+b)*LateSimulated+k;
-        energy+=LateEarWeights[(d*2+c)*LATE_BANDS+b]*((LateHistogram[2*cell+1]+LateHistogram[2*cell]/4294967296.0)/LateRays);
-    }
-    LateGains[id.x]=sqrt(max(0,energy)/LatePartition);
-}
-// Continues each band's envelope beyond the simulated bins (LateTail.cs is the
-// reference): fitted decay over the last two windows of both channels, linear join,
-// raised-cosine fade at the kernel's end. Gains are sqrt(energy / partition).
-[numthreads(64,1,1)]
-void LateExtend(uint3 id:SV_DispatchThreadID)
-{
-    if(id.x>=AudioPairs*LATE_BANDS || LateCount<=LateSimulated || LateSimulated<8)return;
-    uint b=id.x%LATE_BANDS,pair=id.x/LATE_BANDS,S=LateSimulated,K=LateCount;
-    uint window=max(2u,S/4),join=max(1u,window/2),fade=max(1u,(K-S)/8);
-    float first=0,last=0;
-    if(LateRoomBase!=0)
-    {
-        // Room energy of the energy method (all rays): a steadier decay than the listener's envelope.
-        uint room=LateHistogramOffset/2+LateRoomBase-1+(pair*LATE_BANDS+b)*S;
-        for(uint k=0;k<window;k++)
-        {
-            uint u=room+S-2*window+k,v=room+S-window+k;
-            first+=LateHistogram[2*u+1]+LateHistogram[2*u]/4294967296.0;last+=LateHistogram[2*v+1]+LateHistogram[2*v]/4294967296.0;
-        }
-    }
-    else for(uint c=0;c<AudioChannels;c++)
-    {
-        uint base=((pair*AudioChannels+c)*LATE_BANDS+b)*K;
-        for(uint k=0;k<window;k++){float g=LateGains[base+S-2*window+k],h=LateGains[base+S-window+k];first+=g*g;last+=h*h;}
-    }
-    bool decays=first>0 && last>0 && last<first;
-    float decay=decays?pow(last/first,1.0/window):0;uint start=S-window;
-    float shape=decay>1-1e-6?1:(1-pow(decay,(float)window))/(window*(1-decay));
-    for(uint c=0;c<AudioChannels;c++)
-    {
-        uint base=((pair*AudioChannels+c)*LATE_BANDS+b)*K;
-        if(!decays){for(uint k=S;k<K;k++)LateGains[base+k]=0;continue;}
-        float mean=0;for(uint k=start;k<S;k++)mean+=LateGains[base+k]*LateGains[base+k];mean/=window*shape;
-        for(uint k=S-join;k<S;k++)
-        {
-            float w=(k-(S-join)+1.0)/(join+1),e=LateGains[base+k]*LateGains[base+k];
-            LateGains[base+k]=sqrt(max(0,e+(mean*pow(decay,(float)(k-start))-e)*w));
-        }
-        for(uint k=S;k<K;k++)
-        {
-            uint left=K-k;float f=left>fade?1:sin(1.5707963*left/(fade+1.0));
-            LateGains[base+k]=sqrt(mean*pow(decay,(float)(k-start)))*f;
-        }
-    }
-}
-[numthreads(64,1,1)]
-void LateBuild(uint3 id:SV_DispatchThreadID)
-{
-    uint count=AudioPairs*AudioChannels*LateCount*LateBins;if(id.x>=count)return;
-    uint bin=id.x%LateBins,k=(id.x/LateBins)%LateCount,c=(id.x/(LateBins*LateCount))%AudioChannels,pair=id.x/(LateBins*LateCount*AudioChannels);
-    uint noise=(LateOffsets[pair]+k)%LateBasisCount;float envelope=0;
-    // Smooth envelope across frequency (LateBasis.EnvelopeWeight) times the channel's noise.
-    for(uint b=0;b<LATE_BANDS;b++)envelope+=LateEnvelopeWeights[bin*LATE_BANDS+b]*LateGains[((pair*AudioChannels+c)*LATE_BANDS+b)*LateCount+k];
-    LateKernels[LateBank*count+id.x]=envelope>0?LateBasisSpectra[(c*LateBasisCount+noise)*LateBins+bin]*envelope:float2(0,0);
-}
 float LateDry(uint source,int at)
 {
-    uint4 row=LateEmissionRanges[LateEmissionRow+source];
     AudioPath path=(AudioPath)0;
-    if(row.w==0)return AudioRead(source,at,path);
-    float value=0;
-    for(uint n=0;n<row.y;n++)
-    {
-        float amplitude=LateEmissionPoints[row.x+n].w;if(amplitude==0)continue;
-        if(row.w==2){uint4 clock=LateEmissionClocks[row.x+n];path.emissionPhase=clock.x;path.birthLow=clock.y;path.birthHigh=clock.z;}
-        else path.emissionPhase=AudioHash(row.z^(n*0x85ebca6bu+0x9e3779b9u))>>16;
-        value+=amplitude*AudioRead(source,at,path);
-    }
-    return value;
+    return AudioRead(source,at,path);
 }
 [numthreads(256,1,1)]
 void LateInput(uint3 group:SV_GroupID,uint3 tid:SV_GroupThreadID)

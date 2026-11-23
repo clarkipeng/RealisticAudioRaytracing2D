@@ -95,7 +95,7 @@ public static partial class TakeDemo
         manager.monitorLive=true; manager.takeRoot=world; manager.takeDimension=AcousticTake.Dimension.Spatial3D;
         manager.sampleRate=AudioSettings.outputSampleRate;
         manager.takeDefaultMaterial=AssetDatabase.LoadAssetAtPath<AudioMaterial>("Assets/Materials/Material.asset");
-        manager.directShader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
+        manager.directShader=TransportSolver.LoadPathShader();
 
         manager.directSettings.listenerOutput=TakeRender.ListenerOutput.Mono;
         manager.directSettings.transport=TakeRender.Transport.Raytraced; manager.directSettings.useBvh=true;

@@ -100,7 +100,7 @@ public sealed class Hrtf
             for(int ear=0;ear<2;ear++)
             {
                 Array.Clear(data,0,n);for(int t=0;t<taps;t++)data[t].x=filters[(i*2+ear)*taps+t];
-                ImpulseResponseAudio.Fft(data,false);
+                SpectralAudio.Fft(data,false);
                 for(int k=0;k<=n/2;k++)power[k]+=weight*(data[k].x*(double)data[k].x+data[k].y*(double)data[k].y);
             }
             total+=2*weight;
@@ -127,17 +127,17 @@ public sealed class Hrtf
             log[k]=new Vector2((float)value,0);if(k>0 && k<n/2)log[n-k]=log[k];
         }
         // Minimum phase from the real cepstrum (fold the anti-causal part onto the causal one).
-        ImpulseResponseAudio.Fft(log,true);
+        SpectralAudio.Fft(log,true);
         for(int k=1;k<n/2;k++){log[k]*=2;log[n-k]=Vector2.zero;}
-        ImpulseResponseAudio.Fft(log,false);
+        SpectralAudio.Fft(log,false);
         var eq=new Vector2[n];
         for(int k=0;k<n;k++){double m=Math.Exp(log[k].x);eq[k]=new Vector2((float)(m*Math.Cos(log[k].y)),(float)(m*Math.Sin(log[k].y)));}
         for(int i=0;i<count;i++)for(int ear=0;ear<2;ear++)
         {
             Array.Clear(data,0,n);for(int t=0;t<taps;t++)data[t].x=filters[(i*2+ear)*taps+t];
-            ImpulseResponseAudio.Fft(data,false);
+            SpectralAudio.Fft(data,false);
             for(int k=0;k<n;k++){var a=data[k];var b=eq[k];data[k]=new Vector2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);}
-            ImpulseResponseAudio.Fft(data,true);
+            SpectralAudio.Fft(data,true);
             for(int t=0;t<taps;t++)filters[(i*2+ear)*taps+t]=data[t].x;
         }
     }
@@ -170,7 +170,7 @@ public sealed class Hrtf
         for(int direction=0;direction<directions;direction++)for(int ear=0;ear<channels;ear++)
         {
             Array.Clear(data,0,fft);for(int t=0;t<(hrtf?.Taps??1);t++)data[t].x=hrtf==null?1:hrtf.Coefficient(direction,ear,t);
-            ImpulseResponseAudio.Fft(data,false);Array.Copy(data,0,spectra,(direction*channels+ear)*bins,bins);
+            SpectralAudio.Fft(data,false);Array.Copy(data,0,spectra,(direction*channels+ear)*bins,bins);
         }
         return spectra;
     }

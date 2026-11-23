@@ -35,32 +35,32 @@ public partial class TakeChecks
         Assert.That(t60 / eyring, Is.EqualTo(1).Within(.15));
     }
     // Sound leaking out of a scattering room through its walls (t = 1e-3), listener outside: the path
-    // method's connections through walls (traced with probability = the first wall's transmission,
-    // weighted back) give the energy method's leaked energy. Both are estimates; the tolerance covers
-    // their seed noise.
+    // method's connections through walls are traced with probability = the first wall's transmission and
+    // weighted back, and survival in time drops paths by age with weights; neither changes the mean
+    // leaked energy. Both are estimates; the tolerance covers their seed noise.
     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void PathMethodLeaksThroughWallsLikeTheEnergyMethod()
+    public void PathMethodLeaksThroughWallsUnbiased()
     {
         var size = new Vector3(6, 5, 4);
-        double Leak(TakeRender.Method method, int seed, float survival = -1, int flags = 0)
+        double Leak(int seed, float survival = -1, int flags = 0)
         {
             LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(.1f, .5f, 1e-3f), new Vector3(-1.5f, .5f, .4f), new Vector3(3.8f, -.3f, .2f),
                      out var scene, out var geometry, out var state);
-            var settings = ControlSettings(method, 1 << 16, .4f); settings.seed = seed; settings.specularDetectionRadius = .5f;
+            var settings = ControlSettings(TakeRender.Method.Path, 1 << 16, .4f); settings.seed = seed; settings.specularDetectionRadius = .5f;
             if (survival >= 0) settings.pathSurvivalSeconds = survival;
             using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-            if (method == TakeRender.Method.Path) solver.Method.ProfileFlags = flags;
+            solver.Method.ProfileFlags = flags;
             solver.Solve(state, new TakeRender.DirectPath[1]);
             double direct = (new Vector3(3.8f, -.3f, .2f) - new Vector3(-1.5f, .5f, .4f)).magnitude / 343;
             return Window(ControlEnergy(solver, 2), (int)Math.Ceiling(direct * 1000) + 5, int.MaxValue);
         }
-        double path = 0, all = 0, lifelong = 0, energy = 0;
+        double path = 0, all = 0, lifelong = 0;
         for (int seed = 0; seed < 2; seed++)
         {
-            path += Leak(TakeRender.Method.Path, seed) / 2; all += Leak(TakeRender.Method.Path, seed, -1, 16) / 2;
-            lifelong += Leak(TakeRender.Method.Path, seed, 0, 16) / 2; energy += Leak(TakeRender.Method.Energy, seed) / 2;
+            path += Leak(seed) / 2; all += Leak(seed, -1, 16) / 2;
+            lifelong += Leak(seed, 0, 16) / 2;
         }
-        TestContext.WriteLine($"leaked energy: path {path:G4}; every blocked connection traced {all:G4}; and no survival in time {lifelong:G4}; energy method {energy:G4}");
+        TestContext.WriteLine($"leaked energy: path {path:G4}; every blocked connection traced {all:G4}; and no survival in time {lifelong:G4}");
         Assert.That(path / all, Is.EqualTo(1).Within(.2), "Tracing blocked connections with probability t (weighted 1/t) keeps the mean.");
         Assert.That(all / lifelong, Is.EqualTo(1).Within(.2), "Survival in time keeps the mean.");
     }
@@ -98,17 +98,6 @@ public partial class TakeChecks
                     foreach (int band in new[] {1, 3, 5}) line.Append(FormattableString.Invariant($" {Window(ControlEnergy(solver, band), 0, int.MaxValue) - 1 / (x * x):G4}"));
                     line.Append(";");
                 }
-            {
-                // Coherent reference: the Pressure method (exact image paths and edge diffraction, coherently summed).
-                var state = States(2); state[0].position = new Vector3(0, 1, 0); state[1].position = new Vector3(x, 1, 0);
-                state[2].position = Vector3.zero; state[2].flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry;
-                var settings = ControlSettings(TakeRender.Method.Pressure, 1 << 16, .1f); settings.useBvh = false; settings.diffractionFactor = 1;
-                using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
-                solver.Solve(state, new TakeRender.DirectPath[1]);
-                line.Append(" pressure");
-                foreach (int band in new[] {1, 3, 5}) line.Append(FormattableString.Invariant($" {Window(ControlEnergy(solver, band), 0, int.MaxValue) - 1 / (x * x):G4}"));
-                line.Append(";");
-            }
             TestContext.WriteLine(line.ToString()); Debug.Log("Boundary " + line);
         }
     }
@@ -130,16 +119,15 @@ public partial class TakeChecks
                 TestContext.WriteLine($"t {t} s {s}: outside {total:G4}, escapes {solver.Method.Counter(2)}, events {solver.Method.Counter(1)}");
             }
     }
-    [TestCase(TakeRender.Method.Path, 1f), TestCase(TakeRender.Method.Path, .5f), TestCase(TakeRender.Method.Energy, 1f), TestCase(TakeRender.Method.Energy, .5f),
-     TestCase(TakeRender.Method.Path, 1f, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsLeakAsTheDiffuseFieldPredicts(TakeRender.Method method, float scattering, bool persistent = false)
+    [TestCase(1f), TestCase(.5f), TestCase(1f, true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsLeakAsTheDiffuseFieldPredicts(float scattering, bool persistent = false)
     {
         var size = new Vector3(6, 5, 4); const float a = .1f, t = 1e-3f;
         var source = new Vector3(-1.5f, .5f, .4f); var inside = new Vector3(2.2f, -.3f, .2f); var outside = new Vector3(3.8f, -.3f, .2f);
         double Total(Vector3 listener, int seed)
         {
             LateRoom(AcousticTake.Dimension.Spatial3D, size, LateMaterial(a, scattering, t), source, listener, out var scene, out var geometry, out var state);
-            var settings = ControlSettings(method, 1 << 16, 1.5f); settings.seed = seed; settings.specularDetectionRadius = .5f;
+            var settings = ControlSettings(TakeRender.Method.Path, 1 << 16, 1.5f); settings.seed = seed; settings.specularDetectionRadius = .5f;
             // Persistent: three updates of 0.75 s (a static measurement costs a full solve per update of its warm-up).
             PersistentControl(settings, persistent, 0); if (persistent) settings.responseStepSamples = 6016;
             using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
@@ -154,7 +142,7 @@ public partial class TakeChecks
             foreach (double bz in new[] {size.z / 2 - outside.z, size.z / 2 + outside.z})
                 omega += Math.Atan(ay * bz / (h * Math.Sqrt(h * h + ay * ay + bz * bz)));
         double predicted = tau * inRev * omega / (4 * Math.PI);
-        TestContext.WriteLine($"{method}, s = {scattering}: reverberant energy inside {inRev:G4}, outside {outRev:G4}, diffuse-field prediction {predicted:G4} (wall solid angle {omega:F3} sr), ratio {outRev / predicted:F3}");
+        TestContext.WriteLine($"s = {scattering}: reverberant energy inside {inRev:G4}, outside {outRev:G4}, diffuse-field prediction {predicted:G4} (wall solid angle {omega:F3} sr), ratio {outRev / predicted:F3}");
         Assert.That(outRev / predicted, Is.EqualTo(1).Within(scattering >= 1 ? .2 : .35));
     }
     static long Sum(uint[] values) { long s = 0; foreach (var v in values) s += v; return s; }
@@ -236,11 +224,11 @@ public partial class TakeChecks
         for (int i = 0; i < states.Length; i++)
             states[i] = i < 2 ? old[i] : new AcousticTake.State {rotation = Quaternion.identity, flags = AcousticTake.StateFlags.Active | AcousticTake.StateFlags.Geometry};
     }
-    double ApertureTotal(TakeRender.Method method, bool ground, bool screen, Vector3 listener, int seed, int rays = 1 << 16, float transmission = 0,
+    double ApertureTotal(bool ground, bool screen, Vector3 listener, int seed, int rays = 1 << 16, float transmission = 0,
                          float groundScattering = 1, float screenGap = 0, float radius = .5f, bool porch = false, float roomScattering = 1)
     {
         ApertureRoom(ground, screen, listener, out var scene, out var geometry, out var state, transmission, groundScattering, screenGap, porch, roomScattering);
-        var settings = ControlSettings(method, rays, 1.5f); settings.seed = seed; settings.specularDetectionRadius = radius;
+        var settings = ControlSettings(TakeRender.Method.Path, rays, 1.5f); settings.seed = seed; settings.specularDetectionRadius = radius;
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         solver.Solve(state, new TakeRender.DirectPath[1]);
         return Window(ControlEnergy(solver, 2), 0, int.MaxValue);
@@ -315,21 +303,21 @@ public partial class TakeChecks
     // 1.040 with the beams of part 8) times the
     // reference, whose radiance factor kappa is taken in one direction only (it is 1.15 on the hole's
     // axis and 1.04 at the porch's 38 degrees), so the reference itself is good to about 5%.
-    [TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Energy), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsSeeThroughAPorchAsTheImageReferencePredicts(TakeRender.Method method)
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsSeeThroughAPorchAsTheImageReferencePredicts()
     {
         double hy0 = ApertureY - ApertureHalfY, hy1 = ApertureY + ApertureHalfY, hz0 = ApertureZ - ApertureHalfZ, hz1 = ApertureZ + ApertureHalfZ;
         double omega = MouthIntegral(PorchCalibration, ApertureSize.x / 2, hy0, hy1, hz0, hz1, (y, z) => 1);
         double inside = 0, outside = 0, calibration = 0; const int seeds = 8;
         for (int seed = 0; seed < seeds; seed++)
         {
-            inside += (ApertureTotal(method, false, false, ApertureInside, seed, porch: true) - 1 / (ApertureInside - ApertureSource).sqrMagnitude) / seeds;
-            outside += ApertureTotal(method, false, false, PorchListener, seed, porch: true) / seeds;
-            calibration += (ApertureTotal(method, false, false, PorchCalibration, seed) - DirectThroughHole(PorchCalibration)) / seeds;
+            inside += (ApertureTotal(false, false, ApertureInside, seed, porch: true) - 1 / (ApertureInside - ApertureSource).sqrMagnitude) / seeds;
+            outside += ApertureTotal(false, false, PorchListener, seed, porch: true) / seeds;
+            calibration += (ApertureTotal(false, false, PorchCalibration, seed) - DirectThroughHole(PorchCalibration)) / seeds;
         }
         double kappa = calibration * 4 * Math.PI / (inside * omega);
         double reference = PorchReference(PorchListener, kappa * inside / (4 * Math.PI), out _, out double source, out double reflections);
-        TestContext.WriteLine($"{method}: porch {outside:G4}, image reference {reference:G4} (kappa {kappa:F3}, source paths {source:G3}, {reflections:F2} reflections on average), ratio {outside / reference:F3}");
+        TestContext.WriteLine($"porch {outside:G4}, image reference {reference:G4} (kappa {kappa:F3}, source paths {source:G3}, {reflections:F2} reflections on average), ratio {outside / reference:F3}");
         Assert.That(outside / reference, Is.EqualTo(1).Within(.2));
     }
     // Opt-in (ACOUSTIC_PORCH=1): per method and seed, the inside reverberant energy and the porch listener's
@@ -341,22 +329,21 @@ public partial class TakeChecks
         int seeds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_SEEDS") ?? "16"), first = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_FIRST") ?? "0");
         int rays = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_RAYS") ?? "65536");
         float radius = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_RADIUS") ?? ".5", System.Globalization.CultureInfo.InvariantCulture);
-        string methods = Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_METHODS") ?? "Energy,Path";
+
         float roomScattering = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PORCH_ROOM_SCATTERING") ?? "1", System.Globalization.CultureInfo.InvariantCulture);
         double hy0 = ApertureY - ApertureHalfY, hy1 = ApertureY + ApertureHalfY, hz0 = ApertureZ - ApertureHalfZ, hz1 = ApertureZ + ApertureHalfZ;
         double omega = MouthIntegral(PorchCalibration, ApertureSize.x / 2, hy0, hy1, hz0, hz1, (y, z) => 1);
         PorchReference(PorchListener, 1, out double unit, out double source, out double meanK);
         Debug.Log($"Porch geometry: calibration solid angle {omega:G6} sr, porch unit-radiance integral {unit:G6}, source image paths {source:G6}, mean reflections {meanK:F2}");
-        foreach (string name in methods.Split(','))
         {
-            var method = (TakeRender.Method)Enum.Parse(typeof(TakeRender.Method), name);
+            const string method = "Path";
             for (int seed = first; seed < first + seeds; seed++)
             {
-                double inside = ApertureTotal(method, false, false, ApertureInside, seed, rays, 0, 1, 0, radius, true, roomScattering) - 1 / (ApertureInside - ApertureSource).sqrMagnitude;
-                double outside = ApertureTotal(method, false, false, PorchListener, seed, rays, 0, 1, 0, radius, true, roomScattering);
-                double calibration = ApertureTotal(method, false, false, PorchCalibration, seed, rays, 0, 1, 0, radius, false, roomScattering) - DirectThroughHole(PorchCalibration);
+                double inside = ApertureTotal(false, false, ApertureInside, seed, rays, 0, 1, 0, radius, true, roomScattering) - 1 / (ApertureInside - ApertureSource).sqrMagnitude;
+                double outside = ApertureTotal(false, false, PorchListener, seed, rays, 0, 1, 0, radius, true, roomScattering);
+                double calibration = ApertureTotal(false, false, PorchCalibration, seed, rays, 0, 1, 0, radius, false, roomScattering) - DirectThroughHole(PorchCalibration);
                 double calibrationInside = inside; // the porch returns no sound into the room: its walls are parallel to the axis
-                Debug.Log(FormattableString.Invariant($"Porch {name} seed {seed}: inside {inside:R} outside {outside:R} calibration inside {calibrationInside:R} calibration {calibration:R}"));
+                Debug.Log(FormattableString.Invariant($"Porch {method} seed {seed}: inside {inside:R} outside {outside:R} calibration inside {calibrationInside:R} calibration {calibration:R}"));
             }
         }
     }
@@ -373,46 +360,31 @@ public partial class TakeChecks
         float gap = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_GAP") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
         float radius = float.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_RADIUS") ?? ".5", System.Globalization.CultureInfo.InvariantCulture);
         foreach (var (name, ground, screen) in new[] {("in view", false, false), ("in view, ground", true, false), ("behind the screen, ground", true, true)})
-            foreach (var method in new[] {TakeRender.Method.Energy, TakeRender.Method.Path})
+            foreach (var method in new[] {TakeRender.Method.Path})
             {
                 int seeds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_APERTURE_SEEDS") ?? "4");
                 if (seeds > 4 && !screen) continue;
                 var values = new double[seeds];
                 for (int seed = 0; seed < seeds; seed++)
-                    values[seed] = ApertureTotal(method, ground, screen, ApertureOutside, seed, 1 << 16, transmission, groundScattering, gap, radius) -
+                    values[seed] = ApertureTotal(ground, screen, ApertureOutside, seed, 1 << 16, transmission, groundScattering, gap, radius) -
                                    (screen ? 0 : 1 / (ApertureOutside - ApertureSource).sqrMagnitude);
                 TestContext.WriteLine($"{name}, {method}: reverberant outside {string.Join(", ", Array.ConvertAll(values, v => v.ToString("G4")))}");
                 Debug.Log($"Aperture {name}, {method}: {string.Join(", ", Array.ConvertAll(values, v => v.ToString("G4")))}");
             }
     }
-    [TestCase(TakeRender.Method.Path), TestCase(TakeRender.Method.Energy), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsRadiateThroughAHoleAsTheDiffuseFieldPredicts(TakeRender.Method method)
+    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsRadiateThroughAHoleAsTheDiffuseFieldPredicts()
     {
         double inRev = 0, outRev = 0;
         for (int seed = 0; seed < 2; seed++)
         {
-            inRev += (ApertureTotal(method, false, false, ApertureInside, seed) - 1 / (ApertureInside - ApertureSource).sqrMagnitude) / 2;
-            outRev += (ApertureTotal(method, false, false, ApertureOutside, seed) - 1 / (ApertureOutside - ApertureSource).sqrMagnitude) / 2;
+            inRev += (ApertureTotal(false, false, ApertureInside, seed) - 1 / (ApertureInside - ApertureSource).sqrMagnitude) / 2;
+            outRev += (ApertureTotal(false, false, ApertureOutside, seed) - 1 / (ApertureOutside - ApertureSource).sqrMagnitude) / 2;
         }
         double h = ApertureOutside.x - ApertureSize.x / 2, omega = 4 * Math.Atan(ApertureHalfY * ApertureHalfZ / (h * Math.Sqrt(h * h + ApertureHalfY * ApertureHalfY + ApertureHalfZ * ApertureHalfZ)));
         double predicted = inRev * omega / (4 * Math.PI);
-        TestContext.WriteLine($"{method}: reverberant energy inside {inRev:G4}, outside {outRev:G4}, diffuse-field prediction {predicted:G4} (hole solid angle {omega:F3} sr), ratio {outRev / predicted:F3}");
+        TestContext.WriteLine($"reverberant energy inside {inRev:G4}, outside {outRev:G4}, diffuse-field prediction {predicted:G4} (hole solid angle {omega:F3} sr), ratio {outRev / predicted:F3}");
         Assert.That(outRev / predicted, Is.EqualTo(1).Within(.2));
-    }
-    // Behind the screen only sound scattered by the ground reaches the listener (no analytic value):
-    // the two methods must agree. A specular ground seen beneath a raised screen is measured by
-    // MeasureApertureCases (the Path method's estimate there is much noisier; README part 6).
-    [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsAgreeOnSoundScatteredOutsideAHole()
-    {
-        double energy = 0, path = 0;
-        for (int seed = 0; seed < 4; seed++)
-        {
-            energy += ApertureTotal(TakeRender.Method.Energy, true, true, ApertureOutside, seed) / 4;
-            path += ApertureTotal(TakeRender.Method.Path, true, true, ApertureOutside, seed) / 4;
-        }
-        TestContext.WriteLine($"behind the screen, scattering ground: energy method {energy:G4}, path method {path:G4}, ratio {path / energy:F3}");
-        Assert.That(path / energy, Is.EqualTo(1).Within(.3));
     }
 
     // The audio synthesis reproduces the histogram: one fine-bin arrival becomes one band-shaped

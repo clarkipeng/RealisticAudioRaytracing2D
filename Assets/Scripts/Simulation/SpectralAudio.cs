@@ -97,10 +97,10 @@ internal sealed class SpectralAudio
                 // approximate slope between solves can accumulate nonphysical drift.
                 if(filter.delay<0 || filter.delay>maximumDelay)throw new InvalidOperationException("Propagation clock is outside the declared delay horizon; retrace the path or increase Maximum Delay Seconds.");
                 native[0].y=native[size/2].y=0;
-                for(int k=1;k<size/2;k++)native[size-k]=new Vector2(native[k].x,-native[k].y);ImpulseResponseAudio.Fft(native,true);
+                for(int k=1;k<size/2;k++)native[size-k]=new Vector2(native[k].x,-native[k].y);SpectralAudio.Fft(native,true);
                 Array.Clear(pressure,0,fft);
                 for(int n=0;n<size;n++)pressure[n].x=native[(n+size/2)%size].x;
-                ImpulseResponseAudio.Fft(pressure,false);
+                SpectralAudio.Fft(pressure,false);
                 Array.Copy(pressure,filter.spectrum,bins);
                 ResponseSupportSamples=Math.Max(ResponseSupportSamples,checked((int)Math.Ceiling(filter.delay)+latencyOffset+size+(hrtf?.Taps??1)+radius));
             }
@@ -153,7 +153,7 @@ internal sealed class SpectralAudio
                 if(left!=null && right!=null)Doppler.Clock(receiver-previous.sample,current.sample-previous.sample,left.delay,right.delay,left.rate,right.rate,out delay,out slope);
                 input[n]=new Vector2(Doppler.Read(signals[source],receiver-delay,1-slope,delayFilter,radius,filter.phase,filter.birth),0);
             }
-            ImpulseResponseAudio.Fft(input,false);
+            SpectralAudio.Fft(input,false);
             var angular=headAngular[listener];int endpoints=angular.sqrMagnitude>0?2:1;
             for(int end=0;end<endpoints;end++)
             {
@@ -180,10 +180,32 @@ internal sealed class SpectralAudio
             {
                 Array.Copy(sum,(end*listeners*channels+channel)*bins,input,0,bins);input[0].y=input[fft/2].y=0;
                 for(int k=1;k<fft/2;k++)input[fft-k]=new Vector2(input[k].x,-input[k].y);
-                ImpulseResponseAudio.Fft(input,true);
+                SpectralAudio.Fft(input,true);
                 for(int n=0;n<hop;n++)response.block[channel*hop+n]+=input[fft-hop+n].x*(endpoints==1?1:end==0?1-n/(float)hop:n/(float)hop);
             }
         }
     }
     static Vector2 Multiply(Vector2 a,Vector2 b)=>new Vector2(a.x*b.x-a.y*b.y,a.x*b.y+a.y*b.x);
+    // In-place radix-2 FFT (inverse scaled by 1/n), shared by the CPU DSP references.
+    internal static void Fft(Vector2[] data,bool inverse)
+    {
+        int n=data.Length;
+        for(int i=1,j=0;i<n;i++)
+        {
+            int bit=n>>1;for(;(j&bit)!=0;bit>>=1)j^=bit;j^=bit;
+            if(i<j){var value=data[i];data[i]=data[j];data[j]=value;}
+        }
+        for(int length=2;length<=n;length*=2)
+        {
+            double angle=(inverse?2:-2)*Math.PI/length;var step=new Vector2((float)Math.Cos(angle),(float)Math.Sin(angle));
+            for(int first=0;first<n;first+=length)
+            {
+                var w=Vector2.right;
+                for(int j=0;j<length/2;j++)
+                {var a=data[first+j];var b=data[first+j+length/2];b=new Vector2(b.x*w.x-b.y*w.y,b.x*w.y+b.y*w.x);data[first+j]=a+b;data[first+j+length/2]=a-b;w=new Vector2(w.x*step.x-w.y*step.y,w.x*step.y+w.y*step.x);}
+            }
+            if(length==n)break;
+        }
+        if(inverse)for(int i=0;i<n;i++)data[i]/=n;
+    }
 }

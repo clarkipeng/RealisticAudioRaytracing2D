@@ -2,33 +2,20 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 // One owner and at most one in-flight response batch. Steady live work does not wait;
 // startup, shutdown and offline work may wait. Buffers outlive their request.
+//
+// Two transports: Raytraced runs the path method on the GPU (MethodTransport); it needs `shader`, the path
+// method's compute shader (Resources/Acoustics/PathMethod.compute), which also stands for "GPU available" in
+// the callers (GpuAudio.Selected, provenance). Direct is the CPU direct-sound reference (TakeRender.SolveDirect):
+// retarded direct arrivals with opaque occlusion, no reflections.
 public sealed class TransportSolver : IDisposable
 {
-    // Optional capture ABI. Times are cumulative propagation seconds, not scene time.
-    public enum RayEvent : uint
-    {
-        None,
-        Transmission,
-        Reflection,
-        Scatter,
-        Diffraction,
-        Listener,
-        Escape,
-        Rejected
-    }
-    [StructLayout(LayoutKind.Sequential, Pack = 4)]
-    public struct RaySegment
-    {
-        public Vector4 start, end; // xyz position, w travel time
-        public RayEvent kind;
-        public int material;
-        public uint path;      // 0 direct; 1 + 2*candidate mirror; complete routes use their identity
-        public float pressure; // Signed estimator weight; final gain on listener connections.
-    }
+    // The path method's compute shader: the `shader` that selects GPU transport (RayTraceManager.directShader,
+    // offline render jobs) and the one MethodTransport dispatches.
+    public const string PathShaderResource = "Acoustics/PathMethod";
+    public static ComputeShader LoadPathShader() => Resources.Load<ComputeShader>(PathShaderResource);
     [StructLayout(LayoutKind.Sequential)]
     struct GpuPrimitive
     {
@@ -44,68 +31,47 @@ public sealed class TransportSolver : IDisposable
     readonly AcousticTake.Scene scene;
     readonly AcousticTake.Primitive[] geometry;
     readonly TakeRender.Settings settings;
-    readonly ComputeShader shader;
-    readonly int kernel, pairs, maximumFrames;
+    readonly int pairs, maximumFrames;
     int activeFrames = 1;
     readonly AcousticTake.State[] cpuState;
     readonly TakeRender.DirectPath[] cpuPaths;
     readonly GpuState[] packed;
     readonly DirectBvh bvh;
-    readonly RayTransport transport;
     readonly MethodTransport method;
-    // The Pressure/Energy measurement kernels of the last Solve (null for Hybrid).
+    // The path method of a Raytraced solver (null for Direct).
     internal MethodTransport Method => method;
-    // Path method, persistent rays: empty the rays in flight before frame `frame` of the next solve (a scene cut).
+    // Persistent rays: empty the rays in flight before frame `frame` of the next solve (a scene cut).
     public void FlushRays(int frame) => method?.FlushBefore(frame);
-    // Audio paths and late field of the hybrid (RayTransport) or of the energy method
-    // (MethodTransport in audio mode), in the same layouts.
-    internal RayTransport.Path[] RayPaths => transport?.Paths ?? (method != null && method.Audio ? method.Paths : null);
-    internal ComputeBuffer RayBuffer => transport?.Buffer ?? method?.PathBuffer;
-    internal void PrepareEmissions(TakeRender.Signal[] signals,long first,int frames,Action<long,AcousticTake.State[]> evaluate)
-    {
-        if(Emission.HasBursts(scene))transport?.PrepareEmissions(signals,first,frames,evaluate);
-    }
-    internal int RayPathsPerFrame => transport?.PathsPerFrame ?? (method != null && method.Audio ? method.PathsPerFrame : 0);
-    // The late energy histogram of one solved frame, for either audio backend.
-    internal RayTransport.LateFrame Late(int frame) =>
-        transport != null ? new RayTransport.LateFrame(transport, frame) : method != null && method.Audio ? new RayTransport.LateFrame(method, frame) : default;
-    // Offline dataset diagnostic; see RayTransport.CompleteSampleFamilies.
-    internal int[] CompleteSampleFamilies() =>
-        transport?.CompleteSampleFamilies() ?? throw new InvalidOperationException("Requires GPU raytraced transport.");
-    // Opt-in family gains: the table in use (null when off) and the shader's rho per family.
-    internal FamilyGainTable FamilyGains => transport?.FamilyGains;
-    internal float FamilyRoutesPerSample(int family) =>
-        transport?.RoutesPerSample(family) ?? throw new InvalidOperationException("Requires GPU raytraced transport.");
+    // The exact arrivals (direct sound) as audio paths, and the late histogram of a solved frame.
+    internal RayTransport.Path[] RayPaths => method != null && method.Audio ? method.Paths : null;
+    internal ComputeBuffer RayBuffer => method?.PathBuffer;
+    internal int RayPathsPerFrame => method != null && method.Audio ? method.PathsPerFrame : 0;
+    internal RayTransport.LateFrame Late(int frame) => method != null && method.Audio ? new RayTransport.LateFrame(method, frame) : default;
     ComputeBuffer bvhNodes, bvhIndices;
-    ComputeBuffer primitives, states, sources, listeners, responses;
+    ComputeBuffer primitives, states, sources, listeners;
     readonly TakeRender.DirectPath[] completedPaths;
-    readonly Action<AsyncGPUReadbackRequest> completion;
-    AsyncGPUReadbackRequest request;
     bool pending, disposed, readDirect = true;
-    volatile bool completed;
-    bool failed;
+    bool completed;
     long submitted;
     public bool IsPending => pending;
     public double CompletionSeconds { get; private set; }
     public double MaximumCompletionSeconds { get; private set; }
     public long PairPrimitiveUpperBound { get; private set; }
     public int SolveCount { get; private set; }
-    public string Backend => shader == null && method == null ? "CPU" : "GPU-" + SystemInfo.graphicsDeviceType;
+    public string Backend => method == null ? "CPU" : "GPU-" + SystemInfo.graphicsDeviceType;
     public long CpuBufferBytes =>
         (long)cpuState.Length * 80 +
         (long)(cpuPaths.Length + completedPaths.Length) * TakeRender.DirectPathStride +
-        (packed == null ? 0 : (long)packed.Length * 80) + (bvh?.NumericBytes ?? 0) +
-        (transport?.CpuBytes ?? 0) + (method?.CpuBytes ?? 0);
+        (packed == null ? 0 : (long)packed.Length * 80) + (bvh?.NumericBytes ?? 0) + (method?.CpuBytes ?? 0);
     public long GpuBufferBytes =>
-        shader == null && method == null
+        method == null
             ? 0
             : (long)Math.Max(1, geometry.Length) * 64 + (long)scene.objects.Length * 80 * maximumFrames +
                   (long)(scene.sources.Length + scene.listeners.Length) * 4 +
-                  (long)pairs * TakeRender.DirectPathStride * maximumFrames +
                   (bvh == null
                        ? 0
                        : (long)Math.Max(1, bvh.Nodes.Length) * 48 + (long)Math.Max(1, geometry.Length) * 4) +
-                  (transport?.GpuBytes ?? 0) + (method?.GpuBytes ?? 0);
+                  method.GpuBytes;
     public double BvhBuildSeconds => bvh?.BuildSeconds ?? 0;
     public double BvhUpdateSeconds => bvh?.UpdateSeconds ?? 0;
     public int BvhUpdates => bvh?.UpdateCount ?? 0;
@@ -113,8 +79,8 @@ public sealed class TransportSolver : IDisposable
     public double UploadSeconds { get; private set; }
     public double DispatchReadbackSeconds { get; private set; }
 
-    // methodAudio: an Energy-method solver renders audio (paths and late field for
-    // GpuAudio or the CPU mixer) instead of 1 ms measurement histograms.
+    // methodAudio: the path method renders audio (paths and histograms for GpuAudio or the CPU mixer)
+    // instead of measurement histograms read back synchronously.
     public TransportSolver(AcousticTake.Scene scene, AcousticTake.Primitive[] geometry,
                            TakeRender.Settings settings, ComputeShader shader = null, int maximumFrames = 1,
                            int sampleRate = 48000, bool readbackPaths = true, bool methodAudio = false)
@@ -129,17 +95,14 @@ public sealed class TransportSolver : IDisposable
             throw new ArgumentOutOfRangeException(nameof(maximumFrames));
         this.maximumFrames = maximumFrames;
         completedPaths = new TakeRender.DirectPath[checked(pairs * maximumFrames)];
-        completion = CompleteReadback;
         cpuState = new AcousticTake.State[scene.objects.Length];
         cpuPaths = new TakeRender.DirectPath[pairs];
         if (settings.useBvh)
             bvh = new DirectBvh(scene, geometry);
-        if (shader == null)
-        {
-            if (settings.transport == TakeRender.Transport.Raytraced)
-                throw new InvalidOperationException("Raytraced transport requires Transport.compute.");
+        if (settings.transport == TakeRender.Transport.Direct)
             return;
-        }
+        if (shader == null)
+            throw new InvalidOperationException("Raytraced transport (the path method) requires its compute shader.");
         if (!SystemInfo.supportsComputeShaders || pairs == 0)
             throw new InvalidOperationException(
                 "GPU transport requires compute support and source/listener pairs.");
@@ -147,20 +110,8 @@ public sealed class TransportSolver : IDisposable
             Marshal.SizeOf<DirectBvh.Node>() != 48 ||
             Marshal.SizeOf<TakeRender.DirectPath>() != TakeRender.DirectPathStride)
             throw new InvalidOperationException("Transport solver GPU ABI mismatch.");
-        // Pressure/Energy solves run their own compute shader (MethodTransport) and their
-        // own direct sound; they never instantiate or compile the renderer's shader.
-        bool methods = settings.method != TakeRender.Method.Hybrid;
-        if (!methods)
-            this.shader = UnityEngine.Object.Instantiate(shader);
         try
         {
-            if (!methods)
-            kernel = this.shader.FindKernel(
-                (scene.dimension == AcousticTake.Dimension.Planar2D ? "Direct2D" : "Direct3D") +
-                (bvh == null ? "" : "Bvh"));
-            if (!methods && !this.shader.IsSupported(kernel))
-                throw new NotSupportedException(
-                    "The selected direct compute kernel cannot run on this device.");
             var data = new GpuPrimitive[Math.Max(1, geometry.Length)];
             for (int i = 0; i < geometry.Length; i++)
                 data[i] = new GpuPrimitive { a = geometry[i].a, b = geometry[i].b, c = geometry[i].c,
@@ -177,39 +128,13 @@ public sealed class TransportSolver : IDisposable
             sources.SetData(indices);
             listeners = new ComputeBuffer(scene.listeners.Length, 4);
             listeners.SetData(scene.listeners);
-            responses = new ComputeBuffer(checked(pairs * maximumFrames), TakeRender.DirectPathStride);
             if (bvh != null)
             {
                 bvhNodes = new ComputeBuffer(Math.Max(1, bvh.Nodes.Length), 48);
                 bvhIndices = new ComputeBuffer(Math.Max(1, geometry.Length), 4);
             }
-            if (methods)
-            {
-                method = new MethodTransport(scene, geometry, settings, primitives, states, sources,
-                                             listeners, bvhNodes, bvhIndices, methodAudio, sampleRate, maximumFrames, readbackPaths);
-                return;
-            }
-            this.shader.SetBuffer(kernel, "Primitives", primitives);
-            this.shader.SetBuffer(kernel, "States", states);
-            this.shader.SetBuffer(kernel, "Sources", sources);
-            this.shader.SetBuffer(kernel, "Listeners", listeners);
-            this.shader.SetBuffer(kernel, "Responses", responses);
-            if (bvh != null)
-            {
-                this.shader.SetBuffer(kernel, "BvhNodes", bvhNodes);
-                this.shader.SetBuffer(kernel, "BvhIndices", bvhIndices);
-            }
-            this.shader.SetInt("PrimitiveCount", geometry.Length);
-            this.shader.SetInt("PairCount", pairs);
-            this.shader.SetInt("ListenerCount", scene.listeners.Length);
-            this.shader.SetInt("ObjectCount", scene.objects.Length);
-            this.shader.SetFloat("SpeedOfSound", settings.speedOfSound);
-            this.shader.SetFloat("ReferenceDistance", settings.referenceDistance);
-            this.shader.SetFloat("MinimumDistance", settings.minimumDistance);
-            if (settings.transport == TakeRender.Transport.Raytraced)
-                transport = new RayTransport(scene, geometry, settings, this.shader, primitives, states,
-                                             sources, listeners, bvhNodes, bvhIndices, sampleRate,
-                                             maximumFrames, readbackPaths);
+            method = new MethodTransport(scene, geometry, settings, primitives, states, sources,
+                                         listeners, bvhNodes, bvhIndices, methodAudio, sampleRate, maximumFrames, readbackPaths);
         }
         catch
         {
@@ -229,7 +154,7 @@ public sealed class TransportSolver : IDisposable
                 throw new ArgumentException("Direct solve shape mismatch.");
             activeFrames = 1;
             readDirect = true;
-            if (shader == null && method == null)
+            if (method == null)
             {
                 SolveCpu(state, output);
                 CountSolve();
@@ -237,69 +162,26 @@ public sealed class TransportSolver : IDisposable
             }
             Upload(state, 1);
             long start = Stopwatch.GetTimestamp();
-            if (method != null)
-            {
-                // Diagnostic direct path on the CPU; the method traces its own direct sound.
-                TakeRender.SolveDirect(scene, geometry, state, settings, output, bvh);
-                method.SelectNearPlanes(state, 1);
-                if (method.Audio) method.DispatchAudio(1, bvh?.NodeCount ?? 0, false);
-                else method.Dispatch(bvh?.NodeCount ?? 0);
-                DispatchReadbackSeconds += TakeRender.Elapsed(start);
-                CountSolve();
-                return;
-            }
-            shader.Dispatch(kernel, (pairs + 63) / 64, 1, 1);
-            responses.GetData(output);
-            transport?.Dispatch(1, false);
+            // Diagnostic direct path on the CPU; the method traces its own direct sound.
+            TakeRender.SolveDirect(scene, geometry, state, settings, output, bvh);
+            method.PrepareFrames(state, 1);
+            if (method.Audio) method.DispatchAudio(1, bvh?.NodeCount ?? 0, false);
+            else method.Dispatch(bvh?.NodeCount ?? 0);
             DispatchReadbackSeconds += TakeRender.Elapsed(start);
-            TakeRender.ValidatePaths(output);
             CountSolve();
         }
     }
-    // Explicit synchronous inspection of one pair/bin. The normal shader variant has
-    // no debug storage or readback. The caller owns the returned frozen CPU snapshot.
-    public RaySegment[] CaptureRays(AcousticTake.State[] state, int pair, int frequencyBin)
-    {
-        if(AudioSourcePlane.MaximumSamples(scene)>1)
-            throw new NotSupportedException("The single-origin ray debugger does not yet capture multi-sample planes.");
-        if (disposed || pending || transport == null)
-            throw new InvalidOperationException("Ray capture requires an idle GPU raytraced solver.");
-        if (state.Length != scene.objects.Length || pair < 0 || pair >= pairs || frequencyBin < 0 ||
-            frequencyBin >= settings.FrequencyBins)
-            throw new ArgumentException("Ray capture shape or selection is invalid.");
-        if (Marshal.SizeOf<RaySegment>() != 48)
-            throw new InvalidOperationException("Ray capture GPU ABI mismatch.");
-        int slots = checked(geometry.Length + 1 + 2*(settings.reflectionSampling==TakeRender.ReflectionSampling.PrimitiveBaseline?settings.RaysPerBin:settings.MirrorCandidates(scene))+3*settings.CompleteSamples);
-        var segments = new RaySegment[slots];
-        using var buffer = new ComputeBuffer(slots, 48);
-        buffer.SetData(segments);
-        shader.EnableKeyword("ACOUSTIC_DEBUG");
-        try
-        {
-            shader.SetInt("DebugPair", pair);
-            shader.SetInt("DebugBin", frequencyBin);
-            transport.BindDebug(buffer);
-            Upload(state, 1);
-            transport.Dispatch(1, false);
-            buffer.GetData(segments);
-        }
-        finally
-        {
-            shader.DisableKeyword("ACOUSTIC_DEBUG");
-        }
-        return segments;
-    }
-    // Pressure/Energy methods: solve once more with the first `rays` rays recording
-    // up to `events` events each (two float4 per event, see MethodCommon.hlsl).
+    // Measurement: solve once more with the first `rays` rays recording up to `events`
+    // events each (two float4 per event, see MethodCommon.hlsl).
     internal Vector4[] CaptureMethod(AcousticTake.State[] state, int rays, int events)
     {
         if (disposed || pending || method == null)
-            throw new InvalidOperationException("Method capture requires an idle Pressure/Energy solver.");
+            throw new InvalidOperationException("Method capture requires an idle path method solver.");
         var data = new Vector4[checked(2 * rays * events)];
         using var buffer = new ComputeBuffer(Math.Max(2, data.Length), 16);
         buffer.SetData(data);
         Upload(state, 1);
-        method.SelectNearPlanes(state, 1);
+        method.PrepareFrames(state, 1);
         method.Dispatch(bvh?.NodeCount ?? 0, buffer, rays, events);
         buffer.GetData(data);
         return data;
@@ -326,7 +208,6 @@ public sealed class TransportSolver : IDisposable
                     bvhIndices.SetData(bvh.Indices);
                 if (bvh.NodeCount > 0)
                     bvhNodes.SetData(bvh.Nodes, 0, 0, bvh.UpdateCount == 1 ? bvh.NodeCount : bvh.TopNodeCount);
-                shader?.SetInt("BvhNodeCount", bvh.NodeCount);
             }
         }
         for (int i = 0; i < frames * scene.objects.Length; i++)
@@ -336,9 +217,7 @@ public sealed class TransportSolver : IDisposable
                                                       state[i].rotation.z, state[i].rotation.w),
                                velocity = state[i].velocity, angularVelocity = state[i].angularVelocity,
                                flags = (uint)state[i].flags };
-        transport?.SetActivity(scene, state, frames);
         states.SetData(packed, 0, 0, frames * scene.objects.Length);
-        shader?.SetInt("FrameCount", frames);
         UploadSeconds += TakeRender.Elapsed(start);
     }
     public void BeginSolve(AcousticTake.State[] state, int frames = 1, bool diagnostics = true)
@@ -348,21 +227,19 @@ public sealed class TransportSolver : IDisposable
             if (disposed || pending)
                 throw new InvalidOperationException(
                     "Solver is disposed or already owns an in-flight response.");
-            TakeRender.RequireAudioMethod(settings);
             if (frames < 1 || frames > maximumFrames || state.Length < frames * scene.objects.Length)
                 throw new ArgumentException("Direct solve shape mismatch.");
-            if (shader != null && !SystemInfo.supportsAsyncGPUReadback)
+            if (method != null && !SystemInfo.supportsAsyncGPUReadback)
                 throw new NotSupportedException(
                     "Live GPU tracing requires asynchronous readback; select CPU on this device.");
             if (method != null && !method.Audio)
                 throw new InvalidOperationException("Method measurement solvers do not render audio.");
-            if (!diagnostics && ((transport == null && method == null) || (transport != null ? transport.Paths.Length : method.Paths.Length) != 0))
+            if (!diagnostics && (method == null || method.Paths.Length != 0))
                 throw new InvalidOperationException("GPU-only submission requires GPU transport and audio.");
             readDirect = diagnostics;
             activeFrames = frames;
             submitted = Stopwatch.GetTimestamp();
             completed = false;
-            failed = false;
             pending = true;
             try
             {
@@ -379,12 +256,11 @@ public sealed class TransportSolver : IDisposable
                         }
                     Upload(state, frames);
                     long start = Stopwatch.GetTimestamp();
-                    method.SelectNearPlanes(state, frames);
+                    method.PrepareFrames(state, frames);
                     method.DispatchAudio(frames, bvh?.NodeCount ?? 0, true);
                     DispatchReadbackSeconds += TakeRender.Elapsed(start);
-                    completed = true;
                 }
-                else if (shader == null)
+                else
                 {
                     for (int f = 0; f < frames; f++)
                     {
@@ -392,20 +268,8 @@ public sealed class TransportSolver : IDisposable
                         SolveCpu(cpuState, cpuPaths);
                         Array.Copy(cpuPaths, 0, completedPaths, f * pairs, pairs);
                     }
-                    completed = true;
                 }
-                else
-                {
-                    Upload(state, frames);
-                    long start = Stopwatch.GetTimestamp();
-                    if (readDirect)
-                        shader.Dispatch(kernel, (frames * pairs + 63) / 64, 1, 1);
-                    transport?.Dispatch(frames, true);
-                    if (readDirect)
-                        request = AsyncGPUReadback.Request(
-                            responses, frames * pairs * TakeRender.DirectPathStride, 0, completion);
-                    DispatchReadbackSeconds += TakeRender.Elapsed(start);
-                }
+                completed = true;
                 CountSolve();
             }
             catch
@@ -415,37 +279,18 @@ public sealed class TransportSolver : IDisposable
             }
         }
     }
-    void CompleteReadback(AsyncGPUReadbackRequest value)
-    {
-        failed = value.hasError;
-        if (!failed)
-        {
-            var data = value.GetData<TakeRender.DirectPath>();
-            Unity.Collections.NativeArray<TakeRender.DirectPath>.Copy(data, completedPaths, data.Length);
-        }
-        completed = true; // Publish only after copying; request-owned memory expires after completion.
-    }
     public bool TryComplete(TakeRender.DirectPath[] output, bool wait = false)
     {
         if (!pending || disposed || !readDirect)
             throw new InvalidOperationException("No diagnostic response to complete.");
         if (output.Length < activeFrames * pairs)
             throw new ArgumentException("Direct response shape mismatch.");
-        if (shader != null && !completed)
-        {
-            if (wait)
-                request.WaitForCompletion();
-            else
-                request.Update();
-        }
-        if (!completed || (transport != null && !transport.TryComplete(wait)) || (method != null && !method.TryComplete(wait)))
+        if (!completed || (method != null && !method.TryComplete(wait)))
             return false;
         pending = false;
         double elapsed = TakeRender.Elapsed(submitted);
         CompletionSeconds += elapsed;
         MaximumCompletionSeconds = Math.Max(MaximumCompletionSeconds, elapsed);
-        if (failed)
-            throw new InvalidOperationException("GPU response readback failed.");
         TakeRender.ValidatePaths(completedPaths);
         Array.Copy(completedPaths, output, activeFrames * pairs);
         return true;
@@ -465,15 +310,6 @@ public sealed class TransportSolver : IDisposable
     {
         if (disposed)
             return;
-        if (pending && shader != null && !completed)
-        {
-            // Cancellation may dispose the solver before its audio consumer.
-            // Fence only at shutdown; normal GPU playback reads back PCM alone.
-            if (!readDirect)
-                request = AsyncGPUReadback.Request(transport.Buffer, 4, 0);
-            request.WaitForCompletion();
-        }
-        transport?.Dispose();
         method?.Dispose();
         disposed = true;
         pending = false;
@@ -481,17 +317,9 @@ public sealed class TransportSolver : IDisposable
         states?.Dispose();
         sources?.Dispose();
         listeners?.Dispose();
-        responses?.Dispose();
         bvhNodes?.Dispose();
         bvhIndices?.Dispose();
         bvhNodes = bvhIndices = null;
-        primitives = states = sources = listeners = responses = null;
-        if (shader != null)
-        {
-            if (Application.isPlaying)
-                UnityEngine.Object.Destroy(shader);
-            else
-                UnityEngine.Object.DestroyImmediate(shader);
-        }
+        primitives = states = sources = listeners = null;
     }
 }

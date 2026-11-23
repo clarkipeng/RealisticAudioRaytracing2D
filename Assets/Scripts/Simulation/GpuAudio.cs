@@ -41,14 +41,14 @@ internal sealed partial class GpuAudio : IDisposable
     public static bool Selected(TakeRender.Settings settings,ComputeShader transport) =>
         transport!=null && settings.transport==TakeRender.Transport.Raytraced && settings.audioBackend==TakeRender.AudioBackend.Gpu &&
         // the offline histogram export and import are CPU features of PathReverb
-        !(settings.method==TakeRender.Method.Path && (!string.IsNullOrEmpty(settings.pathHistogramExport) || !string.IsNullOrEmpty(settings.pathHistogramImport)));
+        string.IsNullOrEmpty(settings.pathHistogramExport) && string.IsNullOrEmpty(settings.pathHistogramImport);
     public GpuAudio(AcousticTake.Scene scene,int rate,TakeRender.Settings settings,TakeRender.Signal[] signals,int maximumResponses=1,bool transported=false)
     {
         Emission.Configure(scene,signals);AudioSourcePlane.ValidateRender(scene,settings);layout=new RayTransport.Layout(scene,settings);slots=layout.MaximumSlots;
         audibleSources=new bool[signals.Length];
         for(int s=0;s<signals.Length;s++)audibleSources[s]=scene.listeners.Length>1 || scene.sources[s].mutedListenerPlusOne!=1;
         this.settings=settings;this.signals=signals;listeners=scene.listeners.Length;channels=settings.ChannelsPerListener;pairs=signals.Length*listeners;
-        capacity=layout.Capacity;maximumBlock=checked(settings.responseStepSamples*maximumResponses+(settings.method==TakeRender.Method.Path?settings.LatePartition:0)); // the path reverb's input lookahead (InputEnd)
+        capacity=layout.Capacity;maximumBlock=checked(settings.responseStepSamples*maximumResponses+settings.LatePartition); // the path reverb's input lookahead (InputEnd)
         var hrtf=channels==2?Hrtf.Load(rate):null;int taps=hrtf?.Taps??1;
         fft=1;while(fft<settings.fftSize+taps+settings.spectralHop-2)fft=checked(fft*2);bins=fft/2+1;
         history=checked((int)settings.HistorySamples(rate)+fft+maximumBlock);
@@ -62,10 +62,10 @@ internal sealed partial class GpuAudio : IDisposable
             shader=UnityEngine.Object.Instantiate(asset);
             reset=Kernel("AudioReset");compare=Kernel("AudioCompare");commit=Kernel("AudioCommit");groups=Kernel("AudioGroups");match=Kernel("AudioMatch");filter=Kernel("AudioFilter");input=Kernel("AudioInput");sum=Kernel("AudioSumTiles");inverse=Kernel("AudioInverse");write=Kernel("AudioWrite");
             materialGlobal=Kernel("AudioMaterialGlobal");padGlobal=Kernel("AudioPadGlobal");filterGlobal=Kernel("AudioFilterGlobal");inputGlobal=Kernel("AudioInputGlobal");sumGlobal=Kernel("AudioSumGlobal");saveGlobal=Kernel("AudioSaveGlobal");reverse=Kernel("AudioBitReverse");butterfly=Kernel("AudioButterfly");
-            lateEnvelope=Kernel("LateEnvelope");lateExtend=Kernel("LateExtend");lateBuild=Kernel("LateBuild");lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
+            lateInput=Kernel("LateInput");lateSum=Kernel("LateSum");lateInverse=Kernel("LateInverse");lateWrite=Kernel("LateWrite");
             pathGroups=Kernel("PathGroups");pathFilter=Kernel("PathFilter");pathPieces=Kernel("PathPieces");pathPowers=Kernel("PathPowers");
             pathSlideSelect=Kernel("PathSlideSelect");pathBandInput=Kernel("PathBandInput");pathSlide=Kernel("PathSlide");
-            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateEnvelope,lateExtend,lateBuild,lateInput,lateSum,lateInverse,lateWrite,
+            kernels=new[]{reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly,lateInput,lateSum,lateInverse,lateWrite,
                 pathGroups,pathFilter,pathPieces,pathPowers,pathSlideSelect,pathBandInput,pathSlide};
             transformKernels=new[]{materialGlobal,padGlobal,sumGlobal,saveGlobal,reverse,butterfly};
             int hash=checked(slots*2+1);
@@ -121,8 +121,8 @@ internal sealed partial class GpuAudio : IDisposable
             var twiddles=new Vector2[1024];for(int j=0;j<twiddles.Length;j++)twiddles[j]=new Vector2((float)Math.Cos(-2*Math.PI*j/2048),(float)Math.Sin(-2*Math.PI*j/2048));
             Buffer("AudioTwiddles",twiddles.Length,8).SetData(twiddles);
             PrepareEars(hrtf);
-            PrepareLate(scene,rate);PreparePath(settings,rate);
-            if(pathMode && settings.pathDenoise)
+            PrepareLate(rate);PreparePath(settings,rate);
+            if(settings.pathDenoise)
             {
                 var (weights,header)=PathDenoiser.LoadBundled();var denoise=Resources.Load<ComputeShader>(PathDenoiser.ShaderResource);
                 if(weights==null || denoise==null)throw new InvalidOperationException("pathDenoise needs Resources/Acoustics/PathDenoise and "+PathDenoiser.ShaderResource+".");
@@ -201,7 +201,7 @@ internal sealed partial class GpuAudio : IDisposable
             }
         }
         commands.EndSample("Acoustics.GPU.Filters");
-        if(pathMode)SetPathResponse(sample,cut,late);else SetLateResponse(sample,cut,late);
+        SetPathResponse(sample,cut,late);
         Submit();initialized=true;responseSample=sample;
     }
     void Dispatch(int kernel,int pair,int which)=>commands.DispatchCompute(shader,kernel,args,(uint)((which*pairs+pair)*3*4));
@@ -223,7 +223,7 @@ internal sealed partial class GpuAudio : IDisposable
     // block, needs samples to b + 3P/2 - latency; a render that ends inside that block needs them already.
     public long InputEnd(long end)
     {
-        if(!pathMode || end<=0)return end;
+        if(end<=0)return end;
         long last=(end-1)/latePartition*latePartition;
         return Math.Max(end,last+latePartition+latePartition/2-settings.DspLatencySamples);
     }

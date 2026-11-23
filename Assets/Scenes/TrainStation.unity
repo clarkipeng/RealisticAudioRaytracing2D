@@ -6288,7 +6288,7 @@ MonoBehaviour:
   audioManager: {fileID: 1303114735}
   sampleRate: 44100
   monitorLive: 1
-  directShader: {fileID: 7200000, guid: 5de20de9c9a246e9ae7011feda1cde3b, type: 3}
+  directShader: {fileID: 7200000, guid: 0c101fe48bfc423b9a2f22165f0bd64d, type: 3}
   directSettings:
     responseStepSamples: 1024
     renderSeconds: 0
@@ -6319,7 +6319,7 @@ MonoBehaviour:
     lateTailSeconds: 0
     lateAccumulationSeconds: 0
     seed: 0
-    method: 0
+    method: 3
     methodRays: 4096
     specularDetectionRadius: 0.25
     methodEdgeProbability: 0.5

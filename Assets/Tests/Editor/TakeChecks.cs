@@ -55,8 +55,8 @@ public partial class TakeChecks
     {
         if(!SystemInfo.supportsComputeShaders || !SystemInfo.supportsAsyncGPUReadback)
             Assert.Ignore("Requires compute shaders and asynchronous GPU readback; CPU fallback would not test this contract.");
-        var shader=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/Shaders/Transport.compute");
-        Assert.That(shader,Is.Not.Null,"Transport.compute must import successfully.");
+        var shader=TransportSolver.LoadPathShader();
+        Assert.That(shader,Is.Not.Null,"Resources/Acoustics/PathMethod.compute must import successfully.");
         return shader;
     }
 
@@ -542,10 +542,6 @@ public partial class TakeChecks
     public void DelayFilters()
     {
         TakeRender.Validate(JsonUtility.FromJson<TakeRender.Settings>("{}"));
-        var migrated=JsonUtility.FromJson<TakeRender.Settings>("{\"fftSize\":1024,\"raysPerPair\":1024}");
-        migrated.reflectionSampling=TakeRender.ReflectionSampling.PrimitiveBaseline; // The only estimator that still traces rays per bin.
-        Check(migrated.raysPerPair==0 && migrated.raysPerBin==2 && migrated.RaysPerPair==1026,"Legacy total-ray budgets migrate to complete frequency bins.");
-        migrated.raysPerBin=3;Check(migrated.RaysPerPair==1539,"Migrated settings remain editable through the new field.");
         const int rate=1000,count=256,start=100;
         var pcm=new float[1000]; for (int i=0;i<pcm.Length;i++) pcm[i]=(float)Math.Sin(2*Math.PI*.35*i);
         var signal=new TakeRender.Signal(pcm); signal.SetActive(0,true); signal.Append(new AcousticTake.VoiceEvent {action=AcousticTake.VoiceAction.Play,gain=1,loop=true});
@@ -719,42 +715,7 @@ public partial class TakeChecks
         Reject(()=>overflow.Render(0,1,output),"Reject overflowed audio instead of completing a non-finite dataset.");
     }
 
-    [Test, Category("GPU")]
-    public void GpuDirectChecks()
-    {
-        var shader=RequireGpu();
-        var scene=Scene(2); var state=States(2); state[0].flags|=AcousticTake.StateFlags.Geometry;
-        var geometry=new[] {new AcousticTake.Primitive {a=new Vector3(.5f,-1,-1),b=new Vector3(.5f,1,-1),c=new Vector3(.5f,0,1),objectIndex=0}};
-        var cpu=new TakeRender.DirectPath[2]; var gpu=new TakeRender.DirectPath[2]; var settings=new TakeRender.Settings();
-        foreach (var dimension in new[] {AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
-        {
-            scene.dimension=dimension;
-            using (var solver=new TransportSolver(scene,geometry,settings,shader))
-                for (int i=0; i<25; i++)
-                {
-                    state[0].rotation=Quaternion.AngleAxis(i*7,Vector3.forward);
-                    state[0].position=new Vector3(i*.017f,i*.031f,0);
-                    TakeRender.SolveDirect(scene,geometry,state,settings,cpu); solver.Solve(state,gpu);
-                    for (int pair=0; pair<2; pair++)
-                    { Near(gpu[pair].delaySeconds,cpu[pair].delaySeconds,"GPU direct delay",1e-6f); Near(gpu[pair].pressureGain,cpu[pair].pressureGain,"GPU direct gain/occlusion",1e-5f); Near(Vector4.Distance(gpu[pair].direction,cpu[pair].direction),0,"GPU arrival direction",1e-6f); }
-                }
-        }
-    }
 
-    [Test, Category("GPU")]
-    public void GpuBatches()
-    {
-        var shader=RequireGpu();
-        var scene=Scene(); var states=new AcousticTake.State[10]; var result=new TakeRender.DirectPath[5];
-        for (int f=0;f<5;f++) { var state=States(); state[1].position.x=f+1; Array.Copy(state,0,states,f*2,2); }
-        using (var solver=new TransportSolver(scene,new AcousticTake.Primitive[0],new TakeRender.Settings(),shader,5))
-        {
-            solver.BeginSolve(states,5); Reject(()=>solver.BeginSolve(states,5),"Pending GPU response owns its buffers.");
-            Check(solver.TryComplete(result,true),"Explicit shutdown wait completes async readback.");
-            for (int f=0;f<5;f++) Near(result[f].pressureGain,1f/(f+1),"Batch responses use their own pose frame",1e-6f);
-            solver.BeginSolve(states,5); // Disposal must wait before releasing request-owned buffers.
-        }
-    }
 
 }
 

@@ -45,11 +45,10 @@ public partial class TakeChecks
             }
         }
     }
-    [TestCase(false, Category="Core")]
-    [TestCase(true, Category="GPU")]
-    public void BvhChecks(bool gpu)
+    [Test, Category("Core")]
+    public void BvhChecks()
     {
-        var shader=gpu?RequireGpu():null;
+        ComputeShader shader=null; // the direct transport is the CPU reference
         var random=new System.Random(62831);
         float Coordinate() => (float)(random.NextDouble()*12-6);
         Vector3 Point() => new Vector3(Coordinate(),Coordinate(),Coordinate());
@@ -99,11 +98,10 @@ public partial class TakeChecks
             }
         }
     }
-    [TestCase(false, Category="Core")]
-    [TestCase(true, Category="GPU")]
-    public void InstanceBvhChecks(bool gpu)
+    [Test, Category("Core")]
+    public void InstanceBvhChecks()
     {
-        var shader=gpu?RequireGpu():null;
+        ComputeShader shader=null; // the direct transport is the CPU reference
         foreach(var dimension in new[]{AcousticTake.Dimension.Planar2D,AcousticTake.Dimension.Spatial3D})
         {
             var scene=new AcousticTake.Scene {dimension=dimension,objects=new AcousticTake.ObjectDefinition[4],

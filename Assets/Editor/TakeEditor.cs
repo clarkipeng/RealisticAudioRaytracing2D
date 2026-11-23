@@ -75,7 +75,7 @@ public sealed class TakeEditor : Editor
             SceneRecording.ExportInputs(manager.takePath,output);Debug.Log("Input-only run: "+output,manager);
         });
         if (GUILayout.Button("Open audio comparison window")) TakeComparisonWindow.ShowWindow();
-        if (manager.takeDimension == AcousticTake.Dimension.Planar2D && GUILayout.Button("Open 2D ray debugger")) RayDebugWindow.ShowWindow();
+
         EditorGUILayout.LabelField("Offline acoustic render",EditorStyles.boldLabel);
         DrawTransportSettings(renderSettings);
         EditorGUILayout.HelpBox("Renders saved inputs through the selected shared transport. Compact recordings first reconstruct their scene motion.",MessageType.None);
@@ -139,18 +139,14 @@ public sealed class TakeEditor : Editor
     {
         settings.transport=(TakeRender.Transport)EditorGUILayout.EnumPopup("Transport",settings.transport);
         if(settings.transport!=TakeRender.Transport.Raytraced)return;
-        settings.synthesis=(TakeRender.Synthesis)EditorGUILayout.EnumPopup("Synthesis",settings.synthesis);
         settings.audioBackend=(TakeRender.AudioBackend)EditorGUILayout.EnumPopup("Audio backend",settings.audioBackend);
-        settings.raysPerBin=EditorGUILayout.IntField(new GUIContent("Rays per frequency bin","Primitive-baseline mirror samples; also the floor of the First Images candidate budget."),settings.RaysPerBin);settings.raysPerPair=0;
+        settings.methodRays=EditorGUILayout.IntField(new GUIContent("Path rays per solve","New rays per solve or update of the path method; every ray carries all eight octave bands."),settings.methodRays);
         settings.seed=EditorGUILayout.IntField("Sampling seed",settings.seed);
         settings.maxBounces=EditorGUILayout.IntField("Maximum bounces (0 = direct only)",settings.maxBounces);
-        settings.lateRays=EditorGUILayout.IntField(new GUIContent("Late rays per band","Energy rays per octave band and source/listener pair for the late field; its variance falls as one over this count."),settings.lateRays);
-        settings.lateReceiverRadius=EditorGUILayout.FloatField(new GUIContent("Late receiver radius (m)","Receiver sphere for late specular energy; larger spheres lower variance and smear timing by up to 2r/c."),settings.lateReceiverRadius);
         settings.fftSize=EditorGUILayout.IntField("Acoustic frequency grid (FFT size)",settings.fftSize);
         settings.spectralHop=EditorGUILayout.IntField("Convolution block (samples)",settings.spectralHop);
         settings.diffractionFactor=EditorGUILayout.FloatField("Diffraction factor",settings.diffractionFactor);
-        settings.completeRouteSamples=EditorGUILayout.IntField(new GUIContent("Complete route samples", "Tuned early diffraction/mixed routes (D, DD, RD, DR, RR) per emission; zero keeps direct sound and first images only. This budget multiplies retained emission sites."),settings.completeRouteSamples);
-        settings.familyGains=EditorGUILayout.Toggle(new GUIContent("Family gains","Opt-in level-preserving shrinkage of sampled first-order images and complete routes (Resources/Acoustics/FamilyGains.json). Needs complete routes and First Images; off renders the unbiased estimator."),settings.familyGains);
+
         settings.airAbsorption=EditorGUILayout.Toggle("Air absorption",settings.airAbsorption);
     }
     void DrawConfiguration(RayTraceManager manager)

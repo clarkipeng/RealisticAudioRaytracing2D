@@ -25,7 +25,7 @@ internal sealed partial class GpuAudio
     internal int PathSpectralGroupLimit=-1;
     internal bool FftSingleStages { set => shader.SetInt("AudioFftSingle",value?1:0); }   // profiling only: one FFT stage per pass, as before part 37
     internal string PathPartitionGroups = ""; // diagnostics: how many partitions hold 0, 1, 2, ... impulse groups (all pairs)
-    bool pathMode,lateInitializedOnce;
+    bool lateInitializedOnce;
     int pathBins,pathGroupCount;
     ComputeBuffer pathDenoised;
     PathDenoiser[] denoisers;
@@ -34,13 +34,11 @@ internal sealed partial class GpuAudio
 
     void PreparePath(TakeRender.Settings settings,int rate)
     {
-        pathMode=settings.method==TakeRender.Method.Path;
         foreach(var name in new[]{"PathHistogram","PathEarWeights","PathTermWeights","PathMix","LatePowers"})Buffer(name,1,4);
         foreach(var name in new[]{"PathAlphaBeta","PathSampleValues","PathFilters","PathCoefficients","PathFiltered"})Buffer(name,1,8);
         foreach(var name in new[]{"PathSlideEchoes","PathSlideEchoesRead","PathSlideRates","PathSlideDelays","PathSlideAmplitudes","PathSlideEnd","PathBandHistory","PathBinCounts","PathBinStarts","PathItd"})Buffer(name,1,4);
         Buffer("PathGroupInfo",1,16);Buffer("PathTermBins",1,4);Buffer("PathSampleGroup",1,4);Buffer("PathFftPartitions",1,4);Buffer("PathSpectralPartitions",1,16);Buffer("PathSpectralGroups",1,4);Buffer("PathGroupSpectra",1,8);
         Set("LateAdvance",0);Set("LatePower",0);Set("PathFloat",0);
-        if(!pathMode)return;
         var bins=new PathBins(settings);pathBins=bins.Count;
         latePartition=settings.LatePartition;lateCount=checked((int)Math.Ceiling(bins.Horizon*rate/latePartition)+1);lateSimulated=pathBins;
         lateSupport=checked(lateCount*latePartition+settings.DspLatencySamples);
@@ -99,7 +97,7 @@ internal sealed partial class GpuAudio
         Buffer("PathSpectralPartitions",Math.Max(1,pathSpectralCount),16).SetData(pathSpectralCount>0?spectral.ToArray():new uint[4]);
         Buffer("PathSpectralGroups",Math.Max(1,spectralGroups.Count),4).SetData(spectralGroups.Count>0?spectralGroups.ToArray():new uint[1]);
         Buffer("PathGroupSpectra",Math.Max(1,groupSpectra.Count),8).SetData(groupSpectra.Count>0?groupSpectra.ToArray():new Vector2[1]);
-        var ears=LateBasis.Get(lateRate,latePartition,1,channels).EarWeights;
+        var ears=LateBasis.EarWeights(lateRate,channels);
         Buffer("PathEarWeights",ears.Length,4).SetData(ears);
         var alphaBeta=new Vector2[TakeRender.Settings.LateBands];
         var coherence=channels==2?LateBasis.Coherence(Hrtf.Load(lateRate),lateRate,2*latePartition):null;
@@ -116,7 +114,7 @@ internal sealed partial class GpuAudio
         Buffer("LateInputs",checked(lateSources*lateCount*bins),8).SetData(new Vector2[lateSources*lateCount*bins]);
         Buffer("LateSums",checked(2*lanes*LateTiles*bins),8);
         Buffer("LateBlocks",checked(2*lanes*latePartition),4).SetData(new float[2*lanes*latePartition]);
-        Set("LatePartition",latePartition);Set("LateCount",lateCount);Set("LateSimulated",lateSimulated);Set("LateBins",bins);
+        Set("LatePartition",latePartition);Set("LateCount",lateCount);Set("LateBins",bins);
         Set("LateTiles",LateTiles);Set("LateStep",settings.responseStepSamples);
         Set("LateAdvance",latePartition/2);Set("LatePower",1);Set("PathGroupTotal",pathGroupCount);Set("PathBinsCount",pathBins);
         // Doppler: the slid bins and groups, their weights, and the band-filtered input over the horizon, one step of
@@ -151,7 +149,6 @@ internal sealed partial class GpuAudio
     // The persistent-ray denoiser, one per pair, writing into the histogram the reverb reads (PathFloat).
     public void EnablePathDenoiser(ComputeShader denoise,byte[] weights,string header)
     {
-        if(!pathMode)throw new InvalidOperationException("The denoiser applies to the path method.");
         if(denoisers!=null)foreach(var d in denoisers)d?.Dispose();   // (replacing the bundled weights: measurements)
         var bins=new PathBins(settings);var starts=new double[bins.Count];for(int k=0;k<starts.Length;k++)starts[k]=bins.Start(k);
         pathDenoised=Buffer("PathHistogram",checked(pairs*PathDenoiser.Cells*bins.Count),4);
@@ -162,8 +159,8 @@ internal sealed partial class GpuAudio
 
     void SetPathResponse(long sample,bool cut,RayTransport.LateFrame late)
     {
-        var method=late.Transport as MethodTransport;
-        bool valid=method!=null && method.IsPath;
+        var method=late.Transport;
+        bool valid=method!=null;
         if(!lateReady && !valid)return;
         EnsurePath();
         if(lateInitialized && sample<lateSwap)throw new ArgumentException("Path responses must be ordered.");

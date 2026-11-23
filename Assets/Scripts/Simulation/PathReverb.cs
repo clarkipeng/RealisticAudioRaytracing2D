@@ -22,7 +22,7 @@ using UnityEngine;
 // band energies (LateBasis.EarWeights; interaural level only, no interaural delay), and two
 // independent (orthogonal) slot sequences are mixed per band to the HRTF set's diffuse-field interaural
 // coherence. Positions and signs are fixed per pair, so an update changes amplitudes only.
-// Updates crossfade sample by sample over one response step (two kernel banks), as LateReverb, with
+// Updates crossfade sample by sample over one response step (two kernel banks), with
 // a power correction: the two outputs share signs but their amplitudes differ (independent noisy
 // estimates), so a linear crossfade loses energy (about 1.2 dB at 512 rays in the Church). Over each
 // block the blended output is scaled so its power is the linear interpolation of the two outputs'
@@ -104,7 +104,7 @@ internal sealed class PathReverb
         channels=settings.ChannelsPerListener;listeners=scene.listeners.Length;sources=signals.Length;pairs=sources*listeners;
         latency=settings.DspLatencySamples;step=settings.responseStepSamples;
         if(lookahead>latency)throw new InvalidOperationException("The band filters' lookahead exceeds the DSP latency.");
-        earWeights=LateBasis.Get(rate,partition,1,channels).EarWeights;
+        earWeights=LateBasis.EarWeights(rate,channels);
         alpha=new float[Bands];beta=new float[Bands];
         var coherence=channels==2?LateBasis.Coherence(Hrtf.Load(rate),rate,2*partition):null;
         for(int b=0;b<Bands;b++)
@@ -162,11 +162,11 @@ internal sealed class PathReverb
         for(int b=0;b<Bands;b++)
         {
             for(int k=0;k<n;k++){int f=k<=n/2?k:n-k;x[k]=new Vector2((float)BandWeight(b,(double)f*rate/n),0);}
-            ImpulseResponseAudio.Fft(x,true);
+            SpectralAudio.Fft(x,true);
             var taps=new float[n];
             for(int t=-half;t<=half;t++){double w=.5*(1+Math.Cos(Math.PI*t/(half+1)));taps[t+half]=(float)(x[(t+n)%n].x*w);}
             for(int k=0;k<n;k++)x[k]=new Vector2(k<taps.Length?taps[k]:0,0);
-            ImpulseResponseAudio.Fft(x,false);
+            SpectralAudio.Fft(x,false);
             Array.Copy(x,0,result,b*n,n);
         }
         return result;
@@ -269,7 +269,7 @@ internal sealed class PathReverb
             var t=trains[g];double e1=0,e2=0;
             Array.Clear(x,0,n2);Array.Clear(y,0,n2);
             for(int i=0;i<t.at.Length;i++){x[t.at[i]].x+=t.s1[i];y[t.at[i]].x+=t.s2[i];e1+=t.s1[i]*t.s1[i];e2+=t.s2[i]*t.s2[i];}
-            ImpulseResponseAudio.Fft(x,false);ImpulseResponseAudio.Fft(y,false);
+            SpectralAudio.Fft(x,false);SpectralAudio.Fft(y,false);
             Array.Copy(x,0,spectrum,(g*2)*bins,bins);Array.Copy(y,0,spectrum,(g*2+1)*bins,bins);
             // Exact band energy: the band-filtered pair (h_b * s1, h_b * s2) is made orthonormal at the
             // energy an impulse train of the same broadband energy would give, W = sqrt(target) G^(-1/2),
@@ -501,11 +501,11 @@ internal sealed class PathReverb
             {
                 long start=next*partition-latency+lookahead-partition;
                 for(int n=0;n<2*partition;n++)buffer[n]=new Vector2(start+n<0?0:signals[s].Read(start+n),0);
-                ImpulseResponseAudio.Fft(buffer,false);
+                SpectralAudio.Fft(buffer,false);
                 for(int b=0;b<Bands;b++)
                 {
                     for(int i=0;i<2*partition;i++){var x=buffer[i];var h=filters[b*2*partition+i];band[i]=new Vector2(x.x*h.x-x.y*h.y,x.x*h.y+x.y*h.x);}
-                    ImpulseResponseAudio.Fft(band,true);
+                    SpectralAudio.Fft(band,true);
                     long first=next*partition-latency;
                     for(int n=0;n<partition;n++)history[(s*Bands+b)*historyLength+(int)((first+n)&mask)]=band[partition+n].x;
                 }
@@ -518,11 +518,11 @@ internal sealed class PathReverb
     {
         long start=block*partition-latency+lookahead-partition; // overlap-save window of the FIR
         for(int n=0;n<2*partition;n++)work[n]=new Vector2(start+n<0?0:signals[s].Read(start+n),0);
-        ImpulseResponseAudio.Fft(work,false);
+        SpectralAudio.Fft(work,false);
         for(int b=0;b<Bands;b++)
         {
             for(int i=0;i<2*partition;i++){var x=work[i];var h=filters[b*2*partition+i];wide[i]=new Vector2(x.x*h.x-x.y*h.y,x.x*h.y+x.y*h.x);}
-            ImpulseResponseAudio.Fft(wide,true);
+            SpectralAudio.Fft(wide,true);
             for(int n=0;n<partition;n++)halves[(s*Bands+b)*partition+n]=wide[partition+n].x;
         }
         halfBlock[s]=block;
@@ -542,7 +542,7 @@ internal sealed class PathReverb
             for(int b=0;b<Bands;b++)
             {
                 for(int n=0;n<partition;n++){work[n]=new Vector2(old[b*partition+n],0);work[partition+n]=new Vector2(halves[(s*Bands+b)*partition+n],0);}
-                ImpulseResponseAudio.Fft(work,false);
+                SpectralAudio.Fft(work,false);
                 Array.Copy(work,0,inputs,((s*Bands+b)*count+ring)*bins,bins);
             }
         }
@@ -569,7 +569,7 @@ internal sealed class PathReverb
                 }
                 for(int i=0;i<bins;i++)work[i]=sum[i];work[0].y=work[partition].y=0;
                 for(int i=1;i<partition;i++)work[2*partition-i]=new Vector2(sum[i].x,-sum[i].y);
-                ImpulseResponseAudio.Fft(work,true);
+                SpectralAudio.Fft(work,true);
                 for(int n=0;n<partition;n++)blocks[(b0*listeners*channels+l*channels+c)*partition+n]=work[partition+n].x;
             }
             if(sliding[b0])SlideBlock(b0,block);

@@ -3,8 +3,8 @@ using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
-// Opt-in measurement: band energies of the energy and path methods at fixed Church points, same
-// horizon, so their level gap can be split by time (docs/benchmarks/path-denoise-2026-11-12).
+// Opt-in measurement: band energies of the path method at fixed Church points, same
+// horizon, split by time (docs/benchmarks/path-denoise-2026-11-12 compared them with the removed energy method).
 //   ACOUSTIC_CHURCH_LEVELS=/abs/out.json       results
 //   ACOUSTIC_CHURCH_LEVELS_TAKE=/abs/take      a take (its first frame: poses, doors)
 //   ACOUSTIC_CHURCH_LEVELS_POINTS=x,y,z;x,y,z  listener positions ("take": the take's own listener position)
@@ -17,9 +17,8 @@ using UnityEngine;
 //   ACOUSTIC_CHURCH_LEVELS_POPULATION=N        Path: persistent rays, N in flight (1,024-sample updates); per point a warm-up,
 //                                              then ACOUSTIC_CHURCH_LEVELS_UPDATES (default 32) updates, each one entry of the point
 //   ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY=1        Path: beams only (settings.pathBeamsOnly)
-// Each method solves with 8,192 rays and a 2 s horizon, air absorption on; the energy method with its
-// listening settings (2 m receiver sphere, arrivals, 96 near planes), the path method with its defaults.
-// Output per method, point and band: energy in [0, 50 ms), [50, 200 ms), [200 ms, 2 s) after emission.
+// Each variant solves with 8,192 rays and a 2 s horizon, air absorption on, with the method's defaults.
+// Output per variant, point and band: energy in [0, 50 ms), [50, 200 ms), [200 ms, 2 s) after emission.
 public partial class TakeChecks
 {
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
@@ -49,12 +48,6 @@ public partial class TakeChecks
         var json = new System.Text.StringBuilder("{");
         // Path variants: ACOUSTIC_CHURCH_LEVELS_PATH = radius:seed;radius:seed (default 0.25:0).
         var variants = new System.Collections.Generic.List<(TakeRender.Method method, float radius, int seed, string key)>();
-        foreach (string v in (Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_ENERGY") ?? "2").Split(';'))
-        {
-            if (v == "") continue; // (empty: no energy solves)
-            var rs = v.Split(':'); float radius = float.Parse(rs[0], System.Globalization.CultureInfo.InvariantCulture); int seed = rs.Length > 1 ? int.Parse(rs[1]) : 0;
-            variants.Add((TakeRender.Method.Energy, radius, seed, v == "2" ? "Energy" : FormattableString.Invariant($"Energy r{radius} s{seed}")));
-        }
         int rays = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_RAYS") ?? "8192");
         foreach (string v in (Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_PATH") ?? "0.25:0").Split(';'))
         {
@@ -73,7 +66,6 @@ public partial class TakeChecks
             if (!string.IsNullOrEmpty(diffraction)) settings.diffractionFactor = float.Parse(diffraction, System.Globalization.CultureInfo.InvariantCulture);
             string survival = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_SURVIVAL");
             if (!string.IsNullOrEmpty(survival)) settings.pathSurvivalSeconds = float.Parse(survival, System.Globalization.CultureInfo.InvariantCulture);
-            if (method == TakeRender.Method.Energy) { settings.methodArrivalSlots = 96; settings.methodNearPlanes = 96; }
             int population = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_POPULATION") ?? "0");
             int updates = method == TakeRender.Method.Path && population > 0 ? int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_UPDATES") ?? "32") : 1;
             if (method == TakeRender.Method.Path)
