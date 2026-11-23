@@ -2310,3 +2310,13 @@ Keep several batches in flight: dispatch each update as soon as its observation 
 Throughput is then the GPU's own (one update in 11–12 ms against 21.3 ms of audio) and no frame carries more than its share.
 It needs `GpuAudio` to own a queue of readbacks (each with its own download buffer) and a source ring that retains every pending batch's input, and `TakeRender.Live` to track a queue of batches instead of one; the GPU-side order of the tracer's per-update uploads must be checked for every buffer the batches share.
 A second, independent saving: the audio and denoiser cost about 2 ms per source per update whatever the population (4.0–4.6 ms for two sources), so a second source costs the station half its tracer budget.
+
+### (d) The old transports removed
+
+The hybrid renderer, the energy method and the pressure method are removed with their kernels, settings, checks and offline tools (commits f430c13, d69fecf, 547803b, 25d0ede; about 14,600 lines deleted, 1,300 added).
+The path method is the only raytraced renderer; the CPU direct-sound transport stays as the reference of the DSP checks, and the scoreboard keeps the removed methods' stored runs.
+[docs/method.md](../../method.md) describes the method as it now is.
+- **Histograms.** Trimming the dead HLSL out of the walk's includes changed the static histograms in their last bits (SHA-256 407F2A3B… → 6175A115… for the full solve, 1C01E5D5… → 27FD8A63… for persistent rays): about half the cells differ, by at most 3 × 10⁻⁸ of the largest cell, with identical totals and contribution counts. It is the compiled code again (parts 24, 40 and 44): the old shader files with the new C# reproduce the old hashes. Every analytic check passes.
+- **Checks dropped with the energy method.** `MethodsAgreeOnSoundScatteredOutsideAHole` compared the two methods with no analytic reference; the leak check keeps its two unbiasedness assertions.
+- **Rain.** Plane sources (the Church's rain) rendered only through the hybrid renderer; a take now leaves them out with one warning.
+- **The 2D rooms** (Big Room, SmollRoom) are kept as scenes but no longer play raytraced audio: the path method is 3D only. They can be removed.

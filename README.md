@@ -1,5 +1,7 @@
 # Acoustic ray tracing
 
+**How it works:** [docs/method.md](docs/method.md) (the method, with its derivations, validation and cost) and [docs/writeup.md](docs/writeup.md) (a blog-style write-up). The lab notebook behind them is [docs/benchmarks/path-denoise-2026-11-12](docs/benchmarks/path-denoise-2026-11-12/README.md).
+
 Unity **6000.4.1f1 (Unity 6.4)**, C# and HLSL. The renderer runs the persistent-ray path method ([docs/method.md](docs/method.md)) in 3D, live and offline, with a CPU direct-sound reference in 2D and 3D. Compact station recordings retain inputs/events and the matching scene/code identity.
 
 **Implemented now:** editable 3D station and church with asset/voice sources and a binaural listener, train service with station stops and walking aboard, sliding door and walkthrough controls, strict take capture, live directional spectral monitoring, pose replay/scrubbing, CPU/HLSL direct solvers for 2D/3D, offline WAV/response export, bounded asynchronous GPU batches, captured output PCM/timing, configurable fractional-delay FIR, binaural headphone rendering, and a native comparison window with synchronized audio, plots and recorded scene views. Live and offline share interpolation, the source timeline and scheduling. Raytraced DSP has a GPU implementation and a selectable CPU reference. The direct/opaque baseline runs on the CPU. The path method traces reflections, scattering, transmission/refraction, material/air attenuation and UTD edge diffraction on the GPU, with per-arrival head orientation.
