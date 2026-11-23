@@ -17,6 +17,7 @@ using UnityEngine;
 //   ACOUSTIC_CHURCH_LEVELS_POPULATION=N        Path: persistent rays, N in flight (1,024-sample updates); per point a warm-up,
 //                                              then ACOUSTIC_CHURCH_LEVELS_UPDATES (default 32) updates, each one entry of the point
 //   ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY=1        Path: beams only (settings.pathBeamsOnly)
+//   ACOUSTIC_CHURCH_LEVELS_WALK_DIFFRACTION=1  Path: diffraction as a walk event (settings.pathWalkDiffraction)
 // Each variant solves with 8,192 rays and a 2 s horizon, air absorption on, with the method's defaults.
 // Output per variant, point and band: energy in [0, 50 ms), [50, 200 ms), [200 ms, 2 s) after emission.
 public partial class TakeChecks
@@ -71,6 +72,7 @@ public partial class TakeChecks
             if (method == TakeRender.Method.Path)
             {
                 settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_BEAMS_ONLY") == "1";
+                settings.pathWalkDiffraction = Environment.GetEnvironmentVariable("ACOUSTIC_CHURCH_LEVELS_WALK_DIFFRACTION") == "1";
                 if (population > 0) { settings.pathPersistent = true; settings.pathPopulation = population; settings.responseStepSamples = 1024; }
             }
             using var solver = new TransportSolver(scene, take.Geometry, settings, RequireGpu(), sampleRate: take.Metadata.sampleRate);

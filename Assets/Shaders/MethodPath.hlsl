@@ -30,6 +30,7 @@
 float PathBin0, PathRatio;
 uint PathFineBins, PathBins, PathCountBase, PathCountCells, PathAudio;
 uint PathProfileFlags; // profiling only: skips bit 0 histogram writes, 2 straight connections, 3 edge connections; bit 4 traces every blocked connection;
+                      // walk diffraction: bit 17 skips the candidates past a hit, bit 18 the whole candidate search (their share of the time);
                       // diagnostics (docs/benchmarks/path-denoise-2026-11-12, part 6): bit 5 stops rays (and zeroes branches) that refract into a medium
                       // outside a partition, counted as nonFinite; bit 10 draws small transmissions instead of keeping reservoir branches; bit 14 keeps
                       // only unobstructed straight connections; bit 15 traces every walk segment twice (the traversal's share)
@@ -519,7 +520,7 @@ struct PathRay // float4 fields only (160 bytes), so that every backend lays it 
     float4 plane;                 // the latest event's plane, outgoing side (beams): normal, offset
     float4 scalars;               // survival, chain's unfolded length, chain's origin time, distance since the segment's start
     uint4 meta;                   // reflections | flags << 24 (1 in a branch, 2 the segment's beam is scored, 4 at a surface: trace from zero distance) | chain kind << 27, medium, rng, events
-    float4 motion;                // x: the delay rate accumulated so far (the rate channel), yzw unused
+    float4 motion;                // x: the delay rate accumulated so far (the rate channel); yzw walk diffraction's walkPhiIn, walkM, walkMeta
 };
 RWStructuredBuffer<PathRay> PathRays;  // [pair][pool 2][PathCapacity]
 RWStructuredBuffer<uint> PathLive;     // [pair][pool 2]: rays in each pool; then [pair]: rays dropped by overflow, ever
@@ -720,6 +721,242 @@ void PathRing(uint index)
     if (i < PathRingSlots * 3 * PathBins) { MethodOutput[2 * (PathRateRingBase + i)] = 0; MethodOutput[2 * (PathRateRingBase + i) + 1] = 0; }
 }
 
+#if PATH_WALK_EDGE
+// Walk diffraction (settings.pathWalkDiffraction; docs/benchmarks/bass-and-diffraction-2026-11-22/README-part-b.md): edge
+// diffraction as an event of the walk, in place of the source's edge rays and every edge connection.
+//  * Deposit. A ray piece of flux Phi whose line passes an edge at offset rho and angle gamma deposits Phi K1(rho) / sin(gamma)
+//    at its closest point on the edge, K1 = sqrt(2 / (pi w^2)) exp(-2 rho^2 / w^2) the beam kernel's 1-D marginal,
+//    w^2 = lambda L / pi, L the chain's unfolded length to that point: summed over rays, the incident intensity per unit
+//    edge length. The whole kernel counts: a ray that hits a plane containing one of the edge's faces before its closest
+//    approach deposits with its line extended past the hit (those edges are listed per plane, PathPlaneEdge*), and a ray
+//    whose latest event was on such a plane deposits nothing on that edge (UTD's reflection-boundary terms already
+//    diffract the reflected field).
+//  * Grazing. With the chain's origin on one of the edge's faces only the rays on its open side exist: the deposit
+//    counts twice (the rigid face's image) and |D|^2 a quarter (Kouyoumjian and Pathak's grazing factor 1/2).
+//  * The diffracted ray leaves the closest point on Keller's cone of the incidence from the chain's origin (p - d *
+//    travelled: the source, a scattering point, an edge, or their image), its azimuth uniform over the exterior angle,
+//    with flux deposit x angle and no D yet. Its first segment is scored at the listener by the beam kernel (width
+//    from the edge) times |D|^2 sin^2(beta) at the listener's own azimuth and distance, so the kernel only estimates the
+//    ray tube's spreading; a deposit of that segment on a second edge takes D of the first at the second's point. If it
+//    hits a surface and goes on, it takes D at its own azimuth with the distance to the hit. UTD's transition terms keep
+//    part 11's beam weights, term by term where the term's boundary exists (PathWalkD).
+//  * Sampling: splitting. The ray goes on undiffracted with its full weight and every deposit is a candidate of a
+//    one-slot weighted reservoir per ray (as the transmitted branches); the kept one becomes a diffracted ray of its own
+//    when the ray ends (persistent rays: when the update ends), carrying the summed weight. (A choice per piece between
+//    diffracting, probability q, and going on with weight 1 / (1 - q) leaves the undiffracted ray a weight (1 - q)^-n
+//    with probability (1 - q)^n after n pieces that pass an edge.) The proposal weight is the deposit times the angle
+//    and UTD's scale 1 / (8 pi k) at 125 Hz (per D not yet applied), so the slot's sum is an energy for the roulette.
+// A diffracted ray's first segment carries its edge's state in walkMeta (edge | grazing << 24 | reflected beam << 25 |
+// first segment << 26), walkPhiIn and walkM (incidence azimuth, incident length); persistent rays keep it in motion.yzw.
+static const float PathWalkTolerance = 4 * RayEpsilon; // a point lies in a plane
+// Per plane (PathPrimitivePlane: the coplanar faces of one object), the edges with a face in it: the candidates past a
+// hit on that plane.
+StructuredBuffer<uint> PathPrimitivePlane;
+StructuredBuffer<uint2> PathPlaneEdgeRanges;
+StructuredBuffer<uint> PathPlaneEdgeIndices;
+static const uint PathWalkGrazing = 1u << 24, PathWalkBeam = 2u << 24, PathWalkFirst = 4u << 24;
+// The plane (normal, offset) is that of the face of normal n through the edge point a.
+bool PathWalkOnPlane(float4 plane, float3 a, float3 n) { return abs(dot(plane.xyz, n)) > .99999 && abs(dot(plane.xyz, a) - plane.w) < PathWalkTolerance; }
+struct PathWalkRay
+{
+    float3 p, d, origin;
+    float travelled, tau, survival;
+    float reach, limit;       // the piece is [0, reach); the horizon's distance
+    uint hitPlane;            // past a hit at `reach`: its plane's edges (PathPrimitivePlane), else 0xffffffff
+    float4 plane;             // the latest event's plane (normal, offset)
+    float4 low, high;         // Phi0 C / Q per band
+    float flux;               // their largest
+    uint meta; bool beam;     // walkMeta (a diffracted ray's first segment); the chain is a reflected beam
+    float phiIn, m;
+};
+struct PathWalkSlot           // the kept candidate (its flux per band is made once, at launch: PathWalkLaunch)
+{
+    float sum, tau, survival;
+    float3 e, q;              // the edge point; the ray's closest point (visibility; q = e: none needed)
+    float4 low, high;         // the passing ray's Phi0 C / Q per band
+    float t, rho2, w20, sinGamma, weight; // closest approach, offset^2, the widest band's w^2, sin(gamma), proposal weight
+    float phiIn, m, cosBeta;  // incidence azimuth, incident length, cosine of Keller's cone
+    uint meta, count;         // edge | grazing | beam; deposits made (counter)
+    uint previous; float previousPhiIn, previousM; float3 previousD, previousE; // a diffracted ray's first segment: its edge's D
+};
+// PathUtdEnergy with a weight ratio per term (incident-boundary terms first; 0: unweighted). (A function of its own: the
+// static walks compile PathUtdEnergy as before, so that their outputs stay bit-identical, part 44.)
+float PathWalkUtd(float n, float phiIn, float phiOut, float sinBeta, float k, float distance, float4 ratios)
+{
+    float2 sum = 0;
+    [unroll] for (uint i = 0; i < 4; i++)
+    {
+        float sign = (i & 1) == 0 ? 1 : -1, x = i < 2 ? phiOut - phiIn : phiOut + phiIn;
+        float argument = (RayPi + sign * x) / (2 * n);
+        if (abs(sin(argument)) < 1e-5) { x += sign * 4e-5 * n; argument = (RayPi + sign * x) / (2 * n); }
+        float N = round((x + sign * RayPi) / (2 * RayPi * n)), c = cos(n * RayPi * N - .5 * x), X = k * distance * 2 * c * c;
+        float weight = ratios[i] <= 0 ? 1 : 1 - exp(-2 * X * ratios[i]);
+        sum += weight * (cos(argument) / sin(argument)) * UtdTransition(X);
+    }
+    return dot(sum, sum) / (8 * RayPi * k * n * n * sinBeta * sinBeta);
+}
+// |D|^2 sin^2(beta) of a diffracted ray's edge toward azimuth phiOut at distance s (UTD distance s m sin^2 / (s + m), m the
+// incident length), with the edge's opacity, the diffraction factor and the grazing factor, all squared.
+// Part 11's beam weights, term by term, only where the term's boundary lies in the wedge's exterior (otherwise no traced
+// field has a boundary there for the beams to smooth): terms 0 and 1 (the shadow boundaries at phi' - pi and phi' + pi)
+// where the incident field is a reflected beam, terms 2 and 3 (the reflection boundaries of face n at 2 angle - pi - phi'
+// and of face 0 at pi - phi') always. At grazing incidence the face's reflected field is the incident field itself (no
+// reflected beam is traced): its reflection term takes the coinciding shadow-boundary term's weight.
+float PathWalkD(uint meta, float angle, float phiIn, float m, float phiOut, float sinBeta, float s, uint band)
+{
+    if (!(phiOut <= angle)) return 0;
+    float ratio = s / m, s2 = sinBeta * sinBeta, opacity = MethodEdgeOpacity(meta & 0xffffff, band);
+    bool beam = (meta & PathWalkBeam) != 0;
+    float4 ratios = ratio * float4(beam && phiIn >= RayPi, beam && phiIn <= angle - RayPi, phiIn >= angle - RayPi, phiIn <= RayPi);
+    if ((meta & PathWalkGrazing) != 0) { if (phiIn < .5 * angle) ratios.w = ratios.y; else ratios.z = ratios.x; }
+    return PathWalkUtd(angle / RayPi, phiIn, phiOut, sinBeta, MethodWavenumber(band), s * m / (s + m) * s2, ratios) * s2 *
+           opacity * opacity * DiffractionFactor * DiffractionFactor * ((meta & PathWalkGrazing) != 0 ? .25 : 1);
+}
+// One edge against the ray piece (beyond: past its hit, the edge in the hit's plane): its deposit, offered to the slot.
+void PathWalkConsider(uint edge, PathWalkRay r, bool beyond, inout uint rng, inout PathWalkSlot slot)
+{
+    if ((r.meta & PathWalkFirst) != 0 && edge == (r.meta & 0xffffff)) return; // (the diffracted ray's own edge)
+    float3 a, u, f, nn; float extent, angle;
+    EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
+    float b = dot(r.d, u), sin2 = 1 - b * b;
+    if (sin2 < 1e-6) return;
+    float3 w0 = r.p - a;
+    float dd = dot(w0, r.d), ee = dot(w0, u), t = (b * ee - dd) / sin2, z = (ee - b * dd) / sin2;
+    if (t <= RayEpsilon || (t >= r.reach) != beyond || t >= r.limit || z < 0 || z > extent) return;
+    float3 e = a + u * z, q = r.p + r.d * t, gap = q - e;
+    float rho2 = dot(gap, gap), w20 = SpeedOfSound / MethodBandHz(0) * (r.travelled + t) / RayPi;
+    if (rho2 > 9 * w20) return; // beyond three widths of the widest band (exp(-18))
+    float3 f1 = f * cos(angle) + nn * sin(angle), n1 = nn * cos(angle) - f * sin(angle);
+    if ((PathWalkOnPlane(r.plane, a, nn) || PathWalkOnPlane(r.plane, a, n1)) && abs(dot(r.plane.xyz, r.origin) - r.plane.w) >= PathWalkTolerance) return;
+    float3 o = r.origin - a, incident = e - r.origin;
+    float m = length(incident);
+    if (m <= RayEpsilon) return;
+    incident /= m;
+    bool on0 = abs(dot(o, nn)) < PathWalkTolerance && dot(o, f) > 0, on1 = abs(dot(o, n1)) < PathWalkTolerance && dot(o, f1) > 0, grazing = on0 || on1;
+    // (a thin sheet has both faces in one plane: the side the ray passes on)
+    float phiIn = grazing ? (on0 && (!on1 || dot(gap, nn) >= 0) ? 0 : angle) : TunedEdgeAngle(-incident, f, nn, angle);
+    if (phiIn > angle) return; // an origin behind a face (an image): no incidence from the wedge's exterior
+    float sinGamma = sqrt(sin2), scale = 1 / (8 * RayPi * MethodWavenumber(0));
+    float weight = r.flux * sqrt(2 / (RayPi * w20)) * exp(-2 * rho2 / w20) / sinGamma * angle * (grazing ? 2 : 1) * scale * ((r.meta & PathWalkFirst) != 0 ? scale : 1);
+    if (!(weight > 0) || !isfinite(weight)) return;
+    slot.count++;
+    slot.sum += weight;
+    if (RandomRay(rng) * slot.sum >= weight) return;
+    slot.low = r.low; slot.high = r.high; slot.t = t; slot.rho2 = rho2; slot.w20 = w20; slot.sinGamma = sinGamma; slot.weight = weight;
+    slot.previous = r.meta; slot.previousPhiIn = r.phiIn; slot.previousM = r.m; slot.previousD = r.d; slot.previousE = r.origin;
+    slot.e = e; slot.q = t >= r.reach ? e : q; slot.tau = r.tau + t * MethodSlowness(AirMedium); slot.survival = r.survival;
+    slot.phiIn = phiIn; slot.m = m; slot.cosBeta = dot(incident, u);
+    slot.meta = edge | (grazing ? PathWalkGrazing : 0) | (r.beam ? PathWalkBeam : 0);
+}
+#ifdef USE_BVH
+// Every edge whose first face is in a mesh-tree leaf whose box, padded by `radius`, the piece [0, length] crosses (a
+// superset of the edges within `radius` of it), each once.
+void PathWalkMesh(uint root, State pose, PathWalkRay r, float span, float radius, inout uint rng, inout PathWalkSlot slot)
+{
+    float4 inverse = pose.rotation; inverse.xyz = -inverse.xyz;
+    float3 o = Rotate(inverse, r.p - pose.position.xyz), d = Rotate(inverse, r.d);
+    float3 inv = float3(SafeInverse(d.x), SafeInverse(d.y), SafeInverse(d.z));
+    BvhNode top = BvhNodes[root];
+    float3 extent = max(abs(top.boundsMin.xyz), abs(top.boundsMax.xyz)), at = abs(pose.position.xyz), from = abs(r.p);
+    float pad = radius + 16 * 1.1920929e-7 * (1 + max(at.x, max(at.y, at.z)) + 4 * max(extent.x, max(extent.y, extent.z)) + max(from.x, max(from.y, from.z)));
+    uint stack[32], depth = 0, index = root;
+    float entry;
+    while (true)
+    {
+        BvhNode node = BvhNodes[index];
+        if (LocalBox(node, o, inv, span, pad, false, entry))
+        {
+            if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
+            for (uint leaf = 0; leaf < node.links.w; leaf++)
+            {
+                uint primitive = BvhIndices[node.links.z + leaf];
+                uint2 range = EdgeRanges[primitive];
+                for (uint i = 0; i < range.y; i++)
+                {
+                    uint edge = EdgeIndices[range.x + i];
+                    if (Edges[edge].ids.y == primitive) PathWalkConsider(edge, r, false, rng, slot);
+                }
+            }
+        }
+        if (depth == 0) break;
+        index = stack[--depth];
+    }
+}
+// The candidate edges of a piece through the scene's trees: the piece [0, reach) with the radius of three widths at its
+// far end, clipped to the scene's box padded by that radius (no edge point lies outside the box).
+void PathWalkNear(PathWalkRay r, inout uint rng, inout PathWalkSlot slot)
+{
+    if (BvhNodeCount == 0) return;
+    float lambda0 = SpeedOfSound / MethodBandHz(0), span = r.reach, radius = 3 * sqrt(lambda0 * (r.travelled + span) / RayPi);
+    BvhNode root = BvhNodes[0];
+    float3 inv = float3(SafeInverse(r.d.x), SafeInverse(r.d.y), SafeInverse(r.d.z));
+    float3 lo = (root.boundsMin.xyz - radius - r.p) * inv, hi = (root.boundsMax.xyz + radius - r.p) * inv;
+    float3 near3 = min(lo, hi), far3 = max(lo, hi);
+    float enter = max(max(near3.x, near3.y), max(near3.z, 0)), leave = min(min(far3.x, far3.y), far3.z);
+    if (leave < enter) return;
+    span = min(span, leave); radius = 3 * sqrt(lambda0 * (r.travelled + span) / RayPi);
+    uint stack[32], depth = 0, index = 0;
+    while (index < BvhNodeCount)
+    {
+        BvhNode node = BvhNodes[index];
+        node.boundsMin.xyz -= radius; node.boundsMax.xyz += radius;
+        if (BoundsHit(node, r.p, r.d * span, false))
+        {
+            if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
+            State pose = States[MethodState + node.links.z];
+            if ((pose.flags.x & 3) == 3) PathWalkMesh(node.links.x, pose, r, span, radius, rng, slot);
+        }
+        if (depth == 0) break;
+        index = stack[--depth];
+    }
+}
+#else
+void PathWalkNear(PathWalkRay r, inout uint rng, inout PathWalkSlot slot)
+{
+    [loop] for (uint edge = 0; edge < MethodEdgeCount; edge++) PathWalkConsider(edge, r, false, rng, slot);
+}
+#endif
+// Every candidate of a piece: near it (PathWalkNear), and past its hit those of the hit's plane (each edge passes the
+// three-width test against its own closest approach, so no length bound is needed past the hit).
+void PathWalkEdges(PathWalkRay r, inout uint rng, inout PathWalkSlot slot)
+{
+    PathWalkNear(r, rng, slot);
+    if (r.hitPlane == 0xffffffff) return;
+    uint2 range = PathPlaneEdgeRanges[r.hitPlane];
+    [loop] for (uint i = 0; i < range.y; i++) PathWalkConsider(PathPlaneEdgeIndices[range.x + i], r, true, rng, slot);
+}
+// The slot's candidate as a diffracted ray leaving its edge point: direction on Keller's cone (uniform azimuth), flux.
+// Its flux per band: the deposit Phi K1(rho) / sin(gamma) (air absorption to the closest point) times the angle, the
+// grazing image's 2, and D of a diffracted ray's first segment at this point, over the proposal weight, times the slot's
+// sum over the roulette's keep.
+bool PathWalkLaunch(PathWalkSlot slot, float keep, inout uint rng, out float3 d, out float4 low, out float4 high)
+{
+    float3 a, u, f, nn; float extent, angle;
+    EdgeFrame(slot.meta & 0xffffff, MethodState, false, a, u, f, nn, extent, angle);
+    float sinBeta = sqrt(max(0, 1 - slot.cosBeta * slot.cosBeta)), phi = RandomRay(rng) * angle;
+    d = normalize(u * slot.cosBeta + sinBeta * (f * cos(phi) + nn * sin(phi)));
+    bool first = (slot.previous & PathWalkFirst) != 0;
+    float3 pa = 0, pu = 0, pf = 0, pn = 0; float pextent = 0, pangle = 1, phiAt = 0, sinPrevious = 1;
+    if (first)
+    {
+        EdgeFrame(slot.previous & 0xffffff, MethodState, false, pa, pu, pf, pn, pextent, pangle);
+        float pb = dot(slot.previousD, pu);
+        sinPrevious = sqrt(max(0, 1 - pb * pb)); phiAt = TunedEdgeAngle(slot.e - slot.previousE, pf, pn, pangle);
+    }
+    low = 0; high = 0;
+    [loop] for (uint k = 0; k < MethodBands; k++)
+    {
+        float4 lane = float4((k & 3) == uint4(0, 1, 2, 3));
+        float w2 = slot.w20 / (float)(1u << k);
+        float value = dot(k < 4 ? slot.low : slot.high, lane) * exp(-2 * MethodLoss(AirMedium, k) * slot.t) * sqrt(2 / (RayPi * w2)) * exp(-2 * slot.rho2 / w2) /
+                      slot.sinGamma * angle * ((slot.meta & PathWalkGrazing) != 0 ? 2 : 1) / slot.weight * (slot.sum / keep);
+        if (first) value *= PathWalkD(slot.previous, pangle, slot.previousPhiIn, slot.previousM, phiAt, sinPrevious, slot.m, k);
+        if (k < 4) low += value * lane; else high += value * lane;
+    }
+    return sinBeta > 1e-4 && Visible(MethodState, slot.q, slot.e, false);
+}
+#endif
+
 // One flat loop; every heavy helper has a single call site. Each iteration either deposits the
 // pending contribution, makes one connection, or traces one segment (or, persistent, the part of it
 // that fits in the update).
@@ -762,6 +999,12 @@ void TracePath(uint index)
     MethodAnchor c = v;
     // Ray 0 makes the source's straight connection for every ray (it is deterministic).
     bool connectListener = ray == 0, connectEdge = PathBeamsOnly == 0, hasPending = false;
+#if PATH_WALK_EDGE
+    connectEdge = false; // (walk diffraction: no edge connections)
+    uint walkMeta = 0; float walkPhiIn = 0, walkM = 1; // a diffracted ray's first segment ("Walk diffraction")
+    PathWalkSlot walkSlot = (PathWalkSlot)0;
+    bool walkQueued = false; float3 walkD = 0; float4 walkLow = 0, walkHigh = 0; // (launched: its direction and flux)
+#endif
     float listenerScale = MethodTotalRays / launch, pendingTime = 0; // (the source's exact connection: launch cancels)
     // Delay rates (the rate channel): the ray's rho so far (-ln of its frequency ratio, "Delay rates" above), and for the
     // walk's vertex v and the connections' anchor c theirs up to and including the incoming leg and their point's
@@ -804,6 +1047,9 @@ void TracePath(uint index)
         rho = r.motion.x;
 #endif
         inBranch = (r.meta.x & (1u << 24)) != 0; scored = (r.meta.x & (2u << 24)) != 0;
+#if PATH_WALK_EDGE
+        walkPhiIn = r.motion.y; walkM = r.motion.z; walkMeta = asuint(r.motion.w);
+#endif
         offSurface = (r.meta.x & (4u << 24)) != 0;
         connectListener = false; connectEdge = false; travelling = true;
     }
@@ -828,6 +1074,30 @@ void TracePath(uint index)
             PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead);
 #endif
         }
+#if PATH_WALK_EDGE
+        if ((done || suspending) && walkSlot.sum > 0)
+        {
+            // The kept diffraction candidate becomes a diffracted ray (after roulette on its summed weight, as a branch): this
+            // ray, once it has ended, or a ray of its own queued after the loop when this one stops for the update.
+            float keepWalk = min(1, walkSlot.sum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+            walkQueued = RandomRay(rng) < keepWalk;
+            if (walkQueued) walkQueued = PathWalkLaunch(walkSlot, keepWalk, rng, walkD, walkLow, walkHigh);
+            walkSlot.sum = 0;
+            if (!suspending)
+            {
+                if (!walkQueued) continue; // (the next iteration takes the transmitted branch, if any)
+                walkQueued = false;
+                d = walkD;
+                [unroll] for (uint kw0 = 0; kw0 < MethodBands; kw0++) { float4 lane = float4((kw0 & 3) == uint4(0, 1, 2, 3)); Phi0[kw0] = dot(kw0 < 4 ? walkLow : walkHigh, lane); C[kw0] = 1; }
+                p = walkSlot.e; tau = walkSlot.tau; medium = AirMedium; Q = 1; survival = walkSlot.survival;
+                chain = PathStart(2, tau); chain.edge = walkSlot.meta & 0xffffff;
+                walkMeta = walkSlot.meta | PathWalkFirst; walkPhiIn = walkSlot.phiIn; walkM = walkSlot.m;
+                plane = float4(d, -1e30); offSurface = false; scored = false; sinceStart = 0;
+                fluxPending = false; travelling = true; done = false; inBranch = true;
+                MethodCount(CounterEdgeEvents);
+            }
+        }
+#endif
         if (suspending) break;
         if (connectListener)
         {
@@ -858,6 +1128,9 @@ void TracePath(uint index)
         }
         if (done)
         {
+#if PATH_WALK_EDGE
+            walkMeta = 0;
+#endif
             if (!(branchSum > 0)) break;
             // Trace the kept transmitted branch from its surface, after roulette on its share of a
             // source ray's flux (4 pi r_ref^2).
@@ -877,6 +1150,9 @@ void TracePath(uint index)
         {
             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
             bool edgeRays = edges && v.kind == 0 && METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
+#if PATH_WALK_EDGE
+            edgeRays = false; // (walk diffraction: no edge rays from the source)
+#endif
             bool viaEdge = edgeRays && RandomRay(rng) < MethodEdgeProbability;
             [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) C[k3] = 1;
             medium = v.medium;
@@ -965,7 +1241,11 @@ void TracePath(uint index)
         // (Never stop within a few RayEpsilon of the hit: the resumed trace starts RayEpsilon out and would miss it.)
         bool ends = advance >= segment - 4 * RayEpsilon;
         float along = dot(L - p, d);
-        if (!scored && (along < advance || ends) && (chain.reflections >= 1 || (PathBeamsOnly != 0 && chain.kind != 0)) && medium == AirMedium && airListener && dot(L, plane.xyz) > plane.w)
+        if (!scored && (along < advance || ends) && (chain.reflections >= 1 || (PathBeamsOnly != 0 && chain.kind != 0)
+#if PATH_WALK_EDGE
+            || (walkMeta & PathWalkFirst) != 0 // (a diffracted ray's first segment, in either mode)
+#endif
+            ) && medium == AirMedium && airListener && dot(L, plane.xyz) > plane.w)
         {
             // Beam kernel at the listener of the ray's unfolded line (this segment extended): each prefix of the
             // chain (one listener image) is scored once, by its own segment, whether or not the closest approach
@@ -987,12 +1267,27 @@ void TracePath(uint index)
             {
                 float4 sumLow = 0, sumHigh = 0;
                 float extra = lu - chain.travelled; // unfolded distance from here to the listener image
+#if PATH_WALK_EDGE
+                // A diffracted ray's first segment: |D|^2 sin^2(beta) at the listener's own azimuth and distance.
+                bool walkScore = (walkMeta & PathWalkFirst) != 0;
+                float walkAngle = 1, walkPhiL = 0, walkSinBeta = 1;
+                if (walkScore)
+                {
+                    float3 wa, wu, wf, wn; float wextent;
+                    EdgeFrame(walkMeta & 0xffffff, MethodState, false, wa, wu, wf, wn, wextent, walkAngle);
+                    float cb = dot(d, wu);
+                    walkSinBeta = sqrt(max(0, 1 - cb * cb)); walkPhiL = TunedEdgeAngle(L - (p - d * chain.travelled), wf, wn, walkAngle);
+                }
+#endif
                 [unroll] for (uint kb = 0; kb < MethodBands; kb++)
                 {
                     float4 lane = float4((kb & 3) == uint4(0, 1, 2, 3));
                     float w2 = w20 / (float)(1u << kb);
                     float value = Phi0[kb] * C[kb] / Q * 2 / (RayPi * w2) * exp(-2 * rho2 / w2) / (1 - exp(-2 * clearance * clearance / w2)) *
                                   exp(-2 * MethodLoss(AirMedium, kb) * extra);
+#if PATH_WALK_EDGE
+                    if (walkScore) value *= PathWalkD(walkMeta, walkAngle, walkPhiIn, walkM, walkPhiL, walkSinBeta, lc, kb);
+#endif
                     if (kb < 4) sumLow += value * lane; else sumHigh += value * lane;
                 }
                 if (dot(sumLow + sumHigh, 1) > 0)
@@ -1005,6 +1300,22 @@ void TracePath(uint index)
                 }
             }
         }
+#if PATH_WALK_EDGE
+        if (edges && medium == AirMedium && (PathProfileFlags & 262144) == 0)
+        {
+            // Walk diffraction: this piece's deposits on the edges (past a hit, in the hit's plane), offered to the slot.
+            PathWalkRay wr;
+            wr.p = p; wr.d = d; wr.origin = p - d * chain.travelled; wr.travelled = chain.travelled; wr.tau = tau; wr.survival = survival;
+            wr.reach = ends ? segment : advance; wr.limit = limit;
+            wr.hitPlane = ends && found && (PathProfileFlags & 131072) == 0 ? PathPrimitivePlane[hit] : 0xffffffff;
+            wr.plane = plane; wr.flux = 0;
+            [unroll] for (uint kc = 0; kc < MethodBands; kc++) wr.flux = max(wr.flux, Phi0[kc] * C[kc] / Q);
+            wr.low = float4(Phi0[0] * C[0], Phi0[1] * C[1], Phi0[2] * C[2], Phi0[3] * C[3]) / Q;
+            wr.high = float4(Phi0[4] * C[4], Phi0[5] * C[5], Phi0[6] * C[6], Phi0[7] * C[7]) / Q;
+            wr.meta = walkMeta; wr.beam = chain.reflections >= 1; wr.phiIn = walkPhiIn; wr.m = walkM;
+            PathWalkEdges(wr, rng, walkSlot);
+        }
+#endif
         if (!found) { MethodCount(CounterEscapes); done = true; continue; }
         if (!ends)
         {
@@ -1015,6 +1326,17 @@ void TracePath(uint index)
             offSurface = offSurface && advance <= 0; // still at the surface if it has not moved
             continue;
         }
+#if PATH_WALK_EDGE
+        if ((walkMeta & PathWalkFirst) != 0)
+        {
+            // A diffracted ray going on past its first hit: D at its own azimuth, UTD's distance to the hit.
+            float3 wa, wu, wf, wn; float wextent, wangle;
+            EdgeFrame(walkMeta & 0xffffff, MethodState, false, wa, wu, wf, wn, wextent, wangle);
+            float cb = dot(d, wu), sinBeta = sqrt(max(0, 1 - cb * cb)), phiOut = TunedEdgeAngle(d, wf, wn, wangle);
+            [loop] for (uint kw1 = 0; kw1 < MethodBands; kw1++) Phi0[kw1] *= PathWalkD(walkMeta, wangle, walkPhiIn, walkM, phiOut, sinBeta, chain.travelled + distance, kw1);
+            walkMeta = 0;
+        }
+#endif
         p += d * distance; tau += distance * MethodSlowness(medium); chain.travelled += distance;
         [unroll] for (uint k7 = 0; k7 < MethodBands; k7++) C[k7] *= exp(-2 * MethodLoss(medium, k7) * distance);
         float3 n = dot(d, normal) < 0 ? normal : -normal;
@@ -1051,6 +1373,9 @@ void TracePath(uint index)
             cRate = rateIn; cVelocity = hitVelocity;
 #endif
             connectListener = connectEdge = PathBeamsOnly == 0;
+#if PATH_WALK_EDGE
+            connectEdge = false;
+#endif
         }
         float total = mT + mD + mS;
         if (!(total > 0)) { done = true; continue; }
@@ -1175,6 +1500,9 @@ void TracePath(uint index)
     }
     InterlockedMax(MethodStats[MethodBands * MethodDepths * MethodStatStride + CounterLongestChain], iterations);
     MethodCount(CounterIterations, iterations);
+#if PATH_WALK_EDGE
+    MethodCount(CounterEdgeConnections, walkSlot.count); // (walk diffraction: deposits offered to the slot)
+#endif
     // Persistent: keep the stopped ray, and queue its branch reservoir as a ray of its own (writes after the
     // loop: on Metal, buffer writes inside a [loop] just before a return were dropped, part 14).
     if (suspending)
@@ -1189,6 +1517,9 @@ void TracePath(uint index)
         r.motion = float4(rho, 0, 0, 0);
 #else
         r.motion = 0; // (traced while nothing moved: no rate)
+#endif
+#if PATH_WALK_EDGE
+        r.motion = float4(0, walkPhiIn, walkM, asfloat(walkMeta));
 #endif
         PathKeep(r);
         float keepBranchRay = min(1, branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
@@ -1208,6 +1539,19 @@ void TracePath(uint index)
 #endif
             PathKeep(r);
         }
+#if PATH_WALK_EDGE
+        // The update's kept diffraction candidate, launched in the loop, queued as a diffracted ray of its own (as the branch above).
+        if (walkQueued)
+        {
+            MethodCount(CounterEdgeEvents);
+            r.position = float4(walkSlot.e, walkSlot.tau); r.direction = float4(walkD, target);
+            r.phiLow = walkLow; r.phiHigh = walkHigh; r.wLow = 1; r.wHigh = 1;
+            r.plane = float4(walkD, -1e30); r.scalars = float4(walkSlot.survival, 0, walkSlot.tau, 0);
+            r.meta = uint4(1u << 24 | (2u << 27), AirMedium, HashRay(rng ^ 0x1b873593u), events);
+            r.motion = float4(0, walkSlot.phiIn, walkSlot.m, asfloat(walkSlot.meta | PathWalkFirst));
+            PathKeep(r);
+        }
+#endif
     }
 }
 

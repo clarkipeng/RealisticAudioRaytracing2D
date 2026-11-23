@@ -13,11 +13,12 @@ using UnityEngine;
 //   ACOUSTIC_PATH_PROFILE_PERSISTENT=1        persistent rays (settings.pathPersistent): updates of about 23.2 ms
 //                                             (1,024 samples at 44.1 kHz), the time of one update after a horizon of
 //                                             them; also the rays in flight and the ray state's memory
-//   ACOUSTIC_PATH_PROFILE_BEAMS_ONLY=1        with persistent rays: the beams-only mode (settings.pathBeamsOnly)
+//   ACOUSTIC_PATH_PROFILE_BEAMS_ONLY=1        the beams-only mode (settings.pathBeamsOnly)
+//   ACOUSTIC_PATH_PROFILE_WALK_DIFFRACTION=1  diffraction as a walk event (settings.pathWalkDiffraction)
 //   ACOUSTIC_PATH_PROFILE_POPULATION=1          with persistent rays: the RAYS list is the rays in flight N (settings.pathPopulation)
 // For each scene, variants (ACOUSTIC_PATH_PROFILE_FLAGS, ProfileFlags) with a fence after every phase:
 // edge distribution and clearance, walk, readback. The "connect" field is zero since the beams replaced
-// the chain connections. "candidates" is the most loop iterations of one thread in one dispatch (the walk's
+// the chain connections. "edgeConnections" is counter 10 (walk diffraction: the deposits offered). "candidates" is the most loop iterations of one thread in one dispatch (the walk's
 // serial chain; persistent: the largest over the warm-up's updates), "chains" all iterations (persistent: of
 // the whole warm-up), per pose.
 public partial class TakeChecks
@@ -38,10 +39,11 @@ public partial class TakeChecks
         bool persistent = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_PERSISTENT") == "1";
         void Persist(TakeRender.Settings settings, int rate)
         {
+            settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS_ONLY") == "1";
+            settings.pathWalkDiffraction = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_WALK_DIFFRACTION") == "1";
             if (!persistent) return;
             settings.pathPersistent = true;
             if (Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_POPULATION") == "1") settings.pathPopulation = rays;
-            settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_PROFILE_BEAMS_ONLY") == "1";
             settings.responseStepSamples = Math.Max(1, (int)Math.Round(1024.0 / 44100 * rate / settings.spectralHop)) * settings.spectralHop;
         }
         void Record(string name, TransportSolver solver, AcousticTake.State[] state, Action<int> place, int poses)
@@ -56,14 +58,14 @@ public partial class TakeChecks
             foreach (int flags in flagList)
             {
                 m.ProfileFlags = flags; Array.Clear(m.PhaseSeconds, 0, 4);
-                long events = 0, chains = 0, trials = 0, detections = 0, inFlight = 0;
+                long events = 0, chains = 0, trials = 0, detections = 0, inFlight = 0, deposits = 0;
                 for (int p = 0; p < poses; p++)
                 {
                     place(p); solver.Solve(state, new TakeRender.DirectPath[1]);
-                    events += m.Counter(1); detections += m.Counter(7); chains += m.Counter(8); trials += m.Counter(15); inFlight += m.RaysInFlight();
+                    events += m.Counter(1); detections += m.Counter(7); chains += m.Counter(8); trials += m.Counter(15); inFlight += m.RaysInFlight(); deposits += m.Counter(10);
                     if (m.Counter(9) > 0) Debug.LogWarning($"Path profile {name}: {m.Counter(9)} persistent rays overflowed");
                 }
-                json.Append((flags == flagList[0] ? "" : ",") + FormattableString.Invariant($"{{\"flags\":{flags},\"inFlight\":{inFlight / poses},\"edge\":{m.PhaseSeconds[0] / poses:R},\"walk\":{m.PhaseSeconds[1] / poses:R},\"connect\":{m.PhaseSeconds[2] / poses:R},\"readback\":{m.PhaseSeconds[3] / poses:R},\"events\":{events / poses},\"candidates\":{detections / poses},\"chains\":{chains / poses},\"trials\":{trials / poses}}}"));
+                json.Append((flags == flagList[0] ? "" : ",") + FormattableString.Invariant($"{{\"flags\":{flags},\"inFlight\":{inFlight / poses},\"edge\":{m.PhaseSeconds[0] / poses:R},\"walk\":{m.PhaseSeconds[1] / poses:R},\"connect\":{m.PhaseSeconds[2] / poses:R},\"readback\":{m.PhaseSeconds[3] / poses:R},\"events\":{events / poses},\"candidates\":{detections / poses},\"chains\":{chains / poses},\"trials\":{trials / poses},\"edgeConnections\":{deposits / poses}}}"));
                 Debug.Log($"Path profile {name} flags {flags}: walk {m.PhaseSeconds[1] / poses * 1000:F1} ms, connect {m.PhaseSeconds[2] / poses * 1000:F1} ms, edge {m.PhaseSeconds[0] / poses * 1000:F1} ms, readback {m.PhaseSeconds[3] / poses * 1000:F1} ms");
             }
             m.ProfileFlags = 0; m.Profile = false;

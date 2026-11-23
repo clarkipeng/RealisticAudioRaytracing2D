@@ -10,6 +10,9 @@
 // With the delay rates (MethodPath.hlsl "Delay rates"), dispatched while anything moves (MethodTransport.Doppler).
 #pragma kernel TracePath3DDoppler PATH_DOPPLER
 #pragma kernel TracePath3DBvhDoppler USE_BVH PATH_DOPPLER
+// Diffraction as an event of the walk (settings.pathWalkDiffraction, MethodPath.hlsl "Walk diffraction"); static scenes only.
+#pragma kernel TracePath3DWalk PATH_WALK_EDGE
+#pragma kernel TracePath3DBvhWalk USE_BVH PATH_WALK_EDGE
 #pragma kernel PathEdgeWeights3D
 #pragma kernel PathEdgeWeights3DBvh USE_BVH
 #pragma kernel PathEdgeScan
@@ -42,6 +45,8 @@ StructuredBuffer<uint> PathClearanceRead;
 [numthreads(64,1,1)] void TracePath3DBvh(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DBvhDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DBvhWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(256,1,1)] void PathEdgeScan(uint3 t:SV_GroupThreadID) { EnergyEdgeScan(t.x); }

@@ -107,7 +107,7 @@ internal sealed class MethodTransport : IDisposable
     int traceKernel; readonly int clearKernel, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, outputCount, statsCount, frequencyBins, rate;
     readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, stats;
     ComputeBuffer output; // persistent: reallocated with the ring at the first dispatch (EnsureRing)
-    readonly ComputeBuffer arrivals, arrivalCounts, paths, edgeCdf;
+    readonly ComputeBuffer arrivals, arrivalCounts, paths, edgeCdf, primitivePlanes, planeEdgeRangeBuffer, planeEdgeIndexBuffer;
     ComputeBuffer counts;
     // Path: the rate channel (Doppler, MethodPath.hlsl "Delay rates"): per solve [moment 3][bin] cells, the energy-weighted
     // first and second moments of the contributions' delay rates, after the histograms and the ring in `output`, then
@@ -159,13 +159,15 @@ internal sealed class MethodTransport : IDisposable
         TimeBins = new PathBins(settings);
         Bins = (int)Math.Ceiling(settings.maximumDelaySeconds / BinSeconds - 1e-6);
         string suffix = settings.useBvh ? "Bvh" : "";
-        traceKernel = shader.FindKernel("TracePath3D" + suffix);
+        // Walk diffraction (settings.pathWalkDiffraction, MethodPath.hlsl): its own walks, without the delay rates.
+        bool walk = settings.pathWalkDiffraction;
+        traceKernel = shader.FindKernel("TracePath3D" + suffix + (walk ? "Walk" : ""));
         clearKernel = shader.FindKernel("PathClear");
         edgeWeightKernel = shader.FindKernel("PathEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("PathEdgeScan");
         clearanceKernel = shader.FindKernel("PathClearance3D" + suffix);
         persistent = settings.pathPersistent;
         if (persistent) { beginKernel = shader.FindKernel("PathPersistentBeginKernel"); ringKernel = shader.FindKernel("PathRingKernel"); edgeCopyKernel = shader.FindKernel("PathEdgeCopyKernel"); }
-        traceStatic = traceKernel; traceDoppler = shader.FindKernel("TracePath3D" + suffix + "Doppler");
+        traceStatic = traceKernel; traceDoppler = walk ? traceKernel : shader.FindKernel("TracePath3D" + suffix + "Doppler");
         if (population) { sortCountKernel = shader.FindKernel("PathSortCountKernel"); sortScanKernel = shader.FindKernel("PathSortScanKernel"); sortScatterKernel = shader.FindKernel("PathSortScatterKernel"); }
         if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
         foreach (int kernel in new[] {traceKernel, clearKernel, expandKernel, edgeWeightKernel, edgeScanKernel, beginKernel, ringKernel, edgeCopyKernel, sortCountKernel, sortScanKernel, sortScatterKernel})
@@ -213,6 +215,34 @@ internal sealed class MethodTransport : IDisposable
                 adjacency[kept[i].firstFace].Add(i);
                 if (kept[i].secondFace != kept[i].firstFace) adjacency[kept[i].secondFace].Add(i);
             }
+            // Walk diffraction (MethodPath.hlsl): the coplanar faces of one object form a plane, and per plane the edges with a
+            // face in it are the candidates past a hit on it.
+            var planeOf = new uint[Math.Max(1, geometry.Length)];
+            var planeKeys = new Dictionary<(int, long, long, long, long), uint>();
+            for (int i = 0; i < geometry.Length; i++)
+            {
+                var g = geometry[i];
+                Vector3 normal = Vector3.Cross(g.b - g.a, g.c - g.a);
+                if (normal.sqrMagnitude <= 0) { planeOf[i] = uint.MaxValue; continue; }
+                normal.Normalize();
+                float sign = Mathf.Abs(normal.x) > 1e-6f ? Mathf.Sign(normal.x) : Mathf.Abs(normal.y) > 1e-6f ? Mathf.Sign(normal.y) : Mathf.Sign(normal.z);
+                normal *= sign;
+                var key = (g.objectIndex, (long)Math.Round(normal.x * 1e5), (long)Math.Round(normal.y * 1e5), (long)Math.Round(normal.z * 1e5),
+                           (long)Math.Round(Vector3.Dot(normal, g.a) * 1e4));
+                if (!planeKeys.TryGetValue(key, out uint plane)) { plane = (uint)planeKeys.Count; planeKeys.Add(key, plane); }
+                planeOf[i] = plane;
+            }
+            var planeEdges = new List<int>[Math.Max(1, planeKeys.Count)];
+            for (int p = 0; p < planeEdges.Length; p++) planeEdges[p] = new List<int>();
+            for (int i = 0; i < kept.Count; i++)
+                foreach (int face in kept[i].firstFace == kept[i].secondFace ? new[] {kept[i].firstFace} : new[] {kept[i].firstFace, kept[i].secondFace})
+                    if (planeOf[face] != uint.MaxValue && !planeEdges[planeOf[face]].Contains(i)) planeEdges[planeOf[face]].Add(i);
+            var planeEdgeList = new List<int>(); var planeEdgeRanges = new Vector2Int[planeEdges.Length];
+            for (int p = 0; p < planeEdges.Length; p++) { planeEdgeRanges[p] = new Vector2Int(planeEdgeList.Count, planeEdges[p].Count); planeEdgeList.AddRange(planeEdges[p]); }
+            primitivePlanes = new ComputeBuffer(planeOf.Length, 4); primitivePlanes.SetData(planeOf);
+            planeEdgeRangeBuffer = new ComputeBuffer(planeEdgeRanges.Length, 8); planeEdgeRangeBuffer.SetData(planeEdgeRanges);
+            planeEdgeIndexBuffer = new ComputeBuffer(Math.Max(1, planeEdgeList.Count), 4);
+            if (planeEdgeList.Count > 0) planeEdgeIndexBuffer.SetData(planeEdgeList);
             var indices = new List<int>(); var ranges = new Vector2Int[adjacency.Length];
             for (int i = 0; i < adjacency.Length; i++) { ranges[i] = new Vector2Int(indices.Count, adjacency[i].Count); indices.AddRange(adjacency[i]); }
             edgeRanges = new ComputeBuffer(ranges.Length, 8); edgeRanges.SetData(ranges);
@@ -313,6 +343,7 @@ internal sealed class MethodTransport : IDisposable
                 if (bvhNodes != null) { shader.SetBuffer(kernel, "BvhNodes", bvhNodes); shader.SetBuffer(kernel, "BvhIndices", bvhIndices); }
                 shader.SetBuffer(kernel, "MethodArrivals", arrivals); shader.SetBuffer(kernel, "MethodArrivalCounts", arrivalCounts);
                 shader.SetBuffer(kernel, "RayPaths", paths);
+                shader.SetBuffer(kernel, "PathPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "PathPlaneEdgeRanges", planeEdgeRangeBuffer); shader.SetBuffer(kernel, "PathPlaneEdgeIndices", planeEdgeIndexBuffer);
                 shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "MethodEdgeCdfRead", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
                 shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathClearanceRead", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
                 shader.SetBuffer(kernel, "PathEdgeWeight", edgeWeights); shader.SetBuffer(kernel, "PathCohortCount", cohortCounts);
@@ -421,7 +452,7 @@ internal sealed class MethodTransport : IDisposable
     void DispatchEdgeDistribution(int pair = 0, bool all = true)
     {
         shader.Dispatch(clearanceKernel, 1, 1, 1); // the listener's clearance for the beam kernel (once per solve)
-        if (EdgeCount == 0 || settings.diffractionFactor <= 0) return;
+        if (EdgeCount == 0 || settings.diffractionFactor <= 0 || settings.pathWalkDiffraction) return; // (walk diffraction draws no edges from it)
         if (!persistent)
         {
             shader.Dispatch(edgeWeightKernel, (EdgeCount + 63) / 64, 1, 1);
@@ -582,7 +613,8 @@ internal sealed class MethodTransport : IDisposable
         RingSceneDiagonal = states != null && high.x >= low.x ? (high - low).magnitude : double.PositiveInfinity;
         if (states != null && high.x >= low.x) { sortLow = low; sortScale = Vector3.one * SortFine; for (int a = 0; a < 3; a++) sortScale[a] /= Mathf.Max(high[a] - low[a], 1e-3f); }
         // (Beams only: no connections; a beam is heard at most one line of sight after its update.)
-        double reach = (settings.pathBeamsOnly ? 1 : 3) * RingSceneDiagonal * maximumIor / (settings.speedOfSound * PersistentStep);
+        // (Walk diffraction: a diffracted ray can start past a hit, up to a scene diagonal later.)
+        double reach = (settings.pathBeamsOnly && !settings.pathWalkDiffraction ? 1 : 3) * RingSceneDiagonal * maximumIor / (settings.speedOfSound * PersistentStep);
         RingSlots = (int)Math.Min(WarmUpdates + 1, Math.Ceiling(reach) + 1);
         output.Dispose(); counts.Dispose();
         output = new ComputeBuffer(checked(OutputUints), 4);
@@ -866,7 +898,7 @@ internal sealed class MethodTransport : IDisposable
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose();
         counts?.Dispose();
-        arrivals?.Dispose(); arrivalCounts?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); mirrorCdf?.Dispose();
+        arrivals?.Dispose(); arrivalCounts?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); primitivePlanes?.Dispose(); planeEdgeRangeBuffer?.Dispose(); planeEdgeIndexBuffer?.Dispose(); mirrorCdf?.Dispose();
         pathRays?.Dispose(); pathLive?.Dispose(); edgeWeights?.Dispose(); cohortCounts?.Dispose(); sortBuckets?.Dispose(); sortEntries?.Dispose();
     }
 }

@@ -15,7 +15,15 @@ public partial class TakeChecks
         settings.seed = 11;
         // Opt-in: the Path method's beams-only mode in every check (README part 20 runs them so).
         settings.pathBeamsOnly = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BEAMS_ONLY") == "1";
+        settings.pathWalkDiffraction = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_WALK_DIFFRACTION") == "1";
         return settings;
+    }
+    // The Path method's diffraction as a walk event (docs/benchmarks/bass-and-diffraction-2026-11-22/README-part-b.md),
+    // with shortcuts or beams only; "" leaves the settings.
+    static void PathWalkMode(TakeRender.Settings settings, string walk)
+    {
+        if (walk == "") return;
+        settings.pathWalkDiffraction = true; settings.pathBeamsOnly = walk == "beams";
     }
     // Band energies per 1 ms bin of the latest solve, direction-summed.
     static double[] ControlEnergy(TransportSolver solver, int band)
@@ -110,34 +118,43 @@ public partial class TakeChecks
 
     // Rigid half-plane, listener in the shadow: the path method's UTD band energy matches the
     // independent BTM band energy within 1.5 dB.
-    [TestCase(false), TestCase(true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsMatchTheHalfPlaneReference(bool persistent)
+    // Walk diffraction ("shortcuts", "beams"; docs/benchmarks/bass-and-diffraction-2026-11-22/README-part-b.md): every band
+    // 125 Hz-2 kHz within 1 dB (UTD is 0.3 dB above BTM here; the walk event reproduces UTD with the beam kernel's width).
+    [TestCase(false), TestCase(true), TestCase(false, "shortcuts"), TestCase(false, "beams"), TestCase(true, "shortcuts"),
+     Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsMatchTheHalfPlaneReference(bool persistent, string walk = "")
     {
         KnifeEdgeFixture(false, out var scene, out var geometry, out var state);
-        var settings = ControlSettings(TakeRender.Method.Path, 1 << 16, .3f); settings.diffractionFactor = 1; PersistentControl(settings, persistent, 2);
+        // (Walk diffraction scores D at the listener through a narrow beam kernel: 2 kHz needs many more rays for the same noise.)
+        var settings = ControlSettings(TakeRender.Method.Path, walk == "" ? 1 << 16 : persistent ? 1 << 20 : 1 << 22, .3f); settings.diffractionFactor = 1;
+        PersistentControl(settings, persistent, walk == "" ? 2 : 1); PathWalkMode(settings, walk);
         using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         solver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(solver);
         // Independent BTM band energies of this fixture (docs/benchmarks/methods-2026-11-06/
         // btm_reference.py: float64 edge integral, the comparison's band filters).
         double[] btm = {0.009199, 0.006599, 0.004427, 0.002758, 0.001590};
-        for (int band = 1; band <= 4; band++)
+        TestContext.WriteLine($"edges {solver.Method.EdgeCount}, diffracted rays {solver.Method.Counter(12)}, walk deposits {solver.Method.Counter(10)}");
+        for (int band = walk == "" ? 1 : 0; band <= 4; band++)
         {
             double have = Window(ControlEnergy(solver, band), 0, 300);
             TestContext.WriteLine($"band {MethodBands.Centers[band]} Hz: UTD energy {have:G5}, BTM {btm[band]:G5}, {10 * Math.Log10(have / btm[band]):F2} dB");
-            Assert.That(Math.Abs(10 * Math.Log10(have / btm[band])), Is.LessThan(1.5));
+            Assert.That(Math.Abs(10 * Math.Log10(have / btm[band])), Is.LessThan(walk == "" ? 1.5 : 1));
         }
     }
 
     // Rigid cube (2 m), source and listener on opposite sides: only double diffraction
     // (DD over parallel edges) and longer chains reach the listener; the UTD energy (DD
     // connections) is checked on single walls against btm_reference.py.
-    [TestCase(false), TestCase(true), Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
-    public void MethodsReachTheFarSideOfASolid(bool persistent)
+    [TestCase(false), TestCase(true), TestCase(false, "shortcuts"), TestCase(false, "beams"), TestCase(true, "shortcuts"),
+     Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+    public void MethodsReachTheFarSideOfASolid(bool persistent, string walk = "")
     {
         KnifeEdgeFixture(false, out var scene, out _, out var state);
         var geometry = TransportBox(scene.dimension, 2, 0, 1); scene.objects[2].primitiveCount = geometry.Length;
         state[0].position = Vector3.left * 3; state[1].position = Vector3.right * 3;
-        var settings = ControlSettings(TakeRender.Method.Path, 1 << 17, .3f); settings.diffractionFactor = 1; PersistentControl(settings, persistent, 2);
+        // (Walk diffraction: double diffraction through two narrow kernels is heavy-tailed at 1-2 kHz; 4M rays, 1M persistent.)
+        var settings = ControlSettings(TakeRender.Method.Path, walk == "" ? 1 << 17 : persistent ? 1 << 20 : 1 << 22, .3f); settings.diffractionFactor = 1;
+        PersistentControl(settings, persistent, walk == "" ? 2 : 1); PathWalkMode(settings, walk);
         var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
         try
         {
@@ -166,12 +183,16 @@ public partial class TakeChecks
                     p.a = Vector3.Scale(p.a, size) + offset; p.b = Vector3.Scale(p.b, size) + offset; p.c = Vector3.Scale(p.c, size) + offset; wall[i] = p;
                 }
                 using var wallSolver = new TransportSolver(scene, wall, settings, RequireGpu(), sampleRate: 8000);
-                wallSolver.Solve(state, new TakeRender.DirectPath[1]);
+                wallSolver.Solve(state, new TakeRender.DirectPath[1]); AssertNoOverflow(wallSolver);
+                TestContext.WriteLine($"{wallCase.width} m wall: diffracted rays {wallSolver.Method.Counter(12)}, walk deposits {wallSolver.Method.Counter(10)}");
                 for (int band = 0; band <= 4; band++)
                 {
                     double have = Window(ControlEnergy(wallSolver, band), 0, 300), error = 10 * Math.Log10(have / wallCase.btm[band]);
                     TestContext.WriteLine($"{wallCase.width} m wall, band {MethodBands.Centers[band]} Hz: UTD energy {have:G5}, BTM {wallCase.btm[band]:G5}, {error:F2} dB");
-                    if (wallCase.width > 1 && band >= 2) Assert.That(Math.Abs(error), Is.LessThan(2), "UTD double diffraction over a 2 m wall agrees with BTM.");
+                    if (wallCase.width > 1 && band >= 2 && walk == "") Assert.That(Math.Abs(error), Is.LessThan(2), "UTD double diffraction over a 2 m wall agrees with BTM.");
+                    // Walk diffraction (grazing at the second edge: the deposit counted twice, |D|^2 a quarter): every band of the full
+                    // solve, the bands to 500 Hz of the persistent one (its 1M rays leave 1-2 kHz heavy-tailed).
+                    if (wallCase.width > 1 && walk != "" && (!persistent || band <= 2)) Assert.That(Math.Abs(error), Is.LessThan(1.5), "walk double diffraction over a 2 m wall agrees with BTM.");
                 }
             }
         }

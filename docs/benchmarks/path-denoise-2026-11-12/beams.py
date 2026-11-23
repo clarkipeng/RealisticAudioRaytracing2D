@@ -45,6 +45,7 @@ def render(budgets):
         job['output'] = str(BEAM); job['pathBeams'] = True
         if os.environ.get('PATH_SURVIVAL'): job['pathSurvivalSeconds'] = float(os.environ['PATH_SURVIVAL'])
         if os.environ.get('PATH_BEAMS_ONLY') == '1': job['pathBeamsOnly'] = True   # README part 20
+        if os.environ.get('PATH_WALK_DIFFRACTION') == '1': job['pathWalkDiffraction'] = True   # bass-and-diffraction-2026-11-22, part B
         scene = json.loads(Path(job['sceneFile']).read_text())['sceneId']
         if all((BEAM / scene / 'path' / f'r{b:05d}' / str(s) / 'run.json').exists() for b in budgets for s in SEEDS):
             continue
@@ -88,7 +89,7 @@ def score():
             table[name]['seconds'] = float(np.mean([v for v in cost[name].values() if v])) if cost[name] else None
             table[name]['scenes'] = {s: {k: mc.aggregate([r for r in sel if r['group'] == 'all' and r['scene'] == s], ('method',), k).get((name,))
                                          for k in metrics} for s in ids}
-        (HERE / 'beams.json').write_text(json.dumps(table, indent=1) + '\n')
+        Path(os.environ.get('PATH_SCORE_JSON', HERE / 'beams.json')).write_text(json.dumps(table, indent=1) + '\n')   # PATH_SCORE_JSON: elsewhere
         for name, t in table.items():
             print(f"{name:16s} {t['seconds'] or 0:6.2f} s/run  " + '  '.join(f"{g}: " + ' '.join(f"{k} {t[g][k]:.2f}" if t[g][k] is not None else f'{k} -' for k in metrics)
                                                                 for g in ('all', 'shadow', 'closed')))

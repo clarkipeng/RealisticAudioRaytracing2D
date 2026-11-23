@@ -85,7 +85,7 @@ public partial class TakeChecks
         // get independent noise, as live solves do), and air absorption.
         public bool seedPerReceiver, airAbsorption;
         public float pathSurvivalSeconds = -1; // < 0: the settings' default
-        public bool pathBeamsOnly;
+        public bool pathBeamsOnly, pathWalkDiffraction;
         // Method "path-modal": the path method combined with the room modes of this bank (an exported RMB1 file,
         // RoomModes.cs) as tools/room_modes.py combine does; written band-limited.
         public string roomModesBank = "";
@@ -144,7 +144,7 @@ public partial class TakeChecks
         settings.methodRays = budget; settings.specularDetectionRadius = job.detectionRadius;
         settings.methodEdgeProbability = job.edgeProbability; settings.methodRouletteFloor = job.rouletteFloor;
         if (job.pathSurvivalSeconds >= 0) settings.pathSurvivalSeconds = job.pathSurvivalSeconds;
-        settings.pathBeamsOnly = job.pathBeamsOnly;
+        settings.pathBeamsOnly = job.pathBeamsOnly; settings.pathWalkDiffraction = job.pathWalkDiffraction;
         return settings;
     }
     static void MethodWrite(string path, float[] values)
