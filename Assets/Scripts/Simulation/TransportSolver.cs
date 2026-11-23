@@ -122,8 +122,8 @@ public sealed class TransportSolver : IDisposable
             states = new ComputeBuffer(packed.Length, 80);
             if (bvh != null)
             {
-                bvhNodes = new ComputeBuffer(Math.Max(1, bvh.Nodes.Length), 48);
-                bvhIndices = new ComputeBuffer(Math.Max(1, geometry.Length), 4);
+                bvhNodes = new ComputeBuffer(Math.Max(1, bvh.Nodes.Length + (bvh.Trace?.Capacity ?? 0)), 48);
+                bvhIndices = new ComputeBuffer(Math.Max(1, geometry.Length + (bvh.Trace?.Indices.Length ?? 0)), 4);
             }
             method = new MethodTransport(scene, geometry, settings, primitives, states, bvhNodes, bvhIndices, methodAudio, sampleRate, maximumFrames, readbackPaths);
         }
@@ -185,6 +185,18 @@ public sealed class TransportSolver : IDisposable
                 if (bvh.NodeCount > 0)
                     bvhNodes.SetData(bvh.Nodes, 0, 0, bvh.UpdateCount == 1 ? bvh.NodeCount : bvh.TopNodeCount);
             }
+            var trace = bvh.Trace;
+            if (trace != null && method != null)
+            {
+                // The queries' tree (StaticTraceTree): its top every update, the merged tree when it was (re)built.
+                if (trace.TopCount > 0) bvhNodes.SetData(trace.Nodes, 0, bvh.NodeCount, trace.TopCount);
+                if (trace.MergedChanged && trace.MergedNodeCount > 0)
+                {
+                    bvhNodes.SetData(trace.Nodes, trace.MergedStart, bvh.NodeCount + trace.MergedStart, trace.MergedNodeCount);
+                    bvhIndices.SetData(trace.Indices, 0, geometry.Length, trace.Indices.Length);
+                }
+                method.TraceRoot = trace.Root;
+            }
         }
         for (int i = 0; i < frames * scene.objects.Length; i++)
             packed[i] =
@@ -196,6 +208,10 @@ public sealed class TransportSolver : IDisposable
         states.SetData(packed, 0, 0, frames * scene.objects.Length);
         UploadSeconds += TakeRender.Elapsed(start);
     }
+    // Profiling (MeasurePathLiveBudget merged=0): the GPU queries descend the instance tree instead of StaticTraceTree's.
+    internal bool TraceTreeEnabled { set { if (bvh?.Trace != null) bvh.Trace.Enabled = value; } }
+    internal bool TraceTreeInline { set { if (bvh?.Trace != null) bvh.Trace.InlineTriangles = value; } }
+    internal int TraceTreeRebuilds => bvh?.Trace?.Rebuilds ?? 0;
     public void BeginSolve(AcousticTake.State[] state, int frames = 1, bool diagnostics = true)
     {
         using (solveMarker.Auto())

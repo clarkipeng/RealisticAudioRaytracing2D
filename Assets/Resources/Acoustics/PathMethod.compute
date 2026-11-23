@@ -13,6 +13,9 @@
 // Diffraction as an event of the walk (settings.pathWalkDiffraction, MethodPath.hlsl "Walk diffraction"); static scenes only.
 #pragma kernel TracePath3DWalk PATH_WALK_EDGE
 #pragma kernel TracePath3DBvhWalk USE_BVH PATH_WALK_EDGE
+// The work profile (MethodTransport.WorkProfile, README part 46): the Doppler walk counting its scene traversals per kind of query.
+#pragma kernel TracePath3DBvhProfile USE_BVH PATH_DOPPLER PATH_PROFILE
+#pragma kernel PathTraceBenchKernel USE_BVH
 #pragma kernel PathEdgeWeights3D
 #pragma kernel PathEdgeWeights3DBvh USE_BVH
 #pragma kernel PathEdgeScan
@@ -20,6 +23,8 @@
 #pragma kernel PathClear
 #pragma kernel PathClearance3D
 #pragma kernel PathClearance3DBvh USE_BVH
+#pragma kernel PathEndsMedia3D
+#pragma kernel PathEndsMedia3DBvh USE_BVH
 #pragma kernel PathPersistentBeginKernel
 #pragma kernel PathRingKernel
 #pragma kernel PathEdgeCopyKernel
@@ -32,10 +37,11 @@
 // the static walks compile as before, so their outputs stay bit-identical.
 #if defined(PATH_DOPPLER)
 StructuredBuffer<float> MethodEdgeCdfRead;
-StructuredBuffer<uint> PathClearanceRead;
 #define METHOD_EDGE_CDF_READ MethodEdgeCdfRead
-#define PATH_CLEARANCE_READ PathClearanceRead
 #endif
+// Every walk reads the listener's clearance and medium through a read-only view (README part 47).
+StructuredBuffer<uint> PathClearanceRead;
+#define PATH_CLEARANCE_READ PathClearanceRead
 #include "../../Shaders/Geometry.hlsl"
 #include "../../Shaders/Transport.hlsl"
 #include "../../Shaders/MethodCommon.hlsl"
@@ -47,11 +53,15 @@ StructuredBuffer<uint> PathClearanceRead;
 [numthreads(64,1,1)] void TracePath3DBvhDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DBvhWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DBvhProfile(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
+[numthreads(64,1,1)] void PathTraceBenchKernel(uint3 id:SV_DispatchThreadID) { PathTraceBench(id.x + MethodRayOffset); }
 [numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(256,1,1)] void PathEdgeScan(uint3 t:SV_GroupThreadID) { EnergyEdgeScan(t.x); }
 [numthreads(256,1,1)] void PathClearance3D(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
 [numthreads(256,1,1)] void PathClearance3DBvh(uint3 t:SV_GroupThreadID) { PathClearance(t.x); }
+[numthreads(2,1,1)] void PathEndsMedia3D(uint3 t:SV_GroupThreadID) { PathEndsMedia(t.x); }
+[numthreads(2,1,1)] void PathEndsMedia3DBvh(uint3 t:SV_GroupThreadID) { PathEndsMedia(t.x); }
 [numthreads(1,1,1)] void PathPersistentBeginKernel(uint3 id:SV_DispatchThreadID) { PathPersistentBegin(); }
 [numthreads(64,1,1)] void PathSortCountKernel(uint3 id:SV_DispatchThreadID) { PathSortCount(id.x + MethodRayOffset); }
 [numthreads(1024,1,1)] void PathSortScanKernel(uint3 t:SV_GroupThreadID) { PathSortScan(t.x); }

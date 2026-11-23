@@ -56,7 +56,7 @@ internal sealed class MethodTransport : IDisposable
     readonly RayTransport.Layout layout;
     readonly ComputeShader shader;
     readonly Action bind;
-    readonly int clearanceKernel = -1;
+    readonly int clearanceKernel = -1, mediaKernel = -1;
     // Path: queued specular-chain connections of one chunk of rays (MethodPath.hlsl PathConnect).
     // Requests are about 0.5 per ray in a closed specular room; overflow is counted (counter 9).
     readonly ComputeBuffer clearance, mirrorCdf;
@@ -71,7 +71,7 @@ internal sealed class MethodTransport : IDisposable
     // Path: the delay rates (Doppler on reflections, MethodPath.hlsl "Delay rates") are compiled into the walk's
     // PATH_DOPPLER kernels only, dispatched while anything in the dispatched states moves and, with persistent rays, for
     // a horizon after (the rays in flight still carry the rates of what moved). A static scene runs the walk without them.
-    readonly int traceStatic = -1, traceDoppler = -1;
+    readonly int traceStatic = -1, traceDoppler = -1, traceProfile = -1, benchKernel = -1;
     bool moving, doppler;
     long dopplerUntil = -1;
     public bool Doppler => doppler;
@@ -105,7 +105,8 @@ internal sealed class MethodTransport : IDisposable
     ulong flushMask;
     long persistentUpdates;
     int traceKernel; readonly int clearKernel, expandKernel = -1, edgeWeightKernel = -1, edgeScanKernel = -1, outputCount, statsCount, frequencyBins, rate;
-    readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes, stats;
+    readonly ComputeBuffer materials, edgeBuffer, edgeRanges, edgeIndices, volumes;
+    ComputeBuffer stats; // (the work profile enlarges it: EnsureWorkProfile)
     ComputeBuffer output; // persistent: reallocated with the ring at the first dispatch (EnsureRing)
     readonly ComputeBuffer arrivals, arrivalCounts, paths, edgeCdf, primitivePlanes, planeEdgeRangeBuffer, planeEdgeIndexBuffer;
     ComputeBuffer counts;
@@ -164,10 +165,11 @@ internal sealed class MethodTransport : IDisposable
         traceKernel = shader.FindKernel("TracePath3D" + suffix + (walk ? "Walk" : ""));
         clearKernel = shader.FindKernel("PathClear");
         edgeWeightKernel = shader.FindKernel("PathEdgeWeights3D" + suffix); edgeScanKernel = shader.FindKernel("PathEdgeScan");
-        clearanceKernel = shader.FindKernel("PathClearance3D" + suffix);
+        clearanceKernel = shader.FindKernel("PathClearance3D" + suffix); mediaKernel = shader.FindKernel("PathEndsMedia3D" + suffix);
         persistent = settings.pathPersistent;
         if (persistent) { beginKernel = shader.FindKernel("PathPersistentBeginKernel"); ringKernel = shader.FindKernel("PathRingKernel"); edgeCopyKernel = shader.FindKernel("PathEdgeCopyKernel"); }
         traceStatic = traceKernel; traceDoppler = walk ? traceKernel : shader.FindKernel("TracePath3D" + suffix + "Doppler");
+        if (settings.useBvh && !walk) { traceProfile = shader.FindKernel("TracePath3DBvhProfile"); benchKernel = shader.FindKernel("PathTraceBenchKernel"); }
         if (population) { sortCountKernel = shader.FindKernel("PathSortCountKernel"); sortScanKernel = shader.FindKernel("PathSortScanKernel"); sortScatterKernel = shader.FindKernel("PathSortScatterKernel"); }
         if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
         foreach (int kernel in new[] {traceKernel, clearKernel, expandKernel, edgeWeightKernel, edgeScanKernel, beginKernel, ringKernel, edgeCopyKernel, sortCountKernel, sortScanKernel, sortScatterKernel})
@@ -268,7 +270,7 @@ internal sealed class MethodTransport : IDisposable
             countCells = checked(Frames * Pairs * TimeBins.Count);
             rateCells = checked(Frames * Pairs * RateMoments * TimeBins.Count);
             ringCells = Directions * Bands * TimeBins.Count;
-            clearance = new ComputeBuffer(1, 4);
+            clearance = new ComputeBuffer(3, 4); // the listener's clearance, the source's and the listener's media (MethodPath.hlsl PathClearance)
             // Persistent pools, sized for the rays expected in flight: a cohort of age t keeps at most the fraction
             // S(t) = min(1, T0 / t) of its rays (survival in time; all of them without it), plus a quarter for
             // transmitted branches and one cohort of margin. Overflow is counted (counter 9) and asserted absent by the checks.
@@ -327,7 +329,8 @@ internal sealed class MethodTransport : IDisposable
             // memory accumulated), so all bindings are made again at every dispatch.
             int volumeCount = volumeData.Length, keptCount = kept.Count;
             bool anyTransmission = transmissive || volumeData.Length > 0;
-            var kernels = new List<int> {traceKernel, clearKernel, edgeWeightKernel, edgeScanKernel, clearanceKernel, traceDoppler};
+            var kernels = new List<int> {traceKernel, clearKernel, edgeWeightKernel, edgeScanKernel, clearanceKernel, mediaKernel, traceDoppler};
+            if (traceProfile >= 0) kernels.AddRange(new[] {traceProfile, benchKernel});
             if (expandKernel >= 0) kernels.Add(expandKernel);
             if (persistent) kernels.AddRange(new[] {beginKernel, ringKernel, edgeCopyKernel});
             if (population) kernels.AddRange(new[] {sortCountKernel, sortScanKernel, sortScatterKernel});
@@ -439,7 +442,9 @@ internal sealed class MethodTransport : IDisposable
     }
     void Clear()
     {
-        int clear = Math.Max(Math.Max(Math.Max(Math.Max(outputCount, statsCount), Frames * Pairs), countCells), 2 * rateCells);
+        int statsCleared = statsCount + (WorkProfile && traceProfile >= 0 ? 3 * ProfileKinds : 0);
+        shader.SetInt("MethodStatsCount", statsCleared);
+        int clear = Math.Max(Math.Max(Math.Max(Math.Max(outputCount, statsCleared), Frames * Pairs), countCells), 2 * rateCells);
         for (int first = 0; first < clear; first += 65535 * 64)
         {
             shader.SetInt("MethodClearOffset", first);
@@ -452,6 +457,7 @@ internal sealed class MethodTransport : IDisposable
     void DispatchEdgeDistribution(int pair = 0, bool all = true)
     {
         shader.Dispatch(clearanceKernel, 1, 1, 1); // the listener's clearance for the beam kernel (once per solve)
+        shader.Dispatch(mediaKernel, 1, 1, 1);     // the source's and the listener's media
         if (EdgeCount == 0 || settings.diffractionFactor <= 0 || settings.pathWalkDiffraction) return; // (walk diffraction draws no edges from it)
         if (!persistent)
         {
@@ -630,7 +636,91 @@ internal sealed class MethodTransport : IDisposable
         bool want = moving || (persistent && persistentUpdates < dopplerUntil);
         doppler = want;
         traceKernel = doppler ? traceDoppler : traceStatic;
+        if (WorkProfile && traceProfile >= 0) { if (EnsureWorkProfile()) bind(); traceKernel = traceProfile; doppler = true; }
     }
+    // The work profile (measurement, README part 46): the walk's PATH_PROFILE kernel (the Doppler walk with counters) counts per
+    // thread its scene traversals by the kind of query that made them, their node visits and triangle tests, after the counters
+    // in `stats`: totals [kind 8][3], then per dispatch thread ProfileThreadWords words (MethodPath.hlsl). Persistent rays only.
+    public bool WorkProfile;
+    public const int ProfileKinds = 8, ProfileThreadWords = 6;
+    public static readonly string[] ProfileKindNames = {"segment", "nee-first-hit", "nee-crossing", "edge-connection", "beam-visibility", "partition-exit", "medium-after-transmission", "edge-ray-and-source-medium"};
+    int ProfileBase => statsCount;
+    int ProfileThreads => PersistentCapacity + maximumNewRays;
+    bool EnsureWorkProfile()
+    {
+        int words = ProfileBase + 3 * ProfileKinds + ProfileThreadWords * ProfileThreads;
+        if (stats.count >= words) return false;
+        stats.Dispose(); stats = new ComputeBuffer(words, 4);
+        stats.SetData(new uint[words]); // (threads that return at once write nothing; AddWorkProfile empties their words again)
+        return true;
+    }
+    public sealed class WorkProfileTotals
+    {
+        public readonly long[] queries = new long[ProfileKinds], nodes = new long[ProfileKinds], triangles = new long[ProfileKinds];
+        public long updates, rays, iterations, iterationLanes, nodeSum, nodeLanes, querySum, queryLanes, longest;
+    }
+    // Adds the latest update's work profile (synchronous readback). SIMD utilisation, per group of 32 consecutive threads (an Apple
+    // GPU's SIMD width): the lanes' sum over 32 times the group's largest, an upper bound (lanes may also diverge within the counts).
+    public void AddWorkProfile(WorkProfileTotals totals)
+    {
+        var data = new uint[3 * ProfileKinds + ProfileThreadWords * ProfileThreads];
+        stats.GetData(data, 0, ProfileBase, data.Length);
+        for (int k = 0; k < ProfileKinds; k++) { totals.queries[k] += data[3 * k]; totals.nodes[k] += data[3 * k + 1]; totals.triangles[k] += data[3 * k + 2]; }
+        int threads = ProfileThreads, offset = 3 * ProfileKinds;
+        for (int group = 0; group < threads; group += 32)
+        {
+            long iterations = 0, maxIterations = 0, nodes = 0, maxNodes = 0, queries = 0, maxQueries = 0;
+            for (int t = group; t < Math.Min(threads, group + 32); t++)
+            {
+                int at = offset + ProfileThreadWords * t;
+                uint i = data[at], q = data[at + 1], n = data[at + 2];
+                if (i > 0) totals.rays++;
+                iterations += i; maxIterations = Math.Max(maxIterations, i); queries += q; maxQueries = Math.Max(maxQueries, q); nodes += n; maxNodes = Math.Max(maxNodes, n);
+            }
+            if (maxIterations == 0) continue;
+            totals.iterations += iterations; totals.iterationLanes += 32 * maxIterations; totals.querySum += queries; totals.queryLanes += 32 * maxQueries;
+            totals.nodeSum += nodes; totals.nodeLanes += 32 * maxNodes; totals.longest = Math.Max(totals.longest, maxIterations);
+        }
+        stats.SetData(new uint[data.Length], 0, ProfileBase, data.Length);
+        totals.updates++;
+    }
+    // The traversal ceiling (measurement, README part 46; MethodPath.hlsl PathTraceBench): after an update, `threads` scene queries
+    // of `mode` from the pool's rays in a kernel that does nothing else; the median over `repeats` dispatches of the queries per
+    // second (each timed with a fence, whose round trip is in it).
+    public double TraceBench(int threads, int mode, int repeats = 5)
+    {
+        if (benchKernel < 0 || !persistent) return 0;
+        shader.SetInt("PathBenchMode", mode);
+        var rates = new double[repeats];
+        for (int r = 0; r < repeats; r++)
+        {
+            Fence();
+            long start = Stopwatch.GetTimestamp();
+            for (long first = 0; first < threads; first += 65535L * 64)
+            {
+                shader.SetInt("MethodRayOffset", (int)first);
+                shader.Dispatch(benchKernel, (int)((Math.Min(65535L * 64, threads - first) + 63) / 64), 1, 1);
+            }
+            Fence();
+            rates[r] = threads / TakeRender.Elapsed(start);
+        }
+        Array.Sort(rates);
+        return rates[repeats / 2];
+    }
+    public static string WorkProfileReport(WorkProfileTotals t)
+    {
+        var b = new System.Text.StringBuilder();
+        double rays = Math.Max(1, t.rays);
+        long queries = 0, nodes = 0, triangles = 0;
+        for (int k = 0; k < ProfileKinds; k++) { queries += t.queries[k]; nodes += t.nodes[k]; triangles += t.triangles[k]; }
+        b.Append(FormattableString.Invariant($"{t.updates} updates, {t.rays / Math.Max(1, t.updates)} threads per update; per thread {t.iterations / rays:F2} iterations, {queries / rays:F2} queries, {nodes / rays:F1} node visits, {triangles / rays:F1} triangle tests; "));
+        b.Append(FormattableString.Invariant($"SIMD utilisation (bound): iterations {t.iterations / (double)Math.Max(1, t.iterationLanes):P1}, queries {t.querySum / (double)Math.Max(1, t.queryLanes):P1}, node visits {t.nodeSum / (double)Math.Max(1, t.nodeLanes):P1}; longest {t.longest} iterations\n"));
+        for (int k = 0; k < ProfileKinds; k++)
+            b.Append(FormattableString.Invariant($"  {ProfileKindNames[k]}: {t.queries[k] / rays:F3} queries per thread ({100.0 * t.queries[k] / Math.Max(1, queries):F1}%), {t.nodes[k] / (double)Math.Max(1, t.queries[k]):F1} node visits and {t.triangles[k] / (double)Math.Max(1, t.queries[k]):F1} triangle tests per query, {100.0 * t.nodes[k] / Math.Max(1, nodes):F1}% of node visits\n"));
+        return b.ToString();
+    }
+    // The root of the scene queries' tree (TransportSolver: StaticTraceTree.Root; 0, the instance tree).
+    public int TraceRoot;
     // Profiling (measurement only): a fence after every phase, and seconds per phase
     // [edge distribution, walk, (unused since the beams replaced the chain connections), readback].
     // ProfileFlags (MethodPath.hlsl): bit 0 skips the histogram writes; it changes the result.
@@ -645,7 +735,7 @@ internal sealed class MethodTransport : IDisposable
         EnsureRing(null); // (no states given: a ring for the whole horizon)
         bind();
         SelectDoppler(persistent ? (PersistentSingleUpdate ? 1 : WarmUpdates) : 1);
-        shader.SetInt("BvhNodeCount", bvhNodeCount);
+        shader.SetInt("BvhNodeCount", bvhNodeCount); shader.SetInt("BvhTraceRoot", TraceRoot);
         Clear();
         if (persistent)
         {
@@ -672,7 +762,7 @@ internal sealed class MethodTransport : IDisposable
         }
         long read = Stopwatch.GetTimestamp();
         output.GetData(Output, 0, 0, Output.Length);
-        stats.GetData(Stats);
+        stats.GetData(Stats, 0, 0, Stats.Length);
         counts.GetData(Counts); output.GetData(Rates, 0, 2 * RateBase, Rates.Length);
         PhaseSeconds[3] += TakeRender.Elapsed(read);
     }
@@ -701,7 +791,7 @@ internal sealed class MethodTransport : IDisposable
         }
         long read = Stopwatch.GetTimestamp();
         output.GetData(Output, 0, 0, Output.Length); // the ring follows the frames' histograms
-        stats.GetData(Stats);
+        stats.GetData(Stats, 0, 0, Stats.Length);
         counts.GetData(Counts, 0, 0, Counts.Length);
         output.GetData(Rates, 0, 2 * RateBase, Rates.Length);
         PhaseSeconds[3] += TakeRender.Elapsed(read);
@@ -717,7 +807,7 @@ internal sealed class MethodTransport : IDisposable
         bind();
         SelectDoppler(frames);
         shader.SetInt("PathProfileFlags", ProfileFlags); // (profiling only; zero in use)
-        shader.SetInt("BvhNodeCount", bvhNodeCount);
+        shader.SetInt("BvhNodeCount", bvhNodeCount); shader.SetInt("BvhTraceRoot", TraceRoot);
         long start = Stopwatch.GetTimestamp();
         // A GPU profiler sample around the updates (the live HUD reads its time with a Recorder).
         traceBegin ??= Marker(true); traceEnd ??= Marker(false);

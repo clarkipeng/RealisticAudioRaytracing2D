@@ -62,6 +62,7 @@ float PathVolumeSide(uint owner)
 // the unfolded length from it: a diffuse reflection keeps no phase relation with the path before it, so the
 // scattering point is the new source of the Gaussian beam argument (w^2 = lambda L / pi, L from the chain's origin).
 uint PathBeamsOnly;
+static const uint PathProfileThreadWords = 6; // (work profile, PATH_PROFILE: words per thread after the totals)
 // Persistent rays: past this many loop iterations within one update, every further reflection is survived with
 // probability PathIterationSurvival (weight / probability: unbiased); bounds the update's longest serial chains.
 uint PathIterationCap; float PathIterationSurvival;
@@ -96,6 +97,14 @@ void PathClearance(uint thread)
     if (NearestHit(MethodState, L, d, 1e4, false, hit, distance, normal)) InterlockedMin(PathClearanceMin, asuint(distance));
     GroupMemoryBarrierWithGroupSync();
     if (thread == 0) PathClearanceOut[0] = PathClearanceMin;
+}
+// The source's and the listener's media, once per solve after PathClearance (README part 47), in PathClearanceOut[1] and [2]:
+// the walk reads the listener's there instead of every thread locating both ends itself, two point-location queries per thread
+// per update that all gave the same answer (a new ray still locates the source: TracePath). (A kernel of its own: in PathClearance's, beside its barriers, the compiler could not
+// build MediumAt's loop.)
+void PathEndsMedia(uint thread)
+{
+    if (thread < 2) PathClearanceOut[1 + thread] = MediumAt(MethodState, States[MethodState + (thread == 0 ? MethodSourceObject : MethodListenerObject)].position.xyz, false);
 }
 float PathSurvival(float time) { return PathSurvivalSeconds > 0 ? min(1, PathSurvivalSeconds / max(time, 1e-6)) : 1; }
 RWStructuredBuffer<uint> PathCounts; // contributions per [solve][bin]
@@ -281,6 +290,7 @@ bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, bool exact,
     if (!exact && MethodAnyTransmission != 0 && (PathProfileFlags & 16) == 0) // (bit 4: always trace, a check of this roulette)
     {
         uint hit; float distance; float3 normal;
+        PROFILE_KIND(1);
         if (NearestHit(MethodState, v.position, w, d - RayEpsilon, false, hit, distance, normal))
         {
             keep = 0;
@@ -299,7 +309,11 @@ bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, bool exact,
         t = d * MethodSlowness(v.medium);
         [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) factor[k3] = exp(-2 * MethodLoss(v.medium, k3) * d);
     }
-    else if (!MethodConnect(v.position, L, v.medium, true, factor, t)) return false;
+    else
+    {
+        PROFILE_KIND(2);
+        if (!MethodConnect(v.position, L, v.medium, true, factor, t)) return false;
+    }
     float r = max(MinimumDistance, d);
     float e[8];
     [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) e[k1] = I[k1] * D * factor[k1] / (r * r) * scale / keep;
@@ -371,6 +385,7 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     time = 0; fromOut = 0;
 #endif
     if (MethodEdgeCount == 0 || DiffractionFactor <= 0) return false;
+    PROFILE_KIND(3);
     float pick, pick2 = 1;
     // From the source, draw the edge from the solve's distribution (PathEdgeWeights: edges between
     // source and listener) instead of uniformly over every edge of the scene: in the Church (14,075
@@ -656,6 +671,22 @@ void PathSortScatter(uint index)
         else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount], 1u); }
     }
 }
+// The traversal ceiling (measurement, README part 46): scene queries alone, in a kernel that does nothing else, from the
+// positions of the rays in flight (the pool population control just wrote), thread i taking ray i mod the count. Mode 0: a
+// closest hit in a fresh uniform direction (incoherent, as after scattering); 1: a closest hit along the ray's own direction
+// (the pool's sorted order); 2: an any-hit query toward the listener (a shadow ray). The never-true write keeps the query.
+uint PathBenchMode;
+void PathTraceBench(uint index)
+{
+    uint live = min(PathLive[PathReadCount], PathCapacity);
+    if (live == 0) return;
+    PathRay r = PathRays[PathReadBase + index % live];
+    uint rng = HashRay(index * 0x9e3779b9u + 0x2545f491u), hit; float distance; float3 normal;
+    float3 L = States[MethodState + MethodListenerObject].position.xyz, d = PathBenchMode == 1 ? r.direction.xyz : UnitDirection(rng, false);
+    if (PathBenchMode == 2) { d = L - r.position.xyz; distance = length(d); d /= max(distance, 1e-6); }
+    bool found = TraceScene(MethodState, r.position.xyz, d, RayEpsilon, PathBenchMode == 2 ? max(distance - RayEpsilon, 0) : 1e4, false, PathBenchMode == 2, 0xffffffff, hit, distance, normal);
+    if (distance < 0) MethodStats[0] = hit + (found ? 1u : 0u);
+}
 // Appends a ray to the pool being written (overflow is counted and the ray dropped: a bias, reported).
 void PathKeep(PathRay r)
 {
@@ -689,6 +720,18 @@ bool PathPartitionExit(uint hit, float3 position, float3 direction, bool medium,
         if (travelled >= PartitionDepth) return false;
     }
     return false;
+}
+
+// Where a transmission at `hit` goes (README part 50): out of a partition's far face, undeviated, into the medium the ray was in
+// (PathPartitionExit leaves every object entered on the way, so the ray is again inside exactly what contained it: no point
+// location is needed, unless the mesh leaks), or into the medium behind the surface.
+void PathCrossing(uint hit, float3 p, float3 d, uint medium, out bool partition, out float wall, out uint next)
+{
+    PROFILE_KIND(5);
+    partition = PathPartitionExit(hit, p, d, MethodRefracts(hit), wall);
+    next = medium;
+    PROFILE_KIND(6);
+    if (!partition) next = MediumAt(MethodState, p + d * 2 * RayEpsilon, false);
 }
 
 // Mode 0: the current slot of the pair's ring becomes the update's histogram (MethodCellBase, PathCountBase)
@@ -981,13 +1024,13 @@ void TracePath(uint index)
     uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
     MethodAnchor v;
     v.position = S; v.normal = 0; v.previous = S; v.kind = 0; v.edge = 0; v.primitive = 0xffffffff; v.time = 0;
-    bool airListener = true;
+    // The listener's medium, located once per solve (PathEndsMedia); a resumed ray carries its own medium, so only a new ray
+    // locates the source. (Reading the source's medium from the buffer too made the compiler fail to build the static walk's
+    // connection loop, "can't unroll loops marked with loop attribute", as in part 17.)
+    bool airListener = PATH_CLEARANCE_READ[2] == AirMedium;
+    PROFILE_KIND(7);
     v.medium = AirMedium;
-    [loop] for (uint end = 0; end < 2; end++)
-    {
-        uint here = MediumAt(MethodState, end == 0 ? S : L, false);
-        if (end == 0) v.medium = here; else airListener = here == AirMedium;
-    }
+    if (!resumed) v.medium = MediumAt(MethodState, S, false); // (not ?:, whose sides are both evaluated in this dialect)
     float I[8], cI[8], Phi0[8], C[8];
     // A new ray's weight: the histogram is divided by MethodTotalRays when read, so a cohort of n rays carries
     // MethodTotalRays / n each (PathLaunchScale, persistent rays; 1 otherwise) and a change of n between updates
@@ -1167,6 +1210,7 @@ void TracePath(uint index)
                 float3 e = a + z * u, w = e - v.position;
                 float m = length(w);
                 edgeExtent = (r * r + (z - z0) * (z - z0)) * span / r; // 1 / (density of the point on the edge)
+                PROFILE_KIND(7);
                 if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle || !Visible(MethodState, v.position, e, false)) { done = true; continue; }
                 w /= m;
                 float cosBeta = dot(w, u);
@@ -1217,6 +1261,7 @@ void TracePath(uint index)
         // start (a mullion's face meeting a window pane let rays into the pane, where they bounced for hundreds of events).
         // (Profiling bit 15: every segment is traced twice, the same query, so the extra time is one traversal per segment.)
         bool found = false;
+        PROFILE_KIND(0);
         [loop] for (uint traces = (PathProfileFlags & 32768) != 0 ? 0u : 1u; traces < 2; traces++)
             found = TraceScene(MethodState, p, d, offSurface ? 0 : RayEpsilon, limit, false, false, 0xffffffff, hit, distance, normal);
         // A ray in air cannot meet a closed solid's face from inside: it got there through a leak (README part 18)
@@ -1262,6 +1307,7 @@ void TracePath(uint index)
             float startInset = max(0, 4 * RayEpsilon / max(abs(dot(d, plane.xyz)), 1e-3) - sinceStart);
             float endInset = found ? 4 * RayEpsilon / max(abs(dot(d, normal)), 1e-3) : 0;
             float3 qb = p + d * clamp(along, min(startInset, .5 * segment), max(segment - endInset, .5 * segment));
+            PROFILE_KIND(4);
             bool seen = lc > 0 && rho2 < clearance * clearance && Visible(MethodState, qb, L, false);
             if (seen)
             {
@@ -1395,11 +1441,7 @@ void TracePath(uint index)
         float pick = RandomRay(rng) * total;
         bool transmit = !split && pick >= mD && pick < mD + mT;
         float wall = 0; bool partition = false; uint next = medium;
-        if (keepBranch || transmit)
-        {
-            partition = PathPartitionExit(hit, p, d, MethodRefracts(hit), wall);
-            next = MediumAt(MethodState, p + d * ((partition ? wall : 0) + 2 * RayEpsilon), false);
-        }
+        if (keepBranch || transmit) PathCrossing(hit, p, d, medium, partition, wall, next);
         if (keepBranch)
         {
             branch = chain; branchSurvival = survival;
@@ -1500,6 +1542,26 @@ void TracePath(uint index)
     }
     InterlockedMax(MethodStats[MethodBands * MethodDepths * MethodStatStride + CounterLongestChain], iterations);
     MethodCount(CounterIterations, iterations);
+#ifdef PATH_PROFILE
+    {
+        // Totals per kind [kind 8][queries, node visits, triangle tests], then per thread of the dispatch [PathProfileThreadWords]:
+        // loop iterations, queries, node visits, triangle tests, and the walk segments' queries and node visits (MethodTransport.WorkProfileReport).
+        uint base = MethodBands * MethodDepths * MethodStatStride + MethodCounters;
+        [unroll] for (uint kp = 0; kp < 4; kp++)
+        {
+            InterlockedAdd(MethodStats[base + 3 * kp], ProfileQueriesLow[kp]); InterlockedAdd(MethodStats[base + 3 * kp + 1], ProfileNodesLow[kp]);
+            InterlockedAdd(MethodStats[base + 3 * kp + 2], ProfileTrianglesLow[kp]);
+            InterlockedAdd(MethodStats[base + 12 + 3 * kp], ProfileQueriesHigh[kp]); InterlockedAdd(MethodStats[base + 12 + 3 * kp + 1], ProfileNodesHigh[kp]);
+            InterlockedAdd(MethodStats[base + 12 + 3 * kp + 2], ProfileTrianglesHigh[kp]);
+        }
+        uint at = base + 24 + PathProfileThreadWords * (MethodRayOffset + index);
+        MethodStats[at] = iterations;
+        MethodStats[at + 1] = ProfileSum(ProfileQueriesLow + ProfileQueriesHigh);
+        MethodStats[at + 2] = ProfileSum(ProfileNodesLow + ProfileNodesHigh);
+        MethodStats[at + 3] = ProfileSum(ProfileTrianglesLow + ProfileTrianglesHigh);
+        MethodStats[at + 4] = ProfileQueriesLow.x; MethodStats[at + 5] = ProfileNodesLow.x;
+    }
+#endif
 #if PATH_WALK_EDGE
     MethodCount(CounterEdgeConnections, walkSlot.count); // (walk diffraction: deposits offered to the slot)
 #endif

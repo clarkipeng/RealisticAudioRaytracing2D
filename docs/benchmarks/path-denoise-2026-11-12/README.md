@@ -2329,3 +2329,86 @@ The path method is the only raytraced renderer; the CPU direct-sound transport s
 - **Nothing else changes.** The method, the populations (the Church 11,000 rays, the station 4,000 per source), the denoiser and the binaural output are the live showcase's; the HUD and the source markers are hidden; while holding at the platform's edge the view turns toward the fastest-moving source (the train) at most at 120° per second, a capture-only choice so that the film shows what is heard passing. The station runs with part 44's fast train (30 m/s, 6 m/s²).
 - `tools/path_live_church.py video DIR OUT.mp4` puts the two walks one after the other: 1920 × 1080 H.264 High, yuv420p, BT.709 (in the stream), CRF 18, AAC 192 kbit/s, one gain for the whole film (the loudest peak to −1 dBFS), half-second fades, and a 1280 × 720 thumbnail.
 - The film is 69 s: the Church's walk (29 s: standing, up the nave to the organ, back, the doors opened, out along the facade) and the station's (40 s: the waiting room's door, then the train leaving and coming back past the platform). Both captures had zero underruns. Delivered to `~/Movies/site-long-cuts/audio-raytracer-long.mp4`.
+
+## 46. The work per ray: a profile, and the hardware's ceilings
+
+The goal of this round is many more rays, each doing less work: at least 100,000 rays in flight in the Church within about 6 ms of GPU per update, with less noise far down the nave and outside.
+At part 45 the Church held 11,000 rays at about 6.3 ms (tracer about 4.2 ms).
+
+**The profile** (`MethodTransport.WorkProfile`; `MeasurePathLiveBudget` with `profile=1`).
+A copy of the Doppler walk compiled with `PATH_PROFILE` counts, per thread, every scene traversal by the kind of query that made it, with its node visits and triangle tests, and writes each thread's totals after the counters.
+SIMD utilisation is taken per group of 32 consecutive threads (an Apple GPU's SIMD width) as the lanes' sum over 32 times the group's largest; it is an upper bound, since lanes can also diverge inside equal counts.
+The Church's take, 16 updates after the timed rounds, part 45's code:
+
+| Kind of query | queries per thread and update | share of queries | node visits per query | triangle tests per query | share of node visits |
+|---|---:|---:|---:|---:|---:|
+| walk segment (closest hit) | 1.565 | 29.0% | 76.8 | 11.6 | 39.6% |
+| next-event connection, first hit | 0.438 | 8.1% | 96.2 | 10.3 | 13.9% |
+| next-event connection through walls | 0.012 | 0.2% | 62.1 | 6.1 | 0.2% |
+| edge connections (visibility) | 0.203 | 3.8% | 75.1 | 7.7 | 5.0% |
+| beam visibility | 0.303 | 5.6% | 68.1 | 2.3 | 6.8% |
+| transmissions (partition exit and the medium behind) | 0.790 | 14.6% | 43.7 | 5.3 | 11.4% |
+| the source's and the listener's media, every thread | 2.000 | 37.0% | 31.9 | 0 | 21.0% |
+| edge rays from the source | 0.087 | 1.6% | 75.3 | 5.8 | 2.2% |
+| **all** | **5.40** | | **56** | **5.5** | |
+
+- Per thread and update: 3.94 loop iterations, 5.40 queries, 304 node visits, 30 triangle tests, identical at 11,000 and 100,000 rays in flight.
+- SIMD utilisation: 32% of the iterations, 37% of the queries and 33% of the node visits at 11,000 rays (35, 41 and 36% at 100,000); the longest thread ran 77 iterations (103).
+- Throughput of the walk: 10,894 threads × 5.40 queries in 5.84 ms is **10 M queries per second** at 11,000 rays, and 99,914 × 5.40 in 24.65 ms is **22 M/s** at 100,000 (four variants interleaved, denoiser on, load 6–11).
+
+**The ceilings.**
+- **Software, this tree.** A kernel that does nothing but scene queries (`PathTraceBench`), from the positions of the rays in flight, 2²⁰ queries per dispatch: **34 M/s** for closest hits in fresh uniform directions (as after scattering), 46 M/s along the rays' own directions, 76 M/s for any-hit queries toward the listener.
+- **Hardware.** `tools/metal_rt_ceiling.swift` builds a Metal acceleration structure of the same 17,345 triangles (dumped with `ACOUSTIC_PATH_BUDGET_DUMP`) and runs the same queries with Metal's intersector from the same rays: **1,060 M/s** in fresh directions, 678 M/s along the rays' own directions, 629 M/s for any-hit queries between two rays' positions (longer than the queries toward the listener).
+- A wide, compressed tree in software typically gives two to three times a binary tree's rate on GPUs (Ylitie, Karras and Laine 2017); that was not measured here.
+
+**Where the gap is.**
+1. **Hardware against our software traversal: 8–31 times.** The traversal is a binary tree of 48-byte nodes, both children's boxes tested per step, every triangle test loading its primitive and its object's pose and rotating three vertices.
+2. **The walk against its own traversal: 3–7 times.** In isolation the tree answers 34–76 M queries per second; inside the walk 10–22 M/s. The rest is the walk's own work per query (state, materials, connections, deposits), its SIMD utilisation of about a third, and its occupancy: a kernel of this size holds few threads per core, and at 11,000 rays the GPU is not even full.
+3. **Queries that need not exist: 37%.** Every thread located the source and the listener in the scene's closed volumes, every update, for an answer that is the same for all of them (part 47).
+4. **Node visits: 77 per walk segment.** Each object has its own tree, and the boxes of the Church's walls, roofs, arcades and meadow all span the nave, so a ray there descends a dozen trees from their roots (part 48).
+
+So the first changes are exact ones that remove work (parts 47–49); the structural ones (the walk split into stages, hardware queries) come after.
+
+## 47. Fewer point-location queries
+
+- **The ends' media, once per update.** A kernel of two threads (`PathEndsMedia`) locates the source and the listener after the clearance kernel and writes their media beside the clearance; the walk reads the listener's there.
+  Reading the source's medium there as well made the compiler fail to build the static walk ("can't unroll loops marked with loop attribute", as part 17 found), so a new ray still locates the source itself; a resumed ray carries its own medium and needs neither.
+  That turns 2 point-location queries per thread into one per new ray (17% of the rays).
+- **No point location after a partition.** A transmission through a partition ends at its far face only once every object entered on the way has been left (part 18), so the ray is again inside exactly what contained it, and its medium is the one it had; the point-location query after a partition crossing is dropped (`PathCrossing`). A refracting medium still locates what lies behind the surface. The two agree wherever the meshes are closed.
+
+Queries per thread went from 5.40 to 3.40; the media at the start went from 37% of all queries to 0, and the medium after a transmission from 0.43 to 0.26 queries per thread.
+Interleaved at 11,000 rays (three variants, denoiser on, load 8–14), the time did not move: 6.00 [5.09–7.50] ms with every thread locating both ends, 5.99 [5.09–7.40] ms without.
+At 11,000 rays the GPU is not full and the update lasts as long as its slowest SIMD groups' chains; a query that every lane makes at the same point, coherently, costs little there. It matters where the GPU is full (part 49's 100,000-ray rows include it).
+
+## 48. One tree over the objects that have not moved
+
+**What changed** (`StaticTraceTree.cs`, `SahBuilder.cs`, `Geometry.hlsl` `TraceScene`).
+The scene's queries now descend a tree of their own: every object that has not moved since the first update merged into one world-space tree of its triangles (the same binned surface-area heuristic as the mesh trees, now `SahBuilder`, shared by both), under a small instance tree with the objects that have moved.
+- **Exact.** Triangles are tested as before and ties go to the lower primitive index, so the hits do not depend on the tree; the merged tree's boxes are padded beyond the rounding of the poses, as the instance boxes are.
+- **Motion.** An object that moves, or changes its active or geometry flags, leaves the merged set for good. Until the merged tree without it has been rebuilt on a worker thread, the queries descend the instance tree, as before, so a door that opens costs no stall. In the Church one object leaves the set during the take (one rebuild); the station's trains leave it at their first move.
+- **What keeps the instance tree.** Point location (`MediumAt`) and walk diffraction look objects up by their own trees, so they still descend it from its root; `BvhTraceRoot` is the merged tree's root, or 0 for the instance tree.
+
+**Effect** (interleaved, 11,000 rays, three variants, denoiser on, load 8–14): node visits per walk segment 76.8 → 55.1, per thread 304 → 175 (with part 47); tracer **5.99 [5.09–7.40] → 4.47 [3.66–6.06] ms**.
+
+## 49. Triangles stored in the tree
+
+**What changed** (`Geometry.hlsl` `ConsiderTriangle`, `StaticTraceTree.InlineTriangles`).
+The merged tree's leaves hold their triangles in the node array itself, one node each: the first vertex and the primitive's index, the two edges, and the parallel test's scale 8ε |e₁| |e₂|, all in world space.
+A triangle test then loads one 48-byte node instead of a primitive and its object's pose, and rotates nothing; the arithmetic is the old test's, so a hit changes only where world-space rounding differs, in the last bits.
+No buffer is added (the walk binds close to Metal's limit, part 31).
+
+**Ceiling** (`PathTraceBench`, 2²⁰ queries): closest hits in fresh directions 34 → **83 M/s**, along the rays' directions 46 → 95 M/s, any-hit toward the listener 76 → 124 M/s (the instance tree with part 47 against the merged tree with its triangles stored).
+
+**Time per update, interleaved** (no denoiser; the instance tree against the merged tree with stored triangles, both with part 47):
+
+| Rays in flight | instance tree | merged tree, triangles stored | profile, per thread |
+|---:|---|---|---|
+| 11,000 | 4.28 [3.87–5.57] ms | **3.03 [2.65–3.74] ms** | node visits 245 → 172 |
+| 100,000 | 21.75 [20.66–24.05] ms | **13.00 [12.00–13.91] ms** | |
+
+At 100,000 rays the tracer took 24.65 ms with part 45's code (part 46, another process), so parts 47–49 make it **1.9 times** faster there, and about 2 times at 11,000 rays (5.84–6.00 → 3.03 ms).
+The walk now runs at 3.40 queries per thread, 11,000 × 3.40 in 3.03 ms (12 M/s) and 100,000 × 3.40 in 13.0 ms (26 M/s); its SIMD utilisation is unchanged at about 30%.
+
+**Checks.** The full tier passes.
+On the wave suite (full solves at 2,048 rays, four seeds, `suite.py` beside this file) parts 47–49 score exactly as part 27's runs to two decimals: level 3.38 dB overall, 1.81 in view, 4.91 in shadow, 1.95 in closed rooms; T30 70% overall, EDT 195%.
+The histograms differ from part 27's in the last bits only (1.4 × 10⁻⁸ of the total in the furnished room, 0 in the shoebox, 5.7 × 10⁻⁹ around the BEM canopy).

@@ -148,6 +148,7 @@ void ConsiderMedium(uint v, uint root, uint stateOffset, float3 location, bool i
     float nearest = 1e30; float3 normal = 0;
 #ifdef USE_BVH
     uint hit = 0xffffffff;
+    PROFILE_QUERY();
     TraceMesh(root, pose, stateOffset, location, probe, RayEpsilon, is2D, false, hit, nearest, normal);
 #else
     for (uint i = 0; i < volume.ids.y; i++)
@@ -168,6 +169,7 @@ uint MediumAt(uint stateOffset, float3 location, bool is2D)
     while (index < BvhNodeCount)
     {
         BvhNode node = BvhNodes[index];
+        PROFILE_NODE();
         if (all(location.xy >= node.boundsMin.xy) && all(location.xy <= node.boundsMax.xy) &&
             (is2D || (location.z >= node.boundsMin.z && location.z <= node.boundsMax.z)))
         {

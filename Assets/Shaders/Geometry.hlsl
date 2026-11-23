@@ -33,6 +33,26 @@ float3 PointVelocity(uint index, float3 location, float lag = 0)
                 : float3(0, 0, 0));
 }
 static const float RayEpsilon = 0.0001, RayPi = 3.141592653589793;
+// Work profile (PATH_PROFILE kernels only, MethodTransport.WorkProfile; README part 46): per thread, the scene traversals by
+// the kind of query that made them (ProfileKind, set before each query: PROFILE_KIND), and their node visits and triangle tests.
+#ifdef PATH_PROFILE
+static uint ProfileKind = 0;
+static uint4 ProfileQueriesLow = 0, ProfileQueriesHigh = 0, ProfileNodesLow = 0, ProfileNodesHigh = 0, ProfileTrianglesLow = 0, ProfileTrianglesHigh = 0;
+void ProfileAdd(inout uint4 low, inout uint4 high, uint amount)
+{
+    low += amount * (uint4)(ProfileKind == uint4(0, 1, 2, 3)); high += amount * (uint4)(ProfileKind == uint4(4, 5, 6, 7));
+}
+uint ProfileSum(uint4 v) { return v.x + v.y + v.z + v.w; }
+#define PROFILE_KIND(k) ProfileKind = (k)
+#define PROFILE_QUERY() ProfileAdd(ProfileQueriesLow, ProfileQueriesHigh, 1)
+#define PROFILE_NODE() ProfileAdd(ProfileNodesLow, ProfileNodesHigh, 1)
+#define PROFILE_TRIANGLE() ProfileAdd(ProfileTrianglesLow, ProfileTrianglesHigh, 1)
+#else
+#define PROFILE_KIND(k)
+#define PROFILE_QUERY()
+#define PROFILE_NODE()
+#define PROFILE_TRIANGLE()
+#endif
 float3 PastPoint(State state, float3 local, float lag)
 {
     float3 worldPoint = Rotate(state.rotation, local);
@@ -98,6 +118,10 @@ struct BvhNode
 StructuredBuffer<BvhNode> BvhNodes;
 StructuredBuffer<uint> BvhIndices;
 uint BvhNodeCount;
+// The scene queries' tree (StaticTraceTree, README part 48): the objects that have not moved merged into one world-space mesh
+// tree (a top node with links.w = 0xfffffffe, its root in links.x, descended with the identity pose), under the moved
+// objects' instances. 0: the instance tree (its root), which media and walk diffraction always use.
+uint BvhTraceRoot;
 bool BoundsHit(BvhNode node, float3 o, float3 d, bool is2D)
 {
     float near = 0, far = 1;
@@ -123,6 +147,7 @@ bool ConsiderPrimitive(uint id, uint stateOffset, float3 origin, float3 directio
                        bool is2D, inout uint hit, inout float distance, inout float3 normal)
 {
     float3 candidateNormal;
+    PROFILE_TRIANGLE();
     float candidate = IntersectPrimitive(id, stateOffset, origin, direction, is2D, 0, minimum, candidateNormal);
     if (candidate < distance || (hit != 0xffffffff && candidate == distance && id < hit))
     {
@@ -131,6 +156,26 @@ bool ConsiderPrimitive(uint id, uint stateOffset, float3 origin, float3 directio
     return false;
 }
 #ifdef USE_BVH
+// A triangle stored in the node array (StaticTraceTree's merged tree, README part 49): its first vertex and the primitive's index
+// (boundsMin), the first edge and 8 epsilon |e1| |e2| (boundsMax), the second edge (links.xyz), all in world space, so the test
+// loads no primitive or pose and rotates nothing. The arithmetic is IntersectPrimitive's.
+static const uint TriangleLeaf = 0x40000000u; // a leaf's links.w: its triangles are stored from links.z in the node array
+bool ConsiderTriangle(BvhNode t, float3 origin, float3 direction, float minimum, inout uint hit, inout float distance, inout float3 normal)
+{
+    PROFILE_TRIANGLE();
+    uint id = asuint(t.boundsMin.w);
+    float3 a = t.boundsMin.xyz, e1 = t.boundsMax.xyz, e2 = asfloat(t.links.xyz), h = cross(direction, e2);
+    float det = dot(e1, h);
+    if (abs(det) <= t.boundsMax.w * length(direction)) return false;
+    float3 s = origin - a, q = cross(s, e1);
+    float u = dot(s, h) / det, v = dot(direction, q) / det, along = dot(e2, q) / det;
+    float candidate = along > minimum && u >= 0 && v >= 0 && u + v <= 1 ? along : 1e30;
+    if (candidate < distance || (hit != 0xffffffff && candidate == distance && id < hit))
+    {
+        hit = id; distance = candidate; normal = normalize(cross(e1, e2)); return true;
+    }
+    return false;
+}
 BvhNode WorldBounds(BvhNode node, State pose)
 {
     float3 low = node.boundsMin.xyz, high = node.boundsMax.xyz;
@@ -152,6 +197,7 @@ bool TraceMeshPlanar(uint root, State pose, uint stateOffset, float3 origin, flo
     while (true)
     {
         BvhNode node = BvhNodes[index];
+        PROFILE_NODE();
         if (BoundsHit(WorldBounds(node, pose), origin, direction * distance, is2D))
         {
             if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
@@ -194,6 +240,7 @@ bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 di
     while (true)
     {
         BvhNode node = BvhNodes[index];
+        PROFILE_NODE();
         if (tested || LocalBox(node, o, inv, distance, pad, is2D, entry))
         {
             if (node.links.w == 0)
@@ -208,6 +255,11 @@ bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 di
                     index = leftFirst ? node.links.x : node.links.y; tested = true; continue;
                 }
                 if (left || right) { index = left ? node.links.x : node.links.y; tested = true; continue; }
+            }
+            else if ((node.links.w & TriangleLeaf) != 0)
+            {
+                for (uint stored = 0; stored < (node.links.w & 0xffffu); stored++)
+                    if (ConsiderTriangle(BvhNodes[node.links.z + stored], origin, direction, minimum, hit, distance, normal) && anyHit) return true;
             }
             else
                 for (uint leaf = 0; leaf < node.links.w; leaf++)
@@ -225,16 +277,20 @@ bool TraceScene(uint stateOffset, float3 origin, float3 direction, float minimum
                 bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
 {
     hit = 0xffffffff; distance = maximum; normal = 0;
+    PROFILE_QUERY();
 #ifdef USE_BVH
-    uint stack[32], depth = 0, index = 0;
-    while (index < BvhNodeCount)
+    uint stack[32], depth = 0, index = ignoredOwner == 0xffffffff ? BvhTraceRoot : 0;
+    while (BvhNodeCount > 0) // (the trace tree lies after the BvhNodeCount nodes of the instance tree)
     {
         BvhNode node = BvhNodes[index];
+        PROFILE_NODE();
         if (BoundsHit(node, origin, direction * distance, is2D))
         {
             if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
-            State pose = States[stateOffset + node.links.z];
-            if (node.links.z != ignoredOwner && (pose.flags.x & 3) == 3)
+            bool merged = node.links.w == 0xfffffffe;
+            State pose = States[stateOffset + (merged ? 0 : node.links.z)];
+            if (merged) { pose.position = 0; pose.rotation = float4(0, 0, 0, 1); pose.flags.x = 3; }
+            if ((merged || node.links.z != ignoredOwner) && (pose.flags.x & 3) == 3)
             {
                 if (TraceMesh(node.links.x, pose, stateOffset, origin, direction, minimum, is2D, anyHit,
                               hit, distance, normal)) return true;

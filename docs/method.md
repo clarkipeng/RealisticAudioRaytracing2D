@@ -47,7 +47,15 @@ Each object has an immutable bounding volume hierarchy built with a binned surfa
 Rays are brought into an object's frame once and test boxes with the inverse direction; the nearer child is visited first and the farther one is culled when popped if a closer hit has been found since.
 Triangles are always tested in world space and ties go to the lower primitive index, so the hits do not depend on the tree.
 A top-level tree over the objects' boxes is rebuilt, not refitted, whenever an object moves: a refitted tree keeps its first grouping, and an object that travels far (a train on its loop) then stretches every box above it across its path.
+
+The scene's queries descend a tree of their own (notebook parts 48 and 49): every object that has not moved since the first update merged into one world-space tree of its triangles, built by the same heuristic, under a small instance tree of the objects that have moved.
+Its leaves store their triangles in the node array, in world space (first vertex, both edges, the primitive's index), so a triangle test loads one node and rotates nothing.
+An object that moves leaves the merged set for good; until the merged tree without it is rebuilt on a worker thread, queries descend the instance tree, so the hits never depend on which tree served them.
+Point location (the medium at a point) keeps the instance tree, whose objects it looks up by their own trees.
+In the Church the merged tree halves the node visits per walk segment's query against separate trees whose boxes all span the nave (77 → 55) and stored triangles double the traversal's rate.
+
 Hardware ray tracing is not available to these kernels on Metal in Unity 6.4.
+Measured outside Unity on the same triangles and rays, Metal's intersector answers 0.6–1.1 G queries per second on the M5, 5–13 times this software traversal (notebook part 46).
 
 **Materials.**
 Each material has per octave band an absorption coefficient α, a scattering coefficient s (the share of reflected energy that is scattered, ISO 17497-1), and a transmission τ, plus an acoustic index (the speed of sound in air over that in the material: 0.064 for stone, 0.095 for wood).
@@ -423,13 +431,15 @@ Measured on an Apple M5 (16 GB) under Unity 6.4 on Metal, GPU time per update, t
 
 | Phase | ms per update |
 |---|---:|
-| tracer: edge distribution, walk, population control and sort, histogram and ring | 4.2 |
+| tracer: edge distribution, walk, population control and sort, histogram and ring | 3.0 (4.2 before notebook parts 47–49) |
 | audio: path kernels, convolution, echoes, direct path, PCM and readback | 1.45 |
 | denoiser | 0.64 |
-| total | about 6.3 |
+| total | about 5.1 |
 
 Each phase includes one fence's round trip (about 0.2 ms).
-The traversal is about a third of the tracer; the histogram and ring writes cost nothing measurable; the audio side and the denoiser do not depend on N, and below about 6,000 rays the tracer has a floor of about 3.3 ms, so no population reaches 5 ms with this structure.
+At 100,000 rays in flight the tracer takes 13.0 ms (21.8 ms before notebook parts 47–49).
+Per thread and update the walk makes 3.4 scene queries (walk segments 46% of them, next-event and edge connections 19%, beam visibility 9%, transmissions 18%) and 172 node visits, at a SIMD utilisation of about 30% (notebook part 46's work profile); it realises 12–26 M queries per second against 83–124 M/s for its traversal alone in a kernel that does nothing else.
+The histogram and ring writes cost nothing measurable; the audio side and the denoiser do not depend on N.
 Memory: 160 bytes per ray in flight, and the ring of future histograms (44 MB in the Church, whose meadow makes the ring 262 slots deep).
 
 In the live showcase (release player, 60 Hz, windowed smoke runs of a scripted walk), the Church at 11,000 rays had no underrun in three runs, frame GPU time 9.3 ms median and 12.5 ms at the 99th percentile, the scene's own rendering included.
@@ -451,7 +461,7 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 - **One batch in flight.** The live renderer waits for each batch's readback before dispatching the next, so its throughput is quantised to frames; this, not the GPU's capacity, limits the station to 4,000 rays per source (section 12). Several batches in flight would remove it.
 - **The audio's fixed cost per source.** Kernels, convolution and denoiser cost about 2 ms per source per update whatever the population, so a second source costs half the tracer's budget.
 - **The first run of a new build stalls** for about 2.5 s when the Doppler walk is first dispatched (Metal compiles its pipeline on first use).
-- **Hardware ray tracing is unavailable** to Unity compute kernels on Metal; a native plugin route was assessed (it would save at most about 2 ms) and not built.
+- **Hardware ray tracing is unavailable** to Unity compute kernels on Metal. Measured in a native program, Metal's intersector is 5–13 times the software traversal on the same queries (notebook part 46); using it needs the walk's queries batched between stages, which the walk does not yet do.
 
 ## 14. Where the code is
 
@@ -459,7 +469,8 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 |---|---|
 | walk, persistent rays, population control, beams, connections, rate channel | `Assets/Shaders/MethodPath.hlsl`, `Assets/Resources/Acoustics/PathMethod.compute` |
 | shared walk helpers: edge sampling, UTD, materials, media, Lambert directions | `Assets/Shaders/MethodCommon.hlsl`, `Assets/Shaders/Transport.hlsl` |
-| intersection and trees | `Assets/Shaders/Geometry.hlsl`, `Assets/Scripts/Simulation/DirectBvh.cs` |
+| intersection and trees | `Assets/Shaders/Geometry.hlsl`, `Assets/Scripts/Simulation/DirectBvh.cs`, `StaticTraceTree.cs`, `SahBuilder.cs` |
+| work profile and traversal ceilings | `MethodTransport.WorkProfile` and `TraceBench`, `MeasurePathLiveBudget` (`profile=1`), `tools/metal_rt_ceiling.swift` |
 | direct sound and its spectral synthesis | `PathDirectArrival` and `PathExpandDirect` in `MethodPath.hlsl`, `Assets/Scripts/Simulation/SpectralAudio.cs`, `Doppler.cs`, `GpuAudio.cs` |
 | dispatch, pools, ring, Doppler kernels | `Assets/Scripts/Simulation/MethodTransport.cs`, `Assets/Scripts/Simulation/TransportSolver.cs` |
 | histogram bins | `Assets/Scripts/Simulation/PathBins.cs` |

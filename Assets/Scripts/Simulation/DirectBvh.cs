@@ -19,7 +19,7 @@ internal sealed class DirectBvh
     readonly int[] owners,order,roots,stack=new int[32],meshStack=new int[32];
     readonly Node[] bounds;
     readonly Vector3[] centers;
-    readonly CenterComparer comparer;
+    readonly SahBuilder.CenterComparer comparer;
     readonly bool planar;
     readonly int objectCount,topCount;
     int built;
@@ -28,6 +28,10 @@ internal sealed class DirectBvh
     Pose[] previous=Array.Empty<Pose>();
     int previousFrames;
     public int NodeCount => Nodes.Length;
+    // The GPU queries' tree (3D scenes): the unmoved objects merged, after these nodes and indices in the GPU buffers.
+    public readonly StaticTraceTree Trace;
+    internal bool HasMesh(int owner) => Array.IndexOf(owners,owner)>=0;
+    internal Node Instance(int owner){var node=bounds[owner];node.first=(uint)owner;node.left=(uint)roots[owner];node.count=uint.MaxValue;return node;}
     public int TopNodeCount => topCount;
     public int PrimitiveCount => local.Length;
     public double BuildSeconds {get;private set;}
@@ -44,13 +48,20 @@ internal sealed class DirectBvh
         var counts=new int[objectCount];foreach(var p in geometry)counts[p.objectIndex]++;
         int instances=0,nodeCount=0;foreach(int count in counts)if(count>0){instances++;nodeCount+=2*count-1;}   // an upper bound; trimmed below
         owners=new int[instances];order=new int[instances];topCount=CountNodes(instances,1);Nodes=new Node[checked(topCount+nodeCount)];
-        Indices=new int[geometry.Length];centers=new Vector3[Math.Max(objectCount,geometry.Length)];comparer=new CenterComparer(centers);
+        Indices=new int[geometry.Length];centers=new Vector3[objectCount];comparer=new SahBuilder.CenterComparer(centers);
         var starts=new int[objectCount];int first=0,ownerIndex=0;
         for(int owner=0;owner<objectCount;owner++){starts[owner]=first;first+=counts[owner];if(counts[owner]>0)owners[ownerIndex++]=owner;}
-        for(int i=0;i<geometry.Length;i++){Indices[starts[geometry[i].objectIndex]++]=i;var p=geometry[i];centers[i]=planar?(p.a+p.b)*.5f:(p.a+p.b+p.c)/3;}
-        built=topCount;first=0;
-        foreach(int owner in owners){roots[owner]=BuildSah(Indices,first,counts[owner],0);first+=counts[owner];}
+        var low=new Vector3[geometry.Length];var high=new Vector3[geometry.Length];var middle=new Vector3[geometry.Length];
+        for(int i=0;i<geometry.Length;i++)
+        {
+            Indices[starts[geometry[i].objectIndex]++]=i;var p=geometry[i];middle[i]=planar?(p.a+p.b)*.5f:(p.a+p.b+p.c)/3;
+            low[i]=Vector3.Min(p.a,p.b);high[i]=Vector3.Max(p.a,p.b);if(!planar){low[i]=Vector3.Min(low[i],p.c);high[i]=Vector3.Max(high[i],p.c);}
+        }
+        var meshes=new SahBuilder(low,high,middle,planar,Nodes,topCount);first=0;
+        foreach(int owner in owners){roots[owner]=meshes.Build(Indices,first,counts[owner]);first+=counts[owner];}
+        built=meshes.Built;
         var trimmed=Nodes;Array.Resize(ref trimmed,built);Nodes=trimmed;
+        if(!planar)Trace=new StaticTraceTree(geometry,objectCount,Nodes.Length,geometry.Length);
         BuildSeconds=TakeRender.Elapsed(start);
     }
     static int CountNodes(int count,int leaf) => count==0 ? 0:count<=leaf ? 1:checked(1+CountNodes(count/2,leaf)+CountNodes(count-count/2,leaf));
@@ -91,104 +102,28 @@ internal sealed class DirectBvh
         // grouping, so an object that travels far (the station's train on its loop) stretches every box above it across
         // its path, and rays then descend into subtrees they cannot hit (README part 41). The rebuild is the same median
         // split over the instances' current centres as the first build: O(n log n) over the instances, n in the hundreds.
-        if(changed){built=0;Array.Copy(owners,order,owners.Length);if(order.Length>0)Build(order,0,order.Length,true);}
+        if(changed){built=0;Array.Copy(owners,order,owners.Length);if(order.Length>0)Build(order,0,order.Length);}
         previousFrames=frames;
+        Trace?.Update(state,frames,this);
         if(changed)UpdateCount++;
         if(!initialized){initialized=true;BuildSeconds+=TakeRender.Elapsed(start);}else UpdateSeconds+=TakeRender.Elapsed(start);
         return changed;
     }
-    sealed class CenterComparer : IComparer<int>
-    {
-        readonly Vector3[] values;public int axis;
-        public CenterComparer(Vector3[] values){this.values=values;}
-        public int Compare(int a,int b){int order=values[a][axis].CompareTo(values[b][axis]);return order==0?a.CompareTo(b):order;}
-    }
-    int Build(int[] indices,int first,int count,bool top)
+    // The instance tree: a median split over the instances' current centres, one instance per leaf.
+    int Build(int[] indices,int first,int count)
     {
         int index=built++;
-        if(count<=(top?1:4))
+        if(count<=1)
         {
-            var node=new Node{min=Vector3.positiveInfinity,max=Vector3.negativeInfinity,first=(uint)first,count=(uint)count};
-            if(top){int owner=indices[first];node=bounds[owner];node.first=(uint)owner;node.left=(uint)roots[owner];node.count=uint.MaxValue;}
-            else for(int i=first;i<first+count;i++)
-            {
-                var p=local[indices[i]];var low=Vector3.Min(p.a,p.b);var high=Vector3.Max(p.a,p.b);
-                if(!planar){low=Vector3.Min(low,p.c);high=Vector3.Max(high,p.c);}
-                node.min=Vector3.Min(node.min,low);node.max=Vector3.Max(node.max,high);
-            }
+            int owner=indices[first];var node=bounds[owner];node.first=(uint)owner;node.left=(uint)roots[owner];node.count=uint.MaxValue;
             Nodes[index]=node;return index;
         }
         var lowCenter=centers[indices[first]];var highCenter=lowCenter;
         for(int i=first+1;i<first+count;i++){lowCenter=Vector3.Min(lowCenter,centers[indices[i]]);highCenter=Vector3.Max(highCenter,centers[indices[i]]);}
         var size=highCenter-lowCenter;comparer.axis=size.x>=size.y?0:1;if(size.z>size[comparer.axis])comparer.axis=2;
         Array.Sort(indices,first,count,comparer);
-        int left=Build(indices,first,count/2,top),right=Build(indices,first+count/2,count-count/2,top);
+        int left=Build(indices,first,count/2),right=Build(indices,first+count/2,count-count/2);
         var branch=Union(Nodes[left],Nodes[right]);branch.left=(uint)left;branch.right=(uint)right;branch.first=branch.count=0;Nodes[index]=branch;return index;
-    }
-    // Mesh trees: binned surface-area heuristic over the three axes (12 bins), leaves of up to 8 triangles where
-    // the heuristic prefers them, a median split beyond depth 18 (with the median levels below it the tree stays within the GPU traversal stack of 32 entries).
-    // The tree only orders and culls the exact triangle tests, so its shape changes the time, not the hits.
-    const int Bins=12,MaximumLeaf=8,SahDepth=18;
-    readonly Vector3[] binLow=new Vector3[Bins],binHigh=new Vector3[Bins];readonly int[] binCount=new int[Bins];
-    readonly float[] costLeft=new float[Bins];
-    static float Area(Vector3 low,Vector3 high){var e=Vector3.Max(high-low,Vector3.zero);return e.x*e.y+e.y*e.z+e.z*e.x;}
-    void Bounds(int id,out Vector3 low,out Vector3 high)
-    {
-        var p=local[id];low=Vector3.Min(p.a,p.b);high=Vector3.Max(p.a,p.b);
-        if(!planar){low=Vector3.Min(low,p.c);high=Vector3.Max(high,p.c);}
-    }
-    int BuildSah(int[] indices,int first,int count,int depth)
-    {
-        if(count<=4 || depth>=SahDepth)return depth>=SahDepth?Build(indices,first,count,false):Leaf(indices,first,count);
-        var lowCenter=centers[indices[first]];var highCenter=lowCenter;var lowBox=Vector3.positiveInfinity;var highBox=Vector3.negativeInfinity;
-        for(int i=first;i<first+count;i++)
-        {
-            lowCenter=Vector3.Min(lowCenter,centers[indices[i]]);highCenter=Vector3.Max(highCenter,centers[indices[i]]);
-            Bounds(indices[i],out var l,out var h);lowBox=Vector3.Min(lowBox,l);highBox=Vector3.Max(highBox,h);
-        }
-        float parent=Area(lowBox,highBox),best=float.PositiveInfinity;int bestAxis=-1,bestSplit=0;
-        for(int axis=0;axis<(planar?2:3);axis++)
-        {
-            float extent=highCenter[axis]-lowCenter[axis];if(!(extent>0))continue;
-            for(int b=0;b<Bins;b++){binLow[b]=Vector3.positiveInfinity;binHigh[b]=Vector3.negativeInfinity;binCount[b]=0;}
-            for(int i=first;i<first+count;i++)
-            {
-                int b=Math.Min(Bins-1,(int)((centers[indices[i]][axis]-lowCenter[axis])/extent*Bins));
-                Bounds(indices[i],out var l,out var h);binLow[b]=Vector3.Min(binLow[b],l);binHigh[b]=Vector3.Max(binHigh[b],h);binCount[b]++;
-            }
-            var accLow=Vector3.positiveInfinity;var accHigh=Vector3.negativeInfinity;int n=0;
-            for(int b=0;b<Bins-1;b++){accLow=Vector3.Min(accLow,binLow[b]);accHigh=Vector3.Max(accHigh,binHigh[b]);n+=binCount[b];costLeft[b]=n==0?0:Area(accLow,accHigh)*n;}
-            accLow=Vector3.positiveInfinity;accHigh=Vector3.negativeInfinity;n=0;
-            for(int b=Bins-1;b>0;b--)
-            {
-                accLow=Vector3.Min(accLow,binLow[b]);accHigh=Vector3.Max(accHigh,binHigh[b]);n+=binCount[b];
-                if(n==0 || n==count)continue;
-                float cost=costLeft[b-1]+Area(accLow,accHigh)*n;
-                if(cost<best){best=cost;bestAxis=axis;bestSplit=b;}
-            }
-        }
-        // Leaf if splitting does not pay (traversal cost 1 against one triangle test each).
-        if(bestAxis<0 || (count<=MaximumLeaf && 1+best/Math.Max(parent,1e-20f)>=count))
-            return bestAxis<0?(count<=MaximumLeaf?Leaf(indices,first,count):Build(indices,first,count,false)):Leaf(indices,first,count);
-        float lo=lowCenter[bestAxis],span=highCenter[bestAxis]-lo;
-        int left=first,right=first+count-1;
-        while(left<=right)
-        {
-            int b=Math.Min(Bins-1,(int)((centers[indices[left]][bestAxis]-lo)/span*Bins));
-            if(b<bestSplit)left++;else{int t=indices[left];indices[left]=indices[right];indices[right]=t;right--;}
-        }
-        int split=left-first;
-        if(split==0 || split==count)return Build(indices,first,count,false);
-        int index=built++;
-        int l2=BuildSah(indices,first,split,depth+1),r2=BuildSah(indices,first+split,count-split,depth+1);
-        var branch=Union(Nodes[l2],Nodes[r2]);branch.left=(uint)l2;branch.right=(uint)r2;branch.first=branch.count=0;Nodes[index]=branch;return index;
-    }
-    int Leaf(int[] indices,int first,int count)
-    {
-        int index=built++;
-        var node=new Node{min=Vector3.positiveInfinity,max=Vector3.negativeInfinity,first=(uint)first,count=(uint)count};
-        for(int i=first;i<first+count;i++){Bounds(indices[i],out var l,out var h);node.min=Vector3.Min(node.min,l);node.max=Vector3.Max(node.max,h);}
-        Nodes[index]=node;return index;
     }
     bool MeshBlocked(int root,AcousticTake.State pose,Vector3 origin,Vector3 end)
     {

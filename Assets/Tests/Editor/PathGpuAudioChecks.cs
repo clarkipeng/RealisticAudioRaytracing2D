@@ -147,7 +147,9 @@ public partial class TakeChecks
     // denoise (0/1), flags (MethodTransport.ProfileFlags), iterationCap, edgeSlice, kernels (0: the path
     // kernels built once and then left, a profiling bound), spectra (0: every partition through the band FFTs), kernelSkip (GpuAudio.PathKernelSkip, a profiling bound), otherDenoiser (1: the weights in ACOUSTIC_PATH_BUDGET_DENOISER), spectralLimit (GpuAudio.PathSpectralGroupLimit), fftSingle (1: one FFT stage per pass),
     // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000-23,000),
-    // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU); default "base:".
+    // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU), profile (1: after the
+    // rounds, the work profile of 16 updates, MethodTransport.WorkProfile), merged (0: the GPU queries descend the instance tree,
+    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles); default "base:".
     // All variants live in one process and are measured interleaved, in rounds of 8 updates each
     // (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25), after a horizon of warm-up updates each, so drift from other work on
     // the machine falls on every variant alike. Reported: median and the 10th-90th percentile range per phase, and the
@@ -158,7 +160,7 @@ public partial class TakeChecks
         public string name; public GpuAudio gpu; public TransportSolver solver; public AcousticTake.State[] state; public long cursor;
         public readonly System.Collections.Generic.List<double>[] times = {new(), new(), new()};
         public readonly System.Collections.Generic.List<int> populations = new();
-        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle;
+        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle, profile, merged = true, inline = true;
     }
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
     public void MeasurePathLiveBudget()
@@ -213,6 +215,9 @@ public partial class TakeChecks
                         case "otherDenoiser": other = value != 0; break;
                         case "spectralLimit": v.spectralLimit = value; break;
                         case "fftSingle": v.fftSingle = value != 0; break;
+                        case "profile": v.profile = value != 0; break;
+                        case "merged": v.merged = value != 0; break;
+                        case "inline": v.inline = value != 0; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
                 }
@@ -220,6 +225,7 @@ public partial class TakeChecks
                 v.gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
                 v.solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
                 v.solver.Method.ProfileFlags = v.flags;
+                v.solver.TraceTreeEnabled = v.merged; v.solver.TraceTreeInline = v.inline;
                 if (other)
                 {
                     // Another denoiser's weights (ACOUSTIC_PATH_BUDGET_DENOISER: a folder with weights.bytes and header.json).
@@ -256,13 +262,37 @@ public partial class TakeChecks
             }
             foreach (var v in variants) for (int u = 0; u < v.solver.Method.WarmUpdates; u++) Update(v, -1);
             for (int r = 0; r < rounds; r++) foreach (var v in variants) for (int u = 0; u < perRound; u++) Update(v, r);
+            // The work profile (profile=1, README part 46): after the timed rounds, 16 updates of the walk's counting kernel.
+            foreach (var v in variants)
+            {
+                if (!v.profile) continue;
+                var totals = new MethodTransport.WorkProfileTotals();
+                v.solver.Method.WorkProfile = true;
+                for (int u = 0; u < 16; u++) { Update(v, -1); v.solver.Method.AddWorkProfile(totals); }
+                v.solver.Method.WorkProfile = false;
+                UnityEngine.Debug.Log($"PATH_WORK {v.name}: " + MethodTransport.WorkProfileReport(totals));
+                var m = v.solver.Method;
+                string dump = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_DUMP");
+                if (!string.IsNullOrEmpty(dump))
+                {
+                    // For an external ceiling benchmark (README part 46): world-space triangles at the current state, then the rays the
+                    // latest walk kept (position, direction), as little-endian float32 with counts first.
+                    var rays = m.ReadWalkPool(out int rayCount);
+                    using var w = new BinaryWriter(File.Create(dump));
+                    w.Write(take.Geometry.Length);
+                    foreach (var g in take.Geometry) { var pose = v.state[g.objectIndex]; foreach (var x in new[] {g.a, g.b, g.c}) { var y = pose.position + pose.rotation * x; w.Write(y.x); w.Write(y.y); w.Write(y.z); } }
+                    w.Write(rayCount);
+                    for (int r = 0; r < rayCount; r++) for (int k = 0; k < 7; k++) if (k != 3) w.Write(rays[r * MethodTransport.PathRayFloats + k]);
+                }
+                UnityEngine.Debug.Log(FormattableString.Invariant($"PATH_CEILING {v.name}: closest hit, fresh directions {m.TraceBench(1 << 20, 0) / 1e6:F0} M/s; closest hit, own directions {m.TraceBench(1 << 20, 1) / 1e6:F0} M/s; any hit to the listener {m.TraceBench(1 << 20, 2) / 1e6:F0} M/s"));
+            }
             string Stat(System.Collections.Generic.List<double> v) { var x = v.ToArray(); Array.Sort(x); return $"{x[x.Length / 2]:F2} [{x[x.Length / 10]:F2}-{x[x.Length * 9 / 10]:F2}]"; }
             string loadAfter = Load();
             foreach (var v in variants)
             {
                 var n = v.populations.ToArray(); Array.Sort(n);
                 UnityEngine.Debug.Log($"PATH_BUDGET {v.name}: tracer {Stat(v.times[0])} ms, audio {Stat(v.times[1])} ms, CPU calls {Stat(v.times[2])} ms; " +
-                                      $"{v.times[0].Count} updates, population {n[n.Length / 2]} [{n[n.Length / 10]}-{n[n.Length * 9 / 10]}], in flight {v.solver.Method.RaysInFlight()}, overflowed {v.solver.Method.RaysOverflowed()}, load {loadBefore} -> {loadAfter}");
+                                      $"{v.times[0].Count} updates, population {n[n.Length / 2]} [{n[n.Length / 10]}-{n[n.Length * 9 / 10]}], in flight {v.solver.Method.RaysInFlight()}, trace-tree rebuilds {v.solver.TraceTreeRebuilds}, overflowed {v.solver.Method.RaysOverflowed()}, load {loadBefore} -> {loadAfter}");
             }
             if (!string.IsNullOrEmpty(tracePath)) File.WriteAllText(tracePath, trace.ToString());
             UnityEngine.Debug.Log($"PATH_BUDGET impulse groups per partition (count:partitions): {variants[0].gpu.PathPartitionGroups}");
