@@ -520,7 +520,9 @@ Details and measurements are in docs/benchmarks/path-denoise-2026-11-12, parts 2
 - **Add a scene:** give its `SceneSession` a `PathLiveScene` (the sources that stay on, those that loop from the start, the rays per source and the smoke walk) and list the scene in `PathLive.Scenes`.
   `ShowcaseAuthoring` (Acoustics > Author live showcase scenes) authors the two scenes' components.
 - **Rays in flight:** 11,000 per source in the Church.
-  The station has two sources, so it runs 4,000 per source: at 8,000 per source its smoke run lost 22,104 samples as the train came back past the platform (before part 41's tree rebuild; 8,000 has not been rerun with the materials, part 44).
+  The station has two sources, so it runs 4,000 per source: at 8,000 and at 6,000 per source its smoke runs lost samples as the train passed the platform.
+  The cause is the live pipeline's single batch in flight, not a GPU spike (part 45).
+- **First run of a new build:** Metal compiles the Doppler walk's pipeline when the listener first moves, a stall of about 2.5 s; run a new build's smoke once before measuring it (part 45).
 - **Options** (command line, for example `open Builds/LiveShowcase/LiveShowcase.app --args -pathPopulation 11000`):
   - `-pathPopulation N`: the rays in flight per source, in every scene.
   - `-stationTrainSpeed V`, `-stationTrainAcceleration A`: the station train's cruise speed (m/s, default 12) and acceleration (m/s², default 3); part 44's 30 m/s pass uses 30 and 6.

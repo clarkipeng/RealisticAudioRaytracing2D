@@ -2254,3 +2254,59 @@ Every path render with counts (the live renderer, the offline renders, the GPU-a
 - `GpuPathReverbMatchesTheCpuReference`: binaural static 3.75 × 10⁻⁵ (unchanged: its listener moves, so the Doppler walk ran before too), mono static 4.18 × 10⁻⁶ (was 6.27 × 10⁻⁶: its echoes are now rendered), moving 6.13 × 10⁻⁵ (6.1 × 10⁻⁵).
 - `PathReflectionsCarryTheImageSourceDoppler`: the slid reflection is unchanged (271.25 Hz against 271.17 Hz, purity 0.825); the comparison "without the rate channel" now steps a discrete impulse from bin centre to bin centre instead of slot noise, 237.75 Hz with purity 0.52 (was 259.75 Hz, 0.68); sliding is still the purer, which is what the check asserts. Its static control stays bit-identical with and without the rate channel.
 - `PathReverbReproducesTheHistogram` and `PathReverbCrossfadeKeepsThePower` pass no counts and are unchanged (0.998).
+
+### (b) The station at 8,000 rays per source
+
+Windowed smoke runs of the station's walk (release player unless stated, 60 Hz, screen unlocked, on mains):
+
+| Build | rays per source | underrun samples | frame GPU ms (median) | note |
+|---|---:|---:|---:|---|
+| part 44's | 8,000 | 12,288 | 10.4 | |
+| this part's | 8,000 | take stopped | | first run of a new build: a 2.3 s GPU stall about 6 s in (`FinishFrameRendering`), see below |
+| this part's | 8,000 | 5,120 | 10.3 | |
+| this part's, development player | 8,000 | 0 | 9.8 | |
+| this part's | 6,000 | 0 | 9.4 | |
+| this part's | 6,000 | 0 | 9.3 | |
+| this part's | 6,000 | 28,672 | 9.9 | in three bursts while the train passes the platform (24.5, 29.4 and 33 s) |
+
+No population above 4,000 had zero underruns in three runs, so the station's default stays at 4,000 rays per source.
+
+**The first run of a new build.**
+The first run of each new player (release and development alike) stalled for 2.3–2.7 s in `PostLateUpdate.FinishFrameRendering`, with the main thread idle, about 5 s into the walk, when the listener first moves and the Doppler walk is dispatched for the first time: Metal compiles that large kernel's pipeline on first use.
+At 8,000 rays per source the renderer could not catch up after it, its observation queue filled and the take stopped; later runs of the same build, with the pipeline cached, did not stall.
+Part 44's paging stall in the first station run after a build was probably the same.
+Warming both walk kernels at load (one dispatch of each on an empty pool) would move it to the loading screen; it is not built.
+
+**Per-stage GPU times are not available in players on Metal.**
+The development player's profiler `Recorder`s also report zero GPU time (part 38 found them empty in release players), so the stages were measured in the editor instead (`MeasurePathLiveBudget`, which now takes the take's window with `ACOUSTIC_PATH_BUDGET_WINDOW`), on the take of a station smoke run, both sources, denoiser on, one update at a time with a fence after each phase:
+
+| Window of the take | rays per source | tracer, ms | audio and denoiser, ms |
+|---|---:|---|---|
+| 18–22 s, standing at the platform's edge | 8,000 | 6.51 [6.06–7.22] | 4.16 [3.97–4.64] |
+| 18–22 s | 4,000 | 5.42 [4.93–6.11] | 3.98 [3.79–4.40] |
+| 27–31 s, the train coming back past the listener | 8,000 | 6.45 [5.99–6.99] | 4.57 [4.02–5.18] |
+| 27–31 s | 4,000 | 5.38 [4.83–6.01] | 4.25 [3.79–4.92] |
+
+So one update of both sources costs about 11 ms at 8,000 rays per source, and the train's pass adds only about 0.4 ms of audio to it; the tracer does not rise.
+
+### (c) The 29–30 ms GPU frames near the train: located
+
+The player's pipeline trace (`-liveTrace`) records the updates each frame dispatches, and the frame's GPU time (`FrameTimingManager`) arrives three frames after the frame it measures.
+Aligned so, the 8,000-ray run of part 44's build sorts cleanly by the updates a frame carries:
+
+| Updates dispatched in the frame | frames | frame GPU, ms (median) |
+|---:|---:|---:|
+| 0 | 836 | 1.1 (the scene alone) |
+| 1 | 1,108 | 12.0 |
+| 2 | 235 | 28.0 |
+
+- **The 29–30 ms frames are frames that carry two audio updates** for both sources: about a ninth of all frames, throughout the walk, not only near the train.
+- **Why a frame carries two.** The live renderer keeps one batch in flight: it dispatches a batch, waits for its PCM readback, and only then dispatches the next, covering everything observed meanwhile (at most `maximumResponsesPerBatch` = 2 updates). Updates (21.3 ms) and frames (16.7 ms) do not divide, and a readback lands one or two frames later, so the next batch often holds two updates.
+- **Why it underruns near the train.** As the train passes, the scene's own rendering of it adds a few milliseconds to every frame (frames with no update rose from 1 to 2–4 ms) and the audio about 0.4 ms per update, so a two-update frame takes 34–37 ms instead of 27–28, longer than two frame periods. Its readback then lands three frames later, so the pipeline delivers two updates per three frames, 2,048 samples per 50 ms or 41,000 per second against the 48,000 the device consumes, and the queue's lead drains: the trace shows the batches stuck at two updates, six to eight observations pending and the queue empty exactly where the underruns are.
+- **So it is the pipeline's shape, not a GPU spike.** The GPU's average load fits (about 0.78 updates of 11–12 ms per frame, plus the scene); what does not fit is one batch in flight, whose readback is quantised to frames.
+
+**The fix, not built.**
+Keep several batches in flight: dispatch each update as soon as its observation is known, up to the playback lead, without waiting for the previous readback.
+Throughput is then the GPU's own (one update in 11–12 ms against 21.3 ms of audio) and no frame carries more than its share.
+It needs `GpuAudio` to own a queue of readbacks (each with its own download buffer) and a source ring that retains every pending batch's input, and `TakeRender.Live` to track a queue of batches instead of one; the GPU-side order of the tracer's per-update uploads must be checked for every buffer the batches share.
+A second, independent saving: the audio and denoiser cost about 2 ms per source per update whatever the population (4.0–4.6 ms for two sources), so a second source costs the station half its tracer budget.

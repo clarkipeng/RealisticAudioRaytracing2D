@@ -168,6 +168,9 @@ public partial class TakeChecks
         string spec = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_VARIANTS") ?? "base:";
         string tracePath = Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_TRACE");
         int rounds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_ROUNDS") ?? "25"), perRound = 8;
+        // The take's window the updates cycle through (ACOUSTIC_PATH_BUDGET_WINDOW: "start,length" in seconds, default 7,8).
+        var window = (Environment.GetEnvironmentVariable("ACOUSTIC_PATH_BUDGET_WINDOW") ?? "7,8").Split(',');
+        double windowStart = double.Parse(window[0], System.Globalization.CultureInfo.InvariantCulture), windowLength = double.Parse(window[1], System.Globalization.CultureInfo.InvariantCulture);
         var shader = RequireGpu();
         var job = TakeBatch.ParseJob(File.ReadAllText(file));
         using var take = AcousticTake.Open(job.take);
@@ -233,7 +236,7 @@ public partial class TakeChecks
             {
                 int step = 1024; long sample = v.cursor;
                 if (v.loadRound >= 0) v.solver.Method.ProfileFlags = round >= v.loadRound ? v.flags | 32768 : v.flags;
-                take.Evaluate(Math.Min(7 * 44100L + sample % (8 * 44100L), take.Metadata.durationSamples), v.state);
+                take.Evaluate(Math.Min((long)(windowStart * rate) + sample % (long)(windowLength * rate), take.Metadata.durationSamples), v.state);
                 Fence();
                 var w = Stopwatch.StartNew();
                 v.solver.BeginSolve(v.state, 1, false); Fence();
