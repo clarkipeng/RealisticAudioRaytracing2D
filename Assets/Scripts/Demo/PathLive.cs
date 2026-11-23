@@ -27,10 +27,10 @@ public sealed class PathLive : MonoBehaviour
     };
     public static string Title(Scene scene) => Scenes.FirstOrDefault(s => s.path == scene.path).title ?? scene.name;
 
-    // 11,000 rays in flight per source: ten windowed smoke runs of the Church at 11,000 and three at 16,000 had no audio
-    // underrun (README part 41; part 38's runs at 11,000 lost samples to main-thread stalls that did not recur).
-    // A scene's PathLiveScene.population overrides it, and the command line both: -pathPopulation N.
-    public int population = 11000;
+    // 23,000 rays in flight per source, the top of the denoiser's trained range: since README parts 47-49 they cost the tracer
+    // about what 11,000 did before, and windowed smoke runs of the Church at 23,000 had no audio underrun (part 51).
+    // A scene's PathLiveScene.population overrides it (the station: 4,000), and the command line both: -pathPopulation N.
+    public int population = 23000;
     // The auto-budget (PathPopulationBudget, README part 34): the GPU milliseconds per update the tracer, the denoiser and
     // the reverb may take together; the population then moves within the denoiser's trained range. Zero: a fixed population.
     // Command line: -pathBudget MS. Off by default: it reads the profiler's per-sample GPU times, which only development

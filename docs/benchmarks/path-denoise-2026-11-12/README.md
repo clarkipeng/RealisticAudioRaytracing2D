@@ -2412,3 +2412,82 @@ The walk now runs at 3.40 queries per thread, 11,000 × 3.40 in 3.03 ms (12 M/s)
 **Checks.** The full tier passes.
 On the wave suite (full solves at 2,048 rays, four seeds, `suite.py` beside this file) parts 47–49 score exactly as part 27's runs to two decimals: level 3.38 dB overall, 1.81 in view, 4.91 in shadow, 1.95 in closed rooms; T30 70% overall, EDT 195%.
 The histograms differ from part 27's in the last bits only (1.4 × 10⁻⁸ of the total in the furnished room, 0 in the shoebox, 5.7 × 10⁻⁹ around the BEM canopy).
+
+## 50. Path guiding: built, measured, not kept
+
+**What was built** (`guiding.patch` beside this file, not applied; `settings.pathGuiding`).
+- **Sampling.** At a scattering point the next direction is drawn by one-sample MIS between Lambert's law and a directional distribution learned for the hit primitive: with probability ½, if the primitive has statistics, a bin by its share and a direction uniformly within it, otherwise Lambert's law. The density is ½ p_guide + ½ cos θ / π and the flux is divided by it, so the estimate stays unbiased; the defensive half (Hesterberg 1995) bounds the weight by 2 and keeps every direction Lambert's law reaches.
+- **Learning.** A ray remembers its latest scattering point's primitive, the bin it left in and 1 / (W p), W its band-summed flux on leaving and p the density it was drawn with. Every contribution it makes afterwards (beams, its later vertices' next-event and edge connections, its transmitted branch's) adds E / (W p) to that bin, E the contribution's energy: the bins estimate the integral of the importance (energy at the listener per unit flux sent) over each bin, as Vorba et al. (2014) and Müller et al. (2017) splat it. The record travels with the persistent ray and its branches.
+- **Bins.** 32 per primitive: 4 equal-area bands of the vertical axis by 8 sectors of azimuth. The primitive is the spatial cell, so the resolution is the scene's own tessellation and no cell size is chosen.
+- **Forgetting.** Each update multiplies the statistics by exp(−|ΔL| / R), ΔL the listener's move and R its clearance, the scale at which the beams' image lattice changes (part 8); a listener at rest keeps them all, and a flush resets them.
+- The statistics live after the cohort counts in their buffer, so the walk binds nothing new.
+
+**Unbiased.** `PersistentRaysMatchTheFullSolveInExpectation` with a fifth mode, the fixed population with guiding learned over the warm-up: window ratios against the full solve 0.96–1.08 (500 Hz: 1.054, 0.980, 0.968; 4 kHz: 0.976, 1.075, 0.961), as close as the unguided population's 0.88–1.10.
+
+**Noise** (`guiding.py` beside this file; the Church's standing, walking and outside tracks, the live settings, two seeds, updates 32–63 against part 25's 8 N targets; window / band level / decay curve errors in dB; the late field's level per update (0.2–2 s) over the target's at 125 / 500 / 2,000 Hz, median over mean):
+
+| Track | N | guiding | ms per update | noisy input | after the denoiser | late field, median / mean |
+|---|---:|---|---:|---|---|---|
+| standing | 11,000 | off | 2.7 | 10.35 / 4.93 / 4.58 | 6.51 / 2.06 / 2.96 | 0.73 / 0.74 / 0.62 |
+| standing | 11,000 | on | 2.6 | 12.01 / 4.73 / 6.50 | 7.35 / 2.31 / 3.64 | 0.54 / 0.64 / 0.59 |
+| walking | 11,000 | off | 2.6 | 10.21 / 4.63 / 5.21 | 6.68 / 2.52 / 3.14 | 0.60 / 0.75 / 0.66 |
+| walking | 11,000 | on | 2.7 | 12.04 / 5.07 / 7.16 | 7.49 / 2.04 / 4.10 | 0.50 / 0.62 / 0.65 |
+| outside | 11,000 | off | 2.7 | 17.47 / 8.19 / 10.82 | 9.28 / 7.67 / 5.56 | 0.22 / 0.15 / 0.10 |
+| outside | 11,000 | on | 2.9 | 17.28 / 9.20 / 12.51 | 9.91 / 6.92 / 6.86 | 0.16 / 0.10 / 0.06 |
+| standing | 23,000 | off | 4.2 | 9.25 / 4.30 / 3.99 | 6.09 / 1.94 / 2.73 | 0.63 / 0.73 / 0.53 |
+| standing | 23,000 | on | 4.1 | 10.24 / 4.50 / 5.26 | 7.28 / 2.58 / 3.71 | 0.27 / 0.52 / 0.57 |
+| walking | 23,000 | off | 4.9 | 8.56 / 4.44 / 4.24 | 6.45 / 2.93 / 2.70 | 0.65 / 0.85 / 0.84 |
+| walking | 23,000 | on | 4.1 | 10.15 / 4.63 / 5.79 | 7.17 / 2.68 / 3.64 | 0.74 / 0.76 / 0.75 |
+| outside | 23,000 | off | 4.4 | 15.83 / 8.06 / 8.27 | 9.72 / 12.29 / 7.18 | 0.04 / 0.06 / 0.05 |
+| outside | 23,000 | on | 4.1 | 15.66 / 6.74 / 10.13 | 10.34 / 12.51 / 6.88 | 0.12 / 0.11 / 0.04 |
+
+- Guiding is worse almost everywhere: 1–2 dB in window and 1–2 dB in decay curve on the noisy input inside, and 0.6–0.8 dB after the denoiser; outside it is within these runs' noise, which is the heavy tail of part 15.
+- It costs nothing measurable (the ms column), so the loss is variance, not time.
+- **Why.** Every direction leads to a later scattering point whose next-event connection reaches the listener, so the importance inside is nearly flat, and what makes it vary is a rare large contribution (a beam that passes close, a connection along a grazing edge). Per primitive and bin the statistics hold tens of samples per horizon, so the learned shares follow those rare events, half the samples go into lobes that one lucky path made, and the variance rises. An estimate of the importance good enough to steer by needs far more samples per cell than the walk makes (Müller et al. train on hundreds of samples per tree leaf), or a coarser, adaptive structure; neither was built.
+- **Adjoint-driven splitting and roulette** (Vorba and Křivánek 2016) in population control was not built: it would weight each ray by the same learned importance, which this measurement shows is too noisy per primitive to steer by.
+- The denoiser was trained on unguided inputs, but the noisy input is worse too, so that is not the cause.
+
+**At equal time** (the unguided rows): parts 47–49 make 23,000 rays cost about what 11,000 did (4.2–4.9 against 4.3–6.0 ms per update in the tracer), and they take 1.1–1.7 dB off the window error of the noisy input inside and outside, and 0.2–0.4 dB off it after the denoiser inside (standing 6.51 → 6.09, walking 6.68 → 6.45 dB), with the late field's spread per update far down the nave down by a fifth to a third (standard deviation over mean 1.30 / 0.93 / 1.10 → 1.04 / 0.67 / 0.72).
+Outside, after the denoiser, 23,000 rays are not better than 11,000 (9.72 against 9.28 dB in window): one update's outside field is set by rare diffracted and transmitted paths (parts 15 and 20), and doubling the rays does not tame that tail.
+
+## 51. The steps not built, the population, and where 100,000 rays stand
+
+**Geometric simplification by wavelength: assessed, not built.**
+- **What it could save.** With the merged tree, a walk segment's query visits 55 nodes and tests 12 triangles among 17,345. A tree's depth grows with the logarithm of its triangles, so removing even three quarters of them (every moulding and detail) removes about two levels, some 4 of the 55 node visits (about 7%), a few percent of the tracer.
+- **Why it is not a cost lever here.** One geometric path carries all eight bands (125 Hz–16 kHz, wavelengths 2.7 m to 2 cm). A proxy that drops features below one band's wavelength misrepresents the bands above it, and a level of detail per band would split each path into eight, multiplying the work it was meant to save. The detail's main effect is acoustic, not computational: it scatters the rays that meet it, which the scattering coefficients would then have to carry, validated band by band against the wave suite. That is a modelling change to make for accuracy, not for speed.
+
+**Cheaper connections: bounded by the profile, not built.**
+Next-event and edge connections are 19% of the walk's queries (0.43 and 0.21 per thread and update) and beam visibility 9%.
+A roulette by expected contribution could skip at most part of them, so at most about a tenth of the queries, and part 47 showed that removing 37% of the queries saved nothing measurable at 11,000 rays (the update is set by its slowest SIMD groups, not its query count). The edge selection (a visible-edge set per update, a light tree or reservoir choice of edges) changes which edges are tested, not how many: 0.2 queries per thread. Neither is where the time is.
+
+**Hardware ray tracing: the ceiling measured, the integration not built.**
+Metal's intersector answers 0.6–1.1 G queries per second on these triangles (part 46), 5–13 times the merged tree's software traversal in a kernel that does nothing else, and 25–90 times what the walk realises (12–26 M/s).
+Using it from Unity's kernels needs the walk's queries to leave the walk: today every query is a call made inside the walk's loop, from eight places, including loops (partition exits, the through-wall connection) and point location.
+The design that follows from the profile:
+1. **One query site.** The walk's loop issues one query per iteration from a single call (origin, direction, interval, closest or any hit), and every caller becomes a stage that sets up its query and consumes the answer at the next iteration. In the megakernel that alone makes the lanes of a SIMD group traverse together whatever they are asking (the traversal's utilisation is now 27–31%), and it shrinks the kernel (the traversal is inlined once instead of about fifteen times; runs that compile this kernel peak about 0.7 GiB above those that find it compiled).
+2. **Queries as records.** With one site, a query is a record: the walk writes it to a buffer and yields, a native Metal plugin (`MTLAccelerationStructure` of the merged tree's triangles, refitted for the moving objects' instances) answers a batch with the intersector, and the walk resumes. Persistent rays already stop and resume; the stage machine adds the query's continuation to their state.
+3. **The software tree stays** as the fallback and the reference; a check compares the hits.
+At 100,000 rays the walk makes 340,000 queries per update; at the hardware's rate they take about 0.3–0.6 ms, against the 13 ms the tracer takes now, so the stage machine and the occupancy of the rest of the walk would set the time, not the traversal.
+
+**The population at about 6 ms** (`MeasurePathLiveBudget` with the auto-budget, `budget=6`, the maximum raised to 100,000 for this measurement, the denoiser on, one variant per process).
+- **Church:** N settled at 15,900 [13,300–15,900] with the tracer at 3.43 ms and the audio with the denoiser at 2.47 ms. The audio's fixed 2.5 ms leaves the tracer 3.5 ms of the 6, and at 100,000 rays the tracer takes 13 ms, so 100,000 rays fit in about 15.5 ms, not 6.
+- **Station** (two sources, 18–22 s of its take): even 4,000 rays per source take 8.75 ms (tracer 5.86, audio 2.89), so 6 ms is out of reach; at 11 ms the auto-budget settled at 10,400 per source (8,000 at part 45).
+
+**The showcase.** The Church's default population is now **23,000** (`PathLive.population`), the top of the denoiser's trained range, which since parts 47–49 costs the tracer about what 11,000 did; the station stays at 4,000 per source.
+Windowed smoke runs of the rebuilt showcase, hidden (release player, 60 Hz):
+
+| Run | Church: N, underrun samples, frame GPU ms median | Station: N per source, underrun samples, frame GPU ms median |
+|---|---|---|
+| `-pathPopulation 23000` | 23,000, 0, 10.5 | |
+| `-pathPopulation 23000` (again) | 23,000, 0, 10.6 | |
+| `-pathPopulation 11000` | 11,000, 0, 8.9 | |
+| final build, defaults | 23,000, 0, 10.6 | 4,000, 0, 7.2 |
+| final build, defaults (again) | 23,000, 0, 10.6 | 4,000, 0, 7.2 |
+
+The first run of the new build stopped before the Church's walk began (part 45's first-run pipeline compile).
+
+**Listening** (`.context/energy-audio/listen/`; the smoke runs' recordings, binaural, never played here): `path-100k-nave-today-11000.wav` against `path-100k-nave-new-23000.wav` (standing at the doors' end of the nave, far from the organ, 0.5–5 s), and `path-100k-outside-today-11000.wav` against `path-100k-outside-new-23000.wav` (outside along the facade, 24.5–29 s).
+"Today" is today's population, 11,000, on the new build: parts 47–49 are exact, so its noise is that of part 45's code.
+
+**Where 100,000 rays stand.** Parts 47–49 made the tracer 1.9 times faster at 100,000 rays (24.65 → 13.0 ms) and 2 times at 11,000; the target of 100,000 within about 6 ms of GPU needs the tracer at about 3.5 ms there, 3.7 times faster again, with the audio and denoiser's 2.5 ms unchanged.
+The profile says where that is: the walk realises a quarter or less of its own traversal's rate (SIMD utilisation about 30%, a large kernel at low occupancy), and its traversal runs at a tenth or less of the hardware's. Both are addressed by the one-query-site stage machine above, which is the next step.

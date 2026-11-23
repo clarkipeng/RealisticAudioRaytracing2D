@@ -126,7 +126,7 @@ A scene cut empties the pools and the ring.
 
 ## 5. Population control
 
-The pool holds a fixed number N of rays in flight (11,000 per source in the Church).
+The pool holds a fixed number N of rays in flight (23,000 per source in the Church, 4,000 in the station).
 Rays are grouped by cohort, the rays launched in one update; cohort k has age a_k = (k − ½) Δt.
 After each update's walk, every cohort is brought to its share of N:
 
@@ -442,7 +442,8 @@ Per thread and update the walk makes 3.4 scene queries (walk segments 46% of the
 The histogram and ring writes cost nothing measurable; the audio side and the denoiser do not depend on N.
 Memory: 160 bytes per ray in flight, and the ring of future histograms (44 MB in the Church, whose meadow makes the ring 262 slots deep).
 
-In the live showcase (release player, 60 Hz, windowed smoke runs of a scripted walk), the Church at 11,000 rays had no underrun in three runs, frame GPU time 9.3 ms median and 12.5 ms at the 99th percentile, the scene's own rendering included.
+In the live showcase (release player, 60 Hz, windowed smoke runs of a scripted walk), the Church at 23,000 rays had no underrun in four runs, frame GPU time 10.6 ms median, the scene's own rendering included (8.9 ms at 11,000; notebook part 51).
+With the auto-budget at 6 ms per update for the tracer, the audio and the denoiser together, the Church settles at about 16,000 rays (tracer 3.4 ms, audio with the denoiser 2.5 ms).
 The train station runs two sources at 4,000 rays each.
 One update of both sources costs about 11 ms there at 8,000 rays each (tracer 6.5 ms, audio and denoiser 4.2–4.6 ms), which the GPU could sustain, but the live renderer keeps one batch in flight and its readback is quantised to frames: near the passing train a two-update batch takes longer than two frames, delivery falls below the device's rate and the queue drains (notebook part 45).
 So 6,000 and 8,000 rays per source both underran in some runs, and the station stays at 4,000.
@@ -455,6 +456,7 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 - **UTD on short edges.** UTD assumes edges long against the wavelength; 71% of the Church's edges are shorter than a wavelength at 250 Hz, and the bias against BTM for such edges is not measured.
 - **The early decay at realtime budgets.** EDT errors on the wave suite are large for every variant, and the denoiser's decay curves in the Church are worse than its window errors.
 - **Connections are checked against the scene when made.** Geometry moving during a connection's flight (tens of milliseconds) is seen as it was when the connection was made.
+- **Path guiding did not pay.** Guiding the scattering directions by a per-primitive distribution learned from the rays' own contributions (unbiased, one-sample MIS with Lambert's law) raised the noise inside by 1–2 dB at every population, because the importance it learned per primitive was dominated by rare large contributions (notebook part 50); it is kept as a patch, not in the code.
 - **Echo selection is per update.** At realtime budgets the end of the early part moves from update to update with the noise; the crossfade hides the switch.
 - **Echoes from static scenes sit at their bin's centre**, up to half a bin (0.4 ms at 50 ms) from their true delay, because the static walk has no delay moment.
 - **The denoiser knows nothing about motion**, and loses to a moving average for a listener walking along a corridor.

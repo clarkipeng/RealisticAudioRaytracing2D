@@ -1,0 +1,370 @@
+diff --git a/Assets/Resources/Acoustics/PathMethod.compute b/Assets/Resources/Acoustics/PathMethod.compute
+index ef46bbb..7d65ffb 100644
+--- a/Assets/Resources/Acoustics/PathMethod.compute
++++ b/Assets/Resources/Acoustics/PathMethod.compute
+@@ -31,6 +31,7 @@
+ #pragma kernel PathSortCountKernel
+ #pragma kernel PathSortScanKernel
+ #pragma kernel PathSortScatterKernel
++#pragma kernel PathGuideBuildKernel
+ 
+ // The Doppler walks read the edge distribution and the listener's clearance through read-only views of them
+ // (MethodCommon.hlsl, MethodPath.hlsl): as UAVs they made 10, over the 8 Unity supports (README part 44). Only there:
+@@ -66,6 +67,7 @@ StructuredBuffer<uint> PathClearanceRead;
+ [numthreads(64,1,1)] void PathSortCountKernel(uint3 id:SV_DispatchThreadID) { PathSortCount(id.x + MethodRayOffset); }
+ [numthreads(1024,1,1)] void PathSortScanKernel(uint3 t:SV_GroupThreadID) { PathSortScan(t.x); }
+ [numthreads(64,1,1)] void PathSortScatterKernel(uint3 id:SV_DispatchThreadID) { PathSortScatter(id.x + MethodRayOffset); }
++[numthreads(64,1,1)] void PathGuideBuildKernel(uint3 id:SV_DispatchThreadID) { PathGuideBuild(id.x); }
+ [numthreads(64,1,1)] void PathEdgeCopyKernel(uint3 id:SV_DispatchThreadID) { PathEdgeCopy(id.x); }
+ [numthreads(64,1,1)] void PathRingKernel(uint3 id:SV_DispatchThreadID) { PathRing(id.x); }
+ [numthreads(64,1,1)] void PathExpandDirect(uint3 id:SV_DispatchThreadID) { PathExpand(id.x); }
+diff --git a/Assets/Scripts/Simulation/MethodTransport.cs b/Assets/Scripts/Simulation/MethodTransport.cs
+index 37e0ad2..605d579 100644
+--- a/Assets/Scripts/Simulation/MethodTransport.cs
++++ b/Assets/Scripts/Simulation/MethodTransport.cs
+@@ -80,6 +80,12 @@ internal sealed class MethodTransport : IDisposable
+     readonly bool population;
+     public readonly double PopulationShares; // 1 + sum over cohorts of min(1, T_f / age): N / new rays
+     readonly ComputeBuffer cohortCounts;
++    // Path guiding (settings.pathGuiding, MethodPath.hlsl "Path guiding"): after the pairs' cohort counts in the same buffer, per pair
++    // the statistics [primitive][bin] (two words each), the cumulative shares [primitive][bin] and the listener's last two positions.
++    public const int GuideBins = 32;
++    readonly bool guiding;
++    readonly int guideKernel = -1, guideStride;
++    readonly int[] guideParity;
+     // Population control writes the kept rays in Morton order of their cell and direction octant (MethodPath.hlsl
+     // PathSortCount/Scan/Scatter): per pair the keys' counts and first slots and per axis the fine bins' counts and
+     // cells (SortFine bins over the scene's box), and per scratch ray its key and offset.
+@@ -170,6 +176,9 @@ internal sealed class MethodTransport : IDisposable
+         if (persistent) { beginKernel = shader.FindKernel("PathPersistentBeginKernel"); ringKernel = shader.FindKernel("PathRingKernel"); edgeCopyKernel = shader.FindKernel("PathEdgeCopyKernel"); }
+         traceStatic = traceKernel; traceDoppler = walk ? traceKernel : shader.FindKernel("TracePath3D" + suffix + "Doppler");
+         if (settings.useBvh && !walk) { traceProfile = shader.FindKernel("TracePath3DBvhProfile"); benchKernel = shader.FindKernel("PathTraceBenchKernel"); }
++        guiding = persistent && settings.pathGuiding && !walk && geometry.Length > 0;
++        if (guiding) guideKernel = shader.FindKernel("PathGuideBuildKernel");
++        guideStride = guiding ? 3 * geometry.Length * GuideBins + 6 : 0;
+         if (population) { sortCountKernel = shader.FindKernel("PathSortCountKernel"); sortScanKernel = shader.FindKernel("PathSortScanKernel"); sortScatterKernel = shader.FindKernel("PathSortScatterKernel"); }
+         if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
+         foreach (int kernel in new[] {traceKernel, clearKernel, expandKernel, edgeWeightKernel, edgeScanKernel, beginKernel, ringKernel, edgeCopyKernel, sortCountKernel, sortScanKernel, sortScatterKernel})
+@@ -304,7 +313,9 @@ internal sealed class MethodTransport : IDisposable
+             pathLive = new ComputeBuffer(4 * Pairs, 4); pathLive.SetData(new uint[4 * Pairs]);
+             parity = new int[Pairs]; ringSlot = new int[Pairs]; edgeCursor = new int[Pairs];
+             edgeWeights = new ComputeBuffer(persistent ? Math.Max(1, Pairs * EdgeCount) : 1, 4);
+-            cohortCounts = new ComputeBuffer(Math.Max(1, Pairs * cohorts), 4);
++            cohortCounts = new ComputeBuffer(Math.Max(1, Pairs * (Math.Max(1, cohorts) + guideStride)), 4);
++            if (guiding) cohortCounts.SetData(new uint[cohortCounts.count]);
++            guideParity = new int[Pairs];
+             sortBuckets = new ComputeBuffer(population ? Pairs * SortStride : 1, 4);
+             if (population)
+             {
+@@ -334,6 +345,7 @@ internal sealed class MethodTransport : IDisposable
+             if (expandKernel >= 0) kernels.Add(expandKernel);
+             if (persistent) kernels.AddRange(new[] {beginKernel, ringKernel, edgeCopyKernel});
+             if (population) kernels.AddRange(new[] {sortCountKernel, sortScanKernel, sortScatterKernel});
++            if (guiding) kernels.Add(guideKernel);
+             bind = () =>
+             {
+             foreach (int kernel in kernels)
+@@ -396,6 +408,7 @@ internal sealed class MethodTransport : IDisposable
+             shader.SetFloat("PathCohortTarget", Rays); shader.SetFloat("PathLaunchScale", 1); shader.SetFloat("PathFineEnd", settings.pathFineBins * settings.pathBinSeconds);
+             shader.SetInt("PathPersistent", persistent ? 1 : 0);
+             shader.SetInt("PathBeamsOnly", settings.pathBeamsOnly ? 1 : 0);
++            shader.SetInt("PathGuiding", guiding ? 1 : 0);
+             shader.SetInt("PathCapacity", PersistentCapacity);
+             shader.SetFloat("PathStep", PersistentStep);
+             shader.SetInt("PathFlush", 0);
+@@ -504,6 +517,16 @@ internal sealed class MethodTransport : IDisposable
+         shader.SetInt("PathRingSlot", ringSlot[pair]);
+         shader.SetInt("PathRateRingBase", RateBase + rateCells + pair * RingSlots * RateMoments * TimeBins.Count);
+         if (flush) Ring(1, (long)RingSlots * ringCells);
++        if (guiding)
++        {
++            // Path guiding: forget (a flush: reset) the pair's statistics and make the update's distributions (MethodPath.hlsl PathGuideBuild).
++            int guide = Pairs * Math.Max(1, cohorts) + pair * guideStride, primitives = geometry.Length;
++            shader.SetInt("PathGuideBase", guide); shader.SetInt("PathGuideCdfBase", guide + 2 * primitives * GuideBins);
++            shader.SetInt("PathGuideListenerBase", guide + 3 * primitives * GuideBins); shader.SetInt("PathGuideParity", guideParity[pair]);
++            shader.SetInt("PathGuideFresh", flush ? 1 : 0);
++            shader.Dispatch(guideKernel, (primitives + 63) / 64, 1, 1);
++            guideParity[pair] = 1 - guideParity[pair];
++        }
+         shader.SetInt("MethodRayCount", NewRays);
+         shader.SetFloat("PathCohortTarget", NewRays); shader.SetFloat("PathLaunchScale", Rays / (float)NewRays);
+         long threads = (long)PersistentCapacity + NewRays;
+diff --git a/Assets/Scripts/Simulation/TakeRender.cs b/Assets/Scripts/Simulation/TakeRender.cs
+index cf4527c..dc6b6a0 100644
+--- a/Assets/Scripts/Simulation/TakeRender.cs
++++ b/Assets/Scripts/Simulation/TakeRender.cs
+@@ -92,6 +92,8 @@ public static partial class TakeRender
+         [Range(.05f,1)] public float pathIterationSurvival=.75f;
+         [Min(1),Tooltip("Path method, persistent rays, one source-listener pair: refresh the edge-ray distribution (a slice of 2,048 edge weights, then the distribution) every this many updates; in between the last one stays. Unbiased at any value: the weights only steer the sampling.")]
+         public int pathEdgeSliceUpdates=1;
++        [Tooltip("Path method, persistent rays: path guiding (README part 50). Scattering points draw their direction by one-sample MIS between Lambert's law and a per-primitive directional distribution learned from the rays' own contributions at the listener, weighted by the mixture's density (unbiased).")]
++        public bool pathGuiding;
+         [Tooltip("Path method: room modes below the Schroeder frequency, crossed over with the histogram (RoomModes.cs): a bank exported by tools/room_modes.py, as a path or relative to StreamingAssets, with an optional sidecar <bank>.json naming the geometry and object poses it was baked for. Applied while both ends are in the bank's air and its objects at their baked poses. Empty: off.")]
+         public string roomModesBank="";
+         [Tooltip("Path method, offline: append every response's histogram and counts to this directory (PathReverb).")]
+diff --git a/Assets/Shaders/MethodPath.hlsl b/Assets/Shaders/MethodPath.hlsl
+index a1e24a3..4cda38b 100644
+--- a/Assets/Shaders/MethodPath.hlsl
++++ b/Assets/Shaders/MethodPath.hlsl
+@@ -697,6 +697,83 @@ void PathKeep(PathRay r)
+     if (PathPopulation != 0 && slot < PathCapacity) InterlockedAdd(PathCohortCount[PathCohortBase + PathCohortOf(r.direction.w)], 1u);
+ }
+ 
++// Path guiding (settings.pathGuiding, README part 50): at a scattering point the next direction is drawn by one-sample MIS
++// between Lambert's law and a directional distribution learned, per primitive, from the rays' own contributions at the
++// listener, and weighted by 1 / (the mixture's density), so every estimate stays unbiased.
++//  * Learning. A ray remembers its latest scattering point's primitive, the direction bin it left in and 1 / (W p), W its
++//    band-summed flux on leaving and p the density it was drawn with. Every contribution it makes afterwards (beams, next-event
++//    and edge connections at its later vertices, its transmitted branch's) adds E / (W p) to that primitive's bin, E the
++//    contribution's band-summed energy: the bins then estimate the integral over each bin of the importance (energy at the
++//    listener per unit flux sent in that direction), a sample's 1 / p making it an estimate of the importance rather than of
++//    the importance times the density it was drawn with (Vorba et al. 2014; Mueller et al. 2017 splat the same quantity).
++//  * Forgetting. Each update multiplies the statistics by exp(-|dL| / R), dL the listener's move since the last update and R
++//    its clearance: the image lattice the beams score at changes when the listener moves by about R (part 8); a listener at
++//    rest keeps them all. A flush resets them.
++//  * Sampling. With probability 1/2, if the primitive has statistics, the direction is drawn from its bins (bin by its share,
++//    uniformly within it), otherwise by Lambert's law; the density is 1/2 p_guide + 1/2 cos / pi. The defensive half (Hesterberg
++//    1995) bounds the weight cos / (pi p) by 2, and keeps every direction Lambert's law reaches possible.
++// Bins: 4 equal-area bands of the vertical axis times 8 sectors of azimuth, so every bin spans 4 pi / 32 sr. The statistics
++// (unsigned 32.32 fixed point) and each primitive's cumulative shares (its last word: the total) follow the cohort counts in
++// PathCohortCount (no buffer is added to the walk, which binds close to the limits, part 31).
++uint PathGuiding, PathGuideBase, PathGuideCdfBase, PathGuideListenerBase, PathGuideParity, PathGuideFresh;
++static const uint PathGuideBins = 32;
++uint PathGuideBin(float3 w)
++{
++    uint band = min(3u, (uint)max(0, floor((w.y + 1) * 2)));
++    float phi = atan2(w.z, w.x);
++    return band * 8 + min(7u, (uint)max(0, floor((phi + RayPi) * (4 / RayPi))));
++}
++float3 PathGuideDirection(uint bin, inout uint rng)
++{
++    float y = -1 + ((bin >> 3) + RandomRay(rng)) * .5, phi = ((bin & 7) + RandomRay(rng)) * (RayPi / 4) - RayPi, r = sqrt(max(0, 1 - y * y));
++    return float3(r * cos(phi), y, r * sin(phi));
++}
++float PathGuideShare(uint cdf, uint bin) // the bin's share of the primitive's statistics
++{
++    float upper = bin + 1 < PathGuideBins ? asfloat(PathCohortCount[cdf + bin]) : 1;
++    return upper - (bin > 0 ? asfloat(PathCohortCount[cdf + bin - 1]) : 0);
++}
++void PathGuideAdd(uint at, float value, uint key)
++{
++    if (!(value > 0) || !isfinite(value)) return;
++    float whole = floor(value), part = (value - whole) * 4294967296.0 + (HashRay(key ^ HashRay(at)) >> 8) * (1.0 / 16777216.0);
++    if (part >= 4294967296.0) { whole += 1; part -= 4294967296.0; }
++    uint low = (uint)part, high = (uint)min(whole, 4294967295.0), old;
++    InterlockedAdd(PathCohortCount[at], low, old);
++    if (old + low < old) high++;
++    if (high != 0) InterlockedAdd(PathCohortCount[at + 1], high);
++}
++// Once per update before the walk, a thread per primitive: forget (or reset) its statistics and make its cumulative shares.
++void PathGuideBuild(uint primitive)
++{
++    if (primitive >= PrimitiveCount) return;
++    float3 L = States[MethodState + MethodListenerObject].position.xyz;
++    uint3 before = uint3(PathCohortCount[PathGuideListenerBase + 3 * PathGuideParity], PathCohortCount[PathGuideListenerBase + 3 * PathGuideParity + 1],
++                         PathCohortCount[PathGuideListenerBase + 3 * PathGuideParity + 2]);
++    float keep = PathGuideFresh != 0 ? 0 : exp(-length(L - asfloat(before)) / max(asfloat(PATH_CLEARANCE_READ[0]), 1e-3));
++    if (primitive == 0)
++    {
++        uint3 now = asuint(L);
++        PathCohortCount[PathGuideListenerBase + 3 * (1 - PathGuideParity)] = now.x; PathCohortCount[PathGuideListenerBase + 3 * (1 - PathGuideParity) + 1] = now.y;
++        PathCohortCount[PathGuideListenerBase + 3 * (1 - PathGuideParity) + 2] = now.z;
++    }
++    uint at = PathGuideBase + 2 * primitive * PathGuideBins, cdf = PathGuideCdfBase + primitive * PathGuideBins;
++    float total = 0;
++    [loop] for (uint k = 0; k < PathGuideBins; k++)
++    {
++        float v = (PathCohortCount[at + 2 * k + 1] + PathCohortCount[at + 2 * k] * (1.0 / 4294967296.0)) * keep, whole = floor(v);
++        PathCohortCount[at + 2 * k] = (uint)min((v - whole) * 4294967296.0, 4294967295.0); PathCohortCount[at + 2 * k + 1] = (uint)whole;
++        total += v;
++    }
++    float run = 0;
++    [loop] for (uint j = 0; j + 1 < PathGuideBins; j++)
++    {
++        run += (PathCohortCount[at + 2 * j + 1] + PathCohortCount[at + 2 * j] * (1.0 / 4294967296.0));
++        PathCohortCount[cdf + j] = asuint(total > 0 ? run / total : 0);
++    }
++    PathCohortCount[cdf + PathGuideBins - 1] = asuint(total);
++}
++
+ // PartitionExit for the walk, where overlapping solids are one: the crossing ends at the partition's far
+ // face only once every other object entered on the way has been left too (an even number of their faces
+ // crossed). The Church's door frame runs 8 mm into the floor slab and its stone mullions through the window
+@@ -1066,6 +1143,9 @@ void TracePath(uint index)
+     float branchSum = 0, branchTau = 0, branchSurvival = 1, survival = 1; float3 branchP = 0, branchD = 0; float branchF[8];
+     uint branchMedium = 0;
+     float4 plane = 0, branchPlane = 0; // the latest event's plane, outgoing side (beams)
++    // Path guiding: the latest scattering point's primitive, the bin the ray left it in, and 1 / (W p); the branch's own.
++    uint guidePrimitive = 0xffffffff, guideBin = 0, branchGuidePrimitive = 0xffffffff, branchGuideBin = 0;
++    float guideNorm = 0, branchGuideNorm = 0;
+     [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) branchF[k1] = 0;
+     float edgeExtent = 1, edgeAngle = 1, edgeM = 1, edgeSinBeta = 1, edgePhiIn = 0, edgeD = 1;
+     // Persistent: the path time this update reaches, whether the current segment's beam is scored, and
+@@ -1088,6 +1168,9 @@ void TracePath(uint index)
+         medium = r.meta.y; rng = r.meta.z; events = r.meta.w;
+ #if PATH_DOPPLER
+         rho = r.motion.x;
++#endif
++#if !PATH_WALK_EDGE
++        if (PathGuiding != 0) { guidePrimitive = asuint(r.motion.y); guideBin = asuint(r.motion.z); guideNorm = r.motion.w; }
+ #endif
+         inBranch = (r.meta.x & (1u << 24)) != 0; scored = (r.meta.x & (2u << 24)) != 0;
+ #if PATH_WALK_EDGE
+@@ -1115,6 +1198,10 @@ void TracePath(uint index)
+             PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead, 1 - exp(-pendingRate), heard);
+ #else
+             PathDeposit(pendingFrom, pendingLow, pendingHigh, pendingTime, HashRay(rng ^ (events * 0x85ebca6bu)), ahead);
++#endif
++#if !PATH_WALK_EDGE
++            if (PathGuiding != 0 && guidePrimitive != 0xffffffff)
++                PathGuideAdd(PathGuideBase + 2 * (guidePrimitive * PathGuideBins + guideBin), dot(pendingLow + pendingHigh, 1) * guideNorm, HashRay(rng ^ (events * 0x27d4eb2fu)));
+ #endif
+         }
+ #if PATH_WALK_EDGE
+@@ -1186,6 +1273,7 @@ void TracePath(uint index)
+             rho = branchRate;
+ #endif
+             chain = branch;
++            guidePrimitive = branchGuidePrimitive; guideBin = branchGuideBin; guideNorm = branchGuideNorm;
+             fluxPending = false; travelling = true; done = false; branchSum = 0; inBranch = true; scored = false; sinceStart = 0;
+             MethodCount(CounterBranches);
+         }
+@@ -1237,11 +1325,35 @@ void TracePath(uint index)
+             }
+             else
+             {
+-                float3 w0 = v.kind == 1 ? MethodCosineDirection(v.normal, rng) : UnitDirection(rng, false);
++                // Path guiding at a scattering point: the learned bins with probability 1/2 (if its primitive has statistics).
++                float guided = 0; uint cdf = 0, bin = 0xffffffff;
++#if !PATH_WALK_EDGE
++                if (PathGuiding != 0 && v.kind == 1) { cdf = PathGuideCdfBase + v.primitive * PathGuideBins; guided = asfloat(PathCohortCount[cdf + PathGuideBins - 1]) > 0 ? .5 : 0; }
++                if (guided > 0 && RandomRay(rng) < guided)
++                {
++                    float u = RandomRay(rng); uint lo = 0, hi = PathGuideBins - 1;
++                    [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (asfloat(PathCohortCount[cdf + mid]) > u) hi = mid; else lo = mid + 1; }
++                    bin = lo;
++                }
++#endif
++                float3 w0;
++                if (bin != 0xffffffff) w0 = PathGuideDirection(bin, rng); // (not ?:, whose sides are both evaluated in this dialect)
++                else w0 = v.kind == 1 ? MethodCosineDirection(v.normal, rng) : UnitDirection(rng, false);
+                 float pdf = v.kind == 1 ? max(1e-12, dot(w0, v.normal)) / RayPi : 1 / (4 * RayPi);
++#if !PATH_WALK_EDGE
++                if (PathGuiding != 0 && v.kind == 1)
++                {
++                    if (bin == 0xffffffff) bin = PathGuideBin(w0);
++                    if (guided > 0) pdf = guided * PathGuideShare(cdf, bin) * (PathGuideBins / (4 * RayPi)) + (1 - guided) * max(0, dot(w0, v.normal)) / RayPi;
++                }
++#endif
+                 float D = EnergyDirectivity(v, w0);
+                 if (D == 0) { done = true; continue; }
+-                [unroll] for (uint k5 = 0; k5 < MethodBands; k5++) Phi0[k5] = I[k5] * D / pdf;
++                float flux = 0;
++                [unroll] for (uint k5 = 0; k5 < MethodBands; k5++) { Phi0[k5] = I[k5] * D / pdf; flux += Phi0[k5]; }
++#if !PATH_WALK_EDGE
++                if (PathGuiding != 0 && v.kind == 1) { guidePrimitive = v.primitive; guideBin = bin; guideNorm = 1 / max(flux * pdf, 1e-30); }
++#endif
+                 Q = edgeRays ? 1 - MethodEdgeProbability : 1;
+                 p = v.position; d = w0; tau = v.time;
+ #if PATH_DOPPLER
+@@ -1445,6 +1557,7 @@ void TracePath(uint index)
+         if (keepBranch)
+         {
+             branch = chain; branchSurvival = survival;
++            branchGuidePrimitive = guidePrimitive; branchGuideBin = guideBin; branchGuideNorm = guideNorm;
+             if (partition)
+             {
+                 // Through a partition: undeviated, out of its far face.
+@@ -1576,9 +1689,9 @@ void TracePath(uint index)
+         r.plane = plane; r.scalars = float4(survival, chain.travelled, chain.time, sinceStart);
+         r.meta = uint4(chain.reflections | (inBranch ? 1u << 24 : 0u) | (scored ? 2u << 24 : 0u) | (offSurface ? 4u << 24 : 0u) | (chain.kind << 27), medium, rng, events);
+ #if PATH_DOPPLER
+-        r.motion = float4(rho, 0, 0, 0);
++        r.motion = float4(rho, asfloat(guidePrimitive), asfloat(guideBin), guideNorm);
+ #else
+-        r.motion = 0; // (traced while nothing moved: no rate)
++        r.motion = float4(0, asfloat(guidePrimitive), asfloat(guideBin), guideNorm); // (traced while nothing moved: no rate)
+ #endif
+ #if PATH_WALK_EDGE
+         r.motion = float4(0, walkPhiIn, walkM, asfloat(walkMeta));
+@@ -1595,9 +1708,9 @@ void TracePath(uint index)
+             r.plane = branchPlane; r.scalars = float4(branchSurvival, branch.travelled, branch.time, 0);
+             r.meta = uint4(branch.reflections | 1u << 24 | 4u << 24 | (branch.kind << 27), branchMedium, HashRay(rng ^ 0x68e31da4u), events);
+ #if PATH_DOPPLER
+-            r.motion = float4(branchRate, 0, 0, 0);
++            r.motion = float4(branchRate, asfloat(branchGuidePrimitive), asfloat(branchGuideBin), branchGuideNorm);
+ #else
+-            r.motion = 0;
++            r.motion = float4(0, asfloat(branchGuidePrimitive), asfloat(branchGuideBin), branchGuideNorm);
+ #endif
+             PathKeep(r);
+         }
+diff --git a/Assets/Tests/Editor/PathGpuAudioChecks.cs b/Assets/Tests/Editor/PathGpuAudioChecks.cs
+index 71dec93..2a4b20f 100644
+--- a/Assets/Tests/Editor/PathGpuAudioChecks.cs
++++ b/Assets/Tests/Editor/PathGpuAudioChecks.cs
+@@ -209,6 +209,7 @@ public partial class TakeChecks
+                         case "spectra": spectra = value; break;
+                         case "convolution": convolution = value; break;
+                         case "edgeSlice": settings.pathEdgeSliceUpdates = value; break;
++                        case "guiding": settings.pathGuiding = value != 0; break;
+                         case "iterationCap": settings.pathIterationCap = value; break;
+                         case "load": v.loadRound = value; break;
+                         case "kernelSkip": v.kernelSkip = value; break;
+diff --git a/Assets/Tests/Editor/PathPersistentChecks.cs b/Assets/Tests/Editor/PathPersistentChecks.cs
+index 7aff132..2271b7f 100644
+--- a/Assets/Tests/Editor/PathPersistentChecks.cs
++++ b/Assets/Tests/Editor/PathPersistentChecks.cs
+@@ -63,15 +63,16 @@ public partial class TakeChecks
+     // stops) and independent seeds: the persistent response equals the full solve's in expectation, window by window;
+     // so does that of a fixed population (settings.pathPopulation: cohorts split and rouletted to their share), and
+     // that of a population changed at every update (9,000 and 17,000 in turn, as the auto-budget may:
+-    // MethodTransport.Population; README part 34).
++    // MethodTransport.Population; README part 34), and that of the fixed population with path guiding (settings.pathGuiding,
++    // learned over the warm-up: README part 50).
+     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+     public void PersistentRaysMatchTheFullSolveInExpectation()
+     {
+         ApertureRoom(true, false, ApertureOutside, out var scene, out var geometry, out var state, transmission: .05f, roomScattering: .5f);
+         int[][] windows = {new[] {0, 20}, new[] {20, 60}, new[] {60, 500}};
+         int seeds = int.Parse(Environment.GetEnvironmentVariable("ACOUSTIC_PERSISTENT_SEEDS") ?? "6"); // more: a closer look
+-        const int modes = 4;
+-        string[] names = {"full", "persistent", "population", "changing"};
++        const int modes = 5;
++        string[] names = {"full", "persistent", "population", "changing", "guided"};
+         var sums = new double[modes, 2, 3]; var squares = new double[modes, 2, 3];
+         long branches = 0;
+         for (int mode = 0; mode < modes; mode++)
+@@ -81,8 +82,9 @@ public partial class TakeChecks
+                 if (mode >= 1) { settings.pathPersistent = true; settings.responseStepSamples = 256; }
+                 if (mode >= 2) settings.pathPopulation = 13000; // about 4,000 new rays per update
+                 if (mode == 3) settings.pathPopulationMaximum = 17000;
++                settings.pathGuiding = mode == 4; // path guiding (README part 50), learned over the warm-up
+                 using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+-                if (mode < 3) solver.Solve(state, new TakeRender.DirectPath[1]);
++                if (mode != 3) solver.Solve(state, new TakeRender.DirectPath[1]);
+                 else
+                 {
+                     var m = solver.Method; m.PersistentSingleUpdate = true; // (the first update flushes)
+diff --git a/Assets/Tests/Editor/PathPersistentDataset.cs b/Assets/Tests/Editor/PathPersistentDataset.cs
+index f2324b1..428dfb5 100644
+--- a/Assets/Tests/Editor/PathPersistentDataset.cs
++++ b/Assets/Tests/Editor/PathPersistentDataset.cs
+@@ -22,7 +22,7 @@ public partial class TakeChecks
+         public string kind, spec, job, output;
+         public float[] track;     // scene items: listener xyz per update (warm + record)
+         public long[] samples;    // take items: take sample per update
+-        public int warm, record, population, iterationCap, edgeSliceUpdates = 1;   // settings.pathIterationCap (0: off), pathEdgeSliceUpdates
++        public int warm, record, population, iterationCap, edgeSliceUpdates = 1, guiding;   // settings.pathIterationCap (0: off), pathEdgeSliceUpdates, pathGuiding (1: on)
+         public float highFactor = 8;
+         public int[] seeds, highSeeds;
+     }
+@@ -81,7 +81,7 @@ public partial class TakeChecks
+                 {
+                     var settings = JsonUtility.FromJson<TakeRender.Settings>(JsonUtility.ToJson(template));
+                     settings.method = TakeRender.Method.Path; settings.pathPersistent = true; settings.pathPopulation = population;
+-                    settings.responseStepSamples = step; settings.seed = seed; settings.pathIterationCap = item.iterationCap; settings.pathEdgeSliceUpdates = Math.Max(1, item.edgeSliceUpdates); settings.pathHistogramExport = settings.pathHistogramImport = "";
++                    settings.responseStepSamples = step; settings.seed = seed; settings.pathIterationCap = item.iterationCap; settings.pathEdgeSliceUpdates = Math.Max(1, item.edgeSliceUpdates); settings.pathGuiding = item.guiding != 0; settings.pathHistogramExport = settings.pathHistogramImport = "";
+                     return new TransportSolver(scene, geometry, settings, shader, sampleRate: rate);
+                 }
+                 int population = item.population;

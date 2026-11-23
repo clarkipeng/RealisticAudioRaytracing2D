@@ -146,7 +146,7 @@ public partial class TakeChecks
     // ACOUSTIC_PATH_BUDGET_VARIANTS: variants separated by ';', each "name:key=value,..." with keys population,
     // denoise (0/1), flags (MethodTransport.ProfileFlags), iterationCap, edgeSlice, kernels (0: the path
     // kernels built once and then left, a profiling bound), spectra (0: every partition through the band FFTs), kernelSkip (GpuAudio.PathKernelSkip, a profiling bound), otherDenoiser (1: the weights in ACOUSTIC_PATH_BUDGET_DENOISER), spectralLimit (GpuAudio.PathSpectralGroupLimit), fftSingle (1: one FFT stage per pass),
-    // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000-23,000),
+    // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000 and maximum, default 23,000),
     // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU), profile (1: after the
     // rounds, the work profile of 16 updates, MethodTransport.WorkProfile), merged (0: the GPU queries descend the instance tree,
     // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles); default "base:".
@@ -193,7 +193,7 @@ public partial class TakeChecks
                 settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
                 settings.pathPopulation = 11000; settings.pathDenoise = false; settings.maximumResponsesPerBatch = 1;
                 settings.pathHistogramExport = settings.pathHistogramImport = "";
-                int kernels = 1, spectra = 1, convolution = 1; double budget = 0; bool other = false;
+                int kernels = 1, spectra = 1, convolution = 1, maximum = 23000; double budget = 0; bool other = false;
                 string options = entry.Contains(":") ? entry.Substring(entry.IndexOf(':') + 1) : "";
                 foreach (string kv in options.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries))
                 {
@@ -216,12 +216,13 @@ public partial class TakeChecks
                         case "spectralLimit": v.spectralLimit = value; break;
                         case "fftSingle": v.fftSingle = value != 0; break;
                         case "profile": v.profile = value != 0; break;
+                        case "maximum": maximum = value; break;
                         case "merged": v.merged = value != 0; break;
                         case "inline": v.inline = value != 0; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
                 }
-                if (budget > 0) { settings.pathPopulationMaximum = 23000; v.budget = new PathPopulationBudget(budget, settings.pathPopulation, 4000, 23000); }
+                if (budget > 0) { settings.pathPopulationMaximum = maximum; v.budget = new PathPopulationBudget(budget, settings.pathPopulation, 4000, maximum); }
                 v.gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
                 v.solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
                 v.solver.Method.ProfileFlags = v.flags;
