@@ -2,8 +2,7 @@
 
     PY=.context/fdtd-teacher/venv/bin/python
     $PY tools/room_modes_unity.py reference SCENE [--seed 0]   # export the suite room's bank; save room_modes.combine for
-                                                              # the path method's run (TakeChecks.RoomModesMatchThePython...),
-                                                              # with the probe as documented (see probe below)
+                                                              # the path method's run (TakeChecks.RoomModesMatchThePython...)
     $PY tools/room_modes_unity.py church                       # export the Church's bank with its sidecar (geometry hash,
                                                               # every geometry object's pose at frame 0 of the take)
 
@@ -27,65 +26,6 @@ STATE_FLOATS = 20          # per object and frame: position, quaternion, four mo
 GEOMETRY, SOURCE, LISTENER, ACTIVE = 2, 4, 8, 1
 
 
-def probe(bank, points):
-    """room_modes.probe as its docstring states it (fourth order), which RoomModes.Probe implements.
-
-    room_modes.probe reads its second differences from `parts[a][rows].tocsc()` with columns `np.unique(sub.indices)`:
-    a CSC matrix's indices are row numbers, so the columns it multiplies are the wrong cells and the correction is
-    about zero (trilinear in effect; on the analytic box at h = 0.125 m to 400 Hz its median shape error is 6 %, against
-    0.24 % with the stencil's own neighbours). Here the neighbours are those of each corner cell along each axis.
-    """
-    edges = [np.asarray(bank[f'edges{a}'], float) for a in range(3)]
-    solid = bank['solid']
-    centres = [0.5 * (e[1:] + e[:-1]) for e in edges]
-    widths = [np.diff(e) for e in edges]
-    index = -np.ones(solid.shape, np.int64)
-    cells = np.argwhere(solid < 0)
-    index[tuple(cells.T)] = np.arange(len(cells))
-    psi = bank['psi']
-
-    def air(c):
-        return index[tuple(c)] if all(0 <= c[a] < solid.shape[a] for a in range(3)) else -1
-
-    out = np.zeros((len(points), psi.shape[1]))
-    for p, x in enumerate(np.atleast_2d(points)):
-        c0 = [int(np.clip(np.searchsorted(edges[a], x[a]) - 1, 0, len(centres[a]) - 1)) for a in range(3)]
-        if air(c0) < 0:
-            raise ValueError(f'point {x} lies in a solid cell')
-        t, span, step = [0.0] * 3, [0.0] * 3, [0] * 3
-        for a in range(3):
-            d = x[a] - centres[a][c0[a]]
-            nb = list(c0)
-            nb[a] += 1 if d >= 0 else -1
-            if air(nb) >= 0:
-                span[a], step[a] = abs(centres[a][nb[a]] - centres[a][c0[a]]), nb[a] - c0[a]
-            else:
-                span[a] = widths[a][c0[a]]
-            t[a] = abs(d) / span[a]
-        for delta in np.ndindex(2, 2, 2):
-            w = np.prod([t[a] if delta[a] else 1 - t[a] for a in range(3)])
-            if w == 0:
-                continue
-            target = [c0[a] + delta[a] * step[a] for a in range(3)]
-            for a in range(3):                  # a solid diagonal corner: step back along an axis
-                if air(target) >= 0:
-                    break
-                target[a] = c0[a]
-            j = air(target)
-            value = np.asarray(psi[j], np.float64).copy()
-            for a in range(3):
-                factor = t[a] * (1 - t[a]) * span[a] ** 2 / 2
-                for side in (-1, 1):
-                    nb = list(target)
-                    nb[a] += side
-                    o = air(nb)
-                    if o >= 0 and factor:
-                        value -= factor / (widths[a][target[a]] * 0.5 * (widths[a][target[a]] + widths[a][nb[a]])) * (
-                            np.asarray(psi[o], np.float64) - psi[j])
-            out[p] += w * value
-    return out
-
-
 def export(bank_dir, out):
     if not out.exists():
         rm.export(rm.load_bank(bank_dir), out)
@@ -98,7 +38,7 @@ def reference(scene_id, seed=0, hmax=0.125, budget='r02048'):
     bank_dir = WORK / f'bank-{scene_id}-{hmax:g}'
     bytes_path = export(bank_dir, WORK / f'{scene_id}.roommodes.bytes')
     bank = rm.load_bank(bank_dir)
-    a = probe(bank, np.vstack([scene['source'], np.asarray(scene['points'], float).reshape(-1, 3)]))
+    a = rm.probe(bank, np.vstack([scene['source'], np.asarray(scene['points'], float).reshape(-1, 3)]))
     k, S, a_s, a_r = bank['k'], bank['surface'], a[0], a[1:]
     path_dir = root / scene_id / 'path' / budget / str(seed)
     _, pe, _, _ = mc.read_output(path_dir)

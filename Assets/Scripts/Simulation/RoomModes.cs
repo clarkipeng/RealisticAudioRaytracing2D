@@ -244,8 +244,10 @@ internal sealed class RoomModes
 
     // The scene's bank (settings.roomModesBank), or null when off. A relative path is read from StreamingAssets (how a
     // build ships a bank: StreamingAssets/<file>.roommodes.bytes with its sidecar). Materials: the scene's, by name; a
-    // bank material "opening" (faces onto unglazed openings, church_modes.py) radiates with beta = 1 (rho c, the
-    // plane-wave radiation resistance).
+    // bank material "opening" (faces onto unglazed openings, church_modes.py) loses as an open window, absorption 1.
+    // An opening is not a locally reacting wall, so it enters the first-order damping through the admittance whose
+    // diffuse-field loss is that absorption: averaged over the modes (c/2) beta S is Sabine's c alpha A / (8 V), so
+    // beta = alpha / 8 = 1/8.
     public static RoomModes ForScene(AcousticTake.Scene scene,TakeRender.Settings settings,int rate,int kernelSamples)
     {
         if(string.IsNullOrEmpty(settings.roomModesBank))return null;
@@ -260,7 +262,7 @@ internal sealed class RoomModes
             string name=bank.Materials[m];
             var definition=scene.materials==null?null:Array.Find(scene.materials,x=>x.name==name);
             if(definition!=null)admittance[m]=MaterialAdmittance(definition);
-            else if(name=="opening")admittance[m]=new double[]{1,1,1,1,1,1,1,1};
+            else if(name=="opening"){admittance[m]=new double[8];Array.Fill(admittance[m],1.0/8);}
             else throw new InvalidDataException($"Room mode bank material '{name}' is not in the scene.");
         }
         var modes=new RoomModes(bank,admittance,settings.speedOfSound,settings.referenceDistance,rate,kernelSamples,settings.sincRadius,binding);
@@ -430,9 +432,11 @@ internal sealed class RoomModes
     // delta / pi, both over f +- f (sqrt2 - 1/sqrt2) / 2 (room_modes.schroeder_frequency, its 400-point grid).
     public static double SchroederFrequency(double[] k,double[] delta,double speed)
     {
-        var f=new double[k.Length];double top=0;
-        for(int n=0;n<k.Length;n++){f[n]=k[n]*speed/(2*Math.PI);top=Math.Max(top,f[n]);}
-        double half=.5*(Math.Sqrt(2)-1/Math.Sqrt(2)),lo=Math.Log(20),hi=Math.Log(top/(1+half));
+        var f=new double[k.Length];double top=0,first=double.MaxValue;
+        for(int n=0;n<k.Length;n++){f[n]=k[n]*speed/(2*Math.PI);top=Math.Max(top,f[n]);if(k[n]*speed>delta[n])first=Math.Min(first,f[n]);}
+        // (from the lowest oscillating mode up, as room_modes.schroeder_frequency: the constant mode, overdamped, has a
+        // wavenumber of rounding size and would stretch the grid over decades)
+        double half=.5*(Math.Sqrt(2)-1/Math.Sqrt(2)),lo=Math.Log(first),hi=Math.Log(top/(1+half));
         for(int g=0;g<400;g++)
         {
             double fc=Math.Exp(lo+(hi-lo)*g/399.0),sum=0;int count=0;

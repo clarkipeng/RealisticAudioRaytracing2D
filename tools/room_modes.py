@@ -362,7 +362,7 @@ def probe(bank, points):
     where = {j: i for i, j in enumerate(rows)}
     second = []
     for a in range(3):                              # only the rows' neighbours of psi are read
-        sub = parts[a][rows].tocsc()
+        sub = parts[a][rows]                        # CSR: its indices are the neighbour columns
         cols = np.unique(sub.indices)
         second.append(-(sub[:, cols] @ np.asarray(psi[cols], np.float64)) / vol[rows, None])
     out = np.zeros((len(plans), psi.shape[1]))
@@ -395,8 +395,8 @@ def schroeder_frequency(k, delta, f_grid=None):
     linear frequency, so a density growing as f^2 is overestimated by only 4%)."""
     f = k * C / (2 * math.pi)
     half = 0.5 * (math.sqrt(2) - 1 / math.sqrt(2))
-    if f_grid is None:
-        f_grid = np.geomspace(20, f.max() / (1 + half), 400)
+    if f_grid is None:                              # from the lowest oscillating mode up (the constant mode is the
+        f_grid = np.geomspace(f[k * C > delta].min(), f.max() / (1 + half), 400)   # one overdamped mode)
     for fc in f_grid:
         sel = (f >= fc * (1 - half)) & (f < fc * (1 + half))
         if sel.sum() < 2:
@@ -422,6 +422,65 @@ def path_share(fs, bands=mc.BANDS):
         g2 = np.cos(0.5 * math.pi * x) ** 2 * f       # |G_b|^2 df, df = f ln2 dx
         out.append(float(np.trapezoid(g2 * (1 - crossover(f, fs) ** 2), x) / np.trapezoid(g2, x)))
     return np.array(out)
+
+
+def wall_matrices(bank, directory=None):
+    """G[m, n, l] = integral over material m's faces of psi_n psi_l (the diagonal is S_nm), cached as walls.npy."""
+    path = Path(directory) / 'walls.npy' if directory else None
+    if path is not None and path.exists():
+        return np.load(path)
+    edges = [bank['edges0'], bank['edges1'], bank['edges2']]
+    _, _, _, (fc, fa, fm) = operator(edges, bank['solid'])
+    psi = np.asarray(bank['psi'][fc], np.float64)
+    M = len(bank['materials'])
+    G = np.zeros((M, psi.shape[1], psi.shape[1]), np.float32)
+    for m in range(M):
+        sel = fm == m
+        if sel.any():
+            G[m] = (psi[sel].T * fa[sel]) @ psi[sel]
+    if path is not None:
+        np.save(path, G)
+    return G
+
+
+def coupled(k, G, admittance_bands):
+    """The walls' admittance projected on the rigid modes in full, solved exactly in that basis.
+
+    The impedance condition dp/dn = -(beta/c) dp/dt, projected on the rigid modes (Galerkin), gives
+    q'' + c C q' + Omega^2 q = forcing with C_nl = sum_m beta_m G_mnl; its diagonal is first-order damping
+    (delta_n = c C_nn / 2), its off-diagonal terms couple modes that overlap, which first-order theory
+    misses where modes overlap or a wall's admittance is not small. beta_m is taken at the pair's geometric
+    mean frequency (only near pairs couple; exact for a frequency-independent wall). The state-space form
+    x' = A x, x = (q, q'), A = [[0, I], [-Omega^2, -c C]], is diagonalised once: returns its eigenvalues
+    (2N, complex), V's upper half U (N x 2N) and V^-1's right half W (2N x N).
+    """
+    f = k * C / (2 * math.pi)
+    N = len(k)
+    Cm = np.zeros((N, N))
+    fm = np.sqrt(np.outer(np.maximum(f, 1e-3), np.maximum(f, 1e-3)))
+    beta = admittance_at(admittance_bands, fm.ravel()).reshape(N, N, -1)
+    for m in range(G.shape[0]):
+        Cm += beta[:, :, m] * G[m]
+    A = np.zeros((2 * N, 2 * N))
+    A[:N, N:] = np.eye(N)
+    A[N:, :N] = -np.diag((k * C) ** 2)
+    A[N:, N:] = -C * Cm
+    lam, V = np.linalg.eig(A)
+    W = np.linalg.inv(V)
+    return lam, V[:N], W[:, N:]
+
+
+def transfer_coupled(system, a_src, a_rcv, freqs, chunk=1024):
+    """H(w) = 4 pi c^2 sum_j (psi(r) . U_j) (W_j . psi(s)) / (i w - lambda_j), the coupled modes' transfer."""
+    lam, U, W = system
+    u = a_rcv @ U                                   # [R, 2N]
+    v = W @ a_src                                   # [2N]
+    A = 4 * math.pi * C ** 2 * u * v[None, :]
+    w = 2 * math.pi * np.asarray(freqs, float)
+    H = np.zeros((A.shape[0], len(w)), complex)
+    for a in range(0, len(w), chunk):
+        H[:, a:a + chunk] = A @ (1.0 / (1j * w[None, a:a + chunk] - lam[:, None]))
+    return H
 
 
 def transfer(k, delta, a_src, a_rcv, freqs, chunk=1024):
@@ -472,11 +531,16 @@ def direct_energy(scene, bins=mc.TIME_BINS):
     return E, r, vis
 
 
-def combine(scene, k, S, a_src, a_rcv, path_energy, fs=None):
+def combine(scene, k, S, a_src, a_rcv, path_energy, fs=None, walls=None):
     """Modes below the Schroeder frequency + the path method above it, as band energies [R, 8, T]
-    (band-limited: the path part is smoothed by each band's kernel as the scorer would)."""
+    (band-limited: the path part is smoothed by each band's kernel as the scorer would). walls: the full
+    wall matrices G (wall_matrices) for coupled damping; without them, first-order (diagonal) damping."""
     adm = [scene['materials'][m]['admittance'] for m in scene['materials']]
     delta = damping(k, S, adm)
+    system = coupled(k, walls, adm) if walls is not None else None
+    if system is not None:                          # the coupled modes' own frequencies and decay rates
+        up = system[0].imag > 0
+        fs = fs or schroeder_frequency(system[0].imag[up] / C, -system[0].real[up])
     fs = fs or schroeder_frequency(k, delta)
     if fs is None:
         raise ValueError('the bank does not reach the Schroeder frequency; bake to a higher fmax')
@@ -485,7 +549,7 @@ def combine(scene, k, S, a_src, a_rcv, path_energy, fs=None):
     if k.max() * C / (2 * math.pi) < fs * math.sqrt(2) * (1 - 1e-3):
         raise ValueError(f'bank ends at {k.max() * C / (2 * math.pi):.0f} Hz, below the crossover top {fs * math.sqrt(2):.0f} Hz')
     freqs = np.arange(0, top + DF, DF)
-    Hm = transfer(k, delta, a_src, a_rcv, freqs)
+    Hm = transfer(k, delta, a_src, a_rcv, freqs) if system is None else transfer_coupled(system, a_src, a_rcv, freqs)
     Edir, r, vis = direct_energy(scene)
     Hd = vis[:, None] * np.exp(-2j * math.pi * freqs[None] * r[:, None] / C) / r[:, None]
     W = crossover(freqs, fs)
@@ -509,13 +573,14 @@ def combine(scene, k, S, a_src, a_rcv, path_energy, fs=None):
 
 
 def suite(hmax, scenes=CLOSED, root=mc.DEFAULT_ROOT, work=ROOT / '.context/bass-and-diffraction', budget='r02048',
-          crossover_hz=None):
+          crossover_hz=None, couple=False):
     """Bake each closed room, combine with every seed of the path method's runs, write the outputs.
     crossover_hz: centre the crossover there instead of at the Schroeder frequency (or at the Schroeder
     frequency if that is higher: the path method is only valid above it); the outputs are then named path-modal-x<Hz>."""
     work.mkdir(parents=True, exist_ok=True)
     report = {}
-    method = 'path-modal' if crossover_hz is None else f'path-modal-x{crossover_hz:g}'
+    tag = ('' if crossover_hz is None else f'-x{crossover_hz:g}') + ('-coupled' if couple else '')
+    method = 'path-modal' + tag
     for sid in scenes:
         scene_path = root / sid / 'scene.json'
         scene = json.loads(scene_path.read_text())
@@ -530,6 +595,7 @@ def suite(hmax, scenes=CLOSED, root=mc.DEFAULT_ROOT, work=ROOT / '.context/bass-
                               admittance=[scene['materials'][m]['admittance'] for m in names], out=bank_path)
         bake_seconds = float(bank['seconds'])
         k, S, a_s, a_r = scene_modes(scene, bank=bank)
+        walls = wall_matrices(bank, bank_path) if couple else None
         code = dict(name='tools/room_modes.py', sha256=mc.sha256_file(Path(__file__)))
         base = dict(sceneId=sid, sceneSha256=mc.sha256_file(scene_path), code=code, validSeconds=2.0,
                     bandLimited=True, wallModel='admittance (first order in the modes)')
@@ -540,14 +606,14 @@ def suite(hmax, scenes=CLOSED, root=mc.DEFAULT_ROOT, work=ROOT / '.context/bass-
             if crossover_hz is not None:     # never below the Schroeder frequency
                 fs = schroeder_frequency(k, damping(k, S, [scene['materials'][m]['admittance'] for m in scene['materials']]))
                 fx = max(crossover_hz, fs or 0)
-            out, modal, info = combine(scene, k, S, a_s, a_r, pe.astype(float), fs=fx)
+            out, modal, info = combine(scene, k, S, a_s, a_r, pe.astype(float), fs=fx, walls=walls)
             seconds = time.time() - t
             mc.write_output(root / sid / method / budget / seed_dir.name,
                             dict(base, method=method, budget=budget, seed=int(seed_dir.name),
                                  budgetValue=pmeta.get('budgetValue'), wallSeconds=pmeta['wallSeconds'] + seconds,
                                  modes=info), out)
-        mc.write_output(root / sid / ('modal' if crossover_hz is None else f'modal-x{crossover_hz:g}') / 'bank' / '0',
-                        dict(base, method='modal' if crossover_hz is None else f'modal-x{crossover_hz:g}', budget='bank', seed=0, budgetValue=1, wallSeconds=bake_seconds), modal)
+        mc.write_output(root / sid / ('modal' + tag) / 'bank' / '0',
+                        dict(base, method='modal' + tag, budget='bank', seed=0, budgetValue=1, wallSeconds=bake_seconds), modal)
         report[sid] = dict(info, bakeSeconds=bake_seconds, cells=int(len(bank['volumes'])), hmax=hmax,
                            bankModes=int(len(bank['k'])), bankTopHz=float(bank['k'].max() * C / (2 * math.pi)))
         print(sid, json.dumps({kk: v for kk, v in report[sid].items() if kk != 'pathShare'}), flush=True)
@@ -593,12 +659,14 @@ def main():
     parser.add_argument('--hmax', type=float, default=0.125)
     parser.add_argument('--scenes', default=','.join(CLOSED))
     parser.add_argument('--crossover', type=float, help='centre the crossover here (Hz, not below the Schroeder frequency)')
+    parser.add_argument('--coupled', action='store_true', help='the walls projected on the modes in full (coupled damping)')
     args = parser.parse_args()
     if args.command == 'export':
         export(load_bank(args.paths[0]), args.paths[1])
         return
-    report = suite(args.hmax, args.scenes.split(','), crossover_hz=args.crossover)
-    out = ROOT / '.context/bass-and-diffraction' / ('suite.json' if args.crossover is None else f'suite-x{args.crossover:g}.json')
+    report = suite(args.hmax, args.scenes.split(','), crossover_hz=args.crossover, couple=args.coupled)
+    out = ROOT / '.context/bass-and-diffraction' / ('suite' + ('' if args.crossover is None else f'-x{args.crossover:g}') +
+                                                    ('-coupled' if args.coupled else '') + '.json')
     out.write_text(json.dumps(report, indent=1) + '\n')
 
 

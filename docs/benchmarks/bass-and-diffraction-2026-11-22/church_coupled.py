@@ -19,13 +19,13 @@ C=np.zeros((N,N))
 for m in range(len(mats)):
     sel=fm==m
     if sel.any(): C+=adm[m]*(psi[sel].T*fa[sel])@psi[sel]
-print('diag vs first-order delta check', np.allclose(0.5*343*np.diag(C), rm.damping(k,bank['surface'],[[a]*8 for a in adm])))
+print('diag vs first-order delta check', np.allclose(0.5*343*np.diag(C), rm.damping(k,bank['surfaceVoxel'],[[a]*8 for a in adm])))
 off=np.abs(C-np.diag(np.diag(C))); print('max offdiag/diag ratio median', np.median(off.max(1)/np.diag(C)))
 # FDTD reference (free case), recompute quickly
 solid=bank['solid']; ids=np.where(solid<0,0,solid+1).astype(np.uint8)
 grid=fw.Grid(h,tuple(float(e[0]) for e in edges),tuple(int(n) for n in solid.shape),0)
 clear=ndimage.distance_transform_edt(solid<0)*h; lo=np.array([e[0] for e in edges]); rng=np.random.default_rng(1)
-fs=20.0; src=lo+(np.array(np.unravel_index(np.argmax(clear),clear.shape))+0.5)*h
+fs=rep['schroederHz']; src=lo+(np.array(np.unravel_index(np.argmax(clear),clear.shape))+0.5)*h
 pool=np.argwhere(clear>=343/fs/4); pts=lo+(pool[rng.choice(len(pool),32,replace=False)]+rng.uniform(size=(32,3)))*h
 sim=fw.Simulation(grid,ids,admittance={m+1:float(adm[m]) for m in range(len(mats))},memory_limit=2*fw.GIB)
 res=sim.run(src,pts,2.05,1.2*fs); H,df=mcs.fdtd_transfer_spectrum(res['pressure'],res['source'],res['dt'])

@@ -181,13 +181,20 @@ def bake(h):
     out = WORK / f'bank-church-{h:g}'
     bank = rm.load_bank(out) if (out / 'bank.npz').exists() else \
         rm.bake_grid(edges, solid, mats, h, absorption=absorption, admittance=admittance, out=out)
-    S, mesh_area = surface_integrals(bank, h, mats)
-    np.save(out / 'surface-mesh.npy', S)
+    if 'surfaceVoxel' not in bank:                     # the bank's wall integrals become the mesh's (the voxel
+        S, mesh_area = surface_integrals(bank, h, mats)  # faces' stay as surfaceVoxel, for the FDTD check)
+        small = {key: v for key, v in np.load(out / 'bank.npz').items()}
+        small['surfaceVoxel'] = small['surface']
+        small['surface'] = S
+        small['meshArea'] = np.array(json.dumps(mesh_area))
+        np.savez(out / 'bank.npz', **small)
+        bank = rm.load_bank(out)
+    S, mesh_area = bank['surface'], json.loads(str(bank['meshArea']))
     k = bank['k']
     delta = rm.damping(k, S, admittance)
     fs = rm.schroeder_frequency(k, delta)
     report = dict(h=h, seal=seal, volume=float(bank['volume']), area=float(bank['area']),
-                  voxelAreaPerMaterial={m: float(a) for m, a in zip(mats, bank['surface'][int(np.argmin(k))] * bank['volume'])},
+                  voxelAreaPerMaterial={m: float(a) for m, a in zip(mats, bank['surfaceVoxel'][int(np.argmin(k))] * bank['volume'])},
                   meshAreaPerMaterial=mesh_area, modes=int(len(k)),
                   topHz=float(k.max() * rm.C / (2 * math.pi)), schroederHz=fs,
                   crossoverHz=[fs / math.sqrt(2), fs * math.sqrt(2)] if fs else None,
@@ -207,7 +214,7 @@ def consistency(h, listeners=256, seed=0, source='organ'):
     1 / (1 + S lambda / (8 V)). The path method estimates the uncorrected diffuse field."""
     report = json.loads((WORK / f'church-{h:g}.json').read_text())
     bank = rm.load_bank(WORK / f'bank-church-{h:g}')
-    S = np.load(WORK / f'bank-church-{h:g}' / 'surface-mesh.npy')
+    S = bank['surface']
     mats = [str(m) for m in bank['materials']]
     adm = [report['admittance'][m] for m in mats]
     k = bank['k']
@@ -293,9 +300,9 @@ def fdtd(h, receivers=64, seed=1):
     edges = [bank['edges0'], bank['edges1'], bank['edges2']]
     grid = fw.Grid(float(h), tuple(float(e[0]) for e in edges), tuple(int(n) for n in solid.shape), 0)
     table = {m + 1: float(adm[m][0]) for m in range(len(mats))}   # band 0's admittance (held below 125 Hz)
-    k, S = bank['k'], bank['surface']
+    k, S = bank['k'], bank['surfaceVoxel']          # the FDTD's walls are the voxel faces
     delta = rm.damping(k, S, adm)
-    fs = rm.schroeder_frequency(k, delta)
+    fs = report['schroederHz']                       # the bands: the Church's crossover (mesh walls)
     bands = np.array([fs, math.sqrt(2) * fs])
     clear = ndimage.distance_transform_edt(solid < 0) * h
     lo = np.array([e[0] for e in edges])

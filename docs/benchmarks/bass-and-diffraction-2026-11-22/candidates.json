@@ -1,0 +1,50 @@
+{
+ "gcellPerSecond": 2.062568772016184,
+ "updateSeconds": 0.023219954648526078,
+ "rooms": {
+  "shoebox-0020-presets": {
+   "schroederHz": 241.35338698134007,
+   "topHz": 341.3252331936931,
+   "volume": 40.59716796874999,
+   "modes": 229,
+   "bankMiB": 9.424026489257812,
+   "fdtdCells": 40005.395220399034,
+   "fdtdStepsPerSecond": 5971.642886836076,
+   "fdtdGpuMsPerUpdate": 2.689461444288672,
+   "fdtdStateMiB": 0.6104338870300146
+  },
+  "shoebox-0010-presets": {
+   "schroederHz": 517.8135204087052,
+   "topHz": 732.2989033421485,
+   "volume": 55.859375,
+   "modes": 2762,
+   "bankMiB": 150.66757202148438,
+   "fdtdCells": 543599.2680611393,
+   "fdtdStepsPerSecond": 12811.908150662339,
+   "fdtdGpuMsPerUpdate": 78.40533394138316,
+   "fdtdStateMiB": 8.294666565874317
+  },
+  "furnished-0005-presets": {
+   "schroederHz": 272.4063250024225,
+   "topHz": 385.240719294639,
+   "volume": 69.11279296875,
+   "modes": 569,
+   "bankMiB": 51.28605651855469,
+   "fdtdCells": 97920.27827728308,
+   "fdtdStepsPerSecond": 6739.964635986815,
+   "fdtdGpuMsPerUpdate": 7.429903718407269,
+   "fdtdStateMiB": 1.4941448711743635
+  },
+  "church": {
+   "schroederHz": 22.66644772968866,
+   "topHz": 32.05519779014655,
+   "volume": 29250.28125,
+   "modes": 190,
+   "bankMiB": 25.126380920410156,
+   "fdtdCells": 23874.982891295,
+   "fdtdStepsPerSecond": 560.8205173656912,
+   "fdtdGpuMsPerUpdate": 0.1507370084105899,
+   "fdtdStateMiB": 0.36430332780906677
+  }
+ }
+}
