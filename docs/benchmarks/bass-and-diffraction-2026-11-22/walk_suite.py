@@ -3,13 +3,14 @@
     PY=.context/fdtd-teacher/venv/bin/python
     B=docs/benchmarks/bass-and-diffraction-2026-11-22
     nice -n 19 $PY $B/walk_suite.py profile current walk beams     # GPU time per solve of every suite scene, 2,048 rays
-    $PY $B/walk_suite.py budgets                                   # rays per configuration for the current method's time
-    nice -n 19 $PY $B/walk_suite.py render current 2048 2,3        # beams.py renders (raw-walk-<config>), the given seeds
-    $PY $B/walk_suite.py score                                     # every configuration with four seeds, beams.py's scorer
+    $PY $B/walk_suite.py budgets                                   # rays per scene and configuration for the current method's time
+    nice -n 19 $PY $B/walk_suite.py render current 2,3             # beams.py renders (raw-walk-<config>), the given seeds
+    nice -n 19 $PY $B/walk_suite.py render walk 0,1,2,3
+    $PY $B/walk_suite.py score                                     # every configuration with four seeds and the static-IR baseline
 
 The current method's seeds 0 and 1 are the scoreboard's runs (raw-path-shortcut); its seeds 2 and 3 and every walk run are
-rendered with this code. Equal time: the summed GPU time per solve over the suite's scenes (MeasurePathProfile: edge
-distribution, walk and readback, four receivers per scene), scaled linearly in rays.
+rendered with this code. Equal time, scene by scene: the GPU time per solve (MeasurePathProfile: edge distribution, walk
+and readback, four receivers), scaled linearly in rays.
 """
 import json
 import os
@@ -52,33 +53,57 @@ def seconds(name):
 
 
 def budgets():
+    """Rays per scene and configuration for the current method's time at 2,048 rays (the suite-wide ratio printed too)."""
     base = seconds('current')
     out = {}
     for name in CONFIGS:
         t = seconds(name)
-        ratio = sum(base.values()) / sum(t.values())
-        out[name] = dict(ratio=ratio, rays=int(round(RAYS * ratio)), seconds=t)
-        print(f'{name}: {sum(t.values()) * 1000:.1f} ms per solve summed over the suite; equal time at {out[name]["rays"]} rays (x{ratio:.3f}); '
-              + ', '.join(f'{s} {1000 * v:.1f}' for s, v in t.items()))
+        out[name] = {s: int(round(RAYS * base[s] / t[s])) for s in t}
+        print(f'{name}: {sum(t.values()) * 1000:.1f} ms per solve summed over the suite (x{sum(base.values()) / sum(t.values()):.3f}); rays at equal time: '
+              + ', '.join(f'{s} {out[name][s]}' for s in t))
     (OUT / 'suite-budgets.json').write_text(json.dumps(out, indent=1) + '\n')
 
 
-def render(name, budget, seeds):
-    env = dict(os.environ, PATH_BEAMS_RAW=f'raw-walk-{name}', PATH_SEEDS=seeds, **{f'PATH_{k}': v for k, v in CONFIGS[name].items()})
-    subprocess.run([sys.executable, str(BEAMS), 'render', budget], env=env, check=True)
+def render(name, seeds):
+    """Every scene at its own equal-time budget."""
+    rays = json.loads((OUT / 'suite-budgets.json').read_text())[name]
+    for scene, budget in rays.items():
+        env = dict(os.environ, PATH_BEAMS_RAW=f'raw-walk-{name}', PATH_SEEDS=seeds, PATH_SCENES=scene, **{f'PATH_{k}': v for k, v in CONFIGS[name].items()})
+        subprocess.run([sys.executable, str(BEAMS), 'render', str(2048 if name == 'current' else budget)], env=env, check=True)
 
 
 def score():
-    """Each configuration's four seeds in one folder (the current method's 0 and 1 copied from the scoreboard's runs)."""
-    current = mr.WORK / 'raw-walk-current'
-    for s in scenes():
-        for seed in ('0', '1'):
-            source, target = mr.WORK / 'raw-path-shortcut' / s / 'path' / 'r02048' / seed, current / s / 'path' / 'r02048' / seed
-            if source.exists() and not target.exists():
-                shutil.copytree(source, target)
-    for name in CONFIGS:
-        env = dict(os.environ, PATH_BEAMS_RAW=f'raw-walk-{name}', PATH_SCORE_JSON=str(OUT / f'suite-score-{name}.json'))
-        subprocess.run([sys.executable, str(BEAMS), 'score'], env=env, check=True)
+    """Each configuration, every scene at its equal-time budget with four seeds, beside the static-IR baseline; beams.py's
+    scorer and groups (all / in view / shadow / closed rooms). The current method's seeds 0 and 1 are the scoreboard's runs."""
+    sys.path.insert(0, str(BEAMS.parent))
+    import variants
+    rays = json.loads((OUT / 'suite-budgets.json').read_text())
+    made, table = [], {}
+    metrics = ('level', 'EDT', 'T30', 'etc', 'levelBias')
+    try:
+        for name in CONFIGS:
+            for s in scenes():
+                budget = f'r{2048 if name == "current" else rays[name][s]:05d}'
+                folder = mr.WORK / f'raw-walk-{name}' / s / 'path'
+                if name == 'current':
+                    for seed in ('0', '1'):
+                        source, target = mr.WORK / 'raw-path-shortcut' / s / 'path' / budget / seed, folder / budget / seed
+                        if source.exists() and not target.exists():
+                            shutil.copytree(source, target)
+                made += variants.pack(f'walk-{name}', folder, budget, s)
+        rows = mc.score(mc.DEFAULT_ROOT, Path('/tmp/walk-suite'), methods=[f'walk-{n}' for n in CONFIGS] + ['baseline-static-ir'])['rows']
+        for method in [f'walk-{n}' for n in CONFIGS] + ['baseline-static-ir']:
+            sel = [r for r in rows if r['method'] == method]
+            table[method] = {g: {k: mc.aggregate([r for r in sel if r['group'] == g], ('method',), k).get((method,)) for k in metrics} for g in ('all', 'view', 'shadow')}
+            table[method]['closed'] = {k: mc.aggregate([r for r in sel if r['group'] == 'all' and r['closed']], ('method',), k).get((method,)) for k in metrics}
+            table[method]['scenes'] = {s: {k: mc.aggregate([r for r in sel if r['group'] == 'all' and r['scene'] == s], ('method',), k).get((method,)) for k in metrics}
+                                       for s in scenes()}
+            print(f'{method:20s} ' + '  '.join(f'{g}: ' + ' / '.join(f'{table[method][g][k]:.2f}' if table[method][g][k] is not None else '-' for k in metrics)
+                                               for g in ('all', 'view', 'shadow', 'closed')))
+        (OUT / 'suite-score.json').write_text(json.dumps(table, indent=1) + '\n')
+    finally:
+        for d in set(made):
+            shutil.rmtree(d, ignore_errors=True)
 
 
 if __name__ == '__main__':
@@ -88,7 +113,7 @@ if __name__ == '__main__':
     elif command == 'budgets':
         budgets()
     elif command == 'render':
-        render(sys.argv[2], sys.argv[3], sys.argv[4])
+        render(sys.argv[2], sys.argv[3])
     elif command == 'score':
         score()
     else:
