@@ -435,13 +435,13 @@ Measured on an Apple M5 (16 GB) under Unity 6.4 on Metal, GPU time per update, t
 | Phase | ms per update |
 |---|---:|
 | tracer: edge distribution, walk, population control and sort, histogram and ring | 3.0 (4.2 before notebook parts 47–49) |
-| audio: path kernels (0.34), late convolution (0.27), direct path, four spectral hops, PCM and readback | 1.9 |
+| audio: path kernels (0.34), late convolution (0.27), direct path, four spectral hops, PCM and readback | 1.6 (1.9 before notebook part 58) |
 | denoiser | 0.45 (0.73 before notebook part 55) |
-| total | about 5.4 |
+| total | about 5.1 |
 
 Each phase includes one fence's round trip (about 0.2 ms).
 The denoiser's eight convolutions are most of its time; each thread issues sixteen inputs' loads before their multiply-adds, in the same order, so its output is bit for bit what it was (notebook part 55).
-Of the audio's floor, the four spectral hops' FFTs, sums and inverse FFTs take about 0.4 ms (0.1 per hop, the current and the old filter's passes together).
+The audio renders an update's four spectral hops in one batch: each pass (every pair's input FFTs, the sums and the inverse FFTs, for the current filter and for the old one it crossfades from) is one dispatch over the four hops' blocks, with the same arithmetic per block, so the samples are bit for bit those of hop-by-hop rendering; this took 0.3 ms off the audio's floor, from 1.3 to 1.0 ms in the Church (notebook part 58).
 At 100,000 rays in flight the tracer takes 13.0–14.7 ms (21.8 ms before notebook parts 47–49).
 Per thread and update the walk makes 3.4 scene queries (walk segments 46% of them, next-event and edge connections 19%, beam visibility 9%, transmissions 18%) and 172 node visits, at a SIMD utilisation of about 30% (notebook part 46's work profile); it realises 12–26 M queries per second against 83–124 M/s for its traversal alone in a kernel that does nothing else.
 The histogram and ring writes cost nothing measurable; the audio side and the denoiser do not depend on N.

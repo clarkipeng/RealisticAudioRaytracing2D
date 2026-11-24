@@ -2733,3 +2733,34 @@ A pair's threads read and write only its own blocks (its histogram, counts, hist
 | 20 rounds | 3.80 [3.57–4.28] | 3.60 [3.40–4.06] | |
 
 The denoiser's share of the station's audio fell from about 0.72 ms to about 0.60, a saving of 0.12–0.20 ms per update; the tracer is unchanged (3.33–3.38 ms).
+
+## 58. The spectral hops in batches, bit for bit
+
+**What changed.**
+An update of 1,024 samples is rendered in spectral hops of 256: each hop ran, for the current filter and for the old one it crossfades from, an input FFT per path group (one dispatch per pair), the tiles' sums and the inverse FFTs, so an update issued four times the same dispatches over small grids, and part 55 bounded what the last three hops cost at 0.30 ms.
+The hops of a render now run in batches of up to four (`GpuAudio.HopBatch`): each pass is one dispatch over every pair and every hop of the batch, and then each hop's late block and PCM are written in order as before (`GpuAudio.compute`, `GpuAudio.QueueRender`).
+A hop's block has its own slot of the buffers its passes fill (the input spectra, the head blends, the tiles' sums and the output blocks), block b's slot being (b / hop) mod 4, and the kernels derive hop j's clock, source ring position and readable range from the batch's first hop (`AudioAtHop`).
+The input FFT's grid is the most groups of any pair by the pairs by the hops, built by the response's group count (`AudioHopArgs`); a group past its pair's count returns.
+A render that starts inside a hop finishes it from the block its batch left in that hop's slot.
+Above transforms of 2,048 the global-memory FFT path keeps one slot and renders hop by hop, pair by pair, as before.
+The slots add about 80 MB to the Church's footprint (peak 3.02 GiB against 2.94).
+
+**Exact.**
+`GpuAudioHopBatchesRenderTheSameAudio` (new) renders part 57's sixteen updates of four pairs (two sources, two listeners, binaural, a source moving and a head turning, the denoiser on) hop by hop and in batches, once in whole updates and once with each update split into two renders, the second starting 100 samples in, inside a hop.
+All four SHA-256 hashes of every PCM sample are E09C458D…, which is also part 57's hash before this change.
+
+**Faster** (`MeasurePathLiveBudget`; GPU 0/0 → 0 before and after every run).
+`hopBatch=1` is the new code hop by hop, which already issues one input FFT dispatch for all pairs.
+
+| Scene, variant | Hop by hop, audio ms | Four hops per batch, audio ms |
+|---|---|---|
+| Station, 8,000 rays per source, denoiser on (interleaved, 20 rounds) | 3.25 [3.06–3.73] | 2.94 [2.76–3.43] |
+| Church, 23,000 rays, denoiser off | 1.89 [1.73–2.39] | 1.57 [1.41–2.11] |
+| Church, 23,000 rays, denoiser on | 2.24 [2.11–2.80] | 1.94 [1.80–2.58] |
+| Church, floor (no denoiser, path kernels or late convolution) | 1.31 [1.21–1.64] | 1.00 [0.90–1.37] |
+
+The station ran its variants interleaved in one process (the hop-by-hop variant twice, 3.25 both times); the Church's footprint allows one variant per process, each 15 rounds of 8 updates at `iterationCap=16`.
+Batching saves 0.30–0.32 ms per update in every case, the whole of part 55's bound for the last three hops.
+At the station the audio fell from 3.49–3.60 ms (part 57) to 2.94: the merged input dispatch and the batches together.
+The tracer is unchanged (Church 4.70–4.77 ms, station 3.30–3.32).
+The station at 8,000 rays per source now takes 3.32 + 2.94 ms.

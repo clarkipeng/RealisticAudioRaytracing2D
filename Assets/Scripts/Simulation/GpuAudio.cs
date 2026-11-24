@@ -12,12 +12,12 @@ internal sealed partial class GpuAudio : IDisposable
     readonly CommandBuffer commands;
     readonly TakeRender.Settings settings;
     readonly TakeRender.Signal[] signals;
-    readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock,slots;
+    readonly int pairs,listeners,channels,capacity,fft,bins,history,maximumBlock,slots,hopSlots;
     readonly RayTransport.Layout layout;
     readonly int reset,compare,commit,groups,match,filter,input,sum,inverse,write,materialGlobal,padGlobal,filterGlobal,inputGlobal,sumGlobal,saveGlobal,reverse,butterfly;
     readonly int[] kernels,transformKernels;
     readonly List<ComputeBuffer> owned=new List<ComputeBuffer>();
-    readonly ComputeBuffer args,headsPose,source,work,transform,output,sourceClocks;
+    readonly ComputeBuffer args,hopArgs,headsPose,source,work,transform,output,sourceClocks;
     readonly int[] planeRows;
     readonly int[] filterOffsets;
     readonly float[] download;
@@ -29,7 +29,11 @@ internal sealed partial class GpuAudio : IDisposable
     long cursor,uploaded,responseSample,readbackStarted,readbackCompleted;
     int requested,queued,poseCursor;
     uint previousResponses,previousReused,previousFilters,previousInputFfts;
-    const int Header=8,SumTiles=16;
+    const int Header=8,SumTiles=16,HopSlots=4;
+    // The spectral hops rendered per batch (README part 58), at most the per-hop buffers' slots (4 below transforms of
+    // 2,048, else 1); 1 renders hop by hop, the same samples bit for bit (checks and measurements).
+    internal int HopBatch {get=>hopBatch;set=>hopBatch=Math.Clamp(value,1,hopSlots);}
+    int hopBatch;
     public TakeRender.AudioDiagnostics Diagnostics {get;}=new TakeRender.AudioDiagnostics();
     public long NumericBytes {get;private set;}
     // Profiling only (MeasurePathLiveBudget): the path kernels built once and then left (a bound on their cost).
@@ -51,6 +55,7 @@ internal sealed partial class GpuAudio : IDisposable
         capacity=layout.Capacity;maximumBlock=checked(settings.responseStepSamples*maximumResponses+settings.LatePartition); // the path reverb's input lookahead (InputEnd)
         var hrtf=channels==2?Hrtf.Load(rate):null;int taps=hrtf?.Taps??1;
         fft=1;while(fft<settings.fftSize+taps+settings.spectralHop-2)fft=checked(fft*2);bins=fft/2+1;
+        hopSlots=fft<=2048?HopSlots:1;hopBatch=hopSlots;
         history=checked((int)settings.HistorySamples(rate)+fft+maximumBlock);
         download=new float[checked(maximumBlock*listeners*channels+Header)];
         poses=new Vector4[listeners*2];completion=Complete;
@@ -76,7 +81,8 @@ internal sealed partial class GpuAudio : IDisposable
             Buffer("AudioLast",capacity,RayTransport.PathStride).SetData(new RayTransport.Path[capacity]);
             Buffer("AudioMatches",checked(capacity*2),4);Buffer("AudioPaths",checked(capacity*2),RayTransport.PathStride);Buffer("AudioCounts",pairs*2,4).SetData(new uint[pairs*2]);
             args=Buffer("AudioArgs",pairs*6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);args.SetData(new uint[pairs*6]);
-            Buffer("AudioTable",checked(pairs*hash),8);Buffer("AudioHeads",capacity,4);Buffer("AudioNext",capacity,4);Buffer("AudioBlends",checked(2*capacity),32);
+            hopArgs=Buffer("AudioHopArgs",6,4,ComputeBufferType.IndirectArguments|ComputeBufferType.Structured);hopArgs.SetData(new uint[6]);
+            Buffer("AudioTable",checked(pairs*hash),8);Buffer("AudioHeads",capacity,4);Buffer("AudioNext",capacity,4);Buffer("AudioBlends",checked(hopSlots*2*capacity),32);
             headsPose=Buffer("AudioHeadsPose",checked(poses.Length*maximumResponses),16);
             Buffer("AudioHeadHistory",poses.Length*2,16);
             source=Buffer("AudioSource",checked(signals.Length*history),4,mode:ComputeBufferMode.SubUpdates);
@@ -111,13 +117,13 @@ internal sealed partial class GpuAudio : IDisposable
             int filterElements=Math.Max(1,checked(2*filterCapacity*bins));
             Buffer("AudioFilters",filterElements,8);
             Diagnostics.pathCapacity=capacity;Diagnostics.filterBytes=filterElements*8L;
-            Buffer("AudioSums",checked(listeners*channels*SumTiles*bins),16);Set("AudioTiles",SumTiles);
+            Buffer("AudioSums",checked(hopSlots*listeners*channels*SumTiles*bins),16);Set("AudioTiles",SumTiles);Set("AudioHopSlots",hopSlots);
             // Shared FFTs only write their nonredundant bins. Global filter preparation
             // runs pair by pair, so its separate transform scratch can reuse the same rows.
             int workStride=fft<=2048?bins:fft;
-            work=Buffer("AudioWork",Math.Max(1,checked(filterCapacity*workStride)),8);
+            work=Buffer("AudioWork",Math.Max(1,checked(hopSlots*filterCapacity*workStride)),8);
             transform=fft>2048?Buffer("AudioTransform",checked(Math.Max(maximumGroups,listeners*channels)*fft),8):work;
-            Buffer("AudioBlocks",checked(2*listeners*channels*settings.spectralHop),4).SetData(new float[2*listeners*channels*settings.spectralHop]);
+            Buffer("AudioBlocks",checked(hopSlots*2*listeners*channels*settings.spectralHop),4).SetData(new float[hopSlots*2*listeners*channels*settings.spectralHop]);
             output=Buffer("AudioOutput",download.Length,4);
             var twiddles=new Vector2[1024];for(int j=0;j<twiddles.Length;j++)twiddles[j]=new Vector2((float)Math.Cos(-2*Math.PI*j/2048),(float)Math.Sin(-2*Math.PI*j/2048));
             Buffer("AudioTwiddles",twiddles.Length,8).SetData(twiddles);
@@ -265,37 +271,50 @@ internal sealed partial class GpuAudio : IDisposable
             PrepareInput(need);
         }
         Set("AudioBuildingFilter",0);
+        int hop=settings.spectralHop;
         for(int at=0;at<count;)
         {
-            long now=sample+at,block=now-now%settings.spectralHop;Clock("AudioBlockSample",block);
-            if(now%settings.spectralHop==0)
+            // A batch of hops: their spectra in one pass, then each hop's late block and PCM in order. A render that
+            // starts inside a hop finishes it from the block its batch left in the hop's slot.
+            long now=sample+at;int hops=1;
+            if(now%hop==0){hops=Math.Min(hopBatch,(count-at+hop-1)/hop);SetHop(now,sample+count);QueueSpectra(hops);}
+            for(int j=0;j<hops;j++)
             {
-                Set("AudioRingAt",(int)(block%history));Set("AudioBlockNegative",block<=int.MaxValue?1:0);
-                Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(Math.Max(uploaded,sample+count)-block)));
-                for(int which=0;which<2;which++)
-                {
-                    Set("AudioWhich",which);
-                    commands.BeginSample("Acoustics.GPU.InputFFT");
-                    for(int pair=0;pair<pairs;pair++)
-                    {
-                        Set("AudioPair",pair);Dispatch(fft<=2048?input:inputGlobal,pair,which);
-                        if(fft>2048)FftGlobal(work,fft,false,pair,which);
-                    }
-                    commands.EndSample("Acoustics.GPU.InputFFT");commands.BeginSample("Acoustics.GPU.Mix");
-                    commands.DispatchCompute(shader,sum,(bins+63)/64,SumTiles,listeners*channels);
-                    if(fft<=2048)commands.DispatchCompute(shader,inverse,listeners*channels,1,1);
-                    else {BindTransform(transform);commands.DispatchCompute(shader,sumGlobal,listeners*channels,1,1);FftGlobal(transform,fft,true,0,which,listeners*channels);commands.DispatchCompute(shader,saveGlobal,listeners*channels,1,1);}
-                    commands.EndSample("Acoustics.GPU.Mix");
-                }
+                now=sample+at;long block=now-now%hop;SetHop(block,sample+count);
+                if(now%hop==0)QueueLateBlock(now);
+                int first=(int)(now%hop),length=Math.Min(count-at,hop-first);
+                Set("AudioWriteOffset",queued+at);Set("AudioWriteAt",first);Set("AudioWriteCount",length);
+                commands.BeginSample("Acoustics.GPU.PCM");commands.DispatchCompute(shader,write,(length*listeners*channels+63)/64,1,1);
+                if(lateReady)commands.DispatchCompute(shader,lateWrite,(length*listeners*channels+63)/64,1,1);
+                commands.EndSample("Acoustics.GPU.PCM");at+=length;
             }
-            if(now%settings.spectralHop==0)QueueLateBlock(now);
-            int first=(int)(now%settings.spectralHop),length=Math.Min(count-at,settings.spectralHop-first);
-            Set("AudioWriteOffset",queued+at);Set("AudioWriteAt",first);Set("AudioWriteCount",length);
-            commands.BeginSample("Acoustics.GPU.PCM");commands.DispatchCompute(shader,write,(length*listeners*channels+63)/64,1,1);
-            if(lateReady)commands.DispatchCompute(shader,lateWrite,(length*listeners*channels+63)/64,1,1);
-            commands.EndSample("Acoustics.GPU.PCM");at+=length;
         }
         Submit();cursor+=count;queued+=count;
+    }
+    // The hop whose block starts at `block`: its clock, its source ring position and readable range, and its slot.
+    void SetHop(long block,long end)
+    {
+        Clock("AudioBlockSample",block);Set("AudioRingAt",(int)(block%history));Set("AudioBlockNegative",block<=int.MaxValue?1:0);
+        Set("AudioAvailableStart",checked((int)(Math.Max(0,uploaded-history)-block)));Set("AudioAvailableEnd",checked((int)(Math.Max(uploaded,end)-block)));
+        Set("AudioHopSlot",(int)(block/settings.spectralHop%hopSlots));
+    }
+    // The spectra of `hops` hops from the current one, for the current filter and for the old one it crossfades from:
+    // every pair's input transforms, the sums and the inverse transforms, one dispatch each over all the hops.
+    void QueueSpectra(int hops)
+    {
+        int lanes=listeners*channels;Set("AudioHopCount",hops);
+        for(int which=0;which<2;which++)
+        {
+            Set("AudioWhich",which);
+            commands.BeginSample("Acoustics.GPU.InputFFT");
+            if(fft<=2048)commands.DispatchCompute(shader,input,hopArgs,(uint)(which*3*4));
+            else for(int pair=0;pair<pairs;pair++){Set("AudioPair",pair);Dispatch(inputGlobal,pair,which);FftGlobal(work,fft,false,pair,which);}
+            commands.EndSample("Acoustics.GPU.InputFFT");commands.BeginSample("Acoustics.GPU.Mix");
+            commands.DispatchCompute(shader,sum,(bins+63)/64,SumTiles,lanes*hops);
+            if(fft<=2048)commands.DispatchCompute(shader,inverse,lanes*hops,1,1);
+            else {BindTransform(transform);commands.DispatchCompute(shader,sumGlobal,lanes,1,1);FftGlobal(transform,fft,true,0,which,lanes);commands.DispatchCompute(shader,saveGlobal,lanes,1,1);}
+            commands.EndSample("Acoustics.GPU.Mix");
+        }
     }
     public void BeginReadback()
     {

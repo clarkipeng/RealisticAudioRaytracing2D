@@ -176,8 +176,9 @@ public partial class TakeChecks
 
     // The live path audio of two sources and two listeners (four pairs) in the aperture room, binaural, a source moving and
     // a head turning, rendered update by update through GpuAudio as the live renderer does (the method's output read on the
-    // GPU, no CPU readback): a hash of every PCM sample. configure adjusts the GpuAudio before the first update.
-    string LivePathAudioHash(Action<GpuAudio> configure, bool denoise = true, int updates = 16)
+    // GPU, no CPU readback): a hash of every PCM sample. configure adjusts the GpuAudio before the first update; with split,
+    // each update's samples are queued as two renders, the second starting split samples in (inside a spectral hop).
+    string LivePathAudioHash(Action<GpuAudio> configure, bool denoise = true, int updates = 16, int split = 0)
     {
         var shader = RequireGpu();
         const int rate = 8000, size = 256;
@@ -217,7 +218,9 @@ public partial class TakeChecks
             posed[1].rotation = Quaternion.Euler(0, u * 19, 0); posed[1].angularVelocity = Vector3.up; posed[1].flags |= AcousticTake.StateFlags.VelocityValid;
             solver.BeginSolve(posed, 1, false);
             gpu.SetResponse(sample, sample == 0, solver.RayBuffer, 0, scene, posed, late: solver.Late(0));
-            gpu.QueueRender(sample, step); gpu.BeginReadback(); gpu.TryComplete(pcm, true); solver.CompleteAfterGpuAudio();
+            if (split > 0) { gpu.PrepareInput(gpu.InputEnd(sample + step)); gpu.QueueRender(sample, split); gpu.QueueRender(sample + split, step - split); }
+            else gpu.QueueRender(sample, step);
+            gpu.BeginReadback(); gpu.TryComplete(pcm, true); solver.CompleteAfterGpuAudio();
             foreach (float v in pcm) { Assert.That(float.IsFinite(v)); energy += v * v; }
             var bytes = new byte[pcm.Length * 4]; Buffer.BlockCopy(pcm, 0, bytes, 0, bytes.Length);
             sha.TransformBlock(bytes, 0, bytes.Length, null, 0);
@@ -241,5 +244,17 @@ public partial class TakeChecks
         TestContext.WriteLine($"one denoiser {joint}, one per pair {apart}, no denoiser {plain}");
         Assert.That(apart, Is.EqualTo(joint));
         Assert.That(plain, Is.Not.EqualTo(joint), "the denoiser changes the audio");
+    }
+
+    // Spectral hops rendered in batches (README part 58): four pairs rendered hop by hop and four hops per batch, in whole
+    // updates and in renders that start and end inside a hop, every PCM sample bit for bit the same.
+    [Test, Category("GPU"), Category("Methods"), Timeout(900000)]
+    public void GpuAudioHopBatchesRenderTheSameAudio()
+    {
+        string batched = LivePathAudioHash(null), single = LivePathAudioHash(gpu => gpu.HopBatch = 1);
+        string batchedSplit = LivePathAudioHash(null, split: 100), singleSplit = LivePathAudioHash(gpu => gpu.HopBatch = 1, split: 100);
+        TestContext.WriteLine($"batched {batched}, hop by hop {single}; split renders: batched {batchedSplit}, hop by hop {singleSplit}");
+        Assert.That(single, Is.EqualTo(batched));
+        Assert.That(singleSplit, Is.EqualTo(batchedSplit));
     }
 }

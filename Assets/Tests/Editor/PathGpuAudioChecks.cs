@@ -151,7 +151,8 @@ public partial class TakeChecks
     // rounds, the work profile of 16 updates, MethodTransport.WorkProfile), merged (0: the GPU queries descend the instance tree,
     // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles), stages (1: a fence after each
     // stage of the tracer's update, PATH_STAGE lines with each stage's time), mergedWalk (0: the pairs walked one by one, MethodTransport.MergedWalk),
-    // denoisePerPair (1: one denoiser per pair, each dispatched alone, GpuAudio.EnablePathDenoiser); default "base:".
+    // denoisePerPair (1: one denoiser per pair, each dispatched alone, GpuAudio.EnablePathDenoiser), hopBatch (the spectral hops
+    // rendered per batch, 1: hop by hop, GpuAudio.HopBatch); default "base:".
     // All variants live in one process and are measured interleaved, in rounds of 8 updates each
     // (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25), after a horizon of warm-up updates each, so drift from other work on
     // the machine falls on every variant alike. Reported: median and the 10th-90th percentile range per phase, and the
@@ -196,7 +197,7 @@ public partial class TakeChecks
                 settings.method = TakeRender.Method.Path; settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true;
                 settings.pathPopulation = 11000; settings.pathDenoise = false; settings.maximumResponsesPerBatch = 1;
                 settings.pathHistogramExport = settings.pathHistogramImport = "";
-                int kernels = 1, spectra = 1, convolution = 1, maximum = 23000; double budget = 0; bool other = false, perPair = false;
+                int kernels = 1, spectra = 1, convolution = 1, maximum = 23000, hopBatch = 0; double budget = 0; bool other = false, perPair = false;
                 string options = entry.Contains(":") ? entry.Substring(entry.IndexOf(':') + 1) : "";
                 foreach (string kv in options.Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries))
                 {
@@ -225,13 +226,14 @@ public partial class TakeChecks
                         case "stages": v.stages = value != 0; break;
                         case "mergedWalk": v.mergedWalk = value != 0; break;
                         case "denoisePerPair": perPair = value != 0; break;
+                        case "hopBatch": hopBatch = value; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
                 }
                 if (budget > 0) { settings.pathPopulationMaximum = maximum; v.budget = new PathPopulationBudget(budget, settings.pathPopulation, 4000, maximum); }
                 v.gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
                 v.solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
-                v.solver.Method.ProfileFlags = v.flags; v.solver.Method.MergedWalk = v.mergedWalk;
+                v.solver.Method.ProfileFlags = v.flags; v.solver.Method.MergedWalk = v.mergedWalk; if (hopBatch > 0) v.gpu.HopBatch = hopBatch;
                 v.solver.TraceTreeEnabled = v.merged; v.solver.TraceTreeInline = v.inline;
                 if (perPair && settings.pathDenoise)
                 {
