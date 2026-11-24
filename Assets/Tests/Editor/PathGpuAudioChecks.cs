@@ -149,7 +149,8 @@ public partial class TakeChecks
     // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000 and maximum, default 23,000),
     // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU), profile (1: after the
     // rounds, the work profile of 16 updates, MethodTransport.WorkProfile), merged (0: the GPU queries descend the instance tree,
-    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles); default "base:".
+    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles), queries
+    // (TakeRender.PathQueries), waves (MethodTransport.WaveCount), phases (1: the waves' phases fenced and timed); default "base:".
     // All variants live in one process and are measured interleaved, in rounds of 8 updates each
     // (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25), after a horizon of warm-up updates each, so drift from other work on
     // the machine falls on every variant alike. Reported: median and the 10th-90th percentile range per phase, and the

@@ -1,0 +1,350 @@
+diff --git a/Assets/Scripts/Simulation/DirectBvh.cs b/Assets/Scripts/Simulation/DirectBvh.cs
+index c1ea641..f0c2abb 100644
+--- a/Assets/Scripts/Simulation/DirectBvh.cs
++++ b/Assets/Scripts/Simulation/DirectBvh.cs
+@@ -12,6 +12,7 @@ internal sealed class DirectBvh
+     {
+         public Vector4 min,max;
+         public uint left,right,first,count; // count: 0 branch, uint.MaxValue instance, otherwise primitives.
++        public uint this[int c] { get => c==0?left:c==1?right:c==2?first:count; set { if(c==0)left=value; else if(c==1)right=value; else if(c==2)first=value; else count=value; } }
+     }
+     public Node[] Nodes {get;private set;}
+     public readonly int[] Indices;
+diff --git a/Assets/Scripts/Simulation/StaticTraceTree.cs b/Assets/Scripts/Simulation/StaticTraceTree.cs
+index ef34115..a05fab8 100644
+--- a/Assets/Scripts/Simulation/StaticTraceTree.cs
++++ b/Assets/Scripts/Simulation/StaticTraceTree.cs
+@@ -14,6 +14,7 @@ using UnityEngine;
+ internal sealed class StaticTraceTree
+ {
+     public const uint MergedInstance = 0xfffffffe; // a top node's count: the merged tree (identity pose), its root in `left`
++    public const uint WideInstance = 0xfffffffd;   // the same, 4-wide (README part 53; Geometry.hlsl TraceWide)
+     readonly AcousticTake.Primitive[] geometry;
+     readonly int objectCount, nodeBase, indexBase, topCapacity;
+     readonly bool[] dynamicObject;
+@@ -24,7 +25,9 @@ internal sealed class StaticTraceTree
+     DirectBvh.Node[] merged = Array.Empty<DirectBvh.Node>();
+     int[] mergedIndices = Array.Empty<int>();
+     int mergedRoot = -1;
+-    Task<(DirectBvh.Node[] nodes, int[] indices, int root, int tree)> rebuilding;
++    Task<(DirectBvh.Node[] nodes, int[] indices, int root, int tree, bool wide)> rebuilding;
++    Vector3 mergedLow, mergedHigh; // the merged tree's box
++    bool mergedWide;
+     public readonly DirectBvh.Node[] Nodes;    // [top tree topCapacity][merged tree], absolute links
+     public readonly int[] Indices;             // the merged tree's triangle order, absolute (from indexBase)
+     public int TopCount { get; private set; }
+@@ -36,6 +39,8 @@ internal sealed class StaticTraceTree
+     // The merged tree's leaves hold their triangles in world space in the node array (Geometry.hlsl ConsiderTriangle, README
+     // part 49) instead of primitive indices; profiling: false keeps the indices (MeasurePathLiveBudget inline=0).
+     public bool InlineTriangles = true;
++    // The merged tree collapsed 4-wide (Geometry.hlsl TraceWide, README part 53); profiling: false keeps it binary (MeasurePathLiveBudget wide=0).
++    public bool WideTree = true;
+     public const uint TriangleLeaf = 0x40000000;
+     public int Capacity => Nodes.Length;
+     public int MergedStart => topCapacity;
+@@ -45,7 +50,7 @@ internal sealed class StaticTraceTree
+         this.geometry = geometry; this.objectCount = objectCount; this.nodeBase = nodeBase; this.indexBase = indexBase;
+         dynamicObject = new bool[objectCount]; referencePosition = new Vector3[objectCount]; referenceRotation = new Quaternion[objectCount];
+         topCapacity = 2 * (objectCount + 1);
+-        Nodes = new DirectBvh.Node[topCapacity + Math.Max(1, 3 * geometry.Length)]; // [top][merged tree: at most 2n - 1][its triangles: n]
++        Nodes = new DirectBvh.Node[topCapacity + Math.Max(1, 4 * geometry.Length + 3)]; // [top][merged tree: at most 3 entries per binary branch][its triangles: n]
+         Indices = new int[Math.Max(1, geometry.Length)];
+     }
+ 
+@@ -73,9 +78,9 @@ internal sealed class StaticTraceTree
+             var poses = new (Vector3 position, Quaternion rotation)[objectCount];
+             for (int owner = 0; owner < objectCount; owner++) poses[owner] = (referencePosition[owner], referenceRotation[owner]);
+             var excluded = (bool[])dynamicObject.Clone();
+-            bool inline = InlineTriangles;
+-            if (!initialized) Install(BuildMerged(geometry, poses, excluded, inline));
+-            else rebuilding = Task.Run(() => BuildMerged(geometry, poses, excluded, inline));
++            bool inline = InlineTriangles, wideTree = WideTree;
++            if (!initialized) Install(BuildMerged(geometry, poses, excluded, inline, wideTree));
++            else rebuilding = Task.Run(() => BuildMerged(geometry, poses, excluded, inline, wideTree));
+             initialized = true;
+         }
+         else if (rebuilding != null && rebuilding.IsCompleted)
+@@ -86,27 +91,46 @@ internal sealed class StaticTraceTree
+         BuildTop(instances);
+         return true;
+     }
+-    void Install((DirectBvh.Node[] nodes, int[] indices, int root, int tree) tree)
++    void Install((DirectBvh.Node[] nodes, int[] indices, int root, int tree, bool wide) tree)
+     {
+         merged = tree.nodes; mergedIndices = tree.indices; mergedRoot = tree.root; MergedNodeCount = merged.Length;
++        uint at = (uint)(nodeBase + topCapacity);
++        bool wide = tree.wide; mergedWide = wide;
++        mergedLow = Vector3.positiveInfinity; mergedHigh = Vector3.negativeInfinity;
+         for (int i = 0; i < merged.Length; i++)
+         {
+             var node = merged[i];
+             if (i >= tree.tree) { Nodes[topCapacity + i] = node; continue; } // (a stored triangle)
+-            if (node.count == 0) { node.left += (uint)(nodeBase + topCapacity); node.right += (uint)(nodeBase + topCapacity); }
+-            else node.first += (node.count & TriangleLeaf) != 0 ? (uint)(nodeBase + topCapacity) : (uint)indexBase;
++            if (wide)
++            {
++                if (i % 3 != 0) { Nodes[topCapacity + i] = node; continue; } // (a wide node's second and third entries)
++                // Each child's link: a wide node or a leaf's first stored triangle, both in this array; an empty slot stays.
++                var flags = merged[i + 1];
++                for (int c = 0; c < 4; c++) if (flags[c] != WideEmpty) node[c] += at;
++                if (i == tree.root)
++                    for (int c = 0; c < 4; c++)
++                        if (flags[c] != WideEmpty)
++                        {
++                            mergedLow = Vector3.Min(mergedLow, new Vector3(node.min[c], merged[i + 1].min[c], merged[i + 2].min[c]));
++                            mergedHigh = Vector3.Max(mergedHigh, new Vector3(node.max[c], merged[i + 1].max[c], merged[i + 2].max[c]));
++                        }
++                Nodes[topCapacity + i] = node; continue;
++            }
++            if (node.count == 0) { node.left += at; node.right += at; }
++            else node.first += (node.count & TriangleLeaf) != 0 ? at : (uint)indexBase;
+             Nodes[topCapacity + i] = node;
+         }
++        if (!wide && tree.root >= 0) { mergedLow = merged[tree.root].min; mergedHigh = merged[tree.root].max; }
+         Array.Copy(mergedIndices, Indices, mergedIndices.Length);
+         MergedChanged = true;
+     }
+     // One SAH tree over the merged objects' triangles at their reference poses, the boxes padded beyond the pose's rounding
+     // (as DirectBvh.WorldBounds). Thread-safe: it reads only its arguments.
+-    static (DirectBvh.Node[] nodes, int[] indices, int root, int tree) BuildMerged(AcousticTake.Primitive[] geometry, (Vector3 position, Quaternion rotation)[] poses, bool[] excluded, bool inline)
++    static (DirectBvh.Node[] nodes, int[] indices, int root, int tree, bool wide) BuildMerged(AcousticTake.Primitive[] geometry, (Vector3 position, Quaternion rotation)[] poses, bool[] excluded, bool inline, bool wideTree = true)
+     {
+         int count = 0;
+         foreach (var p in geometry) if (!excluded[p.objectIndex]) count++;
+-        if (count == 0) return (Array.Empty<DirectBvh.Node>(), Array.Empty<int>(), -1, 0);
++        if (count == 0) return (Array.Empty<DirectBvh.Node>(), Array.Empty<int>(), -1, 0, false);
+         var low = new Vector3[geometry.Length]; var high = new Vector3[geometry.Length]; var middle = new Vector3[geometry.Length];
+         var world = new Vector3[3 * geometry.Length];
+         var order = new int[count]; int n = 0;
+@@ -126,21 +150,79 @@ internal sealed class StaticTraceTree
+         var builder = new SahBuilder(low, high, middle, false, nodes, 0);
+         int root = builder.Build(order, 0, count);
+         int built = builder.Built;
+-        if (!inline) { Array.Resize(ref nodes, built); return (nodes, order, root, built); }
+-        // Each leaf's triangles, in its order, after the tree: node `built + k` holds the k-th triangle of `order`.
+-        Array.Resize(ref nodes, built + count);
+-        for (int i = 0; i < built; i++)
+-            if (nodes[i].count != 0) { nodes[i].first += (uint)built; nodes[i].count |= TriangleLeaf; }
+-        for (int k = 0; k < count; k++)
++        if (!inline) { Array.Resize(ref nodes, built); return (nodes, order, root, built, false); }
++        if (!wideTree)
++        {
++            // Binary, each leaf's triangles after the tree (README part 49).
++            Array.Resize(ref nodes, built + count);
++            for (int i = 0; i < built; i++)
++                if (nodes[i].count != 0) { nodes[i].first += (uint)built; nodes[i].count |= TriangleLeaf; }
++            for (int k = 0; k < count; k++) nodes[built + k] = StoredTriangle(world, order[k]);
++            return (nodes, order, root, built, false);
++        }
++        // The binary tree collapsed into a 4-wide one (Wide, README part 53), then each leaf's triangles in its order after it:
++        // entry `tree + k` holds the k-th triangle of `order`.
++        var wide = new System.Collections.Generic.List<DirectBvh.Node>();
++        int wideRoot = Wide(nodes, root, wide);
++        int tree = wide.Count;
++        var result = new DirectBvh.Node[tree + count];
++        for (int i = 0; i < tree; i++)
++        {
++            var node = wide[i];
++            if (i % 3 == 0)
++            {
++                var flags = wide[i + 1];
++                for (int c = 0; c < 4; c++) if (flags[c] != WideEmpty && (flags[c] & TriangleLeaf) != 0) node[c] += (uint)tree; // (to the stored triangles)
++            }
++            result[i] = node;
++        }
++        for (int k = 0; k < count; k++) result[tree + k] = StoredTriangle(world, order[k]);
++        return (result, order, wideRoot, tree, true);
++    }
++    // A triangle stored in the node array (Geometry.hlsl ConsiderTriangle, README part 49).
++    static DirectBvh.Node StoredTriangle(Vector3[] world, int id)
++    {
++        Vector3 a = world[3 * id], e1 = world[3 * id + 1] - a, e2 = world[3 * id + 2] - a;
++        return new DirectBvh.Node {min = new Vector4(a.x, a.y, a.z, BitConverter.Int32BitsToSingle(id)),
++            max = new Vector4(e1.x, e1.y, e1.z, 8 * 1.1920929e-7f * e1.magnitude * e2.magnitude),
++            left = (uint)BitConverter.SingleToInt32Bits(e2.x), right = (uint)BitConverter.SingleToInt32Bits(e2.y), first = (uint)BitConverter.SingleToInt32Bits(e2.z)};
++    }
++    // A 4-wide node (Geometry.hlsl TraceWide): three entries. The first holds the four children's x bounds (min, max as float4s)
++    // and their links, the second their y bounds and their kinds (0 a wide node, TriangleLeaf | count a leaf of stored triangles,
++    // WideEmpty none), the third their z bounds. Nodes are whole triples from the start of the array. A node's children are the binary node's, the one
++    // of largest surface area among them that is not a leaf replaced by its two children until there are four (the usual
++    // collapse; Wald, Benthin and Boulos 2008): the leaves are the binary tree's, so the triangles tested and the hits are too.
++    public const uint WideEmpty = 0xffffffff;
++    static int Wide(DirectBvh.Node[] binary, int node, System.Collections.Generic.List<DirectBvh.Node> wide)
++    {
++        var children = new System.Collections.Generic.List<int>();
++        if (binary[node].count == 0) { children.Add((int)binary[node].left); children.Add((int)binary[node].right); }
++        else children.Add(node);
++        static float Area(DirectBvh.Node n) { var e = Vector3.Max((Vector3)n.max - (Vector3)n.min, Vector3.zero); return e.x * e.y + e.y * e.z + e.z * e.x; }
++        while (children.Count < 4)
+         {
+-            int id = order[k];
+-            Vector3 a = world[3 * id], e1 = world[3 * id + 1] - a, e2 = world[3 * id + 2] - a;
+-            nodes[built + k] = new DirectBvh.Node {min = new Vector4(a.x, a.y, a.z, BitConverter.Int32BitsToSingle(id)),
+-                max = new Vector4(e1.x, e1.y, e1.z, 8 * 1.1920929e-7f * e1.magnitude * e2.magnitude),
+-                left = (uint)BitConverter.SingleToInt32Bits(e2.x), right = (uint)BitConverter.SingleToInt32Bits(e2.y), first = (uint)BitConverter.SingleToInt32Bits(e2.z)};
++            int best = -1;
++            for (int c = 0; c < children.Count; c++)
++                if (binary[children[c]].count == 0 && (best < 0 || Area(binary[children[c]]) > Area(binary[children[best]]))) best = c;
++            if (best < 0) break;
++            int b = children[best];
++            children[best] = (int)binary[b].left; children.Insert(best + 1, (int)binary[b].right);
+         }
+-        return (nodes, order, root, built);
++        int index = wide.Count;
++        wide.Add(default); wide.Add(default); wide.Add(default);
++        DirectBvh.Node ex = default, ey = default, ez = default;
++        for (int c = 0; c < 4; c++)
++        {
++            if (c >= children.Count) { ex.min[c] = ey.min[c] = ez.min[c] = float.PositiveInfinity; ex.max[c] = ey.max[c] = ez.max[c] = float.NegativeInfinity; ey[c] = WideEmpty; continue; }
++            var child = binary[children[c]];
++            ex.min[c] = child.min.x; ex.max[c] = child.max.x; ey.min[c] = child.min.y; ey.max[c] = child.max.y; ez.min[c] = child.min.z; ez.max[c] = child.max.z;
++            if (child.count == 0) { ex[c] = (uint)Wide(binary, children[c], wide); ey[c] = 0; }
++            else { ex[c] = child.first; ey[c] = TriangleLeaf | child.count; }
++        }
++        wide[index] = ex; wide[index + 1] = ey; wide[index + 2] = ez;
++        return index;
+     }
++
+     static float AbsMax(Vector3 v) => Mathf.Max(Mathf.Abs(v.x), Mathf.Max(Mathf.Abs(v.y), Mathf.Abs(v.z)));
+     // The top tree: the merged tree as one instance (identity pose) and every moved object as its own (DirectBvh's instance
+     // node: its world box, its mesh root), by a median split of their centres.
+@@ -149,8 +231,7 @@ internal sealed class StaticTraceTree
+         var leaves = new System.Collections.Generic.List<DirectBvh.Node>();
+         if (mergedRoot >= 0)
+         {
+-            var root = merged[mergedRoot];
+-            leaves.Add(new DirectBvh.Node {min = root.min, max = root.max, left = (uint)(nodeBase + topCapacity + mergedRoot), count = MergedInstance});
++            leaves.Add(new DirectBvh.Node {min = mergedLow, max = mergedHigh, left = (uint)(nodeBase + topCapacity + mergedRoot), count = mergedWide ? WideInstance : MergedInstance});
+         }
+         bool complete = mergedRoot >= 0 || !Enabled;
+         for (int owner = 0; owner < objectCount && complete; owner++)
+diff --git a/Assets/Scripts/Simulation/TransportSolver.cs b/Assets/Scripts/Simulation/TransportSolver.cs
+index 4a21f60..6afe09e 100644
+--- a/Assets/Scripts/Simulation/TransportSolver.cs
++++ b/Assets/Scripts/Simulation/TransportSolver.cs
+@@ -211,6 +211,7 @@ public sealed class TransportSolver : IDisposable
+     // Profiling (MeasurePathLiveBudget merged=0): the GPU queries descend the instance tree instead of StaticTraceTree's.
+     internal bool TraceTreeEnabled { set { if (bvh?.Trace != null) bvh.Trace.Enabled = value; } }
+     internal bool TraceTreeInline { set { if (bvh?.Trace != null) bvh.Trace.InlineTriangles = value; } }
++    internal bool TraceTreeWide { set { if (bvh?.Trace != null) bvh.Trace.WideTree = value; } }
+     internal int TraceTreeRebuilds => bvh?.Trace?.Rebuilds ?? 0;
+     // An object's mesh tree in the GPU's instance tree (the single-object queries of point location), or -1.
+     internal int MeshRoot(int owner) => bvh != null && bvh.HasMesh(owner) ? (int)bvh.Instance(owner).left : -1;
+diff --git a/Assets/Shaders/Geometry.hlsl b/Assets/Shaders/Geometry.hlsl
+index 24e1bd2..744e241 100644
+--- a/Assets/Shaders/Geometry.hlsl
++++ b/Assets/Shaders/Geometry.hlsl
+@@ -272,6 +272,59 @@ bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 di
+     return false;
+ }
+ #endif
++// The merged tree 4-wide (StaticTraceTree.Wide, README part 53): a node is three entries, the four children's x, y and z bounds
++// (min, max as float4s) and in the entries' links the children's links and kinds (0 a node, TriangleLeaf | count a leaf of stored
++// triangles, 0xffffffff none). The four boxes are tested together against the ray in world space, padded as LocalBox pads them
++// (beyond the rounding of the triangles' world coordinates, so no box is missed that a triangle test would hit), leaves are
++// tested at once and nodes pushed farthest first, each culled when popped if a closer hit has been found since. The leaves and the
++// triangle tests are the binary tree's and ties go to the lower primitive, so the hits do not depend on the tree.
++#ifdef USE_BVH
++bool TraceWide(uint root, float3 boundsLow, float3 boundsHigh, float3 origin, float3 direction, float minimum, bool anyHit,
++               inout uint hit, inout float distance, inout float3 normal)
++{
++    float3 inv = float3(SafeInverse(direction.x), SafeInverse(direction.y), SafeInverse(direction.z));
++    float3 m = max(abs(boundsLow), abs(boundsHigh)), q = abs(origin);
++    float pad = 16 * 1.1920929e-7 * (1 + 4 * max(m.x, max(m.y, m.z)) + max(q.x, max(q.y, q.z)));
++    uint stack[48]; float near[48];
++    uint depth = 0, node = root;
++    while (true)
++    {
++        BvhNode ex = BvhNodes[node], ey = BvhNodes[node + 1], ez = BvhNodes[node + 2];
++        PROFILE_NODE();
++        float4 ax = (ex.boundsMin - pad - origin.x) * inv.x, bx = (ex.boundsMax + pad - origin.x) * inv.x;
++        float4 ay = (ey.boundsMin - pad - origin.y) * inv.y, by = (ey.boundsMax + pad - origin.y) * inv.y;
++        float4 az = (ez.boundsMin - pad - origin.z) * inv.z, bz = (ez.boundsMax + pad - origin.z) * inv.z;
++        float4 enter = max(max(min(ax, bx), min(ay, by)), max(min(az, bz), 0));
++        float4 leave = min(min(max(ax, bx), max(ay, by)), min(max(az, bz), distance));
++        // Children to descend, nearest last on the stack (an insertion into the up to four found).
++        uint found = 0, order[4]; float at[4];
++        [unroll] for (uint c = 0; c < 4; c++)
++        {
++            uint kind = ey.links[c];
++            if (kind == 0xffffffff || !(enter[c] <= leave[c])) continue;
++            if ((kind & TriangleLeaf) != 0)
++            {
++                for (uint stored = 0; stored < (kind & 0xffffu); stored++)
++                    if (ConsiderTriangle(BvhNodes[ex.links[c] + stored], origin, direction, minimum, hit, distance, normal) && anyHit) return true;
++                continue;
++            }
++            order[found] = ex.links[c]; at[found] = enter[c]; found++;
++        }
++        // Push farthest first (selection over the up to four found).
++        for (uint i = 0; i < found; i++)
++        {
++            uint farthest = i;
++            for (uint j = i + 1; j < found; j++) if (at[j] > at[farthest]) farthest = j;
++            uint o = order[farthest]; float t = at[farthest]; order[farthest] = order[i]; at[farthest] = at[i];
++            stack[depth] = o; near[depth] = t; depth++;
++        }
++        bool next = false;
++        while (depth > 0) { depth--; if (near[depth] <= distance) { node = stack[depth]; next = true; break; } }
++        if (!next) break;
++    }
++    return false;
++}
++#endif
+ // Shared any-hit / closest-hit traversal. Each median-split level needs at most 32 stack entries.
+ bool TraceSceneSoftware(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
+                         bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
+@@ -287,6 +340,13 @@ bool TraceSceneSoftware(uint stateOffset, float3 origin, float3 direction, float
+         if (BoundsHit(node, origin, direction * distance, is2D))
+         {
+             if (node.links.w == 0) { stack[depth++] = node.links.y; index = node.links.x; continue; }
++            if (node.links.w == 0xfffffffd) // (the merged tree, 4-wide)
++            {
++                if (TraceWide(node.links.x, node.boundsMin.xyz, node.boundsMax.xyz, origin, direction, minimum, anyHit, hit, distance, normal)) return true;
++                if (depth == 0) break;
++                index = stack[--depth];
++                continue;
++            }
+             bool merged = node.links.w == 0xfffffffe;
+             State pose = States[stateOffset + (merged ? 0 : node.links.z)];
+             if (merged) { pose.position = 0; pose.rotation = float4(0, 0, 0, 1); pose.flags.x = 3; }
+diff --git a/Assets/Tests/Editor/PathGpuAudioChecks.cs b/Assets/Tests/Editor/PathGpuAudioChecks.cs
+index b42fc8d..9a6043c 100644
+--- a/Assets/Tests/Editor/PathGpuAudioChecks.cs
++++ b/Assets/Tests/Editor/PathGpuAudioChecks.cs
+@@ -149,7 +149,8 @@ public partial class TakeChecks
+     // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000 and maximum, default 23,000),
+     // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU), profile (1: after the
+     // rounds, the work profile of 16 updates, MethodTransport.WorkProfile), merged (0: the GPU queries descend the instance tree,
+-    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles); default "base:".
++    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles), wide (0: the merged
++    // tree binary, not 4-wide), queries (TakeRender.PathQueries), waves (WaveCount), phases (1: fenced wave phases); default "base:".
+     // All variants live in one process and are measured interleaved, in rounds of 8 updates each
+     // (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25), after a horizon of warm-up updates each, so drift from other work on
+     // the machine falls on every variant alike. Reported: median and the 10th-90th percentile range per phase, and the
+@@ -160,7 +161,7 @@ public partial class TakeChecks
+         public string name; public GpuAudio gpu; public TransportSolver solver; public AcousticTake.State[] state; public long cursor;
+         public readonly System.Collections.Generic.List<double>[] times = {new(), new(), new()};
+         public readonly System.Collections.Generic.List<int> populations = new();
+-        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle, profile, merged = true, inline = true; public int waves; public bool phases;
++        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle, profile, merged = true, inline = true, wide = true; public int waves; public bool phases;
+         public long waveUpdates, wavesRun, raysStopped, queries, finished;
+     }
+     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
+@@ -220,6 +221,7 @@ public partial class TakeChecks
+                         case "maximum": maximum = value; break;
+                         case "merged": v.merged = value != 0; break;
+                         case "inline": v.inline = value != 0; break;
++                        case "wide": v.wide = value != 0; break;
+                         case "queries": settings.pathQueries = (TakeRender.PathQueries)value; break;
+                         case "waves": v.waves = value; break;
+                         case "phases": v.phases = value != 0; break;
+@@ -230,7 +232,7 @@ public partial class TakeChecks
+                 v.gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
+                 v.solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
+                 v.solver.Method.ProfileFlags = v.flags;
+-                v.solver.TraceTreeEnabled = v.merged; v.solver.TraceTreeInline = v.inline;
++                v.solver.TraceTreeEnabled = v.merged; v.solver.TraceTreeInline = v.inline; v.solver.TraceTreeWide = v.wide;
+                 if (v.waves > 0) v.solver.Method.WaveCount = v.waves;
+                 v.solver.Method.WavePhases = v.phases;
+                 if (other)

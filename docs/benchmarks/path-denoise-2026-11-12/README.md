@@ -2535,3 +2535,26 @@ The profile says where that is: the walk realises a quarter or less of its own t
 **What would make it pay.**
 The walk's own work per query has to fall below the traversal it replaces: one query site per loop iteration, so that a ray stops right after its query with only the state that query's continuation needs (part 51's step 1), instead of replaying an iteration from a full state.
 Until then `Hardware` stays a switch and `Software` the default.
+
+## 53. A 4-wide merged tree: built, exact, slower, not kept
+
+**What was built** (`wide-tree.patch` beside this file, not applied).
+The merged tree of part 48 collapsed 4-wide (Wald, Benthin and Boulos 2008): each binary node's children, the largest non-leaf among them replaced by its two children until there are four, so the leaves and the triangle tests are the binary tree's and the hits do not change.
+A node is three 48-byte entries (the four children's x, y and z bounds as float4 pairs, their links and kinds); the four boxes are tested together, leaves at once, nodes pushed farthest first and culled when popped.
+Metal's intersector agreed with it on every ray of `HardwareQueriesAgreeWithTheSoftwareTree`, and `WaveWalkIsTheMegakernelQueryForQuery` passed.
+
+**Time per update** (`MeasurePathLiveBudget`, cap 16, one variant per process, the two trees alternated twice; the GPU was shared with another job at about 95% utilisation, so only the comparison counts):
+
+| Rays in flight | binary (part 49) | 4-wide |
+|---:|---|---|
+| 100,000 | 16.03 / 16.16 ms | 19.83 / 20.24 ms |
+| 11,000 | 5.67 / 5.54 ms | 4.84 / 6.77 ms |
+
+At 100,000 rays the wide tree is a quarter slower in both pairs; at 11,000 the runs are within the shared GPU's noise.
+The node visits fall, but each visit loads three entries and keeps a stack of nodes and their entry distances (48 each) and a sort of up to four children in local arrays, which the walk's already oversized kernel (part 46: SIMD utilisation about 30%, few threads per core) pays for in memory traffic.
+A compressed node (quantised child boxes, Ylitie, Karras and Laine 2017) would load less per visit; it was not built, since the traversal is about half of the walk at 100,000 rays (part 52) and the walk's own work the other half.
+
+**The rest of the round could not be measured.**
+From 18:47 on, another job (a browser recording with ffmpeg, outside the machine-wide lock) held the GPU at 95–96% utilisation.
+Under it the audio phase alone measured 5.5–8.1 ms at 23,000 rays with the denoiser on (2.0–2.5 ms on a quiet machine, part 51), and the auto-budget at 6 ms fell to its floor of 4,000 rays; neither says anything about the code.
+The audio and denoiser profile (step 3) and the populations at 6 ms (step 4) wait for a quiet GPU.
