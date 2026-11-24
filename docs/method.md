@@ -463,7 +463,9 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 - **One batch in flight.** The live renderer waits for each batch's readback before dispatching the next, so its throughput is quantised to frames; this, not the GPU's capacity, limits the station to 4,000 rays per source (section 12). Several batches in flight would remove it.
 - **The audio's fixed cost per source.** Kernels, convolution and denoiser cost about 2 ms per source per update whatever the population, so a second source costs half the tracer's budget.
 - **The first run of a new build stalls** for about 2.5 s when the Doppler walk is first dispatched (Metal compiles its pipeline on first use).
-- **Hardware ray tracing does not pay yet.** Unity's compute kernels cannot call Metal's intersector, so a native plugin answers the walk's queries between waves of the walk (`settings.pathQueries = Hardware`, notebook part 52). It is exact (the waves are the megakernel query for query; the hits agree with the software tree), but slower: a wave stores and reloads each ray's whole loop state and replays its iteration for every answer, which costs per query what the software traversal does, and the tail of long chains is latency-bound. The software megakernel stays the default.
+- **Hardware ray tracing did not pay, and is not in the code.** Unity's compute kernels cannot call Metal's intersector, so a native plugin answered the walk's queries between waves of the walk (notebook part 52).
+  It was exact, but slower at every population and wave count, also after the walk was rebuilt as a state machine with one query per loop iteration (notebook part 54), which only DXC compiles and which made the megakernel itself slower.
+  Both are kept as patches beside the notebook (`hardware-waves.patch`, `state-machine.patch`), not in the code.
 
 ## 14. Where the code is
 
@@ -472,7 +474,6 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 | walk, persistent rays, population control, beams, connections, rate channel | `Assets/Shaders/MethodPath.hlsl`, `Assets/Resources/Acoustics/PathMethod.compute` |
 | shared walk helpers: edge sampling, UTD, materials, media, Lambert directions | `Assets/Shaders/MethodCommon.hlsl`, `Assets/Shaders/Transport.hlsl` |
 | intersection and trees | `Assets/Shaders/Geometry.hlsl`, `Assets/Scripts/Simulation/DirectBvh.cs`, `StaticTraceTree.cs`, `SahBuilder.cs` |
-| hardware queries and the walk in waves (switch, not default) | `Native/AcousticRT/` (the Metal plugin; `build.sh` makes `Assets/Plugins/macOS/AcousticRT.bundle`), `Assets/Scripts/Simulation/HardwareQueries.cs`, "Waves" in `Geometry.hlsl` and `MethodPath.hlsl`, `PathWaveChecks.cs` |
 | work profile and traversal ceilings | `MethodTransport.WorkProfile` and `TraceBench`, `MeasurePathLiveBudget` (`profile=1`), `tools/metal_rt_ceiling.swift` |
 | direct sound and its spectral synthesis | `PathDirectArrival` and `PathExpandDirect` in `MethodPath.hlsl`, `Assets/Scripts/Simulation/SpectralAudio.cs`, `Doppler.cs`, `GpuAudio.cs` |
 | dispatch, pools, ring, Doppler kernels | `Assets/Scripts/Simulation/MethodTransport.cs`, `Assets/Scripts/Simulation/TransportSolver.cs` |
@@ -482,5 +483,5 @@ So 6,000 and 8,000 rays per source both underran in some runs, and the station s
 | denoiser | `Assets/Scripts/Simulation/PathDenoiser.cs`, `Assets/Resources/Acoustics/PathDenoise.compute`, `tools/path_persistent_denoise.py` |
 | auto-budget | `Assets/Scripts/Simulation/PathPopulationBudget.cs` |
 | live showcase | `Assets/Scripts/Demo/PathLive.cs`, `tools/path_live_church.py` |
-| checks | `Assets/Tests/Editor/PathChecks.cs`, `PathPersistentChecks.cs`, `PathWaveChecks.cs`, `PathDopplerChecks.cs`, `PathGpuAudioChecks.cs`, `PathDenoiseChecks.cs`, `RoomModeChecks.cs` |
+| checks | `Assets/Tests/Editor/PathChecks.cs`, `PathPersistentChecks.cs`, `PathDopplerChecks.cs`, `PathGpuAudioChecks.cs`, `PathDenoiseChecks.cs`, `RoomModeChecks.cs` |
 | wave ground truth and scoring | `tools/fdtd_wave.py`, `tools/method_compare.py`, `docs/benchmarks/energy-audio-2026-11-09/scoreboard.py` |

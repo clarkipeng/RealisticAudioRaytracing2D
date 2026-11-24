@@ -149,8 +149,7 @@ public partial class TakeChecks
     // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000 and maximum, default 23,000),
     // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU), profile (1: after the
     // rounds, the work profile of 16 updates, MethodTransport.WorkProfile), merged (0: the GPU queries descend the instance tree,
-    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles), queries
-    // (TakeRender.PathQueries), waves (MethodTransport.WaveCount), phases (1: the waves' phases fenced and timed); default "base:".
+    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles); default "base:".
     // All variants live in one process and are measured interleaved, in rounds of 8 updates each
     // (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25), after a horizon of warm-up updates each, so drift from other work on
     // the machine falls on every variant alike. Reported: median and the 10th-90th percentile range per phase, and the
@@ -161,8 +160,7 @@ public partial class TakeChecks
         public string name; public GpuAudio gpu; public TransportSolver solver; public AcousticTake.State[] state; public long cursor;
         public readonly System.Collections.Generic.List<double>[] times = {new(), new(), new()};
         public readonly System.Collections.Generic.List<int> populations = new();
-        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle, profile, merged = true, inline = true; public int waves; public bool phases;
-        public long waveUpdates, wavesRun, raysStopped, queries, finished;
+        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle, profile, merged = true, inline = true;
     }
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
     public void MeasurePathLiveBudget()
@@ -221,9 +219,6 @@ public partial class TakeChecks
                         case "maximum": maximum = value; break;
                         case "merged": v.merged = value != 0; break;
                         case "inline": v.inline = value != 0; break;
-                        case "queries": settings.pathQueries = (TakeRender.PathQueries)value; break;
-                        case "waves": v.waves = value; break;
-                        case "phases": v.phases = value != 0; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
                 }
@@ -232,8 +227,6 @@ public partial class TakeChecks
                 v.solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
                 v.solver.Method.ProfileFlags = v.flags;
                 v.solver.TraceTreeEnabled = v.merged; v.solver.TraceTreeInline = v.inline;
-                if (v.waves > 0) v.solver.Method.WaveCount = v.waves;
-                v.solver.Method.WavePhases = v.phases;
                 if (other)
                 {
                     // Another denoiser's weights (ACOUSTIC_PATH_BUDGET_DENOISER: a folder with weights.bytes and header.json).
@@ -246,10 +239,8 @@ public partial class TakeChecks
                 variants.Add(v);
             }
             var pcm = new float[2048];
-            int u0 = 0;
             void Update(BudgetVariant v, int round)
             {
-                u0++;
                 int step = 1024; long sample = v.cursor;
                 if (v.loadRound >= 0) v.solver.Method.ProfileFlags = round >= v.loadRound ? v.flags | 32768 : v.flags;
                 take.Evaluate(Math.Min((long)(windowStart * rate) + sample % (long)(windowLength * rate), take.Metadata.durationSamples), v.state);
@@ -268,12 +259,6 @@ public partial class TakeChecks
                     trace.Append(FormattableString.Invariant($"{v.name},{round},{population},{t:F3},{a:F3}\n"));
                 }
                 if (v.budget != null) v.solver.Method.Population = v.budget.Observe(t + a);
-                if (round >= 0 && v.solver.Method.Waves && u0 % 8 == 0)
-                {
-                    // The waves' header (README part 52): waves run, rays stopped over the waves, queries, rays sent to the finish list.
-                    var h = v.solver.Method.ReadWaveHeader();
-                    v.waveUpdates++; v.wavesRun += h[15]; v.raysStopped += h[16]; v.queries += h[17]; v.finished += h[18] + h[1 + h[3]];
-                }
                 v.cursor = sample + step;
             }
             foreach (var v in variants) for (int u = 0; u < v.solver.Method.WarmUpdates; u++) Update(v, -1);
@@ -308,9 +293,7 @@ public partial class TakeChecks
             {
                 var n = v.populations.ToArray(); Array.Sort(n);
                 UnityEngine.Debug.Log($"PATH_BUDGET {v.name}: tracer {Stat(v.times[0])} ms, audio {Stat(v.times[1])} ms, CPU calls {Stat(v.times[2])} ms; " +
-                                      $"{v.times[0].Count} updates, population {n[n.Length / 2]} [{n[n.Length / 10]}-{n[n.Length * 9 / 10]}], in flight {v.solver.Method.RaysInFlight()}, trace-tree rebuilds {v.solver.TraceTreeRebuilds}, overflowed {v.solver.Method.RaysOverflowed()}, load {loadBefore} -> {loadAfter}" +
-                                      (v.waveUpdates > 0 ? FormattableString.Invariant($"; per update (sampled {v.waveUpdates}): waves {v.wavesRun / (double)v.waveUpdates:F1}, rays stopped {v.raysStopped / (double)v.waveUpdates:F0}, queries {v.queries / (double)v.waveUpdates:F0}, finished in software {v.finished / (double)v.waveUpdates:F0}, hardware {v.solver.Method.HardwareWaves}, issue CPU {1000 * v.solver.Method.WaveIssueSeconds / (v.times[0].Count + v.solver.Method.WarmUpdates):F2} ms per update") +
-                                      (v.phases ? ", phases (fenced, ms per update): first wave / intersections / waves / bookkeeping / finish " + string.Join(" / ", Array.ConvertAll(v.solver.Method.WavePhaseSeconds, x => (1000 * x / (v.times[0].Count + v.solver.Method.WarmUpdates)).ToString("F2", System.Globalization.CultureInfo.InvariantCulture))) : "") : ""));
+                                      $"{v.times[0].Count} updates, population {n[n.Length / 2]} [{n[n.Length / 10]}-{n[n.Length * 9 / 10]}], in flight {v.solver.Method.RaysInFlight()}, trace-tree rebuilds {v.solver.TraceTreeRebuilds}, overflowed {v.solver.Method.RaysOverflowed()}, load {loadBefore} -> {loadAfter}");
             }
             if (!string.IsNullOrEmpty(tracePath)) File.WriteAllText(tracePath, trace.ToString());
             UnityEngine.Debug.Log($"PATH_BUDGET impulse groups per partition (count:partitions): {variants[0].gpu.PathPartitionGroups}");

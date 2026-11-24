@@ -212,8 +212,6 @@ public sealed class TransportSolver : IDisposable
     internal bool TraceTreeEnabled { set { if (bvh?.Trace != null) bvh.Trace.Enabled = value; } }
     internal bool TraceTreeInline { set { if (bvh?.Trace != null) bvh.Trace.InlineTriangles = value; } }
     internal int TraceTreeRebuilds => bvh?.Trace?.Rebuilds ?? 0;
-    // An object's mesh tree in the GPU's instance tree (the single-object queries of point location), or -1.
-    internal int MeshRoot(int owner) => bvh != null && bvh.HasMesh(owner) ? (int)bvh.Instance(owner).left : -1;
     public void BeginSolve(AcousticTake.State[] state, int frames = 1, bool diagnostics = true)
     {
         using (solveMarker.Auto())

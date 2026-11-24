@@ -15,14 +15,6 @@
 #pragma kernel TracePath3DBvhWalk USE_BVH PATH_WALK_EDGE
 // The work profile (MethodTransport.WorkProfile, README part 46): the Doppler walk counting its scene traversals per kind of query.
 #pragma kernel TracePath3DBvhProfile USE_BVH PATH_DOPPLER PATH_PROFILE
-// The wave walk (README part 52; MethodPath.hlsl "Waves"): the persistent walk in waves, its queries answered between them by
-// Metal's intersector (Native/AcousticRT) or PathWaveTraceKernel; the megakernel (TracePath3DBvh, PathWaveResume) finishes the rays
-// still going after the update's waves.
-#pragma kernel TracePathWave USE_BVH PATH_WAVE
-#pragma kernel TracePathWaveDoppler USE_BVH PATH_WAVE PATH_DOPPLER
-#pragma kernel PathWaveTraceKernel USE_BVH
-#pragma kernel PathWaveArgsKernel
-#pragma kernel PathCohortCountKernel
 #pragma kernel PathTraceBenchKernel USE_BVH
 #pragma kernel PathEdgeWeights3D
 #pragma kernel PathEdgeWeights3DBvh USE_BVH
@@ -43,7 +35,7 @@
 // The Doppler walks read the edge distribution and the listener's clearance through read-only views of them
 // (MethodCommon.hlsl, MethodPath.hlsl): as UAVs they made 10, over the 8 Unity supports (README part 44). Only there:
 // the static walks compile as before, so their outputs stay bit-identical.
-#if defined(PATH_DOPPLER) || defined(PATH_WAVE)
+#if defined(PATH_DOPPLER)
 StructuredBuffer<float> MethodEdgeCdfRead;
 #define METHOD_EDGE_CDF_READ MethodEdgeCdfRead
 #endif
@@ -62,13 +54,6 @@ StructuredBuffer<uint> PathClearanceRead;
 [numthreads(64,1,1)] void TracePath3DWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DBvhWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
 [numthreads(64,1,1)] void TracePath3DBvhProfile(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePathWave(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePathWaveDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-#ifdef USE_BVH
-[numthreads(64,1,1)] void PathWaveTraceKernel(uint3 id:SV_DispatchThreadID) { PathWaveTrace(id.x); }
-#endif
-[numthreads(64,1,1)] void PathWaveArgsKernel(uint3 id:SV_DispatchThreadID) { PathWaveArgs(id.x); }
-[numthreads(64,1,1)] void PathCohortCountKernel(uint3 id:SV_DispatchThreadID) { PathCohortTally(id.x + MethodRayOffset); }
 [numthreads(64,1,1)] void PathTraceBenchKernel(uint3 id:SV_DispatchThreadID) { PathTraceBench(id.x + MethodRayOffset); }
 [numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }

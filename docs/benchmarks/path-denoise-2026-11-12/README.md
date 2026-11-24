@@ -2558,3 +2558,49 @@ A compressed node (quantised child boxes, Ylitie, Karras and Laine 2017) would l
 From 18:47 on, another job (a browser recording with ffmpeg, outside the machine-wide lock) held the GPU at 95–96% utilisation.
 Under it the audio phase alone measured 5.5–8.1 ms at 23,000 rays with the denoiser on (2.0–2.5 ms on a quiet machine, part 51), and the auto-budget at 6 ms fell to its floor of 4,000 rays; neither says anything about the code.
 The audio and denoiser profile (step 3) and the populations at 6 ms (step 4) wait for a quiet GPU.
+
+## 54. One query site per iteration: built, exact, slower; hardware ray tracing removed
+
+**What was built** (`state-machine.patch` beside this file, against part 53's commit; not applied).
+Part 52's conclusion was that a wave replays a whole loop iteration from a 608-byte state for every answer, so the walk was rebuilt as a state machine with one query site, `PathAsk`, called at most once per iteration of the walk's loop.
+A step that needs the scene sets up its query (origin, direction, interval, closest or any hit, or a point's medium) and the stage it resumes from; the next iteration hands that stage the answer.
+The stages are the event kinds of part 51: the next-event connection (its first hit, then its line through the walls), an edge connection's visibility legs, an edge ray's line of sight, the segment, the beam's visibility, and a transmission's way out of a partition or the medium behind a surface.
+Between two queries the walk ran exactly the steps it ran before, in the same order and with the same random numbers, and the old loop's iterations were still counted as such, so part 28's long-chain lottery saw the same counts.
+- **The connections were resumable.** An edge connection's draws were drawn again from the random state they started from after each visibility leg, instead of being kept; the connection through walls kept its point, distance left, travel time, roulette weight and medium in the stage's own values.
+- **The anchor was the latest vertex.** While a ray is not travelling, the walk's latest non-delta vertex is the connections' anchor, so it was no longer kept twice.
+- **A wave's state shrank to what the next stage needs.** A stopped ray stored a core of 44 bytes and only the sections its stage reads (scratch 12, anchor 28, pending contribution 16, branch 28, edge 12; at most 560 bytes, against part 52's 608 for every ray), and resumed right after its query instead of replaying its iteration.
+
+**Exact.**
+- `MeasurePathHistogramHash` (now also with a moving source, the Doppler walk, and printing the walk's counters): the state machine against the committed walk, both compiled with DXC, full solve and persistent rays under population control, static and moving: every counter identical (rays, events, escapes, roulette, diffuse events, edge connections, branches, resumed rays, loop iterations), every bin's contribution count identical, energies within 4.1–4.5 × 10⁻⁸ of the total.
+- `WaveWalkIsTheMegakernelQueryForQuery`: waves answered in software were bit-identical to the megakernel (64, 3 and 1 waves, with and without population control); answered by Metal, 5 × 10⁻⁷ to 3 × 10⁻⁶ of the total.
+- The wave suite scored as part 52 (level 3.38 dB overall; T30 70.5%, in closed rooms 31.0% against 30.9%), its histograms within 2.4 × 10⁻³ of part 52's (DXC's rounding, below).
+
+**The compiler.**
+FXC could not compile the state machine ("can't unroll loops marked with loop attribute", the error of parts 17, 47 and 52); bisected, it failed whenever a scene traversal and the edge connection's draws shared the loop, in any arrangement.
+DXC (`#pragma use_dxc`) compiles it, and makes every walk slower: the committed walk compiled with DXC instead of FXC takes 59% longer at 100,000 rays.
+The same holds in the other direction: reading the source's medium from the buffer `PathEndsMedia` fills, instead of locating it per new ray, breaks FXC's build of the committed walk with the same error (tried again here; the comment in `TracePath` says so since part 47).
+
+**Time per update in the Church** (`MeasurePathLiveBudget`, `iterationCap=16`, one variant per process, 15 rounds of 8 updates, each run started only once the GPU read at most 20% busy twice, 20 s apart; GPU utilisation before / after in the last column):
+
+| Rays in flight | megakernel, FXC (this commit, part 49's walk) | state machine, megakernel (DXC) | state machine, waves with hardware answers | GPU % |
+|---:|---|---|---|---|
+| 11,000 | 3.05 [2.86–3.39] ms | 5.11 [4.83–5.70] | 5.63 [5.28–6.16] (4 waves) | 11/0 → 0; 0/0 → 0; 0/0 → 0 |
+| 23,000 | 4.81 [4.51–5.22] | 8.83 [8.30–10.26] | 9.79 (4 waves) / 9.07 (8) | 0/0 → 0 for all |
+| 100,000 | 14.66 [14.04–15.86] | 30.44 [29.57–32.36] | 35.95 (2) / 36.05 (4) / 30.17 (8) | 0/0 → 0; 17/0 → 0; 0/0 → 0 |
+
+Part 53's commit (part 52's megakernel, FXC) took 3.06 ms at 11,000 and 15.14 ms at 100,000 in the same runs; compiled with DXC, 24.06 ms at 100,000 (GPU 0/14 → 20).
+The audio, readback included, took 1.83–1.92 ms in every run (the denoiser off).
+
+**Why it is slower.**
+- **DXC's code is slower for this walk.** The same committed walk takes 24.06 ms at 100,000 rays compiled by DXC against 15.14 by FXC (59% more); the state machine cannot be compiled by FXC.
+- **The restructure costs about a quarter more on top** (30.44 against 24.06 ms, both DXC).
+  Where it goes was not profiled further: every iteration passes one switch over the stages with every stage's values live across it, and the lanes of a SIMD group at different stages run them one after another.
+- **The waves did gain.** Part 52's waves took 39% longer than their megakernel at 100,000 rays (21.2 against 15.3 ms at 8 waves); now 8 waves tie the state machine's megakernel (30.17 against 30.44) and lose to it by 3–10% at 11,000 and 23,000.
+  A wave no longer replays an iteration, but the walk it runs is twice as slow as the FXC megakernel's, so the hardware's traversal cannot win back the difference.
+
+**Removed.**
+The hardware path did not pay after the restructure either, so it is no longer in the code: the native Metal plugin (`Native/AcousticRT`, `Assets/Plugins/macOS/AcousticRT.bundle`), `HardwareQueries.cs`, the wave walk in `MethodPath.hlsl`, `Geometry.hlsl`, `MethodCommon.hlsl` and `MethodTransport.cs`, `settings.pathQueries`, `PathWaveChecks.cs` and the budget test's `queries`, `waves` and `phases` options.
+It is kept as `hardware-waves.patch` beside this file (part 52's code; it applies to this commit, and `Native/AcousticRT/build.sh` in it rebuilds the bundle, which the patch does not carry).
+The walk is part 49's again, compiled with FXC: `MeasurePathHistogramHash` gives every counter and every bin's contribution count of part 52's megakernel, energies within 0.6–1.8 × 10⁻⁸ of the total; the wave suite scores as part 52 to two decimals, its histograms within 1.3 × 10⁻⁸ of part 52's (the shoeboxes bit for bit), part 52's own distance from part 49.
+`WarmPathKernels` (compile every walk kernel in a light process before a heavy measurement) moved to `PathDopplerChecks.cs`; `MeasurePathHistogramHash` keeps its moving source, its counters and its knobs (`ACOUSTIC_PATH_HASH_EVENTS`, `_POPULATION`, `_FLAGS`).
+The full tier passes.

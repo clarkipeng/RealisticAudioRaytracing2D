@@ -48,10 +48,15 @@ float2 ReflectionPressure(RayMaterial material, float cosine)
 StructuredBuffer<Edge> Edges;
 StructuredBuffer<uint2> EdgeRanges;
 StructuredBuffer<uint> EdgeIndices;
-// (Volumes: Geometry.hlsl)
+struct Volume
+{
+    float4 minimum, maximum;
+    uint4 ids;
+};
+StructuredBuffer<Volume> Volumes;
 RWStructuredBuffer<RayPath> RayPaths;
 uint RaysPerBin, RaySeed, RayTracePair;
-uint FrequencyBins, RaysPerPair, MaxBounces, EdgeCount, UseAirAbsorption; // (VolumeCount: Geometry.hlsl)
+uint FrequencyBins, RaysPerPair, MaxBounces, EdgeCount, VolumeCount, UseAirAbsorption;
 float FrequencyStep, DiffractionFactor, MaximumPathDelay;
 uint HashRay(uint x)
 {
@@ -144,11 +149,7 @@ void ConsiderMedium(uint v, uint root, uint stateOffset, float3 location, bool i
 #ifdef USE_BVH
     uint hit = 0xffffffff;
     PROFILE_QUERY();
-#ifdef PATH_WAVE
-    WaveAnswer(stateOffset, location, probe, RayEpsilon, nearest, false, volume.ids.z + 1, root, hit, nearest, normal); // (this object's mesh alone)
-#else
     TraceMesh(root, pose, stateOffset, location, probe, RayEpsilon, is2D, false, hit, nearest, normal);
-#endif
 #else
     for (uint i = 0; i < volume.ids.y; i++)
     {

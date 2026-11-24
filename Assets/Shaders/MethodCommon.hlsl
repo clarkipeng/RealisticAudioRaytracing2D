@@ -46,9 +46,6 @@ float MethodSlowness(uint medium) { return MethodIor(medium, 3) / SpeedOfSound; 
 
 void MethodCount(uint counter, uint amount = 1)
 {
-#ifdef PATH_WAVE
-    if (!PathFresh()) return; // (made by an earlier wave, or past a query not answered yet: Geometry.hlsl "Waves")
-#endif
     InterlockedAdd(MethodStats[MethodBands * MethodDepths * MethodStatStride + counter], amount);
 }
 

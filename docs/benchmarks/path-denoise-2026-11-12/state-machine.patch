@@ -1,0 +1,2666 @@
+diff --git a/Assets/Resources/Acoustics/PathMethod.compute b/Assets/Resources/Acoustics/PathMethod.compute
+index 30e4067..dc2581f 100644
+--- a/Assets/Resources/Acoustics/PathMethod.compute
++++ b/Assets/Resources/Acoustics/PathMethod.compute
+@@ -5,6 +5,8 @@
+ // direct arrival as delayed paths). Persistent rays: PathPersistentBeginKernel, then TracePath over the
+ // rays kept from the previous update and the new ones, population control (PathSortCount, PathSortScan and
+ // PathSortScatter: the kept rays resampled and written in coherent order), then PathRingKernel (the update's histogram).
++// Compiled with DXC: FXC could not compile the walk's state machine (README part 54; "can't unroll loops marked with loop attribute").
++#pragma use_dxc
+ #pragma kernel TracePath3D
+ #pragma kernel TracePath3DBvh USE_BVH
+ // With the delay rates (MethodPath.hlsl "Delay rates"), dispatched while anything moves (MethodTransport.Doppler).
+@@ -15,9 +17,8 @@
+ #pragma kernel TracePath3DBvhWalk USE_BVH PATH_WALK_EDGE
+ // The work profile (MethodTransport.WorkProfile, README part 46): the Doppler walk counting its scene traversals per kind of query.
+ #pragma kernel TracePath3DBvhProfile USE_BVH PATH_DOPPLER PATH_PROFILE
+-// The wave walk (README part 52; MethodPath.hlsl "Waves"): the persistent walk in waves, its queries answered between them by
+-// Metal's intersector (Native/AcousticRT) or PathWaveTraceKernel; the megakernel (TracePath3DBvh, PathWaveResume) finishes the rays
+-// still going after the update's waves.
++// The wave walk (README parts 52 and 54; MethodPath.hlsl "Waves"): the persistent walk in waves, its queries answered between them
++// by Metal's intersector (Native/AcousticRT) or PathWaveTraceKernel; its last wave answers its own queries until every ray ends.
+ #pragma kernel TracePathWave USE_BVH PATH_WAVE
+ #pragma kernel TracePathWaveDoppler USE_BVH PATH_WAVE PATH_DOPPLER
+ #pragma kernel PathWaveTraceKernel USE_BVH
+diff --git a/Assets/Scripts/Simulation/MethodTransport.cs b/Assets/Scripts/Simulation/MethodTransport.cs
+index fb9b01c..8c96147 100644
+--- a/Assets/Scripts/Simulation/MethodTransport.cs
++++ b/Assets/Scripts/Simulation/MethodTransport.cs
+@@ -72,19 +72,17 @@ internal sealed class MethodTransport : IDisposable
+     // PATH_DOPPLER kernels only, dispatched while anything in the dispatched states moves and, with persistent rays, for
+     // a horizon after (the rays in flight still carry the rates of what moved). A static scene runs the walk without them.
+     readonly int traceStatic = -1, traceDoppler = -1, traceProfile = -1, benchKernel = -1;
+-    // The wave walk (settings.pathQueries, README part 52; MethodPath.hlsl "Waves"): the persistent walk in waves, its queries
+-    // answered between waves by Metal's intersector (HardwareQueries) or in software (PathWaveTraceKernel), then the rays still
+-    // going finished in software. PathWave holds the waves' header, lists, query records and walk states (WaveLayout below).
++    // The wave walk (settings.pathQueries, README parts 52 and 54; MethodPath.hlsl "Waves"): the persistent walk in waves, its
++    // queries answered between waves by Metal's intersector (HardwareQueries) or in software (PathWaveTraceKernel), the last wave
++    // answering its own in software. PathWave holds the waves' header, lists, query records and stopped rays (WaveLayout below).
+     public readonly bool Waves, HardwareWaves;
+-    internal readonly int[] VolumeOwners;
+-    internal int WaveQueryCapacity => waveSlots; // query records one wave holds // the closed objects (point location probes them one by one)
+     readonly int waveStatic = -1, waveDoppler = -1, waveTraceKernel = -1, waveArgsKernel = -1, cohortCountKernel = -1;
+     readonly ComputeBuffer waveBuffer, answers, stateBuffer, waveArguments;
+     readonly HardwareQueries hardware;
+-    // Waves per update before the finishing walk takes the rest (measurement knob; the finishing walk keeps any count exact).
++    // Waves per update before the last one answers its own queries (measurement knob; any count is exact).
+     public int WaveCount = 64;
+-    public const int WaveHeader = 32, WaveStateUints = 152, WaveTape = 8;
+-    readonly int waveSlots, waveListBase, waveQueryBase, wavePosesBase, waveStateBase, waveSlotUints;
++    public const int WaveHeader = 32, WaveSlotUints = 140; // (MethodPath.hlsl PathWaveSlotUints)
++    readonly int waveSlots, waveListBase, waveQueryBase, wavePointBase, wavePosesBase, waveStateBase;
+     bool waveBound;
+     bool moving, doppler;
+     long dopplerUntil = -1;
+@@ -220,7 +218,6 @@ internal sealed class MethodTransport : IDisposable
+                 }
+             materials = new ComputeBuffer(bands.Length, 32); materials.SetData(bands);
+             var volumeData = RayTransport.Volumes(scene, geometry, bands, Bands);
+-            VolumeOwners = Array.ConvertAll(volumeData, v => (int)v.owner);
+             volumes = new ComputeBuffer(Math.Max(1, volumeData.Length), 48);
+             if (volumeData.Length > 0) volumes.SetData(volumeData);
+             // Diffracting edges only: a wedge whose index pi/angle is an integer is
+@@ -341,17 +338,15 @@ internal sealed class MethodTransport : IDisposable
+                 sortBuckets.SetData(initial);
+             }
+             sortEntries = new ComputeBuffer(population ? Pairs * PersistentCapacity : 1, 8);
+-            if (!Waves) waveBuffer = new ComputeBuffer(4, 4, ComputeBufferType.Raw);
+             if (Waves)
+             {
+-                // WaveLayout (uints): the header; the two active lists and the finish list (a uint4 entry per first-wave thread
+-                // each); a query record (3 uint4) per thread; a record per thread of its walk state and tape (2 uints an answer).
++                // WaveLayout (uints): the header; the two active lists (a uint4 entry per first-wave thread each); a ray query's
++                // record and a point query's (3 uint4 each) per thread; the poses; a record per thread of its stopped ray's sections.
+                 waveSlots = PersistentCapacity + Math.Max(Rays, maximumNewRays);
+-                waveListBase = WaveHeader; waveQueryBase = waveListBase + 3 * 4 * waveSlots; wavePosesBase = waveQueryBase + 12 * waveSlots;
+-                waveStateBase = wavePosesBase + 20 * Math.Max(1, scene.objects.Length);
+-                waveSlotUints = WaveStateUints + 2 * WaveTape;
+-                waveBuffer = new ComputeBuffer(checked(waveStateBase + waveSlots * waveSlotUints), 4, ComputeBufferType.Raw);
+-                answers = new ComputeBuffer(waveSlots, 16);
++                waveListBase = WaveHeader; waveQueryBase = waveListBase + 2 * 4 * waveSlots; wavePointBase = waveQueryBase + 12 * waveSlots;
++                wavePosesBase = wavePointBase + 12 * waveSlots; waveStateBase = wavePosesBase + 20 * Math.Max(1, scene.objects.Length);
++                waveBuffer = new ComputeBuffer(checked(waveStateBase + waveSlots * WaveSlotUints), 4, ComputeBufferType.Raw);
++                answers = new ComputeBuffer(2 * waveSlots, 16); // (the ray queries' answers, then the point queries')
+                 waveArguments = new ComputeBuffer(9, 4, ComputeBufferType.IndirectArguments);
+                 if (HardwareWaves) hardware = new HardwareQueries(geometry, scene.objects.Length);
+             }
+@@ -394,13 +389,13 @@ internal sealed class MethodTransport : IDisposable
+                 shader.SetBuffer(kernel, "PathSortBuckets", sortBuckets); shader.SetBuffer(kernel, "PathSortEntry", sortEntries);
+                 shader.SetBuffer(kernel, "PathRays", pathRays); shader.SetBuffer(kernel, "PathLive", pathLive);
+                 if (Waves) { shader.SetBuffer(kernel, "PathWave", waveBuffer); shader.SetBuffer(kernel, "PathAnswers", answers); shader.SetBuffer(kernel, "PathAnswersOut", answers); shader.SetBuffer(kernel, "PathWaveArguments", waveArguments); }
+-                shader.SetBuffer(kernel, "PathWaveRead", waveBuffer); // (the megakernel reads the waves' state when it finishes them; a placeholder without waves)
+             }
+             if (Waves)
+             {
+-                shader.SetInt("PathWaveQueryBase", waveQueryBase); shader.SetInt("PathWaveTapeCapacity", WaveTape);
++                shader.SetInt("PathWaveQueryBase", waveQueryBase); shader.SetInt("PathWavePointBase", wavePointBase);
+                 shader.SetInt("PathWaveListBase", waveListBase); shader.SetInt("PathWaveListCapacity", waveSlots);
+-                shader.SetInt("PathWaveResume", 0); shader.SetInt("PathWaveStateBase", waveStateBase); shader.SetInt("PathWavePosesBase", wavePosesBase); shader.SetInt("PathWaveSlotUints", waveSlotUints); shader.SetInt("PathWaveFirst", 0);
++                shader.SetInt("PathWaveStateBase", waveStateBase); shader.SetInt("PathWavePosesBase", wavePosesBase);
++                shader.SetInt("PathWaveFirst", 0); shader.SetInt("PathWaveFinish", 0); shader.SetInt("PathWaveHardware", HardwareWaves ? 1 : 0);
+             }
+             shader.SetInt("PrimitiveCount", geometry.Length);
+             shader.SetInt("PairCount", Pairs);
+@@ -584,11 +579,12 @@ internal sealed class MethodTransport : IDisposable
+         if (Profile) { Fence(); lastWalkSeconds = TakeRender.Elapsed(start); }
+     }
+     double lastWalkSeconds;
+-    // The update's walk in waves (README part 52): the first wave starts every ray; each further wave answers the queries the last
+-    // one recorded (Metal's intersector or PathWaveTraceKernel) and runs the rays that recorded them; then the finishing walk.
++    // The update's walk in waves (README parts 52 and 54): the first wave starts every ray; each further wave answers the queries the
++    // last one recorded (Metal's intersector or PathWaveTraceKernel; point queries always the latter) and runs the rays that
++    // recorded them; the last one (PathWaveFinish) answers its own queries until every ray has ended.
+     public double WaveIssueSeconds; // measurement: CPU time spent issuing the waves (no fence)
+-    // Measurement: with WavePhases, a fence after every step and its time added here: the first wave, the intersections, the
+-    // later waves, the bookkeeping, the finishing walk (the fences themselves add to each).
++    // Measurement: with WavePhases, a fence after every step and its time added here: the first wave, the answers, the later
++    // waves, the bookkeeping, the last wave (the fences themselves add to each).
+     public bool WavePhases;
+     public readonly double[] WavePhaseSeconds = new double[5];
+     void WavePhase(int phase, ref long since) { if (!WavePhases) return; Fence(); long now = Stopwatch.GetTimestamp(); WavePhaseSeconds[phase] += (now - since) / (double)Stopwatch.Frequency; since = now; }
+@@ -610,21 +606,19 @@ internal sealed class MethodTransport : IDisposable
+         WavePhase(0, ref since);
+         WaveArgs(1);
+         WavePhase(3, ref since);
+-        for (int w = 1; w < WaveCount; w++)
++        for (int w = 1; w <= WaveCount; w++)
+         {
+             if (hardware != null) hardware.Intersect(0);
+-            else shader.DispatchIndirect(waveTraceKernel, waveArguments, 0);
++            shader.DispatchIndirect(waveTraceKernel, waveArguments, 4 * 6);
+             WavePhase(1, ref since);
++            if (w == WaveCount) shader.SetInt("PathWaveFinish", 1); // the last wave answers its own queries
+             shader.DispatchIndirect(wave, waveArguments, 4 * 3);
+-            WavePhase(2, ref since);
++            WavePhase(w == WaveCount ? 4 : 2, ref since);
++            if (w == WaveCount) break;
+             WaveArgs(1);
+             WavePhase(3, ref since);
+         }
+-        WaveArgs(2);
+-        shader.SetInt("PathWaveResume", 1); // the megakernel finishes the rays still going
+-        shader.DispatchIndirect(traceKernel, waveArguments, 4 * 6);
+-        shader.SetInt("PathWaveResume", 0);
+-        WavePhase(4, ref since);
++        shader.SetInt("PathWaveFinish", 0);
+         WaveIssueSeconds += TakeRender.Elapsed(issued);
+     }
+     // Check (HardwareQueriesAgreeWithTheSoftwareTree): query records (12 uints each, MethodPath.hlsl "Waves") answered by Metal's
+@@ -648,7 +642,9 @@ internal sealed class MethodTransport : IDisposable
+         bind(); SetSolve(0, 0);
+         var header = new uint[WaveHeader]; header[7] = (uint)n;
+         waveBuffer.SetData(header, 0, 0, WaveHeader); waveBuffer.SetData(records, 0, waveQueryBase, records.Length);
+-        waveArguments.SetData(new uint[] {(uint)((n + 63) / 64), 1, 1, 0, 0, 0, 0, 0, 0});
++        uint groups = (uint)((n + 63) / 64);
++        waveArguments.SetData(new uint[] {groups, 1, 1, 0, 0, 0, groups, 1, 1});
++        shader.SetInt("PathWaveHardware", 0);
+         if (hardwareAnswers)
+         {
+             var stale = new uint[4 * n]; for (int i = 0; i < stale.Length; i++) stale[i] = 0xdeadbeef; // (an answer not written shows)
+@@ -658,7 +654,8 @@ internal sealed class MethodTransport : IDisposable
+             // query) runs after the plugin's work (its command buffer waits for it), and the readback waits for that kernel.
+             WaveArgs(0); shader.Dispatch(waveTraceKernel, 1, 1, 1);
+         }
+-        else shader.DispatchIndirect(waveTraceKernel, waveArguments, 0);
++        else shader.DispatchIndirect(waveTraceKernel, waveArguments, 4 * 6);
++        shader.SetInt("PathWaveHardware", HardwareWaves ? 1 : 0);
+         var result = new uint[4 * n]; answers.GetData(result, 0, 0, 4 * n);
+         if (hardwareAnswers) HardwareQueries.ThrowIfFailed();
+         var pairs = new uint[2 * n];
+@@ -674,7 +671,8 @@ internal sealed class MethodTransport : IDisposable
+         WaveArgs(3);
+         hardware.Build(0);
+     }
+-    // Measurement: the waves' header after the latest update (MethodPath.hlsl "Waves": waves run, rays stopped, queries, rays finished).
++    // Measurement: the waves' header after the latest update (MethodPath.hlsl "Waves": waves run, rays stopped, queries, rays the last
++    // wave finished).
+     public uint[] ReadWaveHeader() { var h = new uint[WaveHeader]; if (Waves) waveBuffer.GetData(h, 0, 0, WaveHeader); return h; }
+     void Ring(int mode, long cells)
+     {
+@@ -786,7 +784,7 @@ internal sealed class MethodTransport : IDisposable
+     // in `stats`: totals [kind 8][3], then per dispatch thread ProfileThreadWords words (MethodPath.hlsl). Persistent rays only.
+     public bool WorkProfile;
+     public const int ProfileKinds = 8, ProfileThreadWords = 6;
+-    public static readonly string[] ProfileKindNames = {"segment", "nee-first-hit", "nee-crossing", "edge-connection", "beam-visibility", "partition-exit", "medium-after-transmission", "edge-ray-and-source-medium"};
++    public static readonly string[] ProfileKindNames = {"segment", "nee-first-hit", "nee-crossing", "edge-connection", "beam-visibility", "partition-exit", "medium-after-transmission", "edge-ray"};
+     int ProfileBase => statsCount;
+     int ProfileThreads => PersistentCapacity + maximumNewRays;
+     bool EnsureWorkProfile()
+diff --git a/Assets/Scripts/Simulation/TransportSolver.cs b/Assets/Scripts/Simulation/TransportSolver.cs
+index 4a21f60..93f664e 100644
+--- a/Assets/Scripts/Simulation/TransportSolver.cs
++++ b/Assets/Scripts/Simulation/TransportSolver.cs
+@@ -212,8 +212,6 @@ public sealed class TransportSolver : IDisposable
+     internal bool TraceTreeEnabled { set { if (bvh?.Trace != null) bvh.Trace.Enabled = value; } }
+     internal bool TraceTreeInline { set { if (bvh?.Trace != null) bvh.Trace.InlineTriangles = value; } }
+     internal int TraceTreeRebuilds => bvh?.Trace?.Rebuilds ?? 0;
+-    // An object's mesh tree in the GPU's instance tree (the single-object queries of point location), or -1.
+-    internal int MeshRoot(int owner) => bvh != null && bvh.HasMesh(owner) ? (int)bvh.Instance(owner).left : -1;
+     public void BeginSolve(AcousticTake.State[] state, int frames = 1, bool diagnostics = true)
+     {
+         using (solveMarker.Auto())
+diff --git a/Assets/Shaders/Geometry.hlsl b/Assets/Shaders/Geometry.hlsl
+index 24e1bd2..d4f8273 100644
+--- a/Assets/Shaders/Geometry.hlsl
++++ b/Assets/Shaders/Geometry.hlsl
+@@ -273,7 +273,7 @@ bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 di
+ }
+ #endif
+ // Shared any-hit / closest-hit traversal. Each median-split level needs at most 32 stack entries.
+-bool TraceSceneSoftware(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
++bool TraceScene(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
+                         bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
+ {
+     hit = 0xffffffff; distance = maximum; normal = 0;
+@@ -326,65 +326,10 @@ struct Volume
+ };
+ StructuredBuffer<Volume> Volumes;
+ uint VolumeCount;
+-// A closed object's primitives (first, count), or none.
+-uint2 WaveObjectPrimitives(uint owner)
+-{
+-    uint lo = 0, hi = VolumeCount;
+-    [loop] while (lo < hi) { uint mid = lo + (hi - lo) / 2; if (Volumes[mid].ids.z < owner) lo = mid + 1; else hi = mid; }
+-    return lo < VolumeCount && Volumes[lo].ids.z == owner ? Volumes[lo].ids.xy : uint2(0, 0);
+-}
+-// Waves (README part 52; MethodPath.hlsl "Waves"): in the wave walk every scene query is answered from the walk's tape of answers,
+-// or, if its answer is not there yet, recorded for the next wave (the walk then yields: PathWaveYielded). The tape holds the
+-// answers of the current iteration of the walk's loop, so an iteration that yielded is replayed from its start with one more
+-// answer each wave; the replay makes the same queries in the same order (the walk is deterministic given its state and the
+-// answers), so the walk is the megakernel's, query for query. Side effects (deposits, counters) are made only past the
+-// answers a previous wave already consumed (PathFresh). Answers come from Metal's intersector (Native/AcousticRT) or from
+-// PathWaveTrace (software).
++// Waves (README parts 52 and 54; MethodPath.hlsl "Waves"): the wave walk's header, lists, query records and stopped rays, and the
++// answers to its queries (per record: the primitive, 0xffffffff for none, or a point query's medium; the distance's bits).
+ RWByteAddressBuffer PathWave;          // (uints) MethodTransport.WaveLayout
+-ByteAddressBuffer PathWaveRead;        // (the same, read by the megakernel finishing the waves: MethodPath.hlsl PathWaveResume): header, two active lists, the finish list, query records, walk states
+-StructuredBuffer<uint4> PathAnswers;   // per query record: the primitive (0xffffffff: none), the distance's bits
+-uint PathWaveQueryBase, PathWaveTapeCapacity;
+-#ifdef PATH_WAVE
+-static bool WaveYield = false, WaveFinish = false;
+-static uint WaveTapeIndex = 0, WaveStored = 0, WaveNewBase = 0, WaveNewCount = 0, WaveTapeBase = 0;
+-static int WaveExecuted = -1;          // side effects up to this query index were made by an earlier wave
+-static uint4 WaveRecord0 = 0, WaveRecord1 = 0, WaveRecord2 = 0; // the query the walk yielded on
+-bool PathFresh() { return !WaveYield && (int)WaveTapeIndex > WaveExecuted; }
+-bool PathWaveYielded() { return WaveYield; }
+-uint2 WaveTape(uint k) { return PathWave.Load2(4 * (WaveTapeBase + 2 * k)); }
+-// The answer to the walk's next query, from the tape; if it is not there yet, the walk records the query and yields.
+-bool WaveAnswer(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool anyHit, uint object, uint meshRoot,
+-                out uint hit, out float distance, out float3 normal)
+-{
+-    hit = 0xffffffff; distance = maximum; normal = 0;
+-    if (WaveYield) return true; // (past a missing answer: no hit, and nothing is recorded)
+-    uint k = WaveTapeIndex++;
+-    uint2 answer;
+-    if (k < WaveStored) answer = WaveTape(k);
+-    else if (k - WaveStored < WaveNewCount) answer = PathAnswers[WaveNewBase + k - WaveStored].xy;
+-    else
+-    {
+-        WaveYield = true;
+-        WaveFinish = k >= PathWaveTapeCapacity; // (the tape is full: the finishing walk takes the ray)
+-        WaveRecord0 = uint4(asuint(origin), asuint(minimum)); WaveRecord1 = uint4(asuint(direction), asuint(maximum));
+-        WaveRecord2 = uint4(anyHit ? 1u : 0u, object, meshRoot, 0);
+-        return true;
+-    }
+-    hit = answer.x; distance = asfloat(answer.y);
+-    if (hit == 0xffffffff) distance = maximum;
+-    else normal = PrimitiveNormal(stateOffset, hit);
+-    return true;
+-}
+-#endif
+-bool TraceScene(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
+-                bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
+-{
+-#ifdef PATH_WAVE
+-    WaveAnswer(stateOffset, origin, direction, minimum, maximum, anyHit, 0, 0, hit, distance, normal); // (the walk ignores no owner)
+-    return hit != 0xffffffff;
+-#endif
+-    return TraceSceneSoftware(stateOffset, origin, direction, minimum, maximum, is2D, anyHit, ignoredOwner, hit, distance, normal);
+-}
++StructuredBuffer<uint4> PathAnswers;
+ bool NearestHit(uint stateOffset, float3 origin, float3 direction, float limit, bool is2D, out uint hit,
+                 out float distance, out float3 normal)
+ {
+diff --git a/Assets/Shaders/MethodCommon.hlsl b/Assets/Shaders/MethodCommon.hlsl
+index 9d3a8d3..c3a3c95 100644
+--- a/Assets/Shaders/MethodCommon.hlsl
++++ b/Assets/Shaders/MethodCommon.hlsl
+@@ -46,9 +46,6 @@ float MethodSlowness(uint medium) { return MethodIor(medium, 3) / SpeedOfSound;
+ 
+ void MethodCount(uint counter, uint amount = 1)
+ {
+-#ifdef PATH_WAVE
+-    if (!PathFresh()) return; // (made by an earlier wave, or past a query not answered yet: Geometry.hlsl "Waves")
+-#endif
+     InterlockedAdd(MethodStats[MethodBands * MethodDepths * MethodStatStride + counter], amount);
+ }
+ 
+diff --git a/Assets/Shaders/MethodPath.hlsl b/Assets/Shaders/MethodPath.hlsl
+index 7cc6cb1..f958264 100644
+--- a/Assets/Shaders/MethodPath.hlsl
++++ b/Assets/Shaders/MethodPath.hlsl
+@@ -25,11 +25,6 @@
+ // Uses MethodCommon.hlsl, with its UTD and edge-sampling helpers.
+ #ifndef ACOUSTIC_METHOD_PATH
+ #define ACOUSTIC_METHOD_PATH
+-#ifdef PATH_WAVE
+-#define PATH_FRESH PathFresh()
+-#else
+-#define PATH_FRESH true
+-#endif
+ // Time bins: PathBin0 wide up to PathFineBins * PathBin0, then constant relative resolution
+ // (each bin PathRatio times its start time).
+ float PathBin0, PathRatio;
+@@ -168,9 +163,6 @@ void PathDeposit(float3 from, float4 low, float4 high, float time, uint key, uin
+ #endif
+ {
+     if ((PathProfileFlags & 1) != 0) return;
+-#ifdef PATH_WAVE
+-    if (!PathFresh()) return; // (made by an earlier wave, or past a query not answered yet: Geometry.hlsl "Waves")
+-#endif
+     if (!(time >= 0) || time > MethodHorizon) { MethodCount(CounterNonFinite); return; }
+     uint bin = PathBinOf(time);
+     if (bin >= PathBins) { MethodCount(CounterNonFinite); return; }
+@@ -277,65 +269,32 @@ void PathEdgeWeights(uint index)
+     if (PathPersistent != 0) PathEdgeWeight[PathEdgeWeightBase + edge] = weight; else MethodEdgeCdf[edge] = weight;
+ }
+ 
+-// Straight connection of a non-delta vertex to the listener (through transmitting walls).
++// Straight connection of a non-delta vertex to the listener (through transmitting walls), made by the walk's stages (README
++// part 54; "The walk" below): its first hit, then the line through the walls, then PathListenerEnergy.
+ // Unless `exact` (the source's direct sound), a connection blocked by a surface is traced through
+ // the walls only with probability q = that surface's largest energy transmission over the bands, and
+ // weighted by 1 / q (Russian roulette, unbiased): the transmitted energy is at most that factor, so
+ // the weight stays bounded, and in stone rooms (t of 1e-6) the crossing loop is almost never run.
+-bool PathListener(MethodAnchor v, float I[8], float3 L, float scale, bool exact, inout uint rng, out float4 low, out float4 high, out float time, out float3 from, out float lengthOut)
++// The contribution, from the transmission and air loss `factor` along the line, its travel time t and the roulette's `keep`.
++void PathListenerEnergy(MethodAnchor v, float I[8], float3 L, float scale, float factor[8], float t, float keep, out float4 low, out float4 high, out float time, out float3 from, out float lengthOut)
+ {
+-    low = 0; high = 0;
+-    time = 0; from = 0; lengthOut = 0;
+     float3 w = L - v.position;
+     float d = length(w);
+-    if (d <= RayEpsilon) return false;
+     w /= d;
+     float D = EnergyDirectivity(v, w);
+-    if (D == 0) return false;
+-    float factor[8]; float t, keep = 1;
+-    [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] = 1;
+-    bool clear = false;
+-    if (!exact && MethodAnyTransmission != 0 && (PathProfileFlags & 16) == 0) // (bit 4: always trace, a check of this roulette)
+-    {
+-        uint hit; float distance; float3 normal;
+-        PROFILE_KIND(1);
+-        if (NearestHit(MethodState, v.position, w, d - RayEpsilon, false, hit, distance, normal))
+-        {
+-            keep = 0;
+-            [unroll] for (uint k2 = 0; k2 < MethodBands; k2++)
+-            {
+-                RayMaterial m = MethodSurface(hit, k2);
+-                keep = max(keep, m.medium.w != 0 ? 0 : saturate((1 - m.surface.x) * m.surface.z));
+-            }
+-            if (!(RandomRay(rng) < keep)) return false;
+-        }
+-        else clear = true; // nothing in between: one medium, no crossing loop needed
+-    }
+-    if ((PathProfileFlags & 16384) != 0 && !exact && !clear) return false; // (bit 14: unobstructed connections only)
+-    if (clear)
+-    {
+-        t = d * MethodSlowness(v.medium);
+-        [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) factor[k3] = exp(-2 * MethodLoss(v.medium, k3) * d);
+-    }
+-    else
+-    {
+-        PROFILE_KIND(2);
+-        if (!MethodConnect(v.position, L, v.medium, true, factor, t)) return false;
+-    }
+     float r = max(MinimumDistance, d);
+     float e[8];
+     [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) e[k1] = I[k1] * D * factor[k1] / (r * r) * scale / keep;
+     low = float4(e[0], e[1], e[2], e[3]); high = float4(e[4], e[5], e[6], e[7]);
+     time = v.time + t; from = -w; lengthOut = d;
+-    return true;
+ }
+-// Mirror leg start -> primitive -> end (CompleteMirror without its scan of every lower-index
++// The mirror point of a leg start -> primitive -> end (CompleteMirror without its scan of every lower-index
+ // primitive of the object, which made each RD connection cost a pass over the whole scene): a hit
+ // on the triangle's boundary, where a neighbour could claim the same contact, is rejected instead
+-// (a set of measure zero, so no bias).
+-bool PathMirror(uint primitive, float3 start, float3 end, out float3 hit, out float cosine)
++// (a set of measure zero, so no bias). Its two legs' visibility is tested by the walk (PathEdgeLeg).
++bool PathMirror(uint primitive, float3 start, float3 end, out float3 hit)
+ {
+-    hit = 0; cosine = 0;
++    hit = 0;
+     float3 n, unused;
+     float3 image = CompleteImage(primitive, MethodState, start, false, n), delta = end - image;
+     float lengthTo = length(delta);
+@@ -350,11 +309,7 @@ bool PathMirror(uint primitive, float3 start, float3 end, out float3 hit, out fl
+     float3 m = cross(b - a, c - a);
+     float area = dot(m, m);
+     float3 w = float3(dot(cross(c - b, hit - b), m), dot(cross(a - c, hit - c), m), dot(cross(b - a, hit - a), m)) / max(area, 1e-20);
+-    if (min(w.x, min(w.y, w.z)) <= 1e-5) return false;
+-    [loop] for (uint leg = 0; leg < 2; leg++)
+-        if (!Visible(MethodState, leg == 0 ? start : hit, leg == 0 ? hit : end, false)) return false;
+-    cosine = abs(dot(normalize(hit - start), n));
+-    return true;
++    return min(w.x, min(w.y, w.z)) > 1e-5;
+ }
+ // UtdEnergy with its reflection-boundary terms (the two with phiOut + phiIn) weighted by
+ // 1 - exp(-2 X s'/s), X = k L a their transition argument and s, s' the source- and listener-side
+@@ -379,22 +334,21 @@ float PathUtdEnergy(float n, float phiIn, float phiOut, float sinBeta, float k,
+ }
+ // Listener connection through one edge (D), one mirror and one edge (RD), or two parallel
+ // edges (DD): EnergyEdgeConnection's kernels, with one UtdEnergy body per edge (bands in a loop).
+-// rate: the connection's delay rate, from the anchor's (vRate: up to and including its incoming term; vVelocity: its
+-// point's velocity) through the mirror and the edges (each point moving with its object) to the listener (vL).
+-#if PATH_DOPPLER
+-bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, float vRate, float3 vVelocity, float3 vL, inout uint rng, out float4 low, out float4 high, out float time, out float3 fromOut, out float rate)
++// In three steps (README part 54): PathEdgeDraw makes the draws and the geometry, the walk tests the legs' visibility one query
++// at a time (PathEdgeLeg), drawing the same sample again from the same random numbers after each answer, and PathEdgeEnergy
++// makes the contribution.
++struct PathEdgeSample
+ {
+-    low = 0; high = 0;
+-    time = 0; fromOut = 0; rate = 0;
+-#else
+-bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, inout uint rng, out float4 low, out float4 high, out float time, out float3 fromOut)
++    uint edge, edge2, mirror; bool image, pair;
++    float pick, pick2, variant;
++    float3 e, e2, last, first, hit;
++    float n, phiIn, phiOut, sinBeta, n2, phiIn2, phiOut2, sinBeta2, leg;
++};
++bool PathEdgeDraw(MethodAnchor v, float3 L, inout uint rng, out PathEdgeSample s)
+ {
+-    low = 0; high = 0;
+-    time = 0; fromOut = 0;
+-#endif
++    s = (PathEdgeSample)0;
++    s.pick2 = 1; s.n2 = 1; s.sinBeta2 = 1; s.leg = 1;
+     if (MethodEdgeCount == 0 || DiffractionFactor <= 0) return false;
+-    PROFILE_KIND(3);
+-    float pick, pick2 = 1;
+     // From the source, draw the edge from the solve's distribution (PathEdgeWeights: edges between
+     // source and listener) instead of uniformly over every edge of the scene: in the Church (14,075
+     // edges) a uniform pick found the edges of the doorway between the organ and a listener outside
+@@ -403,7 +357,8 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
+     // pick), with the mixture's probability: in the Church a uniform pick of the doorway's edges from
+     // points in the nave made the diffracted sound outside heavy-tailed (one solve's median a tenth of
+     // the mean). Same estimator, lower variance.
+-    uint edge, edge2;
++    float pick;
++    uint edge;
+     float uSource = RandomRay(rng);
+     bool distribution = METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
+     if (v.kind == 0 && distribution) edge = EnergySampleEdge(uSource, pick);
+@@ -420,64 +375,88 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
+         pick = .5 * pickCdf + .5 * pickLocal;
+     }
+     else edge = MethodPickEdge(v.kind == 1 ? v.primitive : 0xffffffff, rng, pick);
+-    edge2 = edge;
++    s.edge = edge; s.edge2 = edge; s.pick = pick;
+     float r = RandomRay(rng);
+     bool mirrors = PrimitiveCount > 0;
+-    bool image = mirrors && r < 1.0 / 3, pair = r >= (mirrors ? 2.0 / 3 : .5);
+-    float variant = mirrors ? 1.0 / 3 : .5;
+-    uint mirror = 0;
+-    if (image)
++    s.image = mirrors && r < 1.0 / 3; s.pair = r >= (mirrors ? 2.0 / 3 : .5);
++    s.variant = mirrors ? 1.0 / 3 : .5;
++    if (s.image)
+     {
+         // The mirror in proportion to its area (PathMirrorCdf), with that probability.
+         float total = PathMirrorCdf[PrimitiveCount - 1], target = RandomRay(rng) * total;
+         uint lo = 0, hi = PrimitiveCount - 1;
+         [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (PathMirrorCdf[mid] > target) hi = mid; else lo = mid + 1; }
+-        mirror = lo;
++        s.mirror = lo;
+         float area = PathMirrorCdf[lo] - (lo > 0 ? PathMirrorCdf[lo - 1] : 0);
+         if (!(area > 0)) return false;
+-        variant *= area / total;
++        s.variant *= area / total;
+     }
+-    float3 from = v.position, unused, e, e2 = 0, first, hit;
+-    if (image)
++    float3 from = v.position, unused, e, e2 = 0;
++    if (s.image)
+     {
+-        if ((States[MethodState + Primitives[mirror].indices.x].flags.x & 3) != 3) return false;
+-        from = CompleteImage(mirror, MethodState, v.position, false, unused);
++        if ((States[MethodState + Primitives[s.mirror].indices.x].flags.x & 3) != 3) return false;
++        from = CompleteImage(s.mirror, MethodState, v.position, false, unused);
+     }
+-    float n, phiIn, phiOut, sinBeta, n2 = 1, phiIn2 = 0, phiOut2 = 0, sinBeta2 = 1, cosine = 0, leg = 1;
+-    if (pair)
++    if (s.pair)
+     {
+-        edge2 = MethodPickNextEdge(edge, rng, pick2);
+-        if (!UtdApexPair(edge, edge2, from, L, e, e2) || !UtdAngles(edge, from, e, e2, n, phiIn, phiOut, sinBeta) ||
+-            !UtdAngles(edge2, e, e2, L, n2, phiIn2, phiOut2, sinBeta2)) return false;
+-        leg = MethodEdgeLeg(edge, edge2, e, e2);
+-        if (leg == 0) return false;
++        s.edge2 = MethodPickNextEdge(edge, rng, s.pick2);
++        if (!UtdApexPair(edge, s.edge2, from, L, e, e2) || !UtdAngles(edge, from, e, e2, s.n, s.phiIn, s.phiOut, s.sinBeta) ||
++            !UtdAngles(s.edge2, e, e2, L, s.n2, s.phiIn2, s.phiOut2, s.sinBeta2)) return false;
++        s.leg = MethodEdgeLeg(edge, s.edge2, e, e2);
++        if (s.leg == 0) return false;
+     }
+-    else if (!UtdApex(edge, from, L, e) || !UtdAngles(edge, from, e, L, n, phiIn, phiOut, sinBeta)) return false;
+-    float3 last = pair ? e2 : e;
+-    first = e;
+-    if (image) { if (!PathMirror(mirror, v.position, e, hit, cosine)) return false; first = hit; }
+-    [loop] for (uint segment = image ? 1u : 0u; segment < 2; segment++)
+-        if (!Visible(MethodState, segment == 0 ? v.position : last, segment == 0 ? e : L, false)) return false;
++    else if (!UtdApex(edge, from, L, e) || !UtdAngles(edge, from, e, L, s.n, s.phiIn, s.phiOut, s.sinBeta)) return false;
++    s.e = e; s.e2 = e2; s.last = s.pair ? e2 : e; s.first = e;
++    if (s.image) { if (!PathMirror(s.mirror, v.position, e, s.hit)) return false; s.first = s.hit; }
++    return true;
++}
++// The legs whose visibility the connection needs, in order: the mirror's two (anchor -> mirror point -> edge), then anchor ->
++// edge (without a mirror) and last edge -> listener.
++uint PathEdgeLegs(PathEdgeSample s) { return s.image ? 3u : 2u; }
++void PathEdgeLeg(PathEdgeSample s, float3 position, float3 L, uint k, out float3 start, out float3 end)
++{
++    uint segment = s.image ? (k < 2 ? 2u : 1u) : k;
++    start = segment == 2 ? (k == 0 ? position : s.hit) : (segment == 0 ? position : s.last);
++    end = segment == 2 ? (k == 0 ? s.hit : s.e) : (segment == 0 ? s.e : L);
++}
++// rate: the connection's delay rate, from the anchor's (vRate: up to and including its incoming term; vVelocity: its
++// point's velocity) through the mirror and the edges (each point moving with its object) to the listener (vL).
++#if PATH_DOPPLER
++bool PathEdgeEnergy(PathEdgeSample s, MethodAnchor v, float4 inLow, float4 inHigh, float3 L, float vRate, float3 vVelocity, float3 vL, out float4 low, out float4 high, out float time, out float3 fromOut, out float rate)
++{
++    low = 0; high = 0;
++    time = 0; fromOut = 0; rate = 0;
++#else
++bool PathEdgeEnergy(PathEdgeSample s, MethodAnchor v, float4 inLow, float4 inHigh, float3 L, out float4 low, out float4 high, out float time, out float3 fromOut)
++{
++    low = 0; high = 0;
++    time = 0; fromOut = 0;
++#endif
++    uint edge = s.edge, edge2 = s.edge2, mirror = s.mirror;
++    bool image = s.image, pair = s.pair;
++    float3 e = s.e, e2 = s.e2, last = s.last, first = s.first, hit = s.hit, n, from = v.position;
++    float cosine = 0;
++    if (image) { from = CompleteImage(mirror, MethodState, v.position, false, n); cosine = abs(dot(normalize(hit - v.position), n)); }
+     float D = EnergyDirectivity(v, normalize(first - v.position));
+     float m = length(e - from), d = pair ? length(e2 - e) : 0, l = length(L - last), total = m + d + l;
+     if (D == 0 || m <= RayEpsilon || l <= RayEpsilon) return false;
+     MethodCount(CounterEdgeConnections);
+     time = v.time + total * MethodSlowness(AirMedium);
+-    float s2 = sinBeta * sinBeta;
++    float s2 = s.sinBeta * s.sinBeta;
+     float4 sumLow = 0, sumHigh = 0; // see PathDetect
+     [loop] for (uint k = 0; k < MethodBands; k++)
+     {
+         float opacity = MethodEdgeOpacity(edge, k);
+         float4 lane = float4((k & 3) == uint4(0, 1, 2, 3)); // one-hot: no dynamic vector writes in a loop
+-        float share = PathUtdEnergy(n, phiIn, phiOut, sinBeta, MethodWavenumber(k), m * (d + l) / total * s2, pair ? 0 : l / m) * dot(k < 4 ? inLow : inHigh, lane) * D *
++        float share = PathUtdEnergy(s.n, s.phiIn, s.phiOut, s.sinBeta, MethodWavenumber(k), m * (d + l) / total * s2, pair ? 0 : l / m) * dot(k < 4 ? inLow : inHigh, lane) * D *
+                       DiffractionFactor * DiffractionFactor * opacity * opacity;
+         if (pair)
+         {
+             float opacity2 = MethodEdgeOpacity(edge2, k);
+-            share *= UtdEnergy(n2, phiIn2, phiOut2, sinBeta2, MethodWavenumber(k), (m + d) * l / total * s2) * leg * leg *
+-                     DiffractionFactor * DiffractionFactor * opacity2 * opacity2 / (d * pick2);
++            share *= UtdEnergy(s.n2, s.phiIn2, s.phiOut2, s.sinBeta2, MethodWavenumber(k), (m + d) * l / total * s2) * s.leg * s.leg *
++                     DiffractionFactor * DiffractionFactor * opacity2 * opacity2 / (d * s.pick2);
+         }
+-        share *= exp(-2 * MethodLoss(AirMedium, k) * total) / (m * l * total * pick * variant);
++        share *= exp(-2 * MethodLoss(AirMedium, k) * total) / (m * l * total * s.pick * s.variant);
+         if (image) share *= EnergySpecular(MethodSurface(mirror, k), cosine);
+         if (k < 4) sumLow += share * lane; else sumHigh += share * lane;
+     }
+@@ -499,9 +478,6 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
+ // and Doppler of the moving ends, as EnergyArrivals) instead of into the histogram.
+ void PathDirectArrival(float3 S, float3 L, float4 low, float4 high, float scale, float time, float total)
+ {
+-#ifdef PATH_WAVE
+-    if (!PathFresh()) return;
+-#endif
+     float c = SpeedOfSound;
+     float3 vS = Velocity(MethodState + MethodSourceObject), vL = Velocity(MethodState + MethodListenerObject);
+     float3 departure = total > 0 ? (L - S) / total : float3(0, 0, 1);
+@@ -714,43 +690,6 @@ void PathKeep(PathRay r)
+     else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount], 1u); }
+ }
+ 
+-// PartitionExit for the walk, where overlapping solids are one: the crossing ends at the partition's far
+-// face only once every other object entered on the way has been left too (an even number of their faces
+-// crossed). The Church's door frame runs 8 mm into the floor slab and its stone mullions through the window
+-// panes; ending at the frame's far face put transmitted rays inside the floor slab, in air, where they
+-// bounced between faces 8 mm apart for hundreds of events per update (README part 18).
+-bool PathPartitionExit(uint hit, float3 position, float3 direction, bool medium, out float depth)
+-{
+-    uint owner = Primitives[hit].indices.x, foreign = 0;
+-    float travelled = 2 * RayEpsilon;
+-    bool left = false;
+-    depth = 0;
+-    if (medium) return false;
+-    [loop] for (uint i = 0; i < 8; i++)
+-    {
+-        uint next; float distance; float3 normal;
+-        if (!NearestHit(MethodState, position + direction * travelled, direction, PartitionDepth - travelled, false, next, distance, normal)) return false;
+-        travelled += distance;
+-        if (Primitives[next].indices.x == owner) left = true; else foreign++;
+-        if (left && (foreign & 1) == 0) { depth = travelled; return true; }
+-        travelled += 2 * RayEpsilon;
+-        if (travelled >= PartitionDepth) return false;
+-    }
+-    return false;
+-}
+-
+-// Where a transmission at `hit` goes (README part 50): out of a partition's far face, undeviated, into the medium the ray was in
+-// (PathPartitionExit leaves every object entered on the way, so the ray is again inside exactly what contained it: no point
+-// location is needed, unless the mesh leaks), or into the medium behind the surface.
+-void PathCrossing(uint hit, float3 p, float3 d, uint medium, out bool partition, out float wall, out uint next)
+-{
+-    PROFILE_KIND(5);
+-    partition = PathPartitionExit(hit, p, d, MethodRefracts(hit), wall);
+-    next = medium;
+-    PROFILE_KIND(6);
+-    if (!partition) next = MediumAt(MethodState, p + d * 2 * RayEpsilon, false);
+-}
+-
+ // Mode 0: the current slot of the pair's ring becomes the update's histogram (MethodCellBase, PathCountBase)
+ // and is emptied for reuse; mode 1: every slot of the pair's ring is emptied.
+ void PathRing(uint index)
+@@ -1013,166 +952,139 @@ bool PathWalkLaunch(PathWalkSlot slot, float keep, inout uint rng, out float3 d,
+         if (first) value *= PathWalkD(slot.previous, pangle, slot.previousPhiIn, slot.previousM, phiAt, sinPrevious, slot.m, k);
+         if (k < 4) low += value * lane; else high += value * lane;
+     }
+-    return sinBeta > 1e-4 && Visible(MethodState, slot.q, slot.e, false);
++    return sinBeta > 1e-4; // (and its line of sight from the ray's closest point, slot.q: a query of the walk's)
+ }
+ #endif
+ 
+ 
+-// The walk's state between iterations of its loop (README part 52): what TracePath carries from one iteration to the next, with
+-// its band arrays I, cI, Phi0, C and branchF (locals of TracePath: an array in a struct, indexed in a [loop], made the compiler
+-// unroll the loop and fail). The wave walk (PATH_WAVE, "Waves" below) stores it between waves; the megakernel keeps it in registers.
++// ---- The walk as a state machine (README part 54) ----
++// Every scene query of the walk is made from one call, PathAsk, at most one per iteration of the walk's loop: a step of the walk
++// that needs the scene sets up its query (a PathQuery) and the stage it resumes from (PathWalk.stage), and the next iteration
++// hands that stage the answer. The steps are those of the walk before part 54, in the same order and with the same random
++// numbers, so the walk makes the same queries in the same order and its outputs are the same (MeasurePathHistogramHash).
++// Stages and their own values (PathWalk u0, u1, s0-s3, sp, step):
++//   ListenerStart  (no query) the next-event connection's start; Edge with step ~0: an edge connection's
++//   Listener       the next-event connection's first hit
++//   ConnectClear   the connection's line of sight (no transmission in the scene; s2 the roulette's keep, 1)
++//   ConnectCross   the connection through walls: the next surface on its line (sp the point reached, s0 the distance left, s1
++//                  the travel time, s2 keep, u0 the medium, step the crossings; the transmission so far in pendingLow/High)
++//   ConnectExit    the far face of a partition it crossed (also s3 the distance in, u1 the partition's object, step >> 8 tries)
++//   ConnectMedium  the medium beyond a crossing
++//   Edge           an edge connection's visibility leg (u0 the random state it was drawn from, step the legs passed)
++//   EdgeRay        an edge ray's line of sight from the source (u0 its edge, s0 the point along it, s1 the edge's probability)
++//   Segment        the segment's hit (step 1: profiling bit 15, the same query again)
++//   Beam           the beam's visibility at the listener (u1, s0, sp: the segment's hit, distance and normal)
++//   Exit           a transmission's way out of a partition's far face (u1, sp the hit; s1 the distance in; s2 the event's draw,
++//                  u0 the branch kept; step the tries, foreign faces << 8, the partition left << 16)
++//   Medium         the medium behind a transmitting surface (u1, sp, s2, u0 as Exit)
++//   WalkLaunch     walk diffraction: the kept candidate's line of sight (PATH_WALK_EDGE)
++static const uint StageTop = 0, StageListener = 1, StageConnectClear = 2, StageConnectCross = 3, StageConnectExit = 4, StageConnectMedium = 5,
++                  StageEdge = 6, StageEdgeRay = 7, StageSegment = 8, StageBeam = 9, StageExit = 10, StageMedium = 11, StageWalkLaunch = 12,
++                  StageListenerStart = 13;
++static const uint PathAskNone = 0, PathAskClosest = 1, PathAskAny = 2, PathAskMedium = 3;
++struct PathQuery
++{
++    float3 origin, direction; float minimum, maximum;
++    uint kind, profile;                  // PathAsk*; the work profile's kind of query (README part 46)
++};
++struct PathAnswer { uint hit; float distance; float3 normal; }; // (a medium query: hit is the medium)
++PathQuery PathQueryNone() { PathQuery q; q.origin = 0; q.direction = 0; q.minimum = 0; q.maximum = 0; q.kind = PathAskNone; q.profile = 0; return q; }
++PathQuery PathQueryRay(float3 origin, float3 direction, float minimum, float maximum, bool anyHit, uint profile)
++{
++    PathQuery q; q.origin = origin; q.direction = direction; q.minimum = minimum; q.maximum = maximum; q.kind = anyHit ? PathAskAny : PathAskClosest; q.profile = profile;
++    return q;
++}
++PathQuery PathQueryMedium(float3 location, uint profile) { PathQuery q = PathQueryNone(); q.origin = location; q.kind = PathAskMedium; q.profile = profile; return q; }
++// Visible(start, end) as a query: none when the points are within 2 RayEpsilon (visible without one).
++bool PathConnecting(uint stage) { return (stage >= StageListener && stage <= StageEdge) || stage == StageListenerStart; }
++bool PathVisibleQuery(float3 start, float3 end, uint profile, inout PathQuery q)
++{
++    float distance = length(end - start);
++    if (distance <= 2 * RayEpsilon) return false;
++    q = PathQueryRay(start, (end - start) / distance, RayEpsilon, distance - RayEpsilon, true, profile);
++    return true;
++}
++// The one query site's software answer: the scene's tree (TraceScene), or point location (MediumAt).
++PathAnswer PathAsk(PathQuery q)
++{
++    PathAnswer a; a.hit = 0xffffffff; a.distance = q.maximum; a.normal = 0;
++    PROFILE_KIND(q.profile);
++    if (q.kind == PathAskMedium) a.hit = MediumAt(MethodState, q.origin, false);
++    else TraceScene(MethodState, q.origin, q.direction, q.minimum, q.maximum, false, q.kind == PathAskAny, 0xffffffff, a.hit, a.distance, a.normal);
++    return a;
++}
++
++// The walk's state between iterations of its loop: what TracePath carries from one to the next, with its band arrays cI, Phi0, C
++// and branchF (locals of TracePath: an array in a struct, indexed in a [loop], made the compiler unroll the loop and fail). While
++// a ray is not travelling, the walk's latest non-delta vertex is the connections' anchor c (both are the source at the start, and
++// a scattering point is both), so it is not kept twice; its flux is cI iScale / iKeep.
+ struct PathWalk
+ {
+-    uint ray, slot; bool resumed;
++    uint stage, step;                    // where the walk resumes with the next answer, and that stage's count
++    uint u0, u1; float s0, s1, s2, s3; float3 sp; // that stage's own values (above)
+     uint rng, events, iterations, medium, branchMedium;
+-    MethodAnchor v, c;                   // the walk's latest non-delta vertex; the connections' anchor
+-    float4 pendingLow, pendingHigh;      // bands of the pending contribution
++    MethodAnchor c;                      // the connections' anchor (and the latest non-delta vertex while not travelling)
++    float iScale, iKeep;
++    float4 pendingLow, pendingHigh;      // bands of the pending contribution (a connection through walls: its transmission so far)
+     float pendingTime; float3 pendingFrom;
+     bool connectListener, connectEdge, hasPending, travelling, done, fluxPending, inBranch, scored, suspending, offSurface;
+     float listenerScale;
+-    float3 vVelocity, cVelocity; float rho, vRate, cRate, pendingRate, branchRate; // (delay rates: PATH_DOPPLER only)
++    float3 cVelocity; float rho, cRate, pendingRate, branchRate; // (delay rates: PATH_DOPPLER only)
+     float3 p, d; float Q, tau;
+     PathChain chain, branch;
+     float branchSum, branchTau, branchSurvival, survival; float3 branchP, branchD;
+     float4 plane, branchPlane;           // the latest event's plane, outgoing side (beams)
+     float edgeExtent, edgeAngle, edgeM, edgeSinBeta, edgePhiIn, edgeD;
+-    float age, target, sinceStart;
+-    bool skipPending;                    // (a finished ray's resumed iteration: its deposit was made: PathWaveResumeStart)
++    float target, sinceStart;
++#ifdef PATH_WAVE
++    bool anchorFresh, branchHeld, branchFresh; // the wave walk's sections ("Waves"): the anchor set and the branch read or set in this wave
++#endif
+ #if PATH_WALK_EDGE
+     uint walkMeta; float walkPhiIn, walkM; // a diffracted ray's first segment ("Walk diffraction")
+     PathWalkSlot walkSlot;
+     bool walkQueued; float3 walkD; float4 walkLow, walkHigh; // (launched: its direction and flux)
+ #endif
+ };
+-// The wave walk's stored state (README part 52; "Waves" below), read by the wave walk and by the megakernel, which finishes the rays
+-// the update's waves left going (PathWaveResume).
+ #ifdef PATH_WAVE
+-#define PATH_WAVE_STATE PathWave
++#define PATH_WAVE_ONLY(x) x
+ #else
+-#define PATH_WAVE_STATE PathWaveRead
++#define PATH_WAVE_ONLY(x)
+ #endif
+-static const uint PathWaveHeader = 32, PathWaveStateUints = 152;
+-uint PathWaveFirst, PathWaveListBase, PathWaveListCapacity, PathWaveStateBase, PathWaveSlotUints;
+-uint PathWaveRecordUints(uint slot) { return PathWaveStateBase + slot * PathWaveSlotUints; }
+-uint4 PathWaveLoad4(inout uint at) { uint4 v = PATH_WAVE_STATE.Load4(4 * at); at += 4; return v; }
+-uint PathWaveFlags(PathWalk wk)
+-{
+-    return (wk.resumed ? 1u : 0u) | (wk.connectListener ? 2u : 0u) | (wk.connectEdge ? 4u : 0u) | (wk.hasPending ? 8u : 0u) | (wk.travelling ? 16u : 0u) |
+-           (wk.done ? 32u : 0u) | (wk.fluxPending ? 64u : 0u) | (wk.inBranch ? 128u : 0u) | (wk.scored ? 256u : 0u) | (wk.suspending ? 512u : 0u) | (wk.offSurface ? 1024u : 0u);
+-}
+-uint4 PathWaveChainA(PathChain c) { return uint4(c.kind, c.edge, c.hits, c.reflections); }
+-uint4 PathWaveChainB(PathChain c) { return asuint(float4(c.edgePhi, c.edgePick, c.travelled, c.time)); }
+-PathChain PathWaveChain(uint4 a, uint4 b)
+-{
+-    PathChain c; c.kind = a.x; c.edge = a.y; c.hits = a.z; c.reflections = a.w;
+-    float4 f = asfloat(b); c.edgePhi = f.x; c.edgePick = f.y; c.travelled = f.z; c.time = f.w; return c;
+-}
+-void PathWalkLoad(uint slot, out PathWalk wk, out float I[8], out float cI[8], out float Phi0[8], out float C[8], out float branchF[8], out uint tape)
+-{
+-    wk = (PathWalk)0;
+-    uint at = PathWaveRecordUints(slot);
+-    uint4 a = PathWaveLoad4(at); wk.ray = a.x; wk.slot = a.y; wk.rng = a.z; wk.events = a.w;
+-    a = PathWaveLoad4(at); wk.iterations = a.x; wk.medium = a.y; wk.branchMedium = a.z;
+-    uint f = a.w;
+-    wk.resumed = (f & 1) != 0; wk.connectListener = (f & 2) != 0; wk.connectEdge = (f & 4) != 0; wk.hasPending = (f & 8) != 0; wk.travelling = (f & 16) != 0;
+-    wk.done = (f & 32) != 0; wk.fluxPending = (f & 64) != 0; wk.inBranch = (f & 128) != 0; wk.scored = (f & 256) != 0; wk.suspending = (f & 512) != 0; wk.offSurface = (f & 1024) != 0;
+-    float4 x = asfloat(PathWaveLoad4(at)); wk.v.position = x.xyz; wk.v.time = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.v.normal = x.xyz; wk.v.previous.x = x.w;
+-    a = PathWaveLoad4(at); wk.v.previous.yz = asfloat(a.xy); wk.v.kind = a.z; wk.v.edge = a.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.c.position = x.xyz; wk.c.time = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.c.normal = x.xyz; wk.c.previous.x = x.w;
+-    a = PathWaveLoad4(at); wk.c.previous.yz = asfloat(a.xy); wk.c.kind = a.z; wk.c.edge = a.w;
+-    a = PathWaveLoad4(at); wk.v.primitive = a.x; wk.v.medium = a.y; wk.c.primitive = a.z; wk.c.medium = a.w;
+-    float4 lo = asfloat(PathWaveLoad4(at)), hi = asfloat(PathWaveLoad4(at));
+-    I[0] = lo.x; I[1] = lo.y; I[2] = lo.z; I[3] = lo.w; I[4] = hi.x; I[5] = hi.y; I[6] = hi.z; I[7] = hi.w;
+-    lo = asfloat(PathWaveLoad4(at)); hi = asfloat(PathWaveLoad4(at));
+-    cI[0] = lo.x; cI[1] = lo.y; cI[2] = lo.z; cI[3] = lo.w; cI[4] = hi.x; cI[5] = hi.y; cI[6] = hi.z; cI[7] = hi.w;
+-    lo = asfloat(PathWaveLoad4(at)); hi = asfloat(PathWaveLoad4(at));
+-    Phi0[0] = lo.x; Phi0[1] = lo.y; Phi0[2] = lo.z; Phi0[3] = lo.w; Phi0[4] = hi.x; Phi0[5] = hi.y; Phi0[6] = hi.z; Phi0[7] = hi.w;
+-    lo = asfloat(PathWaveLoad4(at)); hi = asfloat(PathWaveLoad4(at));
+-    C[0] = lo.x; C[1] = lo.y; C[2] = lo.z; C[3] = lo.w; C[4] = hi.x; C[5] = hi.y; C[6] = hi.z; C[7] = hi.w;
+-    wk.pendingLow = asfloat(PathWaveLoad4(at)); wk.pendingHigh = asfloat(PathWaveLoad4(at));
+-    x = asfloat(PathWaveLoad4(at)); wk.pendingFrom = x.xyz; wk.pendingTime = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.listenerScale = x.x; wk.Q = x.y; wk.tau = x.z; wk.survival = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.p = x.xyz; wk.age = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.d = x.xyz; wk.target = x.w;
+-    uint4 ca = PathWaveLoad4(at), cb = PathWaveLoad4(at); wk.chain = PathWaveChain(ca, cb);
+-    ca = PathWaveLoad4(at); cb = PathWaveLoad4(at); wk.branch = PathWaveChain(ca, cb);
+-    x = asfloat(PathWaveLoad4(at)); wk.branchSum = x.x; wk.branchTau = x.y; wk.branchSurvival = x.z; wk.sinceStart = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.branchP = x.xyz; wk.rho = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.branchD = x.xyz; wk.vRate = x.w;
+-    lo = asfloat(PathWaveLoad4(at)); hi = asfloat(PathWaveLoad4(at));
+-    branchF[0] = lo.x; branchF[1] = lo.y; branchF[2] = lo.z; branchF[3] = lo.w; branchF[4] = hi.x; branchF[5] = hi.y; branchF[6] = hi.z; branchF[7] = hi.w;
+-    wk.plane = asfloat(PathWaveLoad4(at)); wk.branchPlane = asfloat(PathWaveLoad4(at));
+-    x = asfloat(PathWaveLoad4(at)); wk.edgeExtent = x.x; wk.edgeAngle = x.y; wk.edgeM = x.z; wk.edgeSinBeta = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.edgePhiIn = x.x; wk.edgeD = x.y; wk.cRate = x.z; wk.pendingRate = x.w;
+-    x = asfloat(PathWaveLoad4(at)); wk.vVelocity = x.xyz; wk.branchRate = x.w;
+-    a = PathWaveLoad4(at); wk.cVelocity = asfloat(a.xyz); tape = a.w;
+-}
+-uint PathWaveListEntry(uint list, uint index) { return PathWaveListBase + 4 * (list * PathWaveListCapacity + index); }
+-// The megakernel finishing the rays still going after the update's waves (the last active list, then the finish list): each resumes
+-// the loop iteration it stopped in, from its start, with every query of it answered in software again. That iteration's deposit (at
+-// its top) was made by the wave it began in, so it is not made again; the iteration's diagnostic counters before its last query are.
+-// Where Metal's and the software tree's hits differ (a grazing ray), the iteration continues on the software hit: the same small
+-// difference as between the two answers anywhere in the walk.
+-uint PathWaveResume;
+-bool PathWaveResumeStart(uint index, out PathWalk wk, out float I[8], out float cI[8], out float Phi0[8], out float C[8], out float branchF[8])
+-{
+-    uint list = PATH_WAVE_STATE.Load(4 * 3), active = PATH_WAVE_STATE.Load(4 * (1 + list)), at = 0;
+-    bool found = true;
+-    if (index < active) at = PathWaveListEntry(list, index);
+-    else if (index - active < PATH_WAVE_STATE.Load(4 * 11)) at = PathWaveListEntry(2, index - active);
+-    else found = false;
+-    uint tape;
+-    PathWalkLoad(found ? PATH_WAVE_STATE.Load(4 * at) : 0, wk, I, cI, Phi0, C, branchF, tape);
+-    wk.skipPending = true;
+-    return found;
+-}
++void PathUnpack(float4 low, float4 high, out float v[8]) { v[0] = low.x; v[1] = low.y; v[2] = low.z; v[3] = low.w; v[4] = high.x; v[5] = high.y; v[6] = high.z; v[7] = high.w; }
+ // The walk's start (before its loop): which ray this thread traces (a resumed one, from the pool, or a new one) and its state.
+-bool PathWalkStart(uint index, out PathWalk wk, out float I[8], out float cI[8], out float Phi0[8], out float C[8], out float branchF[8])
++bool PathWalkStart(uint index, out PathWalk wk, out float cI[8], out float Phi0[8], out float C[8], out float branchF[8])
+ {
+-#ifndef PATH_WAVE
+-    if (PathWaveResume != 0) return PathWaveResumeStart(index, wk, I, cI, Phi0, C, branchF);
+-#endif
+     wk = (PathWalk)0;
+-    [unroll] for (uint k0 = 0; k0 < MethodBands; k0++) { I[k0] = 0; cI[k0] = 0; Phi0[k0] = 0; C[k0] = 1; branchF[k0] = 0; }
+-    wk.ray = 0; wk.slot = 0; wk.resumed = false;
++    [unroll] for (uint k0 = 0; k0 < MethodBands; k0++) { cI[k0] = 0; Phi0[k0] = 0; C[k0] = 1; branchF[k0] = 0; }
++    uint ray = 0, slot = 0;
++    bool resumed = false;
+     if (PathPersistent != 0)
+     {
+         uint thread = MethodRayOffset + index, live = min(PathLive[PathReadCount], PathCapacity);
+-        if (thread < live) { wk.resumed = true; wk.slot = thread; }
+-        else if (thread - live < MethodRayCount) wk.ray = thread - live;
++        if (thread < live) { resumed = true; slot = thread; }
++        else if (thread - live < MethodRayCount) ray = thread - live;
+         else return false;
+     }
+     else
+     {
+         if (index >= MethodRayCount) return false;
+-        wk.ray = MethodRayOffset + index;
++        ray = MethodRayOffset + index;
+     }
+-    MethodCount(wk.resumed ? CounterResumed : CounterRays);
++    MethodCount(resumed ? CounterResumed : CounterRays);
+     float3 S = States[MethodState + MethodSourceObject].position.xyz;
+-    wk.rng = HashRay(wk.ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
+-    wk.v.position = S; wk.v.normal = 0; wk.v.previous = S; wk.v.kind = 0; wk.v.edge = 0; wk.v.primitive = 0xffffffff; wk.v.time = 0;
+-    // The listener's medium, located once per solve (PathEndsMedia); a resumed ray carries its own medium, so only a new ray
+-    // locates the source. (Reading the source's medium from the buffer too made the compiler fail to build the static walk's
+-    // connection loop, "can't unroll loops marked with loop attribute", as in part 17; the wave walk reads it there.)
+-    PROFILE_KIND(7);
+-    wk.v.medium = AirMedium;
+-#ifdef PATH_WAVE
+-    if (!wk.resumed) wk.v.medium = PATH_CLEARANCE_READ[1];
+-#else
+-    if (!wk.resumed) wk.v.medium = MediumAt(MethodState, S, false); // (not ?:, whose sides are both evaluated in this dialect)
+-#endif
++    wk.rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
++    wk.c.position = S; wk.c.normal = 0; wk.c.previous = S; wk.c.kind = 0; wk.c.edge = 0; wk.c.primitive = 0xffffffff; wk.c.time = 0;
++    // The source's and the listener's media, located once per solve (PathEndsMedia); a resumed ray carries its own medium.
++    wk.c.medium = resumed ? AirMedium : PATH_CLEARANCE_READ[1];
+     // A new ray's weight: the histogram is divided by MethodTotalRays when read, so a cohort of n rays carries
+     // MethodTotalRays / n each (PathLaunchScale, persistent rays; 1 otherwise) and a change of n between updates
+     // (MethodTransport.Population, the auto-budget) leaves every cohort's estimate unbiased.
+     float launch = PathPersistent != 0 ? PathLaunchScale : 1;
+     wk.pendingLow = 0; wk.pendingHigh = 0;
+-    [unroll] for (uint k = 0; k < MethodBands; k++)
+-    { I[k] = ReferenceDistance * ReferenceDistance * launch; cI[k] = I[k]; Phi0[k] = 0; C[k] = 1; }
+-    wk.c = wk.v;
++    [unroll] for (uint k = 0; k < MethodBands; k++) { cI[k] = ReferenceDistance * ReferenceDistance * launch; Phi0[k] = 0; C[k] = 1; }
++    wk.iScale = 1; wk.iKeep = 1;
+     // Ray 0 makes the source's straight connection for every ray (it is deterministic).
+-    wk.connectListener = wk.ray == 0; wk.connectEdge = PathBeamsOnly == 0; wk.hasPending = false;
++    wk.connectListener = ray == 0; wk.connectEdge = PathBeamsOnly == 0; wk.hasPending = false;
+ #if PATH_WALK_EDGE
+     wk.connectEdge = false; // (walk diffraction: no edge connections)
+     wk.walkMeta = 0; wk.walkPhiIn = 0; wk.walkM = 1;
+@@ -1181,34 +1093,32 @@ bool PathWalkStart(uint index, out PathWalk wk, out float I[8], out float cI[8],
+ #endif
+     wk.listenerScale = MethodTotalRays / launch; wk.pendingTime = 0; // (the source's exact connection: launch cancels)
+     // Delay rates (the rate channel): the ray's rho so far (-ln of its frequency ratio, "Delay rates" above), and for the
+-    // walk's vertex v and the connections' anchor c theirs up to and including the incoming leg and their point's
+-    // velocity.
++    // anchor c its own up to and including the incoming leg and its point's velocity.
+ #if PATH_DOPPLER
+-    wk.vVelocity = Velocity(MethodState + MethodSourceObject); wk.cVelocity = wk.vVelocity;
+-    wk.rho = 0; wk.vRate = 0; wk.cRate = 0; wk.pendingRate = 0; wk.branchRate = 0;
++    wk.cVelocity = Velocity(MethodState + MethodSourceObject);
++    wk.rho = 0; wk.cRate = 0; wk.pendingRate = 0; wk.branchRate = 0;
+ #endif
+     wk.pendingFrom = 0;
+     wk.events = 0;
+     wk.travelling = false; wk.done = false; wk.fluxPending = false; wk.inBranch = false;
+     wk.p = S; wk.d = 0;
+     wk.Q = 1; wk.tau = 0;
+-    wk.medium = wk.v.medium;
++    wk.medium = wk.c.medium;
+     wk.chain = PathStart(0, 0); wk.branch = wk.chain;
+     wk.branchSum = 0; wk.branchTau = 0; wk.branchSurvival = 1; wk.survival = 1; wk.branchP = 0; wk.branchD = 0;
+     wk.branchMedium = 0;
+     wk.plane = 0; wk.branchPlane = 0;
+-    [unroll] for (uint k1 = 0; k1 < MethodBands; k1++) branchF[k1] = 0;
+     wk.edgeExtent = 1; wk.edgeAngle = 1; wk.edgeM = 1; wk.edgeSinBeta = 1; wk.edgePhiIn = 0; wk.edgeD = 1;
+     // Persistent: the path time this update reaches, whether the current segment's beam is scored, and
+     // how far the ray has come since the segment's start (it may resume in mid-air).
+     // New rays reach half a period in their first update, so that update n covers the path times of every cohort
+     // that are heard within half a period of its state's time (the response is centred on it).
+-    wk.age = 0; wk.target = PathPersistent != 0 ? .5 * PathStep : 1e30; wk.sinceStart = 0;
++    wk.target = PathPersistent != 0 ? .5 * PathStep : 1e30; wk.sinceStart = 0;
+     wk.scored = false; wk.suspending = false; wk.offSurface = false;
+-    if (wk.resumed)
++    if (resumed)
+     {
+-        PathRay r = PathRays[PathReadBase + wk.slot];
+-        wk.p = r.position.xyz; wk.tau = r.position.w; wk.d = r.direction.xyz; wk.age = r.direction.w; wk.target = wk.age + PathStep;
++        PathRay r = PathRays[PathReadBase + slot];
++        wk.p = r.position.xyz; wk.tau = r.position.w; wk.d = r.direction.xyz; wk.target = r.direction.w + PathStep;
+         [unroll] for (uint kr = 0; kr < MethodBands; kr++)
+         {
+             float4 lane = float4((kr & 3) == uint4(0, 1, 2, 3));
+@@ -1227,310 +1137,589 @@ bool PathWalkStart(uint index, out PathWalk wk, out float I[8], out float cI[8],
+         wk.offSurface = (r.meta.x & (4u << 24)) != 0;
+         wk.connectListener = false; wk.connectEdge = false; wk.travelling = true;
+     }
+-    wk.iterations = 0;
++    wk.iterations = 0; wk.stage = StageTop; wk.step = 0;
++    PATH_WAVE_ONLY(wk.anchorFresh = true; wk.branchHeld = true; wk.branchFresh = false;)
+     return true;
+ }
+ 
+-#ifdef PATH_WAVE
+-// Waves (README part 52; Geometry.hlsl "Waves" has the queries' side). The update's walk runs in waves: each wave every ray whose
+-// queries were answered runs its loop until a query is not answered yet (or it ends), records that query and stops; between
+-// waves the queries are answered together (Metal's intersector, or PathWaveTrace in software). A ray's state between waves is
+-// its PathWalk at the start of the loop iteration it stopped in, and the tape of that iteration's answers; the next wave
+-// replays the iteration from there. After the update's waves, the megakernel finishes the rays still going (PathWaveResume).
+-// PathWave (uints, MethodTransport.WaveLayout): a header of PathWaveHeader uints (below), two active lists and the finish list
+-// (uint4 entries: the slot, its first answer, the answers, 0), the query records (3 uint4 each, as Native/AcousticRT reads them),
+-// and a record of PathWaveSlotUints per thread of the first wave: its PathWalk (PathWaveStateUints) and its tape (2 uints an answer).
+-// Header: 0 the queries of this wave, 1 and 2 the active lists' counts, 3 the list the next wave reads, 7 the queries the
+-// intersection answers, 11 the finish list's count, 15 waves run, 16 rays stopped over the waves, 17 queries over the waves, 18 rays
+-// sent to the finish list (the indirect arguments are in PathWaveArguments).
+-void PathWaveStore4(inout uint at, uint4 v) { PathWave.Store4(4 * at, v); at += 4; }
+-// The state at the start of an iteration, and the count of its tape's answers.
+-void PathWalkStore(uint slot, PathWalk wk, float I[8], float cI[8], float Phi0[8], float C[8], float branchF[8], uint tape)
+-{
+-    uint at = PathWaveRecordUints(slot);
+-    PathWaveStore4(at, uint4(wk.ray, wk.slot, wk.rng, wk.events));
+-    PathWaveStore4(at, uint4(wk.iterations, wk.medium, wk.branchMedium, PathWaveFlags(wk)));
+-    PathWaveStore4(at, asuint(float4(wk.v.position, wk.v.time))); PathWaveStore4(at, asuint(float4(wk.v.normal, wk.v.previous.x)));
+-    PathWaveStore4(at, uint4(asuint(wk.v.previous.yz), wk.v.kind, wk.v.edge));
+-    PathWaveStore4(at, asuint(float4(wk.c.position, wk.c.time))); PathWaveStore4(at, asuint(float4(wk.c.normal, wk.c.previous.x)));
+-    PathWaveStore4(at, uint4(asuint(wk.c.previous.yz), wk.c.kind, wk.c.edge));
+-    PathWaveStore4(at, uint4(wk.v.primitive, wk.v.medium, wk.c.primitive, wk.c.medium));
+-    PathWaveStore4(at, asuint(float4(I[0], I[1], I[2], I[3]))); PathWaveStore4(at, asuint(float4(I[4], I[5], I[6], I[7])));
+-    PathWaveStore4(at, asuint(float4(cI[0], cI[1], cI[2], cI[3]))); PathWaveStore4(at, asuint(float4(cI[4], cI[5], cI[6], cI[7])));
+-    PathWaveStore4(at, asuint(float4(Phi0[0], Phi0[1], Phi0[2], Phi0[3]))); PathWaveStore4(at, asuint(float4(Phi0[4], Phi0[5], Phi0[6], Phi0[7])));
+-    PathWaveStore4(at, asuint(float4(C[0], C[1], C[2], C[3]))); PathWaveStore4(at, asuint(float4(C[4], C[5], C[6], C[7])));
+-    PathWaveStore4(at, asuint(wk.pendingLow)); PathWaveStore4(at, asuint(wk.pendingHigh)); PathWaveStore4(at, asuint(float4(wk.pendingFrom, wk.pendingTime)));
+-    PathWaveStore4(at, asuint(float4(wk.listenerScale, wk.Q, wk.tau, wk.survival)));
+-    PathWaveStore4(at, asuint(float4(wk.p, wk.age))); PathWaveStore4(at, asuint(float4(wk.d, wk.target)));
+-    PathWaveStore4(at, PathWaveChainA(wk.chain)); PathWaveStore4(at, PathWaveChainB(wk.chain));
+-    PathWaveStore4(at, PathWaveChainA(wk.branch)); PathWaveStore4(at, PathWaveChainB(wk.branch));
+-    PathWaveStore4(at, asuint(float4(wk.branchSum, wk.branchTau, wk.branchSurvival, wk.sinceStart)));
+-    PathWaveStore4(at, asuint(float4(wk.branchP, wk.rho))); PathWaveStore4(at, asuint(float4(wk.branchD, wk.vRate)));
+-    PathWaveStore4(at, asuint(float4(branchF[0], branchF[1], branchF[2], branchF[3]))); PathWaveStore4(at, asuint(float4(branchF[4], branchF[5], branchF[6], branchF[7])));
+-    PathWaveStore4(at, asuint(wk.plane)); PathWaveStore4(at, asuint(wk.branchPlane));
+-    PathWaveStore4(at, asuint(float4(wk.edgeExtent, wk.edgeAngle, wk.edgeM, wk.edgeSinBeta))); PathWaveStore4(at, asuint(float4(wk.edgePhiIn, wk.edgeD, wk.cRate, wk.pendingRate)));
+-    PathWaveStore4(at, asuint(float4(wk.vVelocity, wk.branchRate))); PathWaveStore4(at, uint4(asuint(wk.cVelocity), tape));
+-}
+-// A thread's ray this wave: the first wave starts every ray (PathWalkStart, slot = thread); later waves take the rays of the
+-// active list (and the finishing walk those of the last active list and of the finish list), with their answers.
+-bool PathWaveEnter(uint index, out PathWalk wk, out float I[8], out float cI[8], out float Phi0[8], out float C[8], out float branchF[8], out uint slot)
++
++// ---- The steps of the walk that query the scene (README part 54) ----
++// The next-event connection's end: its contribution from the transmission and air loss along the line (in pendingLow/High), the
++// line's travel time t and the roulette's keep (s2); the source's own (ray 0) is rendered exactly, as a delayed path, when the
++// update makes audio.
++void PathListenerEnd(inout PathWalk wk, float cI[8], float3 L, float3 S, float3 vL, float t)
+ {
+-    WaveExecuted = -1; WaveStored = 0; WaveNewBase = 0; WaveNewCount = 0; WaveTapeIndex = 0;
+-    if (PathWaveFirst != 0)
++    float factor[8], length0;
++    PathUnpack(wk.pendingLow, wk.pendingHigh, factor);
++    PathListenerEnergy(wk.c, cI, L, wk.listenerScale, factor, t, wk.s2, wk.pendingLow, wk.pendingHigh, wk.pendingTime, wk.pendingFrom, length0);
++    wk.hasPending = true;
++#if PATH_DOPPLER
++    wk.pendingRate = wk.cRate + PathEmit(wk.cVelocity, -wk.pendingFrom * MethodSlowness(AirMedium)) + PathReceive(vL, -wk.pendingFrom * MethodSlowness(AirMedium));
++#endif
++    if (PathAudio != 0 && wk.c.kind == 0)
+     {
+-        slot = MethodRayOffset + index;
+-        WaveTapeBase = PathWaveRecordUints(slot) + PathWaveStateUints;
+-        bool started = PathWalkStart(index, wk, I, cI, Phi0, C, branchF);
+-        if (started) PathWalkStore(slot, wk, I, cI, Phi0, C, branchF, 0); // (the first iteration's start)
+-        return started;
++        PathDirectArrival(S, L, wk.pendingLow, wk.pendingHigh, MethodTotalRays, wk.pendingTime, length0); // exact, rendered as a delayed path
++        wk.hasPending = false;
+     }
+-    uint list = PathWave.Load(4 * (3)), active = PathWave.Load(4 * (1 + list)), at;
+-    wk = (PathWalk)0; slot = 0;
+-    [unroll] for (uint k0 = 0; k0 < MethodBands; k0++) { I[k0] = 0; cI[k0] = 0; Phi0[k0] = 0; C[k0] = 1; branchF[k0] = 0; }
+-    if (index >= active) return false;
+-    at = PathWaveListEntry(list, index);
+-    uint4 entry = PathWave.Load4(4 * at);
+-    slot = entry.x; WaveNewBase = entry.y; WaveNewCount = entry.z;
+-    PathWalkLoad(slot, wk, I, cI, Phi0, C, branchF, WaveStored);
+-    WaveExecuted = (int)WaveStored; // (side effects up to the query the ray stopped on were made: PathFresh)
+-    WaveTapeBase = PathWaveRecordUints(slot) + PathWaveStateUints;
+-    return true;
+ }
+-// An iteration completed within this wave: the state is the next iteration's start, with an empty tape.
+-void PathWaveCheckpoint(PathWalk wk, float I[8], float cI[8], float Phi0[8], float C[8], float branchF[8], uint slot)
++// The connection's line from the anchor to the listener (MethodConnect's).
++float3 PathConnectDirection(MethodAnchor c, float3 L) { return (L - c.position) / length(L - c.position); }
++// The transmission along the line multiplied by the loss over `distance` in `medium`.
++void PathConnectLoss(inout PathWalk wk, uint medium, float distance)
+ {
+-    PathWalkStore(slot, wk, I, cI, Phi0, C, branchF, 0);
+-    WaveExecuted = -1; WaveStored = 0; WaveNewBase = 0; WaveNewCount = 0; WaveTapeIndex = 0;
++    float factor[8];
++    PathUnpack(wk.pendingLow, wk.pendingHigh, factor);
++    [unroll] for (uint k = 0; k < MethodBands; k++) factor[k] *= exp(-2 * MethodLoss(medium, k) * distance);
++    wk.pendingLow = float4(factor[0], factor[1], factor[2], factor[3]); wk.pendingHigh = float4(factor[4], factor[5], factor[6], factor[7]);
+ }
+-// The ray stopped on a query not answered yet: its tape keeps every answer the iteration consumed, the query is recorded, and the
+-// ray joins the next wave's list (or, with a full tape, the finish list). The iteration's start is stored already (by
+-// PathWaveEnter or PathWaveCheckpoint).
+-void PathWaveSuspend(uint slot)
++// The next-event connection, one step (one call site in the walk): its start (ListenerStart: the first hit, unless it is the source's exact one or nothing transmits), or
++// the answer to its query. Through walls it is MethodConnect in stages: the line from the anchor to the listener with the
++// transmission of every crossing (once per partition: its far face, ConnectExit) and the loss of each medium.
++void PathListenerStep(inout PathWalk wk, uint stage, PathAnswer answer, float cI[8], float3 L, float3 S, float3 vL, inout PathQuery q)
+ {
+-    uint tape = WaveStored + WaveNewCount, at = PathWaveRecordUints(slot);
+-    [loop] for (uint k = WaveStored; k < tape; k++)
++    wk.stage = StageTop;
++    bool connect = false, next = false, located = false, tail = false, end = false;
++    float t = 0;
++    float3 d = PathConnectDirection(wk.c, L);
++    if (stage == StageListenerStart)
+     {
+-        uint2 answer = PathAnswers[WaveNewBase + k - WaveStored].xy;
+-        PathWave.Store(4 * (WaveTapeBase + 2 * k), answer.x); PathWave.Store(4 * (WaveTapeBase + 2 * k + 1), answer.y);
++        wk.hasPending = false;
++        float3 w = L - wk.c.position;
++        float distance = length(w);
++        w /= distance;
++        if (distance > RayEpsilon && EnergyDirectivity(wk.c, w) != 0)
++        {
++            bool exact = wk.c.kind == 0;
++            if (!exact && MethodAnyTransmission != 0 && (PathProfileFlags & 16) == 0) // (bit 4: always trace, a check of this roulette)
++            {
++                q = PathQueryRay(wk.c.position, w, RayEpsilon, distance - RayEpsilon, false, 1);
++                wk.stage = StageListener;
++            }
++            else if ((PathProfileFlags & 16384) == 0 || exact) { wk.s2 = 1; connect = true; } // (bit 14: unobstructed connections only)
++        }
+     }
+-    PathWave.Store(4 * (at + PathWaveStateUints - 1), tape); // (the tape's count, PathWalkStore's last word)
+-    uint entry, queries = 0, first = 0;
+-    if (WaveFinish) { PathWave.InterlockedAdd(4 * (11), 1u, entry); entry = PathWaveListEntry(2, entry); PathWave.InterlockedAdd(4 * (18), 1u); }
+-    else
++    else if (stage == StageListener)
+     {
+-        queries = 1;
+-        PathWave.InterlockedAdd(4 * (0), queries, first);
+-        uint record = PathWaveQueryBase + 12 * first;
+-        PathWave.Store4(4 * record, WaveRecord0); PathWave.Store4(4 * (record + 4), WaveRecord1); PathWave.Store4(4 * (record + 8), WaveRecord2);
+-        uint next = 1 - PathWave.Load(4 * (3));
+-        PathWave.InterlockedAdd(4 * (1 + next), 1u, entry); entry = PathWaveListEntry(next, entry);
++        if (answer.hit == 0xffffffff)
++        {
++            // Nothing in between: one medium, no crossing loop needed.
++            float distance = length(L - wk.c.position);
++            wk.pendingLow = 1; wk.pendingHigh = 1; wk.s2 = 1;
++            PathConnectLoss(wk, wk.c.medium, distance);
++            t = distance * MethodSlowness(wk.c.medium); end = true;
++        }
++        else
++        {
++            float keep = 0;
++            [unroll] for (uint k2 = 0; k2 < MethodBands; k2++)
++            {
++                RayMaterial m = MethodSurface(answer.hit, k2);
++                keep = max(keep, m.medium.w != 0 ? 0 : saturate((1 - m.surface.x) * m.surface.z));
++            }
++            if (RandomRay(wk.rng) < keep && (PathProfileFlags & 16384) == 0) { wk.s2 = keep; connect = true; }
++        }
+     }
+-    PathWave.Store4(4 * entry, uint4(slot, first, queries, 0));
+-}
+-#endif
+-
+-// One flat loop; every heavy helper has a single call site. Each iteration either deposits the
+-// pending contribution, makes one connection, or traces one segment (or, persistent, the part of it
+-// that fits in the update). The wave walk (PATH_WAVE) runs the same loop, one wave at a time ("Waves").
+-void TracePath(uint index)
+-{
+-    PathWalk wk;
+-    float I[8], cI[8], Phi0[8], C[8], branchF[8];
+-#ifdef PATH_WAVE
+-    uint waveSlot;
+-    if (!PathWaveEnter(index, wk, I, cI, Phi0, C, branchF, waveSlot)) return;
+-    uint passIterations = 0;
+-#else
+-    if (!PathWalkStart(index, wk, I, cI, Phi0, C, branchF)) return;
+-#endif
+-    float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
+-    bool airListener = PATH_CLEARANCE_READ[2] == AirMedium;
+-    bool edges = MethodEdgeCount > 0 && DiffractionFactor > 0;
+-#if PATH_DOPPLER
+-    float3 vL = Velocity(MethodState + MethodListenerObject); // the listener's velocity
+-#endif
+-    [loop] for (;;)
++    else if (stage == StageConnectClear)
+     {
+-#ifdef PATH_WAVE
+-        if (PathWaveYielded()) break;
+-        if (passIterations++ > 0) PathWaveCheckpoint(wk, I, cI, Phi0, C, branchF, waveSlot); // an iteration completed in this wave: the next one's start
+-#endif
+-        wk.iterations++;
+-        if (wk.hasPending && wk.skipPending) wk.hasPending = false;
+-        wk.skipPending = false;
+-        if (wk.hasPending)
++        if (answer.hit == 0xffffffff)
+         {
+-            wk.hasPending = false;
+-            // Persistent: heard ceil((time - target) / step) updates from now (this update's rays reach path time `target`).
+-            // The ring is deep enough for any connection in the scene (MethodTransport.RingSlots); one heard later
+-            // still is counted (PathLive[PathRingFar]) and asserted absent by the checks.
+-            float aheadUpdates = PathPersistent != 0 ? max(0, ceil((wk.pendingTime - wk.target) / PathStep)) : 0;
+-            if (aheadUpdates > (float)PathRingSlots - 1 && wk.pendingTime <= MethodHorizon && PATH_FRESH) InterlockedAdd(PathLive[PathRingFar], 1u); // (later than the horizon: dropped)
+-            uint ahead = (uint)min(aheadUpdates, (float)PathRingSlots - 1);
+-            // (This update's rays reach path time `target`; its own time is half a period before, PathStep later per slot ahead.)
+-#if PATH_DOPPLER
+-            float heard = PathPersistent != 0 ? wk.pendingTime - (wk.target - .5 * PathStep) - ahead * PathStep : 0;
+-            PathDeposit(wk.pendingFrom, wk.pendingLow, wk.pendingHigh, wk.pendingTime, HashRay(wk.rng ^ (wk.events * 0x85ebca6bu)), ahead, 1 - exp(-wk.pendingRate), heard);
+-#else
+-            PathDeposit(wk.pendingFrom, wk.pendingLow, wk.pendingHigh, wk.pendingTime, HashRay(wk.rng ^ (wk.events * 0x85ebca6bu)), ahead);
+-#endif
++            float total = length(L - wk.c.position);
++            PathConnectLoss(wk, AirMedium, total);
++            t = total / SpeedOfSound; end = true;
+         }
+-#if PATH_WALK_EDGE
+-        if ((wk.done || wk.suspending) && wk.walkSlot.sum > 0)
++    }
++    else if (stage == StageConnectCross)
++    {
++        if (answer.hit == 0xffffffff) tail = true; // (no more surfaces)
++        else
+         {
+-            // The kept diffraction candidate becomes a diffracted ray (after roulette on its summed weight, as a branch): this
+-            // ray, once it has ended, or a ray of its own queued after the loop when this one stops for the update.
+-            float keepWalk = min(1, wk.walkSlot.sum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+-            wk.walkQueued = RandomRay(wk.rng) < keepWalk;
+-            if (wk.walkQueued) wk.walkQueued = PathWalkLaunch(wk.walkSlot, keepWalk, wk.rng, wk.walkD, wk.walkLow, wk.walkHigh);
+-            wk.walkSlot.sum = 0;
+-            if (!wk.suspending)
++            float factor[8];
++            PathUnpack(wk.pendingLow, wk.pendingHigh, factor);
++            wk.s1 += answer.distance * MethodSlowness(wk.u0);
++            bool passes = false;
++            [unroll] for (uint k3 = 0; k3 < MethodBands; k3++)
+             {
+-                if (!wk.walkQueued) continue; // (the next iteration takes the transmitted branch, if any)
+-                wk.walkQueued = false;
+-                wk.d = wk.walkD;
+-                [unroll] for (uint kw0 = 0; kw0 < MethodBands; kw0++) { float4 lane = float4((kw0 & 3) == uint4(0, 1, 2, 3)); Phi0[kw0] = dot(kw0 < 4 ? wk.walkLow : wk.walkHigh, lane); C[kw0] = 1; }
+-                wk.p = wk.walkSlot.e; wk.tau = wk.walkSlot.tau; wk.medium = AirMedium; wk.Q = 1; wk.survival = wk.walkSlot.survival;
+-                wk.chain = PathStart(2, wk.tau); wk.chain.edge = wk.walkSlot.meta & 0xffffff;
+-                wk.walkMeta = wk.walkSlot.meta | PathWalkFirst; wk.walkPhiIn = wk.walkSlot.phiIn; wk.walkM = wk.walkSlot.m;
+-                wk.plane = float4(wk.d, -1e30); wk.offSurface = false; wk.scored = false; wk.sinceStart = 0;
+-                wk.fluxPending = false; wk.travelling = true; wk.done = false; wk.inBranch = true;
+-                MethodCount(CounterEdgeEvents);
++                RayMaterial m = MethodSurface(answer.hit, k3);
++                float transmitted = m.medium.w != 0 ? 0 : saturate((1 - m.surface.x) * m.surface.z);
++                factor[k3] *= exp(-2 * MethodLoss(wk.u0, k3) * answer.distance) * transmitted;
++                passes = passes || factor[k3] > 0;
++            }
++            wk.pendingLow = float4(factor[0], factor[1], factor[2], factor[3]); wk.pendingHigh = float4(factor[4], factor[5], factor[6], factor[7]);
++            if (passes)
++            {
++                wk.sp += d * answer.distance; wk.s0 -= answer.distance;
++                if (MethodRefracts(answer.hit)) located = true;
++                else
++                {
++                    // The partition's far face (Transport.hlsl PartitionExit): its transmission was the whole assembly's.
++                    wk.u1 = Primitives[answer.hit].indices.x; wk.s3 = 2 * RayEpsilon;
++                    q = PathQueryRay(wk.sp + d * wk.s3, d, RayEpsilon, PartitionDepth - wk.s3, false, 2);
++                    wk.stage = StageConnectExit;
++                }
+             }
+         }
+-#endif
+-        if (wk.suspending) break;
+-        if (wk.connectListener)
++    }
++    else if (stage == StageConnectExit)
++    {
++        uint tries = wk.step >> 8;
++        bool again = false;
++        if (answer.hit != 0xffffffff && Primitives[answer.hit].indices.x == wk.u1)
+         {
+-            wk.connectListener = false;
+-            float length0;
+-            if ((PathProfileFlags & 4) != 0 && wk.ray != 0) continue;
+-            wk.hasPending = PathListener(wk.c, cI, L, wk.listenerScale, wk.c.kind == 0, wk.rng, wk.pendingLow, wk.pendingHigh, wk.pendingTime, wk.pendingFrom, length0);
+-#if PATH_DOPPLER
+-            wk.pendingRate = wk.cRate + PathEmit(wk.cVelocity, -wk.pendingFrom * MethodSlowness(AirMedium)) + PathReceive(vL, -wk.pendingFrom * MethodSlowness(AirMedium));
+-#endif
+-            if (wk.hasPending && PathAudio != 0 && wk.c.kind == 0)
++            float depth = wk.s3 + answer.distance;
++            if (depth < wk.s0)
+             {
+-                PathDirectArrival(S, L, wk.pendingLow, wk.pendingHigh, MethodTotalRays, wk.pendingTime, length0); // exact, rendered as a delayed path
+-                wk.hasPending = false;
++                wk.s1 += depth * MethodSlowness(wk.u0);
++                PathConnectLoss(wk, wk.u0, depth);
++                wk.sp += d * depth; wk.s0 -= depth;
+             }
+-            continue;
+         }
+-        if (wk.connectEdge)
++        else if (answer.hit != 0xffffffff)
+         {
+-            wk.connectEdge = false;
+-            if ((PathProfileFlags & 8) != 0) continue;
++            wk.s3 += answer.distance + 2 * RayEpsilon;
++            tries++;
++            again = wk.s3 < PartitionDepth && tries < 4;
++        }
++        if (again)
++        {
++            wk.step = (wk.step & 0xff) | tries << 8;
++            q = PathQueryRay(wk.sp + d * wk.s3, d, RayEpsilon, PartitionDepth - wk.s3, false, 2);
++            wk.stage = StageConnectExit;
++        }
++        else located = true;
++    }
++    else if (stage == StageConnectMedium) { wk.u0 = answer.hit; wk.step = (wk.step & 0xff) + 1; next = true; }
++    if (connect)
++    {
++        // MethodConnect's start: visibility alone where nothing in the scene transmits, else the line through the walls.
++        wk.pendingLow = 1; wk.pendingHigh = 1;
++        float total = length(L - wk.c.position);
++        if (total <= 2 * RayEpsilon) end = true;
++        else if (MethodAnyTransmission == 0 && wk.c.medium == AirMedium)
++        {
++            q = PathQueryRay(wk.c.position, (L - wk.c.position) / total, RayEpsilon, total - RayEpsilon, true, 2);
++            wk.stage = StageConnectClear;
++        }
++        else { wk.sp = wk.c.position; wk.s0 = total; wk.s1 = 0; wk.u0 = wk.c.medium; wk.step = 0; next = true; }
++    }
++    if (located) { q = PathQueryMedium(wk.sp + d * (2 * RayEpsilon), 2); wk.stage = StageConnectMedium; }
++    if (next)
++    {
++        // The line from where it has reached (sp, with s0 left) on: the next surface on it, or its end in the last medium.
++        if ((wk.step & 0xff) < 64 && wk.s0 > 2 * RayEpsilon) { q = PathQueryRay(wk.sp, d, RayEpsilon, wk.s0 - RayEpsilon, false, 2); wk.stage = StageConnectCross; }
++        else tail = true;
++    }
++    if (tail) { t = wk.s1 + wk.s0 * MethodSlowness(wk.u0); PathConnectLoss(wk, wk.u0, wk.s0); end = true; }
++    if (end) PathListenerEnd(wk, cI, L, S, vL, t);
++}
++// An edge connection's next visibility leg (from leg `step` on; a leg shorter than 2 RayEpsilon needs no query), and its
++// contribution once every leg is visible.
++void PathEdgeNext(inout PathWalk wk, PathEdgeSample s, float cI[8], float3 L, float3 vL, inout PathQuery q)
++{
++    uint legs = PathEdgeLegs(s);
++    bool asked = false;
++    [unroll] for (uint leg = 0; leg < 3; leg++)
++    {
++        if (asked || leg < wk.step || leg >= legs) continue;
++        float3 start, end;
++        PathEdgeLeg(s, wk.c.position, L, leg, start, end);
++        asked = PathVisibleQuery(start, end, 3, q);
++        if (asked) wk.step = leg;
++    }
++    if (asked) { wk.stage = StageEdge; return; }
+ #if PATH_DOPPLER
+-            wk.hasPending = PathEdgeConnection(wk.c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, wk.cRate, wk.cVelocity, vL, wk.rng, wk.pendingLow, wk.pendingHigh, wk.pendingTime, wk.pendingFrom, wk.pendingRate);
++    wk.hasPending = PathEdgeEnergy(s, wk.c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, wk.cRate, wk.cVelocity, vL, wk.pendingLow, wk.pendingHigh, wk.pendingTime, wk.pendingFrom, wk.pendingRate);
+ #else
+-            wk.hasPending = PathEdgeConnection(wk.c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, wk.rng, wk.pendingLow, wk.pendingHigh, wk.pendingTime, wk.pendingFrom);
++    wk.hasPending = PathEdgeEnergy(s, wk.c, float4(cI[0], cI[1], cI[2], cI[3]), float4(cI[4], cI[5], cI[6], cI[7]), L, wk.pendingLow, wk.pendingHigh, wk.pendingTime, wk.pendingFrom);
+ #endif
+-            continue;
+-        }
+-        if (wk.done)
+-        {
++}
++// An edge connection's step: its draw (step ~0: from the walk's random numbers), or the answer to its leg `step` (blocked: no
++// connection; visible: the same sample drawn again from the same numbers, and the next leg).
++void PathEdgeStep(inout PathWalk wk, PathAnswer answer, float cI[8], float3 L, float3 vL, inout PathQuery q)
++{
++    bool drawn = wk.step == 0xffffffff;
++    if (drawn) { wk.hasPending = false; wk.u0 = wk.rng; wk.step = 0; }
++    else if (answer.hit != 0xffffffff) return;
++    else wk.step++;
++    uint rng = wk.u0;
++    PathEdgeSample s;
++    bool valid = PathEdgeDraw(wk.c, L, rng, s);
++    if (drawn) wk.rng = rng;
++    if (valid) PathEdgeNext(wk, s, cI, L, vL, q);
++}
++// The rest of an edge ray's start, once its edge point is visible from the source: its direction on Keller's cone and its flux
++// (completed at its first hit: UTD's distance parameter). Its edge (u0), point along it (s0) and probability (s1) were drawn.
++bool PathEdgeRay(inout PathWalk wk)
++{
++    float3 a, u, f, nn; float extent, angle;
++    uint edge = wk.u0;
++    EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
++    float3 e = a + wk.s0 * u, w = e - wk.c.position;
++    float m = length(w);
++    w /= m;
++    float cosBeta = dot(w, u);
++    wk.edgeSinBeta = sqrt(max(0, 1 - cosBeta * cosBeta));
++    wk.edgeD = EnergyDirectivity(wk.c, w);
++    if (wk.edgeD == 0 || wk.edgeSinBeta <= 1e-4) return false;
++    wk.edgePhiIn = TunedEdgeAngle(wk.c.position - e, f, nn, angle);
++    float phi = RandomRay(wk.rng) * angle;
++    wk.d = normalize(u * cosBeta + wk.edgeSinBeta * (f * cos(phi) + nn * sin(phi)));
++    wk.edgeAngle = angle; wk.edgeM = m;
++#if PATH_DOPPLER
++    float3 vEdge = PointVelocity(MethodState + Edges[edge].ids.x, e);
++    wk.rho = wk.cRate + PathEmit(wk.cVelocity, w * MethodSlowness(AirMedium)) + PathReceive(vEdge, w * MethodSlowness(AirMedium)) + PathEmit(vEdge, wk.d * MethodSlowness(AirMedium));
++#endif
++    wk.tau = wk.c.time + m * MethodSlowness(AirMedium);
++    wk.p = e; wk.Q = 1; wk.fluxPending = true;
++    wk.chain = PathStart(2, wk.tau);
++    wk.chain.edge = edge; wk.chain.edgePhi = phi; wk.chain.edgePick = wk.s1;
++    wk.plane = float4(wk.d, -1e30); // (beams only: no plane to stand in front of; the normal sets the start inset)
++    MethodCount(CounterEdgeEvents);
++    return true;
++}
++// The segment's query, from the ray's position along its direction up to the horizon.
++void PathSegmentAsk(inout PathWalk wk, inout PathQuery q, inout bool stop)
++{
++    if (++wk.events >= MethodMaxEvents) { MethodCount(CounterEventCap); stop = true; return; }
++    float limit = (MethodHorizon - wk.tau) / MethodSlowness(wk.medium);
++    if (limit <= 0) { MethodCount(CounterHorizon); wk.done = true; return; }
++    // A segment that leaves a surface starts RayEpsilon out along that surface's outgoing normal and is traced
++    // from zero distance: a fixed minimum distance would skip another object's surface within RayEpsilon of the
++    // start (a mullion's face meeting a window pane let rays into the pane, where they bounced for hundreds of events).
++    // (Profiling bit 15: every segment is traced twice, the same query, so the extra time is one traversal per segment.)
++    q = PathQueryRay(wk.p, wk.d, wk.offSurface ? 0 : RayEpsilon, limit, false, 0);
++    wk.stage = StageSegment; wk.step = (PathProfileFlags & 32768) != 0 ? 1u : 0u;
++}
++// The part of the segment this update covers (all of it in the full solve); an escaping segment ends at the horizon.
++void PathSegmentSpan(PathWalk wk, bool found, float distance, out float limit, out float segment, out float advance, out bool ends)
++{
++    limit = (MethodHorizon - wk.tau) / MethodSlowness(wk.medium);
++    segment = found ? distance : limit;
++    advance = found ? min(distance, max(0, (wk.target - wk.tau) / MethodSlowness(wk.medium))) : segment;
++    // (Never stop within a few RayEpsilon of the hit: the resumed trace starts RayEpsilon out and would miss it.)
++    ends = advance >= segment - 4 * RayEpsilon;
++}
++// Beam kernel at the listener of the ray's unfolded line (this segment extended): each prefix of the
++// chain (one listener image) is scored once, by its own segment, whether or not the closest approach
++// falls inside the segment (persistent: in the update during which the ray passes the closest point,
++// or at the segment's end); the listener must be in front of the latest plane and visible from the
++// segment. Width and time use the unfolded distance from the chain's origin to the listener image.
++bool PathBeamDue(PathWalk wk, float3 L, float advance, bool ends, bool airListener)
++{
++    float along = dot(L - wk.p, wk.d);
++    return !wk.scored && (along < advance || ends) && (wk.chain.reflections >= 1 || (PathBeamsOnly != 0 && wk.chain.kind != 0)
+ #if PATH_WALK_EDGE
+-            wk.walkMeta = 0;
++        || (wk.walkMeta & PathWalkFirst) != 0 // (a diffracted ray's first segment, in either mode)
+ #endif
+-            if (!(wk.branchSum > 0)) break;
+-            // Trace the kept transmitted branch from its surface, after roulette on its share of a
+-            // source ray's flux (4 pi r_ref^2).
+-            float keep = min(1, wk.branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+-            if (RandomRay(wk.rng) >= keep) break;
+-            [unroll] for (uint k2 = 0; k2 < MethodBands; k2++) { Phi0[k2] = branchF[k2] * wk.branchSum / keep; C[k2] = 1; }
+-            wk.p = wk.branchP + wk.branchPlane.xyz * RayEpsilon; wk.offSurface = true;
+-            wk.d = wk.branchD; wk.medium = wk.branchMedium; wk.tau = wk.branchTau; wk.Q = 1; wk.survival = wk.branchSurvival; wk.plane = wk.branchPlane;
+-#if PATH_DOPPLER
+-            wk.rho = wk.branchRate;
++        ) && wk.medium == AirMedium && airListener && dot(L, wk.plane.xyz) > wk.plane.w;
++}
++// The beam's contribution, once the listener is visible from the segment.
++void PathBeam(inout PathWalk wk, float Phi0[8], float C[8], float3 L, float3 vL)
++{
++    float along = dot(L - wk.p, wk.d);
++    float3 offset = L - wk.p - wk.d * along;
++    float rho2 = dot(offset, offset), lc = wk.chain.travelled + along;
++    float lu = sqrt(max(lc * lc + rho2, RayEpsilon * RayEpsilon));
++    float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PATH_CLEARANCE_READ[0]);
++    float4 sumLow = 0, sumHigh = 0;
++    float extra = lu - wk.chain.travelled; // unfolded distance from here to the listener image
++#if PATH_WALK_EDGE
++    // A diffracted ray's first segment: |D|^2 sin^2(beta) at the listener's own azimuth and distance.
++    bool walkScore = (wk.walkMeta & PathWalkFirst) != 0;
++    float walkAngle = 1, walkPhiL = 0, walkSinBeta = 1;
++    if (walkScore)
++    {
++        float3 wa, wu, wf, wn; float wextent;
++        EdgeFrame(wk.walkMeta & 0xffffff, MethodState, false, wa, wu, wf, wn, wextent, walkAngle);
++        float cb = dot(wk.d, wu);
++        walkSinBeta = sqrt(max(0, 1 - cb * cb)); walkPhiL = TunedEdgeAngle(L - (wk.p - wk.d * wk.chain.travelled), wf, wn, walkAngle);
++    }
+ #endif
+-            wk.chain = wk.branch;
+-            wk.fluxPending = false; wk.travelling = true; wk.done = false; wk.branchSum = 0; wk.inBranch = true; wk.scored = false; wk.sinceStart = 0;
+-            MethodCount(CounterBranches);
+-        }
+-        if (!wk.travelling)
+-        {
+-            if (++wk.events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
+-            bool edgeRays = edges && wk.v.kind == 0 && METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
++    [unroll] for (uint kb = 0; kb < MethodBands; kb++)
++    {
++        float4 lane = float4((kb & 3) == uint4(0, 1, 2, 3));
++        float w2 = w20 / (float)(1u << kb);
++        float value = Phi0[kb] * C[kb] / wk.Q * 2 / (RayPi * w2) * exp(-2 * rho2 / w2) / (1 - exp(-2 * clearance * clearance / w2)) *
++                      exp(-2 * MethodLoss(AirMedium, kb) * extra);
+ #if PATH_WALK_EDGE
+-            edgeRays = false; // (walk diffraction: no edge rays from the source)
++        if (walkScore) value *= PathWalkD(wk.walkMeta, walkAngle, wk.walkPhiIn, wk.walkM, walkPhiL, walkSinBeta, lc, kb);
+ #endif
+-            bool viaEdge = edgeRays && RandomRay(wk.rng) < MethodEdgeProbability;
+-            [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) C[k3] = 1;
+-            wk.medium = wk.v.medium;
+-            wk.scored = false; wk.sinceStart = 0;
+-            if (viaEdge)
+-            {
+-                float3 a, u, f, nn; float extent, angle, z0, r, edgePick;
+-                uint edge = EnergySampleEdge(RandomRay(wk.rng), edgePick);
+-                EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
+-                float span = EnergyEdgeSpan(a, u, extent, wk.v.position, z0, r);
+-                float z = clamp(z0 + r * tan(atan(-z0 / r) + RandomRay(wk.rng) * span), 0, extent);
+-                float3 e = a + z * u, w = e - wk.v.position;
+-                float m = length(w);
+-                wk.edgeExtent = (r * r + (z - z0) * (z - z0)) * span / r; // 1 / (density of the point on the edge)
+-                PROFILE_KIND(7);
+-                if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle || !Visible(MethodState, wk.v.position, e, false)) { wk.done = true; continue; }
+-                w /= m;
+-                float cosBeta = dot(w, u);
+-                wk.edgeSinBeta = sqrt(max(0, 1 - cosBeta * cosBeta));
+-                wk.edgeD = EnergyDirectivity(wk.v, w);
+-                if (wk.edgeD == 0 || wk.edgeSinBeta <= 1e-4) { wk.done = true; continue; }
+-                wk.edgePhiIn = TunedEdgeAngle(wk.v.position - e, f, nn, angle);
+-                float phi = RandomRay(wk.rng) * angle;
+-                wk.d = normalize(u * cosBeta + wk.edgeSinBeta * (f * cos(phi) + nn * sin(phi)));
+-                wk.edgeAngle = angle; wk.edgeM = m;
++        if (kb < 4) sumLow += value * lane; else sumHigh += value * lane;
++    }
++    if (dot(sumLow + sumHigh, 1) > 0)
++    {
++        wk.hasPending = true; wk.pendingLow = sumLow; wk.pendingHigh = sumHigh;
++        wk.pendingTime = wk.chain.time + lu * MethodSlowness(AirMedium); wk.pendingFrom = -wk.d;
+ #if PATH_DOPPLER
+-                float3 vEdge = PointVelocity(MethodState + Edges[edge].ids.x, e);
+-                wk.rho = wk.vRate + PathEmit(wk.vVelocity, w * MethodSlowness(AirMedium)) + PathReceive(vEdge, w * MethodSlowness(AirMedium)) + PathEmit(vEdge, wk.d * MethodSlowness(AirMedium));
++        wk.pendingRate = wk.rho + PathReceive(vL, wk.d * MethodSlowness(AirMedium));
+ #endif
+-                wk.tau = wk.v.time + m * MethodSlowness(AirMedium);
+-                wk.p = e; wk.Q = 1; wk.fluxPending = true;
+-                wk.chain = PathStart(2, wk.tau);
+-                wk.chain.edge = edge; wk.chain.edgePhi = phi; wk.chain.edgePick = edgePick;
+-                wk.plane = float4(wk.d, -1e30); // (beams only: no plane to stand in front of; the normal sets the start inset)
+-                MethodCount(CounterEdgeEvents);
+-                // Edge rays and source edge connections share the edge's energy kernel; a pending
+-                // flux is completed at the first hit (UTD's distance parameter).
+-                [unroll] for (uint k4 = 0; k4 < MethodBands; k4++) Phi0[k4] = I[k4];
+-            }
+-            else
+-            {
+-                float3 w0 = wk.v.kind == 1 ? MethodCosineDirection(wk.v.normal, wk.rng) : UnitDirection(wk.rng, false);
+-                float pdf = wk.v.kind == 1 ? max(1e-12, dot(w0, wk.v.normal)) / RayPi : 1 / (4 * RayPi);
+-                float D = EnergyDirectivity(wk.v, w0);
+-                if (D == 0) { wk.done = true; continue; }
+-                [unroll] for (uint k5 = 0; k5 < MethodBands; k5++) Phi0[k5] = I[k5] * D / pdf;
+-                wk.Q = edgeRays ? 1 - MethodEdgeProbability : 1;
+-                wk.p = wk.v.position; wk.d = w0; wk.tau = wk.v.time;
++    }
++}
++// The surface's energy fractions per band at the hit (absorbed, transmitted eT, scattered eD, specular eS) and their band sums,
++// with the transmitted part of the ray's flux (the reservoir's candidate) and its largest band.
++void PathEventShares(uint hit, float cosI, float Phi0[8], float C[8], float Q, out float eT[8], out float eD[8], out float eS[8],
++                     out float mT, out float mD, out float mS, out float part[8], out float partWeight)
++{
++    mT = 0; mD = 0; mS = 0; partWeight = 0;
++    [unroll] for (uint k8 = 0; k8 < MethodBands; k8++)
++    {
++        RayMaterial mat = MethodSurface(hit, k8);
++        bool impedance = mat.medium.w != 0;
++        eT[k8] = impedance ? 0 : saturate((1 - mat.surface.x) * mat.surface.z);
++        eD[k8] = impedance ? 0 : saturate((1 - mat.surface.x) * (1 - mat.surface.z) * mat.surface.y);
++        eS[k8] = EnergySpecular(mat, cosI);
++        mT += eT[k8]; mD += eD[k8]; mS += eS[k8];
++    }
++    [unroll] for (uint k10 = 0; k10 < MethodBands; k10++) { part[k10] = Phi0[k10] * C[k10] * eT[k10] / Q; partWeight = max(partWeight, part[k10]); }
++}
++// Where a transmission at the hit (u1) goes (README part 50): out of a partition's far face, undeviated, into the medium the ray
++// was in (the exit leaves every object entered on the way, so the ray is again inside exactly what contained it: no point
++// location is needed, unless the mesh leaks), or into the medium behind the surface. The partition's way out: PathExit below.
++void PathCrossingAsk(inout PathWalk wk, inout PathQuery q)
++{
++    if (MethodRefracts(wk.u1)) { q = PathQueryMedium(wk.p + wk.d * 2 * RayEpsilon, 6); wk.stage = StageMedium; return; }
++    wk.s1 = 2 * RayEpsilon; wk.step = 0;
++    q = PathQueryRay(wk.p + wk.d * wk.s1, wk.d, RayEpsilon, PartitionDepth - wk.s1, false, 5);
++    wk.stage = StageExit;
++}
++#if PATH_WALK_EDGE
++// After the kept diffraction candidate's launch: this ray goes on as the diffracted ray once it has ended (or keeps it for after
++// the update); true: the iteration ends here (the next one takes the transmitted branch, if any).
++bool PathWalkLanded(inout PathWalk wk, inout float Phi0[8], inout float C[8])
++{
++    wk.walkSlot.sum = 0;
++    if (wk.suspending) return false;
++    if (!wk.walkQueued) return true;
++    wk.walkQueued = false;
++    wk.d = wk.walkD;
++    [unroll] for (uint kw0 = 0; kw0 < MethodBands; kw0++) { float4 lane = float4((kw0 & 3) == uint4(0, 1, 2, 3)); Phi0[kw0] = dot(kw0 < 4 ? wk.walkLow : wk.walkHigh, lane); C[kw0] = 1; }
++    wk.p = wk.walkSlot.e; wk.tau = wk.walkSlot.tau; wk.medium = AirMedium; wk.Q = 1; wk.survival = wk.walkSlot.survival;
++    wk.chain = PathStart(2, wk.tau); wk.chain.edge = wk.walkSlot.meta & 0xffffff;
++    wk.walkMeta = wk.walkSlot.meta | PathWalkFirst; wk.walkPhiIn = wk.walkSlot.phiIn; wk.walkM = wk.walkSlot.m;
++    wk.plane = float4(wk.d, -1e30); wk.offSurface = false; wk.scored = false; wk.sinceStart = 0;
++    wk.fluxPending = false; wk.travelling = true; wk.done = false; wk.inBranch = true;
++    MethodCount(CounterEdgeEvents);
++    return false;
++}
++#endif
++
++// Waves (README parts 52 and 54). The update's walk runs in waves: in each wave every ray whose query was answered resumes the
++// walk's loop with its answer and runs until it has set up its next query (or ends); the query is recorded and the ray stops.
++// Between waves the queries are answered together: closest and any-hit queries by Metal's intersector (Native/AcousticRT) or by
++// PathWaveTrace in software, point location by PathWaveTrace. The last wave (PathWaveFinish) answers its rays' queries in the
++// loop itself, in software, until they end. A stopped ray keeps only what its stage needs, by sections: the core always; the
++// stage's own values for the stages that have them; the anchor while a connection or a new direction needs it (written in the wave
++// that set it); the pending contribution; the edge ray's state while its flux is pending; and the branch reservoir, read only
++// where the walk reads it (a branch traced or queued) and written only in the wave that kept it.
++// PathWave (uints, MethodTransport.WaveLayout): a header of 32 uints, two active lists (uint4 entries: the slot and its answer's
++// index), the ray queries' records and the point queries' records (3 uint4 each, as Native/AcousticRT reads them), the poses
++// (Native/AcousticRT's copy) and a record of PathWaveSlotUints per thread of the first wave.
++// Header: 0 the ray queries of this wave, 1 and 2 the active lists' counts, 3 the list the next wave reads, 4 the point queries of
++// this wave, 7 and 8 the ray and point queries being answered, 15 waves run, 16 rays stopped over the waves, 17 queries over the
++// waves, 18 rays the last wave finished. The indirect arguments are in PathWaveArguments.
++uint PathWaveFirst, PathWaveFinish, PathWaveHardware, PathWaveListBase, PathWaveListCapacity, PathWaveQueryBase, PathWavePointBase, PathWaveStateBase;
++uint PathWaveListEntry(uint list, uint index) { return PathWaveListBase + 4 * (list * PathWaveListCapacity + index); }
++#ifdef PATH_WAVE
++// A slot's sections (uints): core 44, the stage's values 12, anchor 28, pending 16, branch 28, edge ray 12.
++static const uint PathWaveAtScratch = 44, PathWaveAtAnchor = 56, PathWaveAtPending = 84, PathWaveAtBranch = 100, PathWaveAtEdge = 128, PathWaveSlotUints = 140;
++static uint WaveSlot = 0;
++uint PathWaveAt(uint section) { return PathWaveStateBase + WaveSlot * PathWaveSlotUints + section; }
++uint4 PathWaveGet(uint at) { return PathWave.Load4(4 * at); }
++float4 PathWaveGetF(uint at) { return asfloat(PathWave.Load4(4 * at)); }
++void PathWavePut(uint at, uint4 v) { PathWave.Store4(4 * at, v); }
++void PathWavePutF(uint at, float4 v) { PathWave.Store4(4 * at, asuint(v)); }
++bool PathWaveScratchLive(uint stage) { return stage != StageSegment && stage != StageListener; }
++bool PathWaveAnchorLive(PathWalk wk) { return (wk.stage >= StageListener && wk.stage <= StageEdgeRay) || wk.connectListener || wk.connectEdge || !wk.travelling; }
++bool PathWaveEdgeLive(PathWalk wk) { return wk.fluxPending || wk.stage == StageEdgeRay; } // (the edge ray's point density is drawn before its query)
++bool PathWavePendingLive(PathWalk wk) { return wk.hasPending || (wk.stage >= StageConnectClear && wk.stage <= StageConnectMedium); }
++void PathWaveStore(PathWalk wk, float cI[8], float Phi0[8], float C[8], float branchF[8])
++{
++    uint at = PathWaveAt(0);
++    uint flags = (wk.connectListener ? 1u : 0u) | (wk.connectEdge ? 2u : 0u) | (wk.hasPending ? 4u : 0u) | (wk.travelling ? 8u : 0u) | (wk.done ? 16u : 0u) |
++                 (wk.fluxPending ? 32u : 0u) | (wk.inBranch ? 64u : 0u) | (wk.scored ? 128u : 0u) | (wk.suspending ? 256u : 0u) | (wk.offSurface ? 512u : 0u);
++    PathWavePut(at, uint4(wk.rng, wk.events, wk.iterations, wk.medium));
++    PathWavePut(at + 4, uint4(wk.stage | flags << 8, wk.step, wk.chain.reflections | wk.chain.kind << 27, asuint(wk.branchSum)));
++    PathWavePutF(at + 8, float4(wk.p, wk.tau)); PathWavePutF(at + 12, float4(wk.d, wk.target));
++    PathWavePutF(at + 16, float4(Phi0[0], Phi0[1], Phi0[2], Phi0[3])); PathWavePutF(at + 20, float4(Phi0[4], Phi0[5], Phi0[6], Phi0[7]));
++    PathWavePutF(at + 24, float4(C[0], C[1], C[2], C[3])); PathWavePutF(at + 28, float4(C[4], C[5], C[6], C[7]));
++    PathWavePutF(at + 32, float4(wk.Q, wk.survival, wk.sinceStart, wk.rho)); PathWavePutF(at + 36, wk.plane);
++    PathWavePut(at + 40, uint4(asuint(wk.chain.travelled), asuint(wk.chain.time), wk.chain.hits, 0));
++    if (PathWaveScratchLive(wk.stage))
++    {
++        at = PathWaveAt(PathWaveAtScratch);
++        PathWavePut(at, uint4(wk.u0, wk.u1, asuint(wk.s0), asuint(wk.s1))); PathWavePutF(at + 4, float4(wk.s2, wk.s3, wk.sp.xy)); PathWavePutF(at + 8, float4(wk.sp.z, 0, 0, 0));
++    }
++    if (wk.anchorFresh && PathWaveAnchorLive(wk))
++    {
++        at = PathWaveAt(PathWaveAtAnchor);
++        PathWavePutF(at, float4(wk.c.position, wk.c.time)); PathWavePutF(at + 4, float4(wk.c.normal, wk.listenerScale));
++        PathWavePut(at + 8, uint4(wk.c.kind, wk.c.edge, wk.c.primitive, wk.c.medium)); PathWavePutF(at + 12, float4(wk.iScale, wk.iKeep, wk.cRate, 0));
++        PathWavePutF(at + 16, float4(wk.cVelocity, 0));
++        PathWavePutF(at + 20, float4(cI[0], cI[1], cI[2], cI[3])); PathWavePutF(at + 24, float4(cI[4], cI[5], cI[6], cI[7]));
++    }
++    if (PathWavePendingLive(wk))
++    {
++        at = PathWaveAt(PathWaveAtPending);
++        PathWavePutF(at, wk.pendingLow); PathWavePutF(at + 4, wk.pendingHigh); PathWavePutF(at + 8, float4(wk.pendingFrom, wk.pendingTime)); PathWavePutF(at + 12, float4(wk.pendingRate, 0, 0, 0));
++    }
++    if (wk.branchFresh)
++    {
++        at = PathWaveAt(PathWaveAtBranch);
++        PathWavePutF(at, float4(branchF[0], branchF[1], branchF[2], branchF[3])); PathWavePutF(at + 4, float4(branchF[4], branchF[5], branchF[6], branchF[7]));
++        PathWavePutF(at + 8, float4(wk.branchP, wk.branchTau)); PathWavePutF(at + 12, float4(wk.branchD, wk.branchSurvival)); PathWavePutF(at + 16, wk.branchPlane);
++        PathWavePut(at + 20, uint4(wk.branch.reflections | wk.branch.kind << 27, asuint(wk.branch.travelled), asuint(wk.branch.time), wk.branchMedium));
++        PathWavePut(at + 24, uint4(asuint(wk.branchRate), wk.branch.hits, 0, 0));
++    }
++    if (PathWaveEdgeLive(wk))
++    {
++        at = PathWaveAt(PathWaveAtEdge);
++        PathWavePutF(at, float4(wk.edgeExtent, wk.edgeAngle, wk.edgeM, wk.edgeSinBeta));
++        PathWavePut(at + 4, uint4(asuint(wk.edgePhiIn), asuint(wk.edgeD), wk.chain.edge, asuint(wk.chain.edgePhi))); PathWavePutF(at + 8, float4(wk.chain.edgePick, 0, 0, 0));
++    }
++}
++void PathWaveLoad(out PathWalk wk, out float cI[8], out float Phi0[8], out float C[8], out float branchF[8])
++{
++    wk = (PathWalk)0;
++    [unroll] for (uint k0 = 0; k0 < MethodBands; k0++) { cI[k0] = 0; branchF[k0] = 0; }
++    uint at = PathWaveAt(0);
++    uint4 a = PathWaveGet(at); wk.rng = a.x; wk.events = a.y; wk.iterations = a.z; wk.medium = a.w;
++    a = PathWaveGet(at + 4);
++    uint flags = a.x >> 8;
++    wk.stage = a.x & 0xff; wk.step = a.y; wk.chain.reflections = a.z & 0xffffff; wk.chain.kind = (a.z >> 27) & 3; wk.branchSum = asfloat(a.w);
++    wk.connectListener = (flags & 1) != 0; wk.connectEdge = (flags & 2) != 0; wk.hasPending = (flags & 4) != 0; wk.travelling = (flags & 8) != 0; wk.done = (flags & 16) != 0;
++    wk.fluxPending = (flags & 32) != 0; wk.inBranch = (flags & 64) != 0; wk.scored = (flags & 128) != 0; wk.suspending = (flags & 256) != 0; wk.offSurface = (flags & 512) != 0;
++    float4 x = PathWaveGetF(at + 8); wk.p = x.xyz; wk.tau = x.w;
++    x = PathWaveGetF(at + 12); wk.d = x.xyz; wk.target = x.w;
++    float4 lo = PathWaveGetF(at + 16), hi = PathWaveGetF(at + 20); PathUnpack(lo, hi, Phi0);
++    lo = PathWaveGetF(at + 24); hi = PathWaveGetF(at + 28); PathUnpack(lo, hi, C);
++    x = PathWaveGetF(at + 32); wk.Q = x.x; wk.survival = x.y; wk.sinceStart = x.z; wk.rho = x.w;
++    wk.plane = PathWaveGetF(at + 36);
++    a = PathWaveGet(at + 40); wk.chain.travelled = asfloat(a.x); wk.chain.time = asfloat(a.y); wk.chain.hits = a.z; wk.chain.edgePick = 1;
++    if (PathWaveScratchLive(wk.stage))
++    {
++        at = PathWaveAt(PathWaveAtScratch);
++        a = PathWaveGet(at); wk.u0 = a.x; wk.u1 = a.y; wk.s0 = asfloat(a.z); wk.s1 = asfloat(a.w);
++        x = PathWaveGetF(at + 4); wk.s2 = x.x; wk.s3 = x.y; wk.sp.xy = x.zw; wk.sp.z = PathWaveGetF(at + 8).x;
++    }
++    if (PathWaveAnchorLive(wk))
++    {
++        at = PathWaveAt(PathWaveAtAnchor);
++        x = PathWaveGetF(at); wk.c.position = x.xyz; wk.c.previous = x.xyz; wk.c.time = x.w;
++        x = PathWaveGetF(at + 4); wk.c.normal = x.xyz; wk.listenerScale = x.w;
++        a = PathWaveGet(at + 8); wk.c.kind = a.x; wk.c.edge = a.y; wk.c.primitive = a.z; wk.c.medium = a.w;
++        x = PathWaveGetF(at + 12); wk.iScale = x.x; wk.iKeep = x.y; wk.cRate = x.z;
++        wk.cVelocity = PathWaveGetF(at + 16).xyz;
++        lo = PathWaveGetF(at + 20); hi = PathWaveGetF(at + 24); PathUnpack(lo, hi, cI);
++    }
++    if (PathWavePendingLive(wk))
++    {
++        at = PathWaveAt(PathWaveAtPending);
++        wk.pendingLow = PathWaveGetF(at); wk.pendingHigh = PathWaveGetF(at + 4);
++        x = PathWaveGetF(at + 8); wk.pendingFrom = x.xyz; wk.pendingTime = x.w; wk.pendingRate = PathWaveGetF(at + 12).x;
++    }
++    if (PathWaveEdgeLive(wk))
++    {
++        at = PathWaveAt(PathWaveAtEdge);
++        x = PathWaveGetF(at); wk.edgeExtent = x.x; wk.edgeAngle = x.y; wk.edgeM = x.z; wk.edgeSinBeta = x.w;
++        a = PathWaveGet(at + 4); wk.edgePhiIn = asfloat(a.x); wk.edgeD = asfloat(a.y); wk.chain.edge = a.z; wk.chain.edgePhi = asfloat(a.w);
++        wk.chain.edgePick = PathWaveGetF(at + 8).x;
++    }
++    wk.anchorFresh = false; wk.branchHeld = !(wk.branchSum > 0); wk.branchFresh = false;
++}
++// The branch reservoir, where the walk reads it.
++void PathWaveBranchLoad(inout PathWalk wk, inout float branchF[8])
++{
++    if (wk.branchHeld) return;
++    wk.branchHeld = true;
++    uint at = PathWaveAt(PathWaveAtBranch);
++    float4 lo = PathWaveGetF(at), hi = PathWaveGetF(at + 4); PathUnpack(lo, hi, branchF);
++    float4 x = PathWaveGetF(at + 8); wk.branchP = x.xyz; wk.branchTau = x.w;
++    x = PathWaveGetF(at + 12); wk.branchD = x.xyz; wk.branchSurvival = x.w;
++    wk.branchPlane = PathWaveGetF(at + 16);
++    uint4 a = PathWaveGet(at + 20);
++    wk.branch = PathStart((a.x >> 27) & 3, asfloat(a.z)); wk.branch.reflections = a.x & 0xffffff; wk.branch.travelled = asfloat(a.y); wk.branchMedium = a.w;
++    a = PathWaveGet(at + 24); wk.branchRate = asfloat(a.x); wk.branch.hits = a.y;
++}
++// A thread's ray this wave: the first wave starts every ray (PathWalkStart, slot = thread); later waves take the rays of the
++// active list, each with its query's answer (Native/AcousticRT's carries no normal: the hit primitive's, where the walk uses it).
++bool PathWaveEnter(uint index, out PathWalk wk, out float cI[8], out float Phi0[8], out float C[8], out float branchF[8], out PathAnswer answer)
++{
++    answer.hit = 0xffffffff; answer.distance = 0; answer.normal = 0;
++    if (PathWaveFirst != 0) { WaveSlot = MethodRayOffset + index; return PathWalkStart(index, wk, cI, Phi0, C, branchF); }
++    uint list = PathWave.Load(4 * 3), active = PathWave.Load(4 * (1 + list));
++    uint2 entry = PathWave.Load2(4 * PathWaveListEntry(list, min(index, max(active, 1u) - 1)));
++    WaveSlot = index < active ? entry.x : 0; // (past the list: a valid slot read, nothing traced)
++    PathWaveLoad(wk, cI, Phi0, C, branchF);
++    uint4 a = PathAnswers[entry.y];
++    answer.hit = a.x; answer.distance = asfloat(a.y);
++    if (answer.hit != 0xffffffff && wk.stage == StageSegment) answer.normal = PrimitiveNormal(MethodState, answer.hit);
++    return index < active;
++}
++// The ray stopped on its query: its sections, the query's record, and its entry in the next wave's list.
++void PathWaveYield(PathWalk wk, float cI[8], float Phi0[8], float C[8], float branchF[8], PathQuery q)
++{
++    PathWaveStore(wk, cI, Phi0, C, branchF);
++    uint index, record;
++    if (q.kind == PathAskMedium) { PathWave.InterlockedAdd(4 * 4, 1u, index); record = PathWavePointBase + 12 * index; index += PathWaveListCapacity; }
++    else { PathWave.InterlockedAdd(0, 1u, index); record = PathWaveQueryBase + 12 * index; }
++    PathWave.Store4(4 * record, asuint(float4(q.origin, q.minimum))); PathWave.Store4(4 * (record + 4), asuint(float4(q.direction, q.maximum)));
++    PathWave.Store4(4 * (record + 8), uint4(q.kind == PathAskAny ? 1u : 0u, 0, 0, 0));
++    uint next = 1 - PathWave.Load(4 * 3), entry;
++    PathWave.InterlockedAdd(4 * (1 + next), 1u, entry);
++    PathWave.Store4(4 * PathWaveListEntry(next, entry), uint4(WaveSlot, index, 0, 0));
++}
++#endif
++
++// One flat loop with one query site (PathAsk; README part 54). Each iteration hands the previous query's answer to the stage that
++// asked for it, runs the walk on until it needs the scene again (or ends), and makes that query. The steps between two queries are
++// the walk's iterations before part 54: each deposits the pending contribution, makes one connection, or traces one segment (or,
++// persistent, the part of it that fits in the update). The wave walk (PATH_WAVE) runs the same loop and stops at the query instead
++// ("Waves").
++void TracePath(uint index)
++{
++    PathWalk wk;
++    float cI[8], Phi0[8], C[8], branchF[8];
++    PathAnswer entered; // (a wave's ray: the answer it resumes with)
++#ifdef PATH_WAVE
++    if (!PathWaveEnter(index, wk, cI, Phi0, C, branchF, entered)) return;
++    bool yielded = false;
++#else
++    if (!PathWalkStart(index, wk, cI, Phi0, C, branchF)) return;
++    entered.hit = 0xffffffff; entered.distance = 0; entered.normal = 0;
++#endif
++    float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
++    bool airListener = PATH_CLEARANCE_READ[2] == AirMedium;
++    bool edges = MethodEdgeCount > 0 && DiffractionFactor > 0;
++    float3 vL = 0; // the listener's velocity (delay rates)
+ #if PATH_DOPPLER
+-                wk.rho = wk.vRate + PathEmit(wk.vVelocity, w0 * MethodSlowness(wk.v.medium));
++    vL = Velocity(MethodState + MethodListenerObject);
+ #endif
+-                if (wk.v.kind == 1) { wk.plane = float4(wk.v.normal, dot(wk.v.normal, wk.p)); wk.p += wk.v.normal * RayEpsilon; wk.offSurface = true; }
+-                wk.chain = PathStart(wk.v.kind, wk.v.time);
+-            }
+-            wk.travelling = true;
++    PathQuery q = PathQueryNone();
++    [loop] for (;;)
++    {
++        PathAnswer answer = entered;
++        if (q.kind != PathAskNone) answer = PathAsk(q); // the walk's one query site
++        q = PathQueryNone();
++        uint stage = wk.stage;
++        bool stop = false, top = false; // top: the iteration's top resumes after its walk diffraction launch (PATH_WALK_EDGE)
++        bool event = false;
++        // ---- The answer, to the stage that asked for it (one of these runs: `stage` is the walk's stage on entry) ----
++#if PATH_WALK_EDGE
++        if (stage == StageWalkLaunch)
++        {
++            wk.stage = StageTop;
++            wk.walkQueued = answer.hit == 0xffffffff;
++            top = !PathWalkLanded(wk, Phi0, C);
+         }
+-        if (++wk.events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
+-        float limit = (MethodHorizon - wk.tau) / MethodSlowness(wk.medium);
+-        uint hit; float distance; float3 normal;
+-        if (limit <= 0) { MethodCount(CounterHorizon); wk.done = true; continue; }
+-        // A segment that leaves a surface starts RayEpsilon out along that surface's outgoing normal and is traced
+-        // from zero distance: a fixed minimum distance would skip another object's surface within RayEpsilon of the
+-        // start (a mullion's face meeting a window pane let rays into the pane, where they bounced for hundreds of events).
+-        // (Profiling bit 15: every segment is traced twice, the same query, so the extra time is one traversal per segment.)
+-        bool found = false;
+-        PROFILE_KIND(0);
+-        [loop] for (uint traces = (PathProfileFlags & 32768) != 0 ? 0u : 1u; traces < 2; traces++)
+-            found = TraceScene(MethodState, wk.p, wk.d, wk.offSurface ? 0 : RayEpsilon, limit, false, false, 0xffffffff, hit, distance, normal);
+-        // A ray in air cannot meet a closed solid's face from inside: it got there through a leak (README part 18)
+-        // and carries energy that is not in the room, so it ends before scoring anything more.
+-        if (found && wk.medium == AirMedium && dot(normal, wk.d) * PathVolumeSide(Primitives[hit].indices.x) > 0) { MethodCount(CounterInsideSolid); wk.done = true; continue; }
+-        if (wk.fluxPending) // (an escaping edge ray takes the horizon as its distance: beams only scores its first segment)
++#endif
++        // The segment: its hit, the beam, the event at the surface, and where a transmission goes.
++        // An edge ray's first segment: its flux completed with the segment's length (an escaping edge ray takes the horizon as its
++        // distance: beams only scores its first segment).
++        if (stage == StageSegment && wk.step == 0 && wk.fluxPending)
+         {
+             // UTD energy flux per unit edge length and azimuth, over the sampling densities.
+             wk.fluxPending = false;
+-            float spread = wk.edgeM * (found ? distance : limit) / (wk.edgeM + (found ? distance : limit));
+-            [loop] for (uint k6 = 0; k6 < MethodBands; k6++)
++            float reach = answer.hit != 0xffffffff ? answer.distance : (MethodHorizon - wk.tau) / MethodSlowness(wk.medium), spread = wk.edgeM * reach / (wk.edgeM + reach);
++            [unroll] for (uint k6 = 0; k6 < MethodBands; k6++) // ([unroll]: an indexed band array in a [loop] here made invalid SPIR-V)
+             {
+                 float opacity = MethodEdgeOpacity(wk.chain.edge, k6);
+                 Phi0[k6] = UtdEnergy(wk.edgeAngle / RayPi, wk.edgePhiIn, wk.chain.edgePhi, wk.edgeSinBeta, MethodWavenumber(k6), spread * wk.edgeSinBeta * wk.edgeSinBeta) *
+@@ -1538,268 +1727,448 @@ void TracePath(uint index)
+                            exp(-2 * MethodLoss(AirMedium, k6) * wk.edgeM) / (wk.edgeM * wk.edgeM) * wk.edgeExtent * wk.edgeAngle / (wk.chain.edgePick * MethodEdgeProbability);
+             }
+         }
+-        // The part of the segment this update covers (all of it in the full solve); an escaping segment ends here.
+-        float segment = found ? distance : limit;
+-        float advance = found ? min(distance, max(0, (wk.target - wk.tau) / MethodSlowness(wk.medium))) : segment;
+-        // (Never stop within a few RayEpsilon of the hit: the resumed trace starts RayEpsilon out and would miss it.)
+-        bool ends = advance >= segment - 4 * RayEpsilon;
+-        float along = dot(L - wk.p, wk.d);
+-        if (!wk.scored && (along < advance || ends) && (wk.chain.reflections >= 1 || (PathBeamsOnly != 0 && wk.chain.kind != 0)
+-#if PATH_WALK_EDGE
+-            || (wk.walkMeta & PathWalkFirst) != 0 // (a diffracted ray's first segment, in either mode)
+-#endif
+-            ) && wk.medium == AirMedium && airListener && dot(L, wk.plane.xyz) > wk.plane.w)
++        if (stage == StageSegment && wk.step != 0)
++        {
++            wk.step = 0; // (profiling bit 15: the same query again)
++            q = PathQueryRay(wk.p, wk.d, wk.offSurface ? 0 : RayEpsilon, (MethodHorizon - wk.tau) / MethodSlowness(wk.medium), false, 0);
++            stage = StageTop; // (answered next time)
++        }
++        if (stage == StageSegment)
+         {
+-            // Beam kernel at the listener of the ray's unfolded line (this segment extended): each prefix of the
+-            // chain (one listener image) is scored once, by its own segment, whether or not the closest approach
+-            // falls inside the segment (persistent: in the update during which the ray passes the closest point,
+-            // or at the segment's end); the listener must be in front of the latest plane and visible from the
+-            // segment. Width and time use the unfolded distance from the chain's origin to the listener image.
+-            wk.scored = true;
+-            float3 offset = L - wk.p - wk.d * along;
+-            float rho2 = dot(offset, offset), lc = wk.chain.travelled + along;
+-            float lu = sqrt(max(lc * lc + rho2, RayEpsilon * RayEpsilon));
+-            float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PATH_CLEARANCE_READ[0]);
+-            // A point of the segment nearest the listener, kept 4 RayEpsilon (perpendicular) off the walls at both
+-            // ends, so that the visibility test cannot start inside a wall's tolerance and see through it.
+-            float startInset = max(0, 4 * RayEpsilon / max(abs(dot(wk.d, wk.plane.xyz)), 1e-3) - wk.sinceStart);
+-            float endInset = found ? 4 * RayEpsilon / max(abs(dot(wk.d, normal)), 1e-3) : 0;
+-            float3 qb = wk.p + wk.d * clamp(along, min(startInset, .5 * segment), max(segment - endInset, .5 * segment));
+-            PROFILE_KIND(4);
+-            bool seen = lc > 0 && rho2 < clearance * clearance && Visible(MethodState, qb, L, false);
+-            if (seen)
++            wk.stage = StageTop;
++            bool found = answer.hit != 0xffffffff;
++            wk.u1 = answer.hit; wk.s0 = answer.distance; wk.sp = answer.normal;
++            // A ray in air cannot meet a closed solid's face from inside: it got there through a leak (README part 18)
++            // and carries energy that is not in the room, so it ends before scoring anything more.
++            if (found && wk.medium == AirMedium && dot(answer.normal, wk.d) * PathVolumeSide(Primitives[answer.hit].indices.x) > 0) { MethodCount(CounterInsideSolid); wk.done = true; }
++            else
+             {
+-                float4 sumLow = 0, sumHigh = 0;
+-                float extra = lu - wk.chain.travelled; // unfolded distance from here to the listener image
+-#if PATH_WALK_EDGE
+-                // A diffracted ray's first segment: |D|^2 sin^2(beta) at the listener's own azimuth and distance.
+-                bool walkScore = (wk.walkMeta & PathWalkFirst) != 0;
+-                float walkAngle = 1, walkPhiL = 0, walkSinBeta = 1;
+-                if (walkScore)
+-                {
+-                    float3 wa, wu, wf, wn; float wextent;
+-                    EdgeFrame(wk.walkMeta & 0xffffff, MethodState, false, wa, wu, wf, wn, wextent, walkAngle);
+-                    float cb = dot(wk.d, wu);
+-                    walkSinBeta = sqrt(max(0, 1 - cb * cb)); walkPhiL = TunedEdgeAngle(L - (wk.p - wk.d * wk.chain.travelled), wf, wn, walkAngle);
+-                }
+-#endif
+-                [unroll] for (uint kb = 0; kb < MethodBands; kb++)
++                float limit, segment, advance; bool ends;
++                PathSegmentSpan(wk, found, answer.distance, limit, segment, advance, ends);
++                event = true;
++                if (PathBeamDue(wk, L, advance, ends, airListener))
+                 {
+-                    float4 lane = float4((kb & 3) == uint4(0, 1, 2, 3));
+-                    float w2 = w20 / (float)(1u << kb);
+-                    float value = Phi0[kb] * C[kb] / wk.Q * 2 / (RayPi * w2) * exp(-2 * rho2 / w2) / (1 - exp(-2 * clearance * clearance / w2)) *
+-                                  exp(-2 * MethodLoss(AirMedium, kb) * extra);
+-#if PATH_WALK_EDGE
+-                    if (walkScore) value *= PathWalkD(wk.walkMeta, walkAngle, wk.walkPhiIn, wk.walkM, walkPhiL, walkSinBeta, lc, kb);
+-#endif
+-                    if (kb < 4) sumLow += value * lane; else sumHigh += value * lane;
+-                }
+-                if (dot(sumLow + sumHigh, 1) > 0)
+-                {
+-                    wk.hasPending = true; wk.pendingLow = sumLow; wk.pendingHigh = sumHigh;
+-                    wk.pendingTime = wk.chain.time + lu * MethodSlowness(AirMedium); wk.pendingFrom = -wk.d;
+-#if PATH_DOPPLER
+-                    wk.pendingRate = wk.rho + PathReceive(vL, wk.d * MethodSlowness(AirMedium));
+-#endif
++                    wk.scored = true;
++                    float along = dot(L - wk.p, wk.d);
++                    float3 offset = L - wk.p - wk.d * along;
++                    float rho2 = dot(offset, offset), lc = wk.chain.travelled + along, clearance = asfloat(PATH_CLEARANCE_READ[0]);
++                    // A point of the segment nearest the listener, kept 4 RayEpsilon (perpendicular) off the walls at both
++                    // ends, so that the visibility test cannot start inside a wall's tolerance and see through it.
++                    float startInset = max(0, 4 * RayEpsilon / max(abs(dot(wk.d, wk.plane.xyz)), 1e-3) - wk.sinceStart);
++                    float endInset = found ? 4 * RayEpsilon / max(abs(dot(wk.d, answer.normal)), 1e-3) : 0;
++                    float3 qb = wk.p + wk.d * clamp(along, min(startInset, .5 * segment), max(segment - endInset, .5 * segment));
++                    if (lc > 0 && rho2 < clearance * clearance)
++                    {
++                        if (PathVisibleQuery(qb, L, 4, q)) { wk.stage = StageBeam; event = false; }
++                        else PathBeam(wk, Phi0, C, L, vL);
++                    }
+                 }
+             }
+         }
+-#if PATH_WALK_EDGE
+-        if (edges && wk.medium == AirMedium && (PathProfileFlags & 262144) == 0)
++        if (stage == StageBeam)
+         {
+-            // Walk diffraction: this piece's deposits on the edges (past a hit, in the hit's plane), offered to the slot.
+-            PathWalkRay wr;
+-            wr.p = wk.p; wr.d = wk.d; wr.origin = wk.p - wk.d * wk.chain.travelled; wr.travelled = wk.chain.travelled; wr.tau = wk.tau; wr.survival = wk.survival;
+-            wr.reach = ends ? segment : advance; wr.limit = limit;
+-            wr.hitPlane = ends && found && (PathProfileFlags & 131072) == 0 ? PathPrimitivePlane[hit] : 0xffffffff;
+-            wr.plane = wk.plane; wr.flux = 0;
+-            [unroll] for (uint kc = 0; kc < MethodBands; kc++) wr.flux = max(wr.flux, Phi0[kc] * C[kc] / wk.Q);
+-            wr.low = float4(Phi0[0] * C[0], Phi0[1] * C[1], Phi0[2] * C[2], Phi0[3] * C[3]) / wk.Q;
+-            wr.high = float4(Phi0[4] * C[4], Phi0[5] * C[5], Phi0[6] * C[6], Phi0[7] * C[7]) / wk.Q;
+-            wr.meta = wk.walkMeta; wr.beam = wk.chain.reflections >= 1; wr.phiIn = wk.walkPhiIn; wr.m = wk.walkM;
+-            PathWalkEdges(wr, wk.rng, wk.walkSlot);
++            wk.stage = StageTop;
++            if (answer.hit == 0xffffffff) PathBeam(wk, Phi0, C, L, vL);
++            event = true;
+         }
+-#endif
+-        if (!found) { MethodCount(CounterEscapes); wk.done = true; continue; }
+-        if (!ends)
++        if (event || stage == StageExit || stage == StageMedium)
+         {
+-            // Persistent: stop in mid-air at the update's path time; the next update resumes here.
+-            wk.p += wk.d * advance; wk.tau += advance * MethodSlowness(wk.medium); wk.chain.travelled += advance;
+-            [unroll] for (uint ka = 0; ka < MethodBands; ka++) C[ka] *= exp(-2 * MethodLoss(wk.medium, ka) * advance);
+-            wk.sinceStart += advance; wk.suspending = true;
+-            wk.offSurface = wk.offSurface && advance <= 0; // still at the surface if it has not moved
+-            continue;
+-        }
++            float eT[8], eD[8], eS[8], part[8], mT = 0, mD = 0, mS = 0, partWeight = 0;
++            bool toEvent = false, shares = false, partition = false; // toEvent: the event's choice is made (shares: its fractions to compute again)
++            float wall = 0; uint next = wk.medium;
++            if (event)
++            {
++                bool found = wk.u1 != 0xffffffff;
++                uint hit = wk.u1; float distance = wk.s0; float3 normal = wk.sp;
++                float limit, segment, advance; bool ends;
++                PathSegmentSpan(wk, found, distance, limit, segment, advance, ends);
+ #if PATH_WALK_EDGE
+-        if ((wk.walkMeta & PathWalkFirst) != 0)
+-        {
+-            // A diffracted ray going on past its first hit: D at its own azimuth, UTD's distance to the hit.
+-            float3 wa, wu, wf, wn; float wextent, wangle;
+-            EdgeFrame(wk.walkMeta & 0xffffff, MethodState, false, wa, wu, wf, wn, wextent, wangle);
+-            float cb = dot(wk.d, wu), sinBeta = sqrt(max(0, 1 - cb * cb)), phiOut = TunedEdgeAngle(wk.d, wf, wn, wangle);
+-            [loop] for (uint kw1 = 0; kw1 < MethodBands; kw1++) Phi0[kw1] *= PathWalkD(wk.walkMeta, wangle, wk.walkPhiIn, wk.walkM, phiOut, sinBeta, wk.chain.travelled + distance, kw1);
+-            wk.walkMeta = 0;
+-        }
++                if (edges && wk.medium == AirMedium && (PathProfileFlags & 262144) == 0)
++                {
++                    // Walk diffraction: this piece's deposits on the edges (past a hit, in the hit's plane), offered to the slot.
++                    PathWalkRay wr;
++                    wr.p = wk.p; wr.d = wk.d; wr.origin = wk.p - wk.d * wk.chain.travelled; wr.travelled = wk.chain.travelled; wr.tau = wk.tau; wr.survival = wk.survival;
++                    wr.reach = ends ? segment : advance; wr.limit = limit;
++                    wr.hitPlane = ends && found && (PathProfileFlags & 131072) == 0 ? PathPrimitivePlane[hit] : 0xffffffff;
++                    wr.plane = wk.plane; wr.flux = 0;
++                    [unroll] for (uint kc = 0; kc < MethodBands; kc++) wr.flux = max(wr.flux, Phi0[kc] * C[kc] / wk.Q);
++                    wr.low = float4(Phi0[0] * C[0], Phi0[1] * C[1], Phi0[2] * C[2], Phi0[3] * C[3]) / wk.Q;
++                    wr.high = float4(Phi0[4] * C[4], Phi0[5] * C[5], Phi0[6] * C[6], Phi0[7] * C[7]) / wk.Q;
++                    wr.meta = wk.walkMeta; wr.beam = wk.chain.reflections >= 1; wr.phiIn = wk.walkPhiIn; wr.m = wk.walkM;
++                    PathWalkEdges(wr, wk.rng, wk.walkSlot);
++                }
+ #endif
+-        wk.p += wk.d * distance; wk.tau += distance * MethodSlowness(wk.medium); wk.chain.travelled += distance;
+-        [unroll] for (uint k7 = 0; k7 < MethodBands; k7++) C[k7] *= exp(-2 * MethodLoss(wk.medium, k7) * distance);
+-        float3 n = dot(wk.d, normal) < 0 ? normal : -normal;
+-        float cosI = max(0, -dot(wk.d, n));
+-        // A slit: this face and the previous event's face (plane) are parallel, face each other, and are closer than
+-        // half the shortest band's wavelength, so no band has a transverse mode across the gap and a ray bouncing
+-        // across it models nothing (the field there is a plane wave along the slit). Such gaps are mesh defects in the
+-        // Church (an open door-frame mesh whose threshold top lies 8 mm above the floor; rays entered from its open
+-        // ends and bounced every centimetre for hundreds of events per update, README part 18). The ray ends.
+-        if (dot(n, wk.plane.xyz) < -.99 && dot(wk.plane.xyz, wk.p) - wk.plane.w < .5 * SpeedOfSound / MethodBandHz(MethodBands - 1))
+-        { MethodCount(CounterInsideSolid); wk.done = true; continue; }
+-        MethodCount(CounterEvents);
+-        float eT[8], eD[8], eS[8], mT = 0, mD = 0, mS = 0;
+-        [unroll] for (uint k8 = 0; k8 < MethodBands; k8++)
+-        {
+-            RayMaterial mat = MethodSurface(hit, k8);
+-            bool impedance = mat.medium.w != 0;
+-            eT[k8] = impedance ? 0 : saturate((1 - mat.surface.x) * mat.surface.z);
+-            eD[k8] = impedance ? 0 : saturate((1 - mat.surface.x) * (1 - mat.surface.z) * mat.surface.y);
+-            eS[k8] = EnergySpecular(mat, cosI);
+-            mT += eT[k8]; mD += eD[k8]; mS += eS[k8];
+-        }
+-        MethodAnchor x;
+-        x.position = wk.p; x.normal = n; x.previous = wk.p; x.kind = 1; x.edge = 0; x.primitive = hit; x.time = wk.tau; x.medium = wk.medium;
+-#if PATH_DOPPLER
+-        float3 hitVelocity = PointVelocity(MethodState + Primitives[hit].indices.x, wk.p);
+-        float rateIn = wk.rho + PathReceive(hitVelocity, wk.d * MethodSlowness(wk.medium)); // (the outgoing term follows the event's choice)
++                if (!found) { MethodCount(CounterEscapes); wk.done = true; }
++                else if (!ends)
++                {
++                    // Persistent: stop in mid-air at the update's path time; the next update resumes here.
++                    wk.p += wk.d * advance; wk.tau += advance * MethodSlowness(wk.medium); wk.chain.travelled += advance;
++                    [unroll] for (uint ka = 0; ka < MethodBands; ka++) C[ka] *= exp(-2 * MethodLoss(wk.medium, ka) * advance);
++                    wk.sinceStart += advance; wk.suspending = true;
++                    wk.offSurface = wk.offSurface && advance <= 0; // still at the surface if it has not moved
++                }
++                else
++                {
++#if PATH_WALK_EDGE
++                    if ((wk.walkMeta & PathWalkFirst) != 0)
++                    {
++                        // A diffracted ray going on past its first hit: D at its own azimuth, UTD's distance to the hit.
++                        float3 wa, wu, wf, wn; float wextent, wangle;
++                        EdgeFrame(wk.walkMeta & 0xffffff, MethodState, false, wa, wu, wf, wn, wextent, wangle);
++                        float cb = dot(wk.d, wu), sinBeta = sqrt(max(0, 1 - cb * cb)), phiOut = TunedEdgeAngle(wk.d, wf, wn, wangle);
++                        [unroll] for (uint kw1 = 0; kw1 < MethodBands; kw1++) Phi0[kw1] *= PathWalkD(wk.walkMeta, wangle, wk.walkPhiIn, wk.walkM, phiOut, sinBeta, wk.chain.travelled + distance, kw1);
++                        wk.walkMeta = 0;
++                    }
+ #endif
+-        if (mD > 0)
+-        {
+-            [unroll] for (uint k9 = 0; k9 < MethodBands; k9++) cI[k9] = Phi0[k9] * C[k9] / wk.Q * eD[k9] / RayPi;
+-            wk.c = x; wk.listenerScale = 1;
++                    wk.p += wk.d * distance; wk.tau += distance * MethodSlowness(wk.medium); wk.chain.travelled += distance;
++                    [unroll] for (uint k7 = 0; k7 < MethodBands; k7++) C[k7] *= exp(-2 * MethodLoss(wk.medium, k7) * distance);
++                    float3 n = dot(wk.d, normal) < 0 ? normal : -normal;
++                    float cosI = max(0, -dot(wk.d, n));
++                    // A slit: this face and the previous event's face (plane) are parallel, face each other, and are closer than
++                    // half the shortest band's wavelength, so no band has a transverse mode across the gap and a ray bouncing
++                    // across it models nothing (the field there is a plane wave along the slit). Such gaps are mesh defects in the
++                    // Church (an open door-frame mesh whose threshold top lies 8 mm above the floor; rays entered from its open
++                    // ends and bounced every centimetre for hundreds of events per update, README part 18). The ray ends.
++                    if (dot(n, wk.plane.xyz) < -.99 && dot(wk.plane.xyz, wk.p) - wk.plane.w < .5 * SpeedOfSound / MethodBandHz(MethodBands - 1))
++                    { MethodCount(CounterInsideSolid); wk.done = true; }
++                    else
++                    {
++                        MethodCount(CounterEvents);
++                        PathEventShares(hit, cosI, Phi0, C, wk.Q, eT, eD, eS, mT, mD, mS, part, partWeight);
++                        if (mD > 0)
++                        {
++                            // The scattering point: the next-event and edge connections' anchor.
++                            [unroll] for (uint k9 = 0; k9 < MethodBands; k9++) cI[k9] = Phi0[k9] * C[k9] / wk.Q * eD[k9] / RayPi;
++                            wk.c.position = wk.p; wk.c.normal = n; wk.c.previous = wk.p; wk.c.kind = 1; wk.c.edge = 0; wk.c.primitive = hit; wk.c.time = wk.tau; wk.c.medium = wk.medium;
++                            wk.listenerScale = 1;
+ #if PATH_DOPPLER
+-            wk.cRate = rateIn; wk.cVelocity = hitVelocity;
++                            wk.cVelocity = PointVelocity(MethodState + Primitives[hit].indices.x, wk.p);
++                            wk.cRate = wk.rho + PathReceive(wk.cVelocity, wk.d * MethodSlowness(wk.medium)); // (the outgoing term follows the event's choice)
+ #endif
+-            wk.connectListener = wk.connectEdge = PathBeamsOnly == 0;
++                            wk.connectListener = wk.connectEdge = PathBeamsOnly == 0;
+ #if PATH_WALK_EDGE
+-            wk.connectEdge = false;
++                            wk.connectEdge = false;
+ #endif
+-        }
+-        float total = mT + mD + mS;
+-        if (!(total > 0)) { wk.done = true; continue; }
+-        // Choose first (the reservoir candidate and the continuation), then find where a transmission
+-        // goes (out of a partition's far face, or into the medium behind the surface) only if one was
+-        // chosen: one call site each, and no traversal for the many hits that do not transmit.
+-        bool split = mT > 0 && mT < .5 * total && (PathProfileFlags & 1024) == 0, keepBranch = false; // (bit 10: no reservoir branches)
+-        float part[8], partWeight = 0;
+-        [unroll] for (uint k10 = 0; k10 < MethodBands; k10++) { part[k10] = Phi0[k10] * C[k10] * eT[k10] / wk.Q; partWeight = max(partWeight, part[k10]); }
+-        if (split && partWeight > 0)
+-        {
+-            // Small transmitted share: a reservoir candidate (MethodCommon.hlsl), not a draw.
+-            wk.branchSum += partWeight;
+-            keepBranch = RandomRay(wk.rng) * wk.branchSum < partWeight;
+-        }
+-        if (split) total = mD + mS;
+-        float pick = RandomRay(wk.rng) * total;
+-        bool transmit = !split && pick >= mD && pick < mD + mT;
+-        float wall = 0; bool partition = false; uint next = wk.medium;
+-        if (keepBranch || transmit) PathCrossing(hit, wk.p, wk.d, wk.medium, partition, wall, next);
+-        if (keepBranch)
+-        {
+-            wk.branch = wk.chain; wk.branchSurvival = wk.survival;
+-            if (partition)
+-            {
+-                // Through a partition: undeviated, out of its far face.
+-                wk.branchP = wk.p + wk.d * wall; wk.branchD = wk.d; wk.branchMedium = next;
+-                wk.branchTau = wk.tau + wall * MethodSlowness(wk.medium);
+-                PathEvent(wk.branch, true);
+-                wk.branch.travelled += wall;
++                            PATH_WAVE_ONLY(wk.anchorFresh = true;)
++                        }
++                        float total = mT + mD + mS;
++                        if (!(total > 0)) wk.done = true;
++                        else
++                        {
++                            // Choose first (the reservoir candidate and the continuation), then find where a transmission
++                            // goes (out of a partition's far face, or into the medium behind the surface) only if one was
++                            // chosen: no query for the many hits that do not transmit.
++                            bool split = mT > 0 && mT < .5 * total && (PathProfileFlags & 1024) == 0, keepBranch = false; // (bit 10: no reservoir branches)
++                            if (split && partWeight > 0)
++                            {
++                                // Small transmitted share: a reservoir candidate (MethodCommon.hlsl), not a draw.
++                                wk.branchSum += partWeight;
++                                keepBranch = RandomRay(wk.rng) * wk.branchSum < partWeight;
++                            }
++                            float pick = RandomRay(wk.rng) * (split ? mD + mS : total);
++                            bool transmit = !split && pick >= mD && pick < mD + mT;
++                            wk.s2 = pick; wk.u0 = keepBranch ? 1u : 0u;
++                            if (keepBranch || transmit) PathCrossingAsk(wk, q);
++                            else toEvent = true;
++                        }
++                    }
++                }
+             }
+-            else
++            else if (stage == StageExit)
+             {
+-                float3 bent = refract(wk.d, n, MethodIor(wk.medium, 3) / MethodIor(next, 3));
+-                bool refracted = dot(bent, bent) > 0;
+-                wk.branchP = wk.p; wk.branchD = refracted ? normalize(bent) : reflect(wk.d, n); wk.branchMedium = refracted ? next : wk.medium;
+-                wk.branchTau = wk.tau;
+-                PathEvent(wk.branch, refracted);
+-                if (refracted && !(wk.medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); partWeight = 1e30; }
++                // PartitionExit for the walk, where overlapping solids are one: the crossing ends at the partition's far
++                // face only once every other object entered on the way has been left too (an even number of their faces
++                // crossed). The Church's door frame runs 8 mm into the floor slab and its stone mullions through the window
++                // panes; ending at the frame's far face put transmitted rays inside the floor slab, in air, where they
++                // bounced between faces 8 mm apart for hundreds of events per update (README part 18).
++                wk.stage = StageTop;
++                uint tries = wk.step & 0xff, foreign = (wk.step >> 8) & 0xff;
++                bool left = (wk.step >> 16) != 0, exited = false, failed = answer.hit == 0xffffffff;
++                if (!failed)
++                {
++                    wk.s1 += answer.distance;
++                    if (Primitives[answer.hit].indices.x == Primitives[wk.u1].indices.x) left = true; else foreign++;
++                    exited = left && (foreign & 1) == 0;
++                    if (!exited) { wk.s1 += 2 * RayEpsilon; tries++; failed = wk.s1 >= PartitionDepth || tries >= 8; }
++                }
++                if (exited) { toEvent = true; shares = true; partition = true; wall = wk.s1; }
++                else if (failed) { q = PathQueryMedium(wk.p + wk.d * 2 * RayEpsilon, 6); wk.stage = StageMedium; }
++                else
++                {
++                    wk.step = tries | foreign << 8 | (left ? 1u : 0u) << 16;
++                    q = PathQueryRay(wk.p + wk.d * wk.s1, wk.d, RayEpsilon, PartitionDepth - wk.s1, false, 5);
++                    wk.stage = StageExit;
++                }
+             }
+-            [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
++            else { wk.stage = StageTop; toEvent = true; shares = true; next = answer.hit; } // (StageMedium: the medium behind the surface)
++            if (toEvent)
++            {
++                // The event's continuation, as drawn (s2) with the branch kept or not (u0).
++                uint hit = wk.u1;
++                float3 n = dot(wk.d, wk.sp) < 0 ? wk.sp : -wk.sp;
++                if (shares) PathEventShares(hit, max(0, -dot(wk.d, n)), Phi0, C, wk.Q, eT, eD, eS, mT, mD, mS, part, partWeight);
++                float total = mT + mD + mS;
++                bool split = mT > 0 && mT < .5 * total && (PathProfileFlags & 1024) == 0;
++                if (split) total = mD + mS;
++                float pick = wk.s2;
++                bool keepBranch = wk.u0 != 0, transmit = !split && pick >= mD && pick < mD + mT, cut = false;
+ #if PATH_DOPPLER
+-            wk.branchRate = rateIn + PathEmit(hitVelocity, wk.branchD * MethodSlowness(wk.branchMedium));
++                float3 hitVelocity = PointVelocity(MethodState + Primitives[hit].indices.x, wk.p);
++                float rateIn = wk.rho + PathReceive(hitVelocity, wk.d * MethodSlowness(wk.medium)); // (the outgoing term follows the event's choice)
+ #endif
+-            float3 bn = dot(wk.branchD, n) > 0 ? n : -n;
+-            wk.branchPlane = float4(bn, dot(bn, wk.branchP));
+-        }
+-        if (pick < mD)
+-        {
+-            // Survival in time also at scattering points (the specular events apply it below).
+-            float alive = PathSurvival(wk.tau), keepAlive = alive / wk.survival;
+-            wk.survival = alive;
+-            if (keepAlive < 1 && RandomRay(wk.rng) >= keepAlive) { MethodCount(CounterRoulette); wk.done = true; continue; }
+-            [unroll] for (uint k12 = 0; k12 < MethodBands; k12++) I[k12] = cI[k12] * (total / mD) / min(1, keepAlive);
+-            wk.v = x;
++                if (keepBranch)
++                {
++                    wk.branch = wk.chain; wk.branchSurvival = wk.survival;
++                    if (partition)
++                    {
++                        // Through a partition: undeviated, out of its far face.
++                        wk.branchP = wk.p + wk.d * wall; wk.branchD = wk.d; wk.branchMedium = next;
++                        wk.branchTau = wk.tau + wall * MethodSlowness(wk.medium);
++                        PathEvent(wk.branch, true);
++                        wk.branch.travelled += wall;
++                    }
++                    else
++                    {
++                        float3 bent = refract(wk.d, n, MethodIor(wk.medium, 3) / MethodIor(next, 3));
++                        bool refracted = dot(bent, bent) > 0;
++                        wk.branchP = wk.p; wk.branchD = refracted ? normalize(bent) : reflect(wk.d, n); wk.branchMedium = refracted ? next : wk.medium;
++                        wk.branchTau = wk.tau;
++                        PathEvent(wk.branch, refracted);
++                        if (refracted && !(wk.medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); partWeight = 1e30; }
++                    }
++                    [unroll] for (uint k11 = 0; k11 < MethodBands; k11++) branchF[k11] = part[k11] / partWeight;
++#if PATH_DOPPLER
++                    wk.branchRate = rateIn + PathEmit(hitVelocity, wk.branchD * MethodSlowness(wk.branchMedium));
++#endif
++                    float3 bn = dot(wk.branchD, n) > 0 ? n : -n;
++                    wk.branchPlane = float4(bn, dot(bn, wk.branchP));
++                    PATH_WAVE_ONLY(wk.branchHeld = true; wk.branchFresh = true;)
++                }
++                if (pick < mD)
++                {
++                    // Survival in time also at scattering points (the specular events apply it below).
++                    float alive = PathSurvival(wk.tau), keepAlive = alive / wk.survival;
++                    wk.survival = alive;
++                    if (keepAlive < 1 && RandomRay(wk.rng) >= keepAlive) { MethodCount(CounterRoulette); wk.done = true; }
++                    else
++                    {
++                        wk.iScale = total / mD; wk.iKeep = min(1, keepAlive); // (the anchor is this point: its flux is cI iScale / iKeep)
++                        PATH_WAVE_ONLY(wk.anchorFresh = true;)
++                        wk.travelling = false;
++                        MethodCount(CounterDiffuse);
++                        if (wk.c.time > MethodHorizon) { MethodCount(CounterHorizon); wk.done = true; }
++                    }
++                }
++                else
++                {
++                    if (transmit)
++                    {
++                        [unroll] for (uint k13 = 0; k13 < MethodBands; k13++) C[k13] *= eT[k13];
++                        wk.Q *= mT / total;
++                        if (partition)
++                        {
++                            PathEvent(wk.chain, true);
++                            wk.tau += wall * MethodSlowness(wk.medium); wk.p += wk.d * wall; wk.chain.travelled += wall;
++                            wk.medium = next;
++                        }
++                        else
++                        {
++                            float3 bent = refract(wk.d, n, MethodIor(wk.medium, 3) / MethodIor(next, 3));
++                            if (dot(bent, bent) > 0)
++                            {
++                                PathEvent(wk.chain, true);
++                                if (!(wk.medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); wk.done = true; cut = true; }
++                                else { wk.d = normalize(bent); wk.medium = next; }
++                            }
++                            else { PathEvent(wk.chain, false); wk.d = reflect(wk.d, n); }
++                        }
++                    }
++                    else
++                    {
++                        [unroll] for (uint k14 = 0; k14 < MethodBands; k14++) C[k14] *= eS[k14];
++                        wk.Q *= mS / total;
++                        PathEvent(wk.chain, false);
++                        wk.d = reflect(wk.d, n);
++                    }
++                    if (!cut)
++                    {
+ #if PATH_DOPPLER
+-            wk.vRate = rateIn; wk.vVelocity = hitVelocity;
++                        wk.rho = rateIn + PathEmit(hitVelocity, wk.d * MethodSlowness(wk.medium));
+ #endif
+-            wk.travelling = false;
+-            MethodCount(CounterDiffuse);
+-            if (wk.v.time > MethodHorizon) { MethodCount(CounterHorizon); wk.done = true; }
+-            continue;
++                        float3 beamNormal = dot(wk.d, n) > 0 ? n : -n;
++                        wk.plane = float4(beamNormal, dot(beamNormal, wk.p));
++                        wk.p += beamNormal * RayEpsilon; wk.offSurface = true;
++                        wk.scored = false; wk.sinceStart = 0;
++                        float weight = 0;
++                        [unroll] for (uint k16 = 0; k16 < MethodBands; k16++) weight = max(weight, C[k16]);
++                        float survive = min(1, weight / (wk.Q * MethodRouletteFloor));
++                        if (wk.inBranch)
++                        {
++                            float fluxNow = 0;
++                            [unroll] for (uint k17 = 0; k17 < MethodBands; k17++) fluxNow = max(fluxNow, Phi0[k17] * C[k17]);
++                            survive = min(survive, fluxNow / (wk.Q * 4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
++                        }
++                        if (PathIterationCap != 0 && wk.iterations > PathIterationCap) survive *= PathIterationSurvival;
++                        float alive = PathSurvival(wk.tau);
++                        survive *= alive / wk.survival;
++                        wk.survival = alive;
++                        if (survive < 1)
++                        {
++                            if (RandomRay(wk.rng) >= survive) { MethodCount(CounterRoulette); wk.done = true; }
++                            else wk.Q *= survive;
++                        }
++                    }
++                }
++            }
+         }
+-        if (transmit)
++        // ---- The top of the walk's iterations, until one needs the scene ----
++        [loop] while ((wk.stage == StageTop || wk.stage == StageEdgeRay || PathConnecting(wk.stage)) && q.kind == PathAskNone && !stop)
+         {
+-            [unroll] for (uint k13 = 0; k13 < MethodBands; k13++) C[k13] *= eT[k13];
+-            wk.Q *= mT / total;
+-            if (partition)
++            if (wk.stage == StageEdgeRay)
+             {
+-                PathEvent(wk.chain, true);
+-                wk.tau += wall * MethodSlowness(wk.medium); wk.p += wk.d * wall; wk.chain.travelled += wall;
+-                wk.medium = next;
++                // An edge ray's start, once its edge point is seen from the source (step 1: closer than 2 RayEpsilon, no query),
++                // then its segment. (Calls with side effects stay out of && and ?:, whose evaluation differs between HLSL dialects.)
++                bool visible = wk.step == 1 || answer.hit == 0xffffffff;
++                wk.stage = StageTop;
++                if (visible) visible = PathEdgeRay(wk);
++                if (!visible) { wk.done = true; continue; }
++                // Edge rays and source edge connections share the edge's energy kernel.
++                [unroll] for (uint k4 = 0; k4 < MethodBands; k4++) Phi0[k4] = cI[k4] * wk.iScale / wk.iKeep;
++                wk.travelling = true;
++            }
++            else if (wk.stage != StageTop)
++            {
++                // A connection, started here or resumed with its query's answer (each kind from one call site).
++                if (wk.stage == StageEdge) PathEdgeStep(wk, answer, cI, L, vL, q);
++                else PathListenerStep(wk, wk.stage, answer, cI, L, S, vL, q);
++                if (q.kind == PathAskNone) wk.stage = StageTop; // (done: the next iteration)
++                continue;
+             }
+             else
+             {
+-                float3 bent = refract(wk.d, n, MethodIor(wk.medium, 3) / MethodIor(next, 3));
+-                if (dot(bent, bent) > 0)
++                if (!top)
+                 {
+-                    PathEvent(wk.chain, true);
+-                    if (!(wk.medium == AirMedium && next == AirMedium) && (PathProfileFlags & 32) != 0) { MethodCount(CounterNonFinite); wk.done = true; continue; }
+-                    wk.d = normalize(bent); wk.medium = next;
++                    wk.iterations++;
++                    if (wk.hasPending)
++                    {
++                        wk.hasPending = false;
++                        // Persistent: heard ceil((time - target) / step) updates from now (this update's rays reach path time `target`).
++                        // The ring is deep enough for any connection in the scene (MethodTransport.RingSlots); one heard later
++                        // still is counted (PathLive[PathRingFar]) and asserted absent by the checks.
++                        float aheadUpdates = PathPersistent != 0 ? max(0, ceil((wk.pendingTime - wk.target) / PathStep)) : 0;
++                        if (aheadUpdates > (float)PathRingSlots - 1 && wk.pendingTime <= MethodHorizon) InterlockedAdd(PathLive[PathRingFar], 1u); // (later than the horizon: dropped)
++                        uint ahead = (uint)min(aheadUpdates, (float)PathRingSlots - 1);
++                        // (This update's rays reach path time `target`; its own time is half a period before, PathStep later per slot ahead.)
++#if PATH_DOPPLER
++                        float heard = PathPersistent != 0 ? wk.pendingTime - (wk.target - .5 * PathStep) - ahead * PathStep : 0;
++                        PathDeposit(wk.pendingFrom, wk.pendingLow, wk.pendingHigh, wk.pendingTime, HashRay(wk.rng ^ (wk.events * 0x85ebca6bu)), ahead, 1 - exp(-wk.pendingRate), heard);
++#else
++                        PathDeposit(wk.pendingFrom, wk.pendingLow, wk.pendingHigh, wk.pendingTime, HashRay(wk.rng ^ (wk.events * 0x85ebca6bu)), ahead);
++#endif
++                    }
++#if PATH_WALK_EDGE
++                    if ((wk.done || wk.suspending) && wk.walkSlot.sum > 0)
++                    {
++                        // The kept diffraction candidate becomes a diffracted ray (after roulette on its summed weight, as a branch): this
++                        // ray, once it has ended, or a ray of its own queued after the loop when this one stops for the update.
++                        float keepWalk = min(1, wk.walkSlot.sum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
++                        wk.walkQueued = RandomRay(wk.rng) < keepWalk;
++                        if (wk.walkQueued) wk.walkQueued = PathWalkLaunch(wk.walkSlot, keepWalk, wk.rng, wk.walkD, wk.walkLow, wk.walkHigh);
++                        bool asked = false;
++                        if (wk.walkQueued) asked = PathVisibleQuery(wk.walkSlot.q, wk.walkSlot.e, 3, q); // (its line of sight)
++                        if (asked) { wk.stage = StageWalkLaunch; continue; }
++                        if (PathWalkLanded(wk, Phi0, C)) continue;
++                    }
++#endif
+                 }
+-                else { PathEvent(wk.chain, false); wk.d = reflect(wk.d, n); }
+-            }
+-        }
+-        else
+-        {
+-            [unroll] for (uint k14 = 0; k14 < MethodBands; k14++) C[k14] *= eS[k14];
+-            wk.Q *= mS / total;
+-            PathEvent(wk.chain, false);
+-            wk.d = reflect(wk.d, n);
+-        }
++                top = false;
++                if (wk.suspending) { stop = true; break; }
++                if (wk.connectListener)
++                {
++                    wk.connectListener = false;
++                    if ((PathProfileFlags & 4) == 0 || wk.c.kind == 0) wk.stage = StageListenerStart; // (bit 2: the source's alone)
++                    continue;
++                }
++                if (wk.connectEdge)
++                {
++                    wk.connectEdge = false;
++                    if ((PathProfileFlags & 8) == 0) { wk.stage = StageEdge; wk.step = 0xffffffff; }
++                    continue;
++                }
++                if (wk.done)
++                {
++#if PATH_WALK_EDGE
++                    wk.walkMeta = 0;
++#endif
++                    if (!(wk.branchSum > 0)) { stop = true; break; }
++                    // Trace the kept transmitted branch from its surface, after roulette on its share of a
++                    // source ray's flux (4 pi r_ref^2).
++                    float keep = min(1, wk.branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
++                    if (RandomRay(wk.rng) >= keep) { stop = true; break; }
++                    PATH_WAVE_ONLY(PathWaveBranchLoad(wk, branchF);)
++                    [unroll] for (uint k2 = 0; k2 < MethodBands; k2++) { Phi0[k2] = branchF[k2] * wk.branchSum / keep; C[k2] = 1; }
++                    wk.p = wk.branchP + wk.branchPlane.xyz * RayEpsilon; wk.offSurface = true;
++                    wk.d = wk.branchD; wk.medium = wk.branchMedium; wk.tau = wk.branchTau; wk.Q = 1; wk.survival = wk.branchSurvival; wk.plane = wk.branchPlane;
+ #if PATH_DOPPLER
+-        wk.rho = rateIn + PathEmit(hitVelocity, wk.d * MethodSlowness(wk.medium));
++                    wk.rho = wk.branchRate;
+ #endif
+-        float3 beamNormal = dot(wk.d, n) > 0 ? n : -n;
+-        wk.plane = float4(beamNormal, dot(beamNormal, wk.p));
+-        wk.p += beamNormal * RayEpsilon; wk.offSurface = true;
+-        wk.scored = false; wk.sinceStart = 0;
+-        float weight = 0;
+-        [unroll] for (uint k16 = 0; k16 < MethodBands; k16++) weight = max(weight, C[k16]);
+-        float survive = min(1, weight / (wk.Q * MethodRouletteFloor));
+-        if (wk.inBranch)
+-        {
+-            float fluxNow = 0;
+-            [unroll] for (uint k17 = 0; k17 < MethodBands; k17++) fluxNow = max(fluxNow, Phi0[k17] * C[k17]);
+-            survive = min(survive, fluxNow / (wk.Q * 4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+-        }
+-        if (PathIterationCap != 0 && wk.iterations > PathIterationCap) survive *= PathIterationSurvival;
+-        float alive = PathSurvival(wk.tau);
+-        survive *= alive / wk.survival;
+-        wk.survival = alive;
+-        if (survive < 1)
+-        {
+-            if (RandomRay(wk.rng) >= survive) { MethodCount(CounterRoulette); wk.done = true; continue; }
+-            wk.Q *= survive;
++                    wk.chain = wk.branch;
++                    wk.fluxPending = false; wk.travelling = true; wk.done = false; wk.branchSum = 0; wk.inBranch = true; wk.scored = false; wk.sinceStart = 0;
++                    MethodCount(CounterBranches);
++                }
++                if (!wk.travelling)
++                {
++                    if (++wk.events >= MethodMaxEvents) { MethodCount(CounterEventCap); stop = true; break; }
++                    bool edgeRays = edges && wk.c.kind == 0 && METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
++#if PATH_WALK_EDGE
++                    edgeRays = false; // (walk diffraction: no edge rays from the source)
++#endif
++                    bool viaEdge = edgeRays && RandomRay(wk.rng) < MethodEdgeProbability;
++                    [unroll] for (uint k3 = 0; k3 < MethodBands; k3++) C[k3] = 1;
++                    wk.medium = wk.c.medium;
++                    wk.scored = false; wk.sinceStart = 0;
++                    if (viaEdge)
++                    {
++                        float3 a, u, f, nn; float extent, angle, z0, r, edgePick;
++                        uint edge = EnergySampleEdge(RandomRay(wk.rng), edgePick);
++                        EdgeFrame(edge, MethodState, false, a, u, f, nn, extent, angle);
++                        float span = EnergyEdgeSpan(a, u, extent, wk.c.position, z0, r);
++                        float z = clamp(z0 + r * tan(atan(-z0 / r) + RandomRay(wk.rng) * span), 0, extent);
++                        float3 e = a + z * u, w = e - wk.c.position;
++                        float m = length(w);
++                        wk.edgeExtent = (r * r + (z - z0) * (z - z0)) * span / r; // 1 / (density of the point on the edge)
++                        if (m <= RayEpsilon || TunedEdgeAngle(-w, f, nn, angle) > angle) { wk.done = true; continue; }
++                        wk.u0 = edge; wk.s0 = z; wk.s1 = edgePick; wk.stage = StageEdgeRay;
++                        wk.step = PathVisibleQuery(wk.c.position, e, 7, q) ? 0u : 1u;
++                        continue;
++                    }
++                    else
++                    {
++                        float3 w0 = wk.c.kind == 1 ? MethodCosineDirection(wk.c.normal, wk.rng) : UnitDirection(wk.rng, false);
++                        float pdf = wk.c.kind == 1 ? max(1e-12, dot(w0, wk.c.normal)) / RayPi : 1 / (4 * RayPi);
++                        float D = EnergyDirectivity(wk.c, w0);
++                        if (D == 0) { wk.done = true; continue; }
++                        [unroll] for (uint k5 = 0; k5 < MethodBands; k5++) Phi0[k5] = cI[k5] * wk.iScale / wk.iKeep * D / pdf;
++                        wk.Q = edgeRays ? 1 - MethodEdgeProbability : 1;
++                        wk.p = wk.c.position; wk.d = w0; wk.tau = wk.c.time;
++#if PATH_DOPPLER
++                        wk.rho = wk.cRate + PathEmit(wk.cVelocity, w0 * MethodSlowness(wk.c.medium));
++#endif
++                        if (wk.c.kind == 1) { wk.plane = float4(wk.c.normal, dot(wk.c.normal, wk.p)); wk.p += wk.c.normal * RayEpsilon; wk.offSurface = true; }
++                        wk.chain = PathStart(wk.c.kind, wk.c.time);
++                    }
++                    wk.travelling = true;
++                }
++            }
++            PathSegmentAsk(wk, q, stop);
+         }
++        if (stop) break;
++#ifdef PATH_WAVE
++        if (q.kind != PathAskNone && PathWaveFinish == 0) { yielded = true; break; } // (answered between waves; the next wave resumes here)
++#endif
+     }
+ #ifdef PATH_WAVE
+-    if (PathWaveYielded()) { PathWaveSuspend(waveSlot); return; }
++    if (yielded) { PathWaveYield(wk, cI, Phi0, C, branchF, q); return; }
+ #endif
+     InterlockedMax(MethodStats[MethodBands * MethodDepths * MethodStatStride + CounterLongestChain], wk.iterations);
+     MethodCount(CounterIterations, wk.iterations);
+@@ -1848,6 +2217,7 @@ void TracePath(uint index)
+         float keepBranchRay = min(1, wk.branchSum / (4 * RayPi * ReferenceDistance * ReferenceDistance * EnergyBranchFloor));
+         if (wk.branchSum > 0 && RandomRay(wk.rng) < keepBranchRay)
+         {
++            PATH_WAVE_ONLY(PathWaveBranchLoad(wk, branchF);)
+             MethodCount(CounterBranches);
+             r.position = float4(wk.branchP + wk.branchPlane.xyz * RayEpsilon, wk.branchTau); r.direction = float4(wk.branchD, wk.target);
+             r.phiLow = float4(branchF[0], branchF[1], branchF[2], branchF[3]) * (wk.branchSum / keepBranchRay);
+@@ -1876,34 +2246,28 @@ void TracePath(uint index)
+         }
+ #endif
+     }
+-
+ }
+ 
+-// Waves, between the walk's waves (README part 52): the queries answered in software (PathWaveTrace: the fallback and the
+-// reference for Native/AcousticRT's answers), and the header's bookkeeping (PathWaveArgs; mode 0: an update's start, 1: after a
+-// wave, 2: the finishing walk's arguments; 3: the frame's poses copied for Native/AcousticRT, one object per thread).
++// Waves, between the walk's waves (README parts 52 and 54): the queries answered in software (PathWaveTrace: the point queries
++// always, the ray queries too unless Native/AcousticRT answers them; the reference for its answers), and the header's bookkeeping
++// (PathWaveArgs; mode 0: an update's start, 1: after a wave; 3: the frame's poses copied for Native/AcousticRT, one object per thread).
+ RWStructuredBuffer<uint4> PathAnswersOut;
+-RWStructuredBuffer<uint> PathWaveArguments; // the indirect arguments (3 uints each: the intersection, the next wave, the finishing walk), a buffer of their
+-                                            // own (read from PathWave's header, the dispatches got stale arguments)
++RWStructuredBuffer<uint> PathWaveArguments; // the indirect arguments (3 uints each: Native/AcousticRT's intersection, the next wave, PathWaveTrace),
++                                            // a buffer of their own (read from PathWave's header, the dispatches got stale arguments)
+ uint PathWaveArgsMode, PathWavePosesBase;
+ #ifdef USE_BVH
+ void PathWaveTrace(uint i)
+ {
+-    if (i >= PathWave.Load(4 * (7))) return;
+-    uint at = PathWaveQueryBase + 12 * i;
++    uint rays = PathWaveHardware != 0 ? 0 : PathWave.Load(4 * 7), points = PathWave.Load(4 * 8);
++    bool located = i >= rays;
++    if (located && i - rays >= points) return;
++    uint at = located ? PathWavePointBase + 12 * (i - rays) : PathWaveQueryBase + 12 * i;
+     float4 a = asfloat(PathWave.Load4(4 * at)), b = asfloat(PathWave.Load4(4 * (at + 4)));
+-    uint4 c = PathWave.Load4(4 * (at + 8));
+-    uint flags = c.x, object = c.y, root = c.z, hit = 0xffffffff;
++    uint flags = PathWave.Load(4 * (at + 8)), hit = 0xffffffff;
+     float distance = b.w; float3 normal;
+-    if (object == 0) TraceSceneSoftware(MethodState, a.xyz, b.xyz, a.w, b.w, false, (flags & 1) != 0, 0xffffffff, hit, distance, normal);
+-    else
+-    {
+-        // (One object's mesh primitive by primitive, as the finishing walk: a second tree traversal here crashed the compiler.)
+-        uint2 range = WaveObjectPrimitives(object - 1);
+-        [loop] for (uint k = 0; k < range.y; k++)
+-            if (ConsiderPrimitive(range.x + k, MethodState, a.xyz, b.xyz, a.w, false, hit, distance, normal) && (flags & 1) != 0) break;
+-    }
+-    PathAnswersOut[i] = uint4(hit, asuint(hit == 0xffffffff ? b.w : distance), 0, 0);
++    if (located) hit = MediumAt(MethodState, a.xyz, false);
++    else TraceScene(MethodState, a.xyz, b.xyz, a.w, b.w, false, (flags & 1) != 0, 0xffffffff, hit, distance, normal);
++    PathAnswersOut[located ? PathWaveListCapacity + i - rays : i] = uint4(hit, asuint(hit == 0xffffffff ? b.w : distance), 0, 0);
+ }
+ #endif
+ void PathWaveArgs(uint thread)
+@@ -1919,18 +2283,16 @@ void PathWaveArgs(uint thread)
+     }
+     if (thread != 0) return;
+     if (PathWaveArgsMode == 0) { [loop] for (uint k = 0; k < 32; k++) PathWave.Store(4 * (k), 0); return; }
++    // After a wave: its queries to be answered, its rays to the next wave.
+     uint list = PathWave.Load(4 * (3)), next = 1 - list;
+-    if (PathWaveArgsMode == 2)
+-    {
+-        PathWaveArguments[6] = (PathWave.Load(4 * (1 + list)) + PathWave.Load(4 * (11)) + 63) / 64; PathWaveArguments[7] = 1; PathWaveArguments[8] = 1;
+-        return;
+-    }
+-    uint queries = PathWave.Load(4 * (0)), active = PathWave.Load(4 * (1 + next));
+-    PathWave.Store(4 * (7), queries);
+-    PathWaveArguments[0] = (queries + 63) / 64; PathWaveArguments[1] = 1; PathWaveArguments[2] = 1;
++    uint rays = PathWave.Load(4 * (0)), points = PathWave.Load(4 * (4)), active = PathWave.Load(4 * (1 + next));
++    PathWave.Store(4 * (7), rays); PathWave.Store(4 * (8), points);
++    PathWaveArguments[0] = (rays + 63) / 64; PathWaveArguments[1] = 1; PathWaveArguments[2] = 1;
+     PathWaveArguments[3] = (active + 63) / 64; PathWaveArguments[4] = 1; PathWaveArguments[5] = 1;
+-    PathWave.Store(4 * (1 + list), 0); PathWave.Store(4 * (3), next); PathWave.Store(4 * (0), 0);
+-    PathWave.Store(4 * (15), PathWave.Load(4 * (15)) + 1); PathWave.Store(4 * (16), PathWave.Load(4 * (16)) + active); PathWave.Store(4 * (17), PathWave.Load(4 * (17)) + queries);
++    PathWaveArguments[6] = ((PathWaveHardware != 0 ? 0 : rays) + points + 63) / 64; PathWaveArguments[7] = 1; PathWaveArguments[8] = 1;
++    PathWave.Store(4 * (1 + list), 0); PathWave.Store(4 * (3), next); PathWave.Store(4 * (0), 0); PathWave.Store(4 * (4), 0);
++    PathWave.Store(4 * (15), PathWave.Load(4 * (15)) + 1); PathWave.Store(4 * (16), PathWave.Load(4 * (16)) + active);
++    PathWave.Store(4 * (17), PathWave.Load(4 * (17)) + rays + points); PathWave.Store(4 * (18), active);
+ }
+ 
+ // Audio: the direct arrival as one path per FFT bin (gain sqrt of the band-interpolated energy).
+diff --git a/Assets/Shaders/Transport.hlsl b/Assets/Shaders/Transport.hlsl
+index c250191..c9b1f91 100644
+--- a/Assets/Shaders/Transport.hlsl
++++ b/Assets/Shaders/Transport.hlsl
+@@ -144,11 +144,7 @@ void ConsiderMedium(uint v, uint root, uint stateOffset, float3 location, bool i
+ #ifdef USE_BVH
+     uint hit = 0xffffffff;
+     PROFILE_QUERY();
+-#ifdef PATH_WAVE
+-    WaveAnswer(stateOffset, location, probe, RayEpsilon, nearest, false, volume.ids.z + 1, root, hit, nearest, normal); // (this object's mesh alone)
+-#else
+     TraceMesh(root, pose, stateOffset, location, probe, RayEpsilon, is2D, false, hit, nearest, normal);
+-#endif
+ #else
+     for (uint i = 0; i < volume.ids.y; i++)
+     {
+diff --git a/Assets/Tests/Editor/PathGpuAudioChecks.cs b/Assets/Tests/Editor/PathGpuAudioChecks.cs
+index 9fdca24..136bce5 100644
+--- a/Assets/Tests/Editor/PathGpuAudioChecks.cs
++++ b/Assets/Tests/Editor/PathGpuAudioChecks.cs
+@@ -272,7 +272,7 @@ public partial class TakeChecks
+                 {
+                     // The waves' header (README part 52): waves run, rays stopped over the waves, queries, rays sent to the finish list.
+                     var h = v.solver.Method.ReadWaveHeader();
+-                    v.waveUpdates++; v.wavesRun += h[15]; v.raysStopped += h[16]; v.queries += h[17]; v.finished += h[18] + h[1 + h[3]];
++                    v.waveUpdates++; v.wavesRun += h[15]; v.raysStopped += h[16]; v.queries += h[17]; v.finished += h[18];
+                 }
+                 v.cursor = sample + step;
+             }
+@@ -309,7 +309,7 @@ public partial class TakeChecks
+                 var n = v.populations.ToArray(); Array.Sort(n);
+                 UnityEngine.Debug.Log($"PATH_BUDGET {v.name}: tracer {Stat(v.times[0])} ms, audio {Stat(v.times[1])} ms, CPU calls {Stat(v.times[2])} ms; " +
+                                       $"{v.times[0].Count} updates, population {n[n.Length / 2]} [{n[n.Length / 10]}-{n[n.Length * 9 / 10]}], in flight {v.solver.Method.RaysInFlight()}, trace-tree rebuilds {v.solver.TraceTreeRebuilds}, overflowed {v.solver.Method.RaysOverflowed()}, load {loadBefore} -> {loadAfter}" +
+-                                      (v.waveUpdates > 0 ? FormattableString.Invariant($"; per update (sampled {v.waveUpdates}): waves {v.wavesRun / (double)v.waveUpdates:F1}, rays stopped {v.raysStopped / (double)v.waveUpdates:F0}, queries {v.queries / (double)v.waveUpdates:F0}, finished in software {v.finished / (double)v.waveUpdates:F0}, hardware {v.solver.Method.HardwareWaves}, issue CPU {1000 * v.solver.Method.WaveIssueSeconds / (v.times[0].Count + v.solver.Method.WarmUpdates):F2} ms per update") +
++                                      (v.waveUpdates > 0 ? FormattableString.Invariant($"; per update (sampled {v.waveUpdates}): waves {v.wavesRun / (double)v.waveUpdates:F1}, rays stopped {v.raysStopped / (double)v.waveUpdates:F0}, queries {v.queries / (double)v.waveUpdates:F0}, rays in the last wave (answered in software) {v.finished / (double)v.waveUpdates:F0}, hardware {v.solver.Method.HardwareWaves}, issue CPU {1000 * v.solver.Method.WaveIssueSeconds / (v.times[0].Count + v.solver.Method.WarmUpdates):F2} ms per update") +
+                                       (v.phases ? ", phases (fenced, ms per update): first wave / intersections / waves / bookkeeping / finish " + string.Join(" / ", Array.ConvertAll(v.solver.Method.WavePhaseSeconds, x => (1000 * x / (v.times[0].Count + v.solver.Method.WarmUpdates)).ToString("F2", System.Globalization.CultureInfo.InvariantCulture))) : "") : ""));
+             }
+             if (!string.IsNullOrEmpty(tracePath)) File.WriteAllText(tracePath, trace.ToString());
+diff --git a/Assets/Tests/Editor/PathWaveChecks.cs b/Assets/Tests/Editor/PathWaveChecks.cs
+index 9bddde1..5ea24a2 100644
+--- a/Assets/Tests/Editor/PathWaveChecks.cs
++++ b/Assets/Tests/Editor/PathWaveChecks.cs
+@@ -3,7 +3,7 @@ using System.Collections.Generic;
+ using NUnit.Framework;
+ using UnityEngine;
+ 
+-// Checks of the wave walk and its hardware queries (settings.pathQueries, README part 52; MethodPath.hlsl "Waves",
++// Checks of the wave walk and its hardware queries (settings.pathQueries, README parts 52 and 54; MethodPath.hlsl "Waves",
+ // Native/AcousticRT). The waves run the megakernel's walk query for query, so with the software tree answering (WavesSoftware)
+ // the response must be the megakernel's to rounding; Metal's intersector must give the software tree's hits.
+ public partial class TakeChecks
+@@ -39,8 +39,8 @@ public partial class TakeChecks
+ 
+     // The aperture room with a ground outside, half-specular transmitting walls (branches, partition crossings) and diffraction
+     // (edge rays, edge connections), persistent rays with the same seed every update, with and without population control: the
+-    // wave walk with software answers is the megakernel to rounding, also with few waves (the finishing walk takes most rays), and
+-    // with Metal's answers it differs only where a hit does (a grazing ray on a triangle's edge).
++    // wave walk with software answers is the megakernel to rounding, also with few waves (the last wave, answering its own queries,
++    // takes most rays), and with Metal's answers it differs only where a hit does (a grazing ray on a triangle's edge).
+     [Test, Category("GPU"), Category("Methods"), Category("Slow"), Timeout(1800000)]
+     public void WaveWalkIsTheMegakernelQueryForQuery()
+     {
+@@ -49,7 +49,7 @@ public partial class TakeChecks
+         {
+             var reference = WaveSolve(scene, geometry, state, TakeRender.PathQueries.Software, population, 0, out _);
+             var waves = WaveSolve(scene, geometry, state, TakeRender.PathQueries.WavesSoftware, population, 0, out var header);
+-            TestContext.WriteLine($"population {population}: waves {header[15]}, rays stopped {header[16]}, queries {header[17]}, to the finish list {header[18]}");
++            TestContext.WriteLine($"population {population}: waves {header[15]}, rays stopped {header[16]}, queries {header[17]}, finished by the last wave {header[18]}");
+             var one = WaveSolve(scene, geometry, state, TakeRender.PathQueries.WavesSoftware, population, 1, out _);
+             var few = WaveSolve(scene, geometry, state, TakeRender.PathQueries.WavesSoftware, population, 3, out _);
+             double dWaves = WaveDifference(reference, waves, "software answers"), dOne = WaveDifference(reference, one, "software answers, 1 wave"),
+@@ -84,8 +84,8 @@ public partial class TakeChecks
+         }
+     }
+ 
+-    // Random rays in each scene (uniform origins in its box, uniform directions; closest hits to 1 km, any-hit segments, and the
+-    // single-object probes of point location on every closed object): Metal's intersector agrees with the software tree, the
++    // Random rays in each scene (uniform origins in its box, uniform directions; closest hits to 1 km and any-hit segments): Metal's
++    // intersector agrees with the software tree, the
+     // same primitive and the distance within 1e-4 m + 1e-5 of it, except at a tie (another primitive at the same distance) and on
+     // rays that graze an edge, a set of measure zero that must stay below 1e-3 of the rays.
+     [Test, Category("GPU"), Category("Methods"), Timeout(1800000)]
+@@ -121,8 +121,6 @@ public partial class TakeChecks
+                 world[3 * i] = pose.position + pose.rotation * geometry[i].a; world[3 * i + 1] = pose.position + pose.rotation * geometry[i].b; world[3 * i + 2] = pose.position + pose.rotation * geometry[i].c;
+                 for (int k = 0; k < 3; k++) { low = Vector3.Min(low, world[3 * i + k]); high = Vector3.Max(high, world[3 * i + k]); }
+             }
+-            var meshes = new List<int>();
+-            foreach (int o in solver.Method.VolumeOwners) if (solver.MeshRoot(o) >= 0) meshes.Add(o);
+             var random = new System.Random(7);
+             float U() => (float)random.NextDouble();
+             Vector3 Point() => new Vector3(Mathf.Lerp(low.x, high.x, U()), Mathf.Lerp(low.y, high.y, U()), Mathf.Lerp(low.z, high.z, U()));
+@@ -131,15 +129,13 @@ public partial class TakeChecks
+             var records = new uint[12 * count];
+             for (int i = 0; i < count; i++)
+             {
+-                Vector3 o = Point(), d = Direction(); float max = 1000; uint any = 0, obj = 0, root = 0;
+-                int kind = i % 4;
+-                if (kind == 1) { var e = Point(); d = e - o; max = d.magnitude; d /= Mathf.Max(max, 1e-6f); any = 1; }
+-                if (kind == 3 && meshes.Count > 0) { int c = meshes[i / 4 % meshes.Count]; obj = (uint)c + 1; root = (uint)solver.MeshRoot(c); }
++                Vector3 o = Point(), d = Direction(); float max = 1000; uint any = 0;
++                if (i % 4 == 1) { var e = Point(); d = e - o; max = d.magnitude; d /= Mathf.Max(max, 1e-6f); any = 1; }
+                 uint F(float x) => BitConverter.ToUInt32(BitConverter.GetBytes(x), 0);
+                 int at = 12 * i;
+                 records[at] = F(o.x); records[at + 1] = F(o.y); records[at + 2] = F(o.z); records[at + 3] = F(i % 8 == 0 ? 0 : 1e-4f);
+                 records[at + 4] = F(d.x); records[at + 5] = F(d.y); records[at + 6] = F(d.z); records[at + 7] = F(max);
+-                records[at + 8] = any; records[at + 9] = obj; records[at + 10] = root;
++                records[at + 8] = any;
+             }
+             var software = solver.Method.AnswerQueries(records, false);
+             var hardware = solver.Method.AnswerQueries(records, true);
+@@ -156,7 +152,7 @@ public partial class TakeChecks
+                     int at = 12 * i;
+                     float G(int k) => BitConverter.ToSingle(BitConverter.GetBytes(records[at + k]), 0);
+                     string Tri(uint h) => h >= geometry.Length ? "-" : $"{world[3 * h]:F2} {world[3 * h + 1]:F2} {world[3 * h + 2]:F2}";
+-                    TestContext.WriteLine($"  {why}: o ({G(0):F3}, {G(1):F3}, {G(2):F3}) d ({G(4):F3}, {G(5):F3}, {G(6):F3}) [{G(3)}, {G(7)}] any {records[at + 8]} object {records[at + 9]}: " +
++                    TestContext.WriteLine($"  {why}: o ({G(0):F3}, {G(1):F3}, {G(2):F3}) d ({G(4):F3}, {G(5):F3}, {G(6):F3}) [{G(3)}, {G(7)}] any {records[at + 8]}: " +
+                                           $"software {hs} at {ts:F4} [{Tri(hs)}], hardware {hh} at {th:F4} [{Tri(hh)}]");
+                 }
+                 if ((hs == uint.MaxValue) != (hh == uint.MaxValue)) { Report("hit or not"); differ++; continue; }
+@@ -166,7 +162,7 @@ public partial class TakeChecks
+                 if (Math.Abs(ts - th) > tolerance) { Report("distance"); differ++; continue; }
+                 if (hs != hh) ties++;
+             }
+-            TestContext.WriteLine($"{name}: {geometry.Length} triangles, {meshes.Count} meshes, {count} rays, {hits} hits; disagreeing {differ}, other primitive at the same distance {ties}, largest distance difference {worst:E2} m");
++            TestContext.WriteLine($"{name}: {geometry.Length} triangles, {count} rays, {hits} hits; disagreeing {differ}, other primitive at the same distance {ties}, largest distance difference {worst:E2} m");
+             Assert.That(hits, Is.GreaterThan(count / 8));
+             Assert.That(differ, Is.LessThanOrEqualTo(count / 1000));
+         }

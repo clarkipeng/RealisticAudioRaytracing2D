@@ -7,6 +7,25 @@ using UnityEngine;
 // part's sliding slots (PathReverb), against the analytic image source of a rigid plane.
 public partial class TakeChecks
 {
+    // Opt-in (ACOUSTIC_WARM_PATH=1): every walk kernel compiled in a light process (static and moving), so that a heavy
+    // measurement after a shader change does not compile them on top of its own memory.
+    [Test, Category("GPU"), Timeout(3600000)]
+    public void WarmPathKernels()
+    {
+        if (Environment.GetEnvironmentVariable("ACOUSTIC_WARM_PATH") != "1") Assert.Ignore("Set ACOUSTIC_WARM_PATH=1.");
+        ApertureRoom(true, false, ApertureOutside, out var scene, out var geometry, out var state, transmission: .05f);
+        var settings = ControlSettings(TakeRender.Method.Path, 256, .3f);
+        settings.pathPersistent = true; settings.responseStepSamples = 128;
+        using var solver = new TransportSolver(scene, geometry, settings, RequireGpu(), sampleRate: 8000);
+        solver.Method.PersistentSingleUpdate = true;
+        solver.Solve(state, new TakeRender.DirectPath[1]);
+        var moving = (AcousticTake.State[])state.Clone();
+        moving[0].velocity = Vector3.right; moving[0].flags |= AcousticTake.StateFlags.VelocityValid; moving[0].position += Vector3.right * .01f;
+        solver.Solve(moving, new TakeRender.DirectPath[1]);
+        AssertNoOverflow(solver);
+        Assert.That(solver.Method.Doppler, "the moving solve ran the Doppler walk");
+    }
+
     // A source moving at 30 m/s past a rigid plane, the listener still, persistent rays, 8 kHz. Per update the rate
     // channel's mean over the plane's reflection must be the image source's Doppler (its delay rate, Doppler.Direct of
     // the mirrored motion); the reverb of a 250 Hz tone (the reflection alone: the direct sound is a separate path) must
