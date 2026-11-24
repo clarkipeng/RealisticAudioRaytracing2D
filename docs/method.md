@@ -318,6 +318,7 @@ Inputs are rendered at populations log-uniform on 4,000–23,000 and at each roo
 **Runtime.**
 A hand-written compute kernel per step of the model (convert the tracer's fixed-point histogram, update the history and averages, features, normaliser, eight convolutions with exact GELU, prediction, band totals, rescaling), recorded into the audio's command buffer between the tracer and the reverb.
 It matches the PyTorch model to a worst relative error of 1.75 × 10⁻⁵ and takes 0.64 ms per update at the Church's 447 bins.
+With several source–listener pairs, one denoiser serves them all: each of its dispatches runs every pair, one thread group layer per pair, each in its own blocks, so every output is bit for bit what a denoiser per pair gives (notebook part 57).
 
 **What it buys.**
 Over the held-out families it beats the best equal-compute temporal filter, a bias-corrected moving average with its decay chosen on validation, by a small margin (window error 1.96 against 2.08 dB; notebook part 25), and in the Church it removes about 4 dB of window error at every population (section 11).

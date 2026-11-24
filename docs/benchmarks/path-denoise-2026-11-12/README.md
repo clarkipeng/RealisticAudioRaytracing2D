@@ -2711,3 +2711,25 @@ The station at 8,000 rays per source now takes 3.33 + 3.60 ms, and at 4,000, 2.6
 
 **Not part of this change: edge slicing for several pairs.**
 With the edge distribution per pair, `pathEdgeSliceUpdates` could refresh several pairs' distributions by slices, as it does for one; it would change the station's outputs (unbiased, but not the same numbers), so it is measured separately.
+
+## 57. One denoiser for all pairs, bit for bit
+
+**What changed.**
+The denoiser ran as one instance per pair, each recording its twenty-odd dispatches over one pair's 48 × bins cells, so the station's two pairs paid every dispatch twice.
+One `PathDenoiser` now serves all of `GpuAudio`'s pairs: its buffers hold one block per pair, and each of its dispatches runs every pair at once, the group's z its pair (`PathDenoise.compute`, `PathDenoiser`, `GpuAudio.EnablePathDenoiser`).
+A pair's threads read and write only its own blocks (its histogram, counts, history, moving averages, features, convolution scratch, sums and output) and do what one pair's dispatch did, in the same order; the conversion reads pair p's cells and counts from the method's output at the strides of its layout.
+`EnablePathDenoiser(…, perPair: true)` keeps the old arrangement for checks and measurements.
+
+**Exact.**
+`PathDenoiserPairsMatchOnePairEach` (new) pushes the fixture's updates through one denoiser of three pairs and three denoisers of one pair (pair 1's histograms scaled by 3.7, pair 2's fed in reverse order), twice with a reset between: all 147,456 outputs are bit-identical.
+`PathDenoiserPairsRenderTheSameAudio` (new) renders sixteen updates of four pairs' live path audio on the GPU (two sources and two listeners in the aperture room, binaural, a source moving and a head turning, the denoiser reading the method's fixed-point output) with one denoiser and with one per pair: the SHA-256 of every PCM sample is the same (E09C458D…), and differs without the denoiser.
+`PathDenoiserKernelMatchesTheModel` still gives the output hash 003424EFBF73DFDB.
+
+**Faster** (the station at 8,000 rays per source, `iterationCap=16`, `edgeSlice=4`, the variants interleaved in one process; GPU 0/0 → 0 before and after both runs):
+
+| Run | One denoiser per pair, audio ms | One for all pairs, audio ms | No denoiser, audio ms |
+|---|---|---|---|
+| 15 rounds | 3.61 [3.42–4.16] | 3.49 [3.29–3.98] | 2.89 [2.66–3.38] |
+| 20 rounds | 3.80 [3.57–4.28] | 3.60 [3.40–4.06] | |
+
+The denoiser's share of the station's audio fell from about 0.72 ms to about 0.60, a saving of 0.12–0.20 ms per update; the tracer is unchanged (3.33–3.38 ms).

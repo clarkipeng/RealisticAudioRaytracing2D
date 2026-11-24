@@ -4,11 +4,12 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 // The persistent-ray denoiser on the GPU (Assets/Resources/Acoustics/PathDenoise.compute; trained by
-// tools/path_persistent_denoise.py, docs/benchmarks/path-denoise-2026-11-12 part 25). One instance per
-// source-listener pair: every update pushes that pair's histogram [direction 6][band 8][bin] (straight from
-// the method's fixed-point output, or from floats in tests), and Output holds the denoised histogram in
-// the same layout, energy units. It keeps the last K updates and two moving averages, so it must see every
-// update of its pair, in order (Reset after a flush). Work is recorded into a command buffer, so it stays
+// tools/path_persistent_denoise.py, docs/benchmarks/path-denoise-2026-11-12 part 25). One instance serves
+// `pairs` source-listener pairs, each dispatch running all of them (README part 57): every update pushes each
+// pair's histogram [direction 6][band 8][bin] (straight from the method's fixed-point output, or from floats in
+// tests), and Output holds the denoised histograms in the same layout, pair after pair, energy units. It keeps
+// the last K updates and two moving averages per pair, so it must see every update of its pairs, in order (Reset
+// after a flush). Work is recorded into a command buffer, so it stays
 // ordered with the tracer before it and the audio after it (GpuAudio.Path).
 public sealed class PathDenoiser : IDisposable
 {
@@ -17,7 +18,7 @@ public sealed class PathDenoiser : IDisposable
 
     public const int Cells = 48;
     public const string Resource = "Acoustics/PathDenoise", ShaderResource = "Acoustics/PathDenoise", ProfilerSample = "Acoustics.GPU.PathDenoise";
-    public readonly int Bins, K;
+    public readonly int Bins, K, Pairs;
     public int Updates { get; private set; }
     public ComputeBuffer Output => outBuffer;
     public int OutputBase => outBase;
@@ -26,7 +27,7 @@ public sealed class PathDenoiser : IDisposable
     readonly Header header;
     readonly ComputeBuffer weights, segment, current, currentCounts, history, countHistory, ema, sums, x, ms, norm, smoothed, binMean, den, outBuffer, scratchA, scratchB, raw;
     readonly int[] weightBase, biasBase;
-    readonly int outBase;
+    readonly int outBase, scratchStride;
     readonly bool ownsOutput;
     CommandBuffer cb;
     // Profiling only (MeasurePathDenoiserSteps): called after each step with the work so far executed.
@@ -44,9 +45,11 @@ public sealed class PathDenoiser : IDisposable
     }
 
     // output: an external buffer to write into at `outputBase` (GpuAudio's histogram of all pairs), or null.
-    public PathDenoiser(ComputeShader shader, byte[] weightBytes, string headerJson, IReadOnlyList<double> binStarts, ComputeBuffer output = null, int outputBase = 0)
+    public PathDenoiser(ComputeShader shader, byte[] weightBytes, string headerJson, IReadOnlyList<double> binStarts, ComputeBuffer output = null, int outputBase = 0, int pairs = 1)
     {
         this.shader = shader;
+        if (pairs < 1) throw new ArgumentOutOfRangeException(nameof(pairs));
+        Pairs = pairs;
         header = JsonUtility.FromJson<Header>(headerJson);
         if (header.channels != Cells || weightBytes.Length != 4 * header.floats) throw new ArgumentException("Denoiser weights do not match their header.");
         K = header.K; Bins = binStarts.Count; decays = header.decays;
@@ -66,7 +69,7 @@ public sealed class PathDenoiser : IDisposable
         var seg = new uint[Bins];
         for (int k = 0; k < Bins; k++) { uint s = 0; foreach (double t in SegmentStarts) if (binStarts[k] >= t) s++; seg[k] = s; }
         segment = new ComputeBuffer(Bins, 4); segment.SetData(seg);
-        ComputeBuffer Floats(long n) => new ComputeBuffer((int)Math.Max(1, n), 4);
+        ComputeBuffer Floats(long n) => new ComputeBuffer((int)Math.Max(1, checked(n * pairs)), 4);   // (one block per pair)
         current = Floats(Cells * Bins); currentCounts = Floats(Bins);
         history = Floats(K * Cells * Bins); countHistory = Floats(K * Bins); ema = Floats(2 * Cells * Bins);
         sums = Floats(2 + 2 * 8 * 3);
@@ -74,6 +77,7 @@ public sealed class PathDenoiser : IDisposable
         norm = Floats(Cells * Bins); smoothed = Floats(Cells * Bins); binMean = Floats(Bins);
         den = Floats(Cells * Bins); outBuffer = output ?? Floats(Cells * Bins); ownsOutput = output == null; outBase = outputBase;
         scratchA = Floats(widest * Bins); scratchB = Floats(widest * Bins); raw = Floats((4 * Cells + 8 * 3) * Bins);
+        scratchStride = widest * Bins;
         convert = shader.FindKernel("Convert"); ingest = shader.FindKernel("Ingest"); scale = shader.FindKernel("Scale");
         features = shader.FindKernel("Features"); smooth = shader.FindKernel("Smooth"); cellMean = shader.FindKernel("CellMean");
         normaliser = shader.FindKernel("Normaliser"); convolve = shader.FindKernel("Convolve"); predict = shader.FindKernel("Predict");
@@ -83,22 +87,24 @@ public sealed class PathDenoiser : IDisposable
 
     public void Reset()
     {
-        ema.SetData(new float[2 * Cells * Bins]);
+        ema.SetData(new float[2 * Cells * Bins * Pairs]);
         Updates = 0;
     }
 
-    // Records one update from the method's output buffer: cells fixedBase.. (two uints each, / rays) and counts countBase..
-    public void Record(CommandBuffer commands, ComputeBuffer fixedOutput, int fixedBase, ComputeBuffer fixedCounts, int countBase, float rays)
+    // Records one update from the method's output buffer: pair p's cells from fixedBase + p fixedStride (two uints each,
+    // / rays) and its counts from countBase + p countStride.
+    public void Record(CommandBuffer commands, ComputeBuffer fixedOutput, int fixedBase, ComputeBuffer fixedCounts, int countBase, float rays, int fixedStride = 0, int countStride = 0)
     {
         cb = commands;
         Common();
         Bind(convert, ("Fixed", fixedOutput), ("FixedCounts", fixedCounts), ("Current", current), ("CurrentCounts", currentCounts));
-        Int("FixedBase", fixedBase); Int("CountBase", countBase); cb.SetComputeFloatParam(shader, "Rays", rays);
-        cb.DispatchCompute(shader, convert, Groups(Cells * Bins), 1, 1);
+        Int("FixedBase", fixedBase); Int("CountBase", countBase); Int("FixedStride", fixedStride); Int("CountStride", countStride);
+        cb.SetComputeFloatParam(shader, "Rays", rays);
+        cb.DispatchCompute(shader, convert, Groups(Cells * Bins), 1, Pairs);
         Run();
     }
 
-    // One update from the CPU (tests): histogram [48][B] in energy units and counts [B], executed now.
+    // One update from the CPU (tests): histograms [pair][48][B] in energy units and counts [pair][B], executed now.
     public void Push(float[] histogram, float[] counts)
     {
         current.SetData(histogram); currentCounts.SetData(counts);
@@ -111,7 +117,7 @@ public sealed class PathDenoiser : IDisposable
 
     void Common()
     {
-        Int("Bins", Bins); Int("K", K); Int("OutBase", outBase);
+        Int("Bins", Bins); Int("K", K); Int("OutBase", outBase); Int("XStride", header.layers[0].input * Bins);
         cb.SetComputeFloatParam(shader, "Decay0", decays[0]); cb.SetComputeFloatParam(shader, "Decay1", decays[1]);
     }
 
@@ -137,24 +143,24 @@ public sealed class PathDenoiser : IDisposable
         {
             if (s != slot && Updates > 1) continue;
             Int("Slot", s); Int("UpdateAverages", s == slot ? 1 : 0);
-            cb.DispatchCompute(shader, ingest, Groups(cells), 1, 1);
+            cb.DispatchCompute(shader, ingest, Groups(cells), 1, Pairs);
         }
         Mark("ingest");
         Int("Slot", slot);
         Bind(scale, ("History", history), ("Ema", ema), ("Sums", sums));
-        cb.DispatchCompute(shader, scale, 1, 1, 1);
+        cb.DispatchCompute(shader, scale, 1, 1, Pairs);
         Mark("scale");
         Bind(features, ("History", history), ("CountHistory", countHistory), ("Ema", ema), ("Sums", sums), ("X", x), ("Ms", ms), ("Norm", norm));
-        cb.DispatchCompute(shader, features, Groups(cells), 1, 1);
+        cb.DispatchCompute(shader, features, Groups(cells), 1, Pairs);
         Mark("features");
         Bind(smooth, ("Norm", norm), ("Smoothed", smoothed));
-        cb.DispatchCompute(shader, smooth, Groups(cells), 1, 1);
+        cb.DispatchCompute(shader, smooth, Groups(cells), 1, Pairs);
         Mark("smooth");
         Bind(cellMean, ("Smoothed", smoothed), ("Norm", norm), ("BinMean", binMean), ("Sums", sums));
-        cb.DispatchCompute(shader, cellMean, Math.Max(1, (Bins + 255) / 256), 1, 1);
+        cb.DispatchCompute(shader, cellMean, Math.Max(1, (Bins + 255) / 256), 1, Pairs);
         Mark("cellMean");
         Bind(normaliser, ("Smoothed", smoothed), ("BinMean", binMean), ("Sums", sums), ("Norm", norm));
-        cb.DispatchCompute(shader, normaliser, Groups(cells), 1, 1);
+        cb.DispatchCompute(shader, normaliser, Groups(cells), 1, Pairs);
         Mark("normaliser");
         var input = x;
         for (int l = 0; l < header.layers.Length; l++)
@@ -165,19 +171,20 @@ public sealed class PathDenoiser : IDisposable
             Int("InChannels", layer.input); Int("OutChannels", layer.output); Int("Taps", layer.taps);
             Int("Dilation", layer.dilation); Int("WeightBase", weightBase[l]); Int("BiasBase", biasBase[l]);
             Int("Gelu", last ? 0 : 1);
+            Int("InStride", l == 0 ? header.layers[0].input * Bins : scratchStride); Int("OutStride", last ? (4 * Cells + 8 * 3) * Bins : scratchStride);
             Bind(convolve, ("Weights", weights), ("Input", input), ("Output", output));
-            cb.DispatchCompute(shader, convolve, Groups(Bins), layer.output, 1);
+            cb.DispatchCompute(shader, convolve, Groups(Bins), layer.output, Pairs);
             input = output;
             Mark("conv" + l);
         }
         Bind(predict, ("Raw", raw), ("Ms", ms), ("Norm", norm), ("Den", den));
-        cb.DispatchCompute(shader, predict, Groups(cells), 1, 1);
+        cb.DispatchCompute(shader, predict, Groups(cells), 1, Pairs);
         Mark("predict");
         Bind(totals, ("Den", den), ("Ms", ms), ("Raw", raw), ("Segment", segment), ("Sums", sums));
-        cb.DispatchCompute(shader, totals, 8 * 3, 1, 1);
+        cb.DispatchCompute(shader, totals, 8 * 3, 1, Pairs);
         Mark("totals");
         Bind(conserve, ("Den", den), ("Segment", segment), ("Sums", sums), ("Out", outBuffer));
-        cb.DispatchCompute(shader, conserve, Groups(cells), 1, 1);
+        cb.DispatchCompute(shader, conserve, Groups(cells), 1, Pairs);
         Mark("conserve");
         if (StepFence == null) cb.EndSample(ProfilerSample);
     }

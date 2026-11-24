@@ -146,14 +146,20 @@ internal sealed partial class GpuAudio
         return (int)Math.Floor(transforms/(channels*(partition+1.0)));
     }
 
-    // The persistent-ray denoiser, one per pair, writing into the histogram the reverb reads (PathFloat).
-    public void EnablePathDenoiser(ComputeShader denoise,byte[] weights,string header)
+    // The persistent-ray denoiser, writing into the histogram the reverb reads (PathFloat).
+    // One denoiser for all pairs, each of its dispatches running every pair (README part 57); perPair: one per pair, each
+    // dispatched alone (the same outputs bit for bit, slower: checks and measurements).
+    public void EnablePathDenoiser(ComputeShader denoise,byte[] weights,string header,bool perPair=false)
     {
         if(denoisers!=null)foreach(var d in denoisers)d?.Dispose();   // (replacing the bundled weights: measurements)
         var bins=new PathBins(settings);var starts=new double[bins.Count];for(int k=0;k<starts.Length;k++)starts[k]=bins.Start(k);
         pathDenoised=Buffer("PathHistogram",checked(pairs*PathDenoiser.Cells*bins.Count),4);
-        denoisers=new PathDenoiser[pairs];
-        for(int p=0;p<pairs;p++)denoisers[p]=new PathDenoiser(denoise,weights,header,starts,pathDenoised,p*PathDenoiser.Cells*bins.Count);
+        if(perPair)
+        {
+            denoisers=new PathDenoiser[pairs];
+            for(int p=0;p<pairs;p++)denoisers[p]=new PathDenoiser(denoise,weights,header,starts,pathDenoised,p*PathDenoiser.Cells*bins.Count);
+        }
+        else denoisers=new[]{new PathDenoiser(denoise,weights,header,starts,pathDenoised,0,pairs)};
         PathDenoising=true;
     }
 
@@ -172,10 +178,13 @@ internal sealed partial class GpuAudio
         if(denoisers!=null && valid)
         {
             // Every update goes through the denoisers (they keep a history), used or not; a cut restarts them.
-            for(int p=0;p<pairs;p++)
+            // (Instance d serves pairs d P.. of P pairs each: all of them, or one.)
+            for(int d=0;d<denoisers.Length;d++)
             {
-                if(cut)denoisers[p].Reset();
-                denoisers[p].Record(commands,method.LateBuffer,fixedOffset+p*PathDenoiser.Cells*pathBins,method.CountsBuffer,(late.Frame*pairs+p)*pathBins,method.LateRays);
+                int first=d*denoisers[d].Pairs;
+                if(cut)denoisers[d].Reset();
+                denoisers[d].Record(commands,method.LateBuffer,fixedOffset+first*PathDenoiser.Cells*pathBins,method.CountsBuffer,(late.Frame*pairs+first)*pathBins,method.LateRays,
+                                    PathDenoiser.Cells*pathBins,pathBins);
             }
         }
         commands.SetComputeBufferParam(shader,pathGroups,"LateHistogram",valid?method.LateBuffer:lateEmpty);
