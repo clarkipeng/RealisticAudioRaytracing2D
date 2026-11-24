@@ -44,8 +44,6 @@ float3 Refract(float3 i, float3 n, float eta) {
 }
 
 
-#pragma kernel FFT
-#pragma kernel IFFT
 
 
 // Change this to modify FFT size
@@ -107,7 +105,7 @@ void FFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
         int j = idx % m2;       // Index within the butterfly group
 
         // Only threads that map to a valid butterfly need to run
-        if (j < m2) {
+        if (idx < n / 2) {
             // FIX: Calculate Angle Directly (Precise & Fast)
             // -2 * PI * j / m
             float angle = -2.0 * PI * j / m; 
@@ -159,7 +157,7 @@ void IFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 groupID : SV_GroupID) {
         int k = (idx / m2) * m;
         int j = idx % m2;
 
-        if (j < m2) {
+        if (idx < n / 2) {
             // INVERSE: Positive angle
             float angle = 2.0 * PI * j / m;
             float2 w = complex_exp(angle);

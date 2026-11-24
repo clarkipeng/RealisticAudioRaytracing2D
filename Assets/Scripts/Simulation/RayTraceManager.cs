@@ -4,7 +4,8 @@ using System.Collections.Generic;
 using Helpers;
 using UnityEngine.Rendering;
 
-public class RayTraceManager : MonoBehaviour
+[DefaultExecutionOrder(10000)]
+public partial class RayTraceManager : MonoBehaviour
 {
     [Header("Shaders")]
     public ComputeShader raytraceShader;
@@ -92,15 +93,11 @@ public class RayTraceManager : MonoBehaviour
     Vector3 lastListenerPos;
     Vector3 sourceVel;
     Vector3 listenerVel;
+    Coroutine legacyPrecompute;
 
     void Start()
     {
-        if (chunkSamples != 1024)
-        {
-            Debug.LogWarning($"chunkSamples was {chunkSamples}, but the GPU FFT kernels use WINDOW_SIZE=1024. Forcing chunkSamples to 1024.");
-            chunkSamples = 1024;
-        }
-
+        if (useTakeRenderer || raytraceShader == null) return; // Capture/replay does not require the legacy GPU renderer.
         InitializeSimulation();
         UpdateGeometry();
         ResetSpectrogram();
@@ -116,6 +113,7 @@ public class RayTraceManager : MonoBehaviour
 
     void Update()
     {
+        if (useTakeRenderer || Mode!=SessionMode.Idle || raytraceShader == null) return;
         if (source != null && listener != null)
         {
             float dt = Time.deltaTime > 0 ? Time.deltaTime : 0.016f;
@@ -185,6 +183,12 @@ public class RayTraceManager : MonoBehaviour
 
     void InitializeSimulation()
     {
+        // Sources can prepare in Start before this manager's late execution order.
+        if (chunkSamples != 1024)
+        {
+            Debug.LogWarning($"chunkSamples was {chunkSamples}, but the GPU FFT kernels use WINDOW_SIZE=1024. Forcing chunkSamples to 1024.");
+            chunkSamples = 1024;
+        }
         hopSize = chunkSamples / 2;
         spectrogramSize = Mathf.CeilToInt(sampleRate * reverbDuration / (float)hopSize) * chunkSamples;
     }
@@ -242,10 +246,16 @@ public class RayTraceManager : MonoBehaviour
 
     public void StartStreaming()
     {
+        if (captureScene!=null) { RecordLegacyVoice(AcousticTake.VoiceAction.Play); return; }
+        if (useTakeRenderer)
+        {
+            BeginLiveSimulation(); RecordLegacyVoice(AcousticTake.VoiceAction.Play); return;
+        }
+        RequireLegacyIdle();
         if (!CanProcessAudio(requireAudioManager: true)) return;
 
         Debug.Log("Starting audio streaming and processing.");
-        isPrecomputing = false;
+        StopStreaming();
         ResetSpectrogram();
         
         delayBetweenChunks = (float)hopSize / sampleRate;
@@ -254,16 +264,21 @@ public class RayTraceManager : MonoBehaviour
         ResetPlaybackState();
         isStreaming = true;
         nextChunkTime = Time.realtimeSinceStartup;
+        RecordLegacyVoice(AcousticTake.VoiceAction.Play);
     }
 
     public void StopStreaming()
     {
+        if (legacyPrecompute!=null) { StopCoroutine(legacyPrecompute); legacyPrecompute=null; }
+        if (precomputedPlaybackSource!=null) precomputedPlaybackSource.Stop();
+        if (isStreaming || captureScene!=null) RecordLegacyVoice(AcousticTake.VoiceAction.Stop);
         isStreaming = false;
         isPrecomputing = false;
     }
 
     public void StartPrecomputedPlayback()
     {
+        RequireLegacyIdle();
         if (isPrecomputing)
         {
             Debug.LogWarning("Precomputation is already running.");
@@ -272,11 +287,13 @@ public class RayTraceManager : MonoBehaviour
 
         if (!CanProcessAudio(requireAudioManager: false)) return;
 
-        StartCoroutine(PrecomputeAndPlay());
+        legacyPrecompute=StartCoroutine(PrecomputeAndPlay());
     }
 
     public void PrepareCurrentClip()
     {
+        if (useTakeRenderer) return;
+        RequireLegacyIdle();
         if (!CanProcessAudio(requireAudioManager: false)) return;
         if (hopSize <= 0 || spectrogramSize <= 0)
             InitializeSimulation();
@@ -328,7 +345,7 @@ public class RayTraceManager : MonoBehaviour
         if (autoPlayPrecomputed)
             PlayPrecomputedClip();
 
-        isPrecomputing = false;
+        isPrecomputing = false; legacyPrecompute=null;
         Debug.Log($"Finished precomputing {precomputedChunks.Count} chunks into {precomputedClip.length:F2}s of audio.");
     }
 
@@ -341,6 +358,7 @@ public class RayTraceManager : MonoBehaviour
 
     public void PlayPrecomputedClip()
     {
+        RequireLegacyIdle();
         if (precomputedClip == null)
         {
             Debug.LogWarning("No precomputed clip is available yet.");
@@ -434,7 +452,8 @@ public class RayTraceManager : MonoBehaviour
     float[] LoadSample(AudioClip clip)
     {
         float[] raw = new float[clip.samples * clip.channels];
-        clip.GetData(raw, 0);
+        if (!clip.GetData(raw, 0))
+            throw new System.InvalidOperationException($"Cannot read PCM from {clip.name}. Enable Decompress On Load and preload the clip before recording.");
 
         float[] mono = new float[clip.samples];
         for (int i = 0; i < clip.samples; i++)
@@ -776,5 +795,9 @@ public class RayTraceManager : MonoBehaviour
             array[j] = temp;
         }
     }
-    void OnDestroy() => ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, initialSpectrumBuffer);
+    void OnDestroy()
+    {
+        DisposeTakeSession();
+        ComputeHelper.Release(wallBuffer, hitBuffer, debugBuffer, spectrogramBufferPing, spectrogramBufferPong, waveformOutBuffer, argsBuffer, frequencyDistributionBuffer, inputBuffer, initialSpectrumBuffer);
+    }
 }

@@ -11,22 +11,18 @@ public class FFTTesting : MonoBehaviour
 
     void TestFFT()
     {
-        int N = 128;
+        int N = 1024; // Legacy kernel size; the configurable implementation is a separate step.
         
         // 1. Use Vector2 to match 'float2' in HLSL (Real, Imaginary)
 
-        int Hz = 440;
-        int sampleRate = 48000;
-        float totalTime = N / (float)sampleRate;
-        float cycles = Hz * totalTime;
-        float period = N / cycles;
+        const int frequencyBin = 5;
 
         Vector2[] data = new Vector2[N];
         
         // Initialize input: Real = Sine Wave, Imaginary = 0
         for (int i = 0; i < N; i++)
         {
-            float val = Mathf.Sin(2 * Mathf.PI * i / period);
+            float val = Mathf.Sin(2 * Mathf.PI * frequencyBin * i / N);
             data[i] = new Vector2(val, 0f);
         }
 
@@ -39,7 +35,7 @@ public class FFTTesting : MonoBehaviour
 
         // --- PERFORM FFT ---
         raytraceShader.SetBuffer(k_fft, "Data", buffer);
-        raytraceShader.Dispatch(k_fft, 1, 1, 1); // 1 group of 128 threads
+        raytraceShader.Dispatch(k_fft, 1, 1, 1);
 
         // Read back FFT results (Optional, for debugging)
         Vector2[] fftOutput = new Vector2[N];
@@ -68,8 +64,7 @@ public class FFTTesting : MonoBehaviour
             // 3. Compare with original input
             // Note: No division by N here (the shader did it)
             float original = Mathf.Sin(2 * Mathf.PI * 5 * i / N);
-            float sign = (finalOutput[i].x < 0) ? -1f : 1f;
-            float reconstructed = sign * Mathf.Sqrt(finalOutput[i].x * finalOutput[i].x + finalOutput[i].y * finalOutput[i].y);
+            float reconstructed = finalOutput[i].x;
             // Debug.Log($"Index {i}: Original = {original:F4}, Reconstructed = {reconstructed:F4}"); 
             
             totalError += Mathf.Abs(original - reconstructed);

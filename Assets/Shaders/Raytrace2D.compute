@@ -1,4 +1,6 @@
 #pragma kernel Trace
+#pragma kernel FFT
+#pragma kernel IFFT
 
 #include "Common.hlsl"
 
@@ -623,7 +625,7 @@ void SpectrogramToWaveformIFFT(uint3 groupThreadID : SV_GroupThreadID, uint3 gro
         int k = (idx / m2) * m;
         int j = idx % m2;
 
-        if (j < m2) {
+        if (idx < n / 2) {
             float angle = 2.0 * PI * j / m;
             float2 w = complex_exp(angle);
 

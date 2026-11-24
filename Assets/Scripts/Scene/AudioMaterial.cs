@@ -16,6 +16,15 @@ public struct AudioMatData
 [CreateAssetMenu(fileName = "NewAudioMaterial", menuName = "Audio/Audio Material")]
 public class AudioMaterial : ScriptableObject
 {
+    [System.Serializable] public struct EnergyKnot
+    {
+        [Min(0)] public float frequencyHz;
+        [Range(0, 1)] public float absorption, scattering;
+    }
+
+    [Tooltip("Optional ordered energy coefficients at any frequency knots. Empty preserves the legacy material. Linear interpolation in Hz, clamped at endpoints.")]
+    public EnergyKnot[] energyCurve = new EnergyKnot[0];
+
     const int BandCount = 8;
     static readonly float[] OctaveBandsHz = { 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f };
 
@@ -97,6 +106,20 @@ public class AudioMaterial : ScriptableObject
             }
         }
 
+        if (energyCurve != null && energyCurve.Length > 0)
+        {
+            ValidateEnergyCurve();
+            for (int i = 0; i < BandCount; i++)
+            {
+                int upper = 0;
+                while (upper < energyCurve.Length - 1 && energyCurve[upper].frequencyHz < OctaveBandsHz[i]) upper++;
+                var a = energyCurve[Mathf.Max(0, upper - 1)]; var b = energyCurve[upper];
+                float t = a.frequencyHz == b.frequencyHz ? 0 : Mathf.InverseLerp(a.frequencyHz, b.frequencyHz, OctaveBandsHz[i]);
+                absorption[i] = Mathf.Lerp(a.absorption, b.absorption, t);
+                scattering[i] = Mathf.Lerp(a.scattering, b.scattering, t);
+            }
+        }
+
         return new AudioMatData {
             absorptionLow = PackLow(absorption),
             absorptionHigh = PackHigh(absorption),
@@ -110,6 +133,44 @@ public class AudioMaterial : ScriptableObject
             dampingHigh = PackHigh(damping)
         };
     }
+
+    public AcousticTake.MaterialDefinition ExportEnergyCurve()
+    {
+        var result = new AcousticTake.MaterialDefinition { name = name };
+        if (energyCurve != null && energyCurve.Length > 0)
+        {
+            ValidateEnergyCurve();
+            result.frequencies = new float[energyCurve.Length];
+            result.absorption = new float[energyCurve.Length]; result.scattering = new float[energyCurve.Length];
+            for (int i = 0; i < energyCurve.Length; i++)
+            {
+                result.frequencies[i] = energyCurve[i].frequencyHz;
+                result.absorption[i] = energyCurve[i].absorption; result.scattering[i] = energyCurve[i].scattering;
+            }
+        }
+        else
+        {
+            var legacy = GetShaderData();
+            result.frequencies = (float[])OctaveBandsHz.Clone();
+            result.absorption = Unpack(legacy.absorptionLow, legacy.absorptionHigh);
+            result.scattering = Unpack(legacy.scatteringLow, legacy.scatteringHigh);
+        }
+        return result;
+    }
+
+    void ValidateEnergyCurve()
+    {
+        for (int i = 0; i < energyCurve.Length; i++)
+        {
+            var p = energyCurve[i];
+            if (!(p.frequencyHz >= 0) || float.IsInfinity(p.frequencyHz) ||
+                (i > 0 && p.frequencyHz <= energyCurve[i - 1].frequencyHz) ||
+                !(p.absorption >= 0 && p.absorption <= 1) || !(p.scattering >= 0 && p.scattering <= 1))
+                throw new System.ArgumentException(name + ": energy knots require increasing finite frequencies and coefficients in [0, 1].");
+        }
+    }
+
+    static float[] Unpack(Vector4 lo, Vector4 hi) => new[] { lo.x, lo.y, lo.z, lo.w, hi.x, hi.y, hi.z, hi.w };
 
     void OnValidate()
     {
