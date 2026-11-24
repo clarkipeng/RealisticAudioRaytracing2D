@@ -2764,3 +2764,45 @@ Batching saves 0.30–0.32 ms per update in every case, the whole of part 55's b
 At the station the audio fell from 3.49–3.60 ms (part 57) to 2.94: the merged input dispatch and the batches together.
 The tracer is unchanged (Church 4.70–4.77 ms, station 3.30–3.32).
 The station at 8,000 rays per source now takes 3.32 + 2.94 ms.
+
+## 59. The populations at 6 ms after parts 56–58, and a smoke run
+
+**Where the station's audio goes now** (8,000 rays per source, `iterationCap=16`, `edgeSlice=4`, the denoiser on, variants interleaved, 15 rounds; GPU 0/0 → 0 before and after both runs).
+
+| Variant | Audio, ms |
+|---|---|
+| all on | 3.03–3.04 |
+| no late convolution (`convolution=0`, a bound) | 2.48 |
+| path kernels built once and left (`kernels=0`, a bound) | 2.43 |
+| no band-FFT partitions (`kernelSkip=2`) | 2.88 |
+| no spectral partitions (`kernelSkip=4`) | 2.74 |
+| no pieces (`kernelSkip=8`) | 2.88 |
+
+So the station's late convolution (two sources, one partition of 1,024 per update, the old bank's sum, inverse and slide in every update because every update crossfades) takes about 0.56 ms, its kernels' rebuild about 0.6 (spectral partitions 0.30, band-FFT partitions 0.16, pieces 0.15), and the denoiser about 0.6 (part 57).
+Skipping `PathGroups` (`kernelSkip=1`) also leaves the pairs' activity flags unset, which silences the late convolution, so it is no bound of that kernel alone.
+
+**The auto-budget at 6 ms** (`budget=6`, the live settings: `iterationCap=16`, `edgeSlice=4`, the denoiser on; one variant per process, 40 rounds of 8 updates; GPU 0/0 → 0 before and after each run).
+
+| Scene | Start | Settled population | Tracer, ms | Audio, ms |
+|---|---|---|---|---|
+| Station (two sources, 18–22 s of its take) | 8,000 per source | **6,956** per source [6,254–7,450] | 3.15 [2.86–3.55] | 2.93 [2.74–3.37] |
+| Church (7–15 s, maximum raised to 40,000) | 23,000 | **17,634** [14,249–18,430] | 4.01 [3.63–4.52] | 1.98 [1.57–2.48] |
+
+Part 55 had the station out of reach of 6 ms even at the minimum of 4,000 rays per source (5.75 + 2.49 ms with the maximum at 100,000; 3.40 + 3.40 ms with it at the population, part 56); it now holds about 7,000 per source.
+The Church settled at 12,500 in part 55 and now at about 17,600, still below 23,000, the denoiser's trained range and the showcase's default: the denoiser was not retrained and the showcase not rebuilt.
+At a fixed 8,000 rays per source the station takes 3.32 + 2.94 ms (part 58), about 0.26 ms over 6.
+
+**Smoke run** (`tools/path_live_church.py smoke --windowed --scenes Church TrainStation --shots`, the existing `Builds/LiveShowcase`, which predates parts 56–58; GPU 0% before, 12% after).
+
+| Scene | Seconds | Underruns, samples | Frame ms (median / p99 / max) | Frame GPU, ms median |
+|---|---|---|---|---|
+| Church | 29 | 0 | 17.04 / 27.6 / 33.0 | 10.7 |
+| TrainStation | 40 | 0 | 17.05 / 24.2 / 33.6 | 7.4 |
+
+The focus stayed with the front application throughout.
+The build was not rebuilt, so this run checks the shipped showcase, not the code of parts 56–58.
+
+**What is left.**
+- The station's late convolution (0.56 ms): the old bank's sum, inverse and slide could run in the same dispatches as the current bank's (exact, about three dispatches fewer per update), and the two banks' sums could share their input loads.
+- The audio's old-filter sums and inverse FFTs could likewise join the current filter's in one dispatch per batch (exact, but the head blends would need a slot per filter).
+- Edge slicing across several pairs (part 56) would cut the station's edge stage, about 0.14 ms per pair net of the fence, but changes its outputs, so it is not an exact change.

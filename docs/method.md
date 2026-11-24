@@ -448,8 +448,8 @@ The histogram and ring writes cost nothing measurable; the audio side and the de
 Memory: 160 bytes per ray in flight, and the ring of future histograms (44 MB in the Church, whose meadow makes the ring 262 slots deep).
 
 In the live showcase (release player, 60 Hz, windowed smoke runs of a scripted walk), the Church at 23,000 rays had no underrun in four runs, frame GPU time 10.6 ms median, the scene's own rendering included (8.9 ms at 11,000; notebook part 51).
-With the auto-budget at 6 ms per update for the tracer, the audio and the denoiser together, the Church settles at 12,500–16,000 rays (fixed populations put 6 ms at about 15,000: tracer about 3.7 ms, audio with the denoiser 2.3 ms; notebook parts 51 and 55).
-The train station runs two sources at 4,000 rays each.
+With the auto-budget at 6 ms per update for the tracer, the audio and the denoiser together, the Church settles at about 17,600 rays (tracer 4.0 ms, audio with the denoiser 2.0 ms; 12,500–16,000 before notebook parts 56–58), and the train station at about 7,000 rays per source (tracer 3.2 ms, audio 2.9 ms; notebook part 59).
+The live showcase's train station runs two sources at 4,000 rays each.
 One update of both sources costs about 11 ms there at 8,000 rays each (tracer 6.5 ms, audio and denoiser 4.2–4.6 ms), which the GPU could sustain, but the live renderer keeps one batch in flight and its readback is quantised to frames: near the passing train a two-update batch takes longer than two frames, delivery falls below the device's rate and the queue drains (notebook part 45).
 So 6,000 and 8,000 rays per source both underran in some runs, and the station stays at 4,000.
 
