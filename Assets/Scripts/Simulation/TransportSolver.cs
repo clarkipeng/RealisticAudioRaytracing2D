@@ -247,6 +247,7 @@ public sealed class TransportSolver : IDisposable
                             Array.Copy(cpuPaths, 0, completedPaths, f * pairs, pairs);
                         }
                     Upload(state, frames);
+                    method.StageHook?.Invoke("upload");
                     long start = Stopwatch.GetTimestamp();
                     method.PrepareFrames(state, frames);
                     method.DispatchAudio(frames, bvh?.NodeCount ?? 0, true);

@@ -119,6 +119,8 @@ Through a door that opens, nothing is heard until the first sound through the op
 The one remaining approximation is that a connection (a straight line to the listener, section 6) is checked against the scene at the time it is made, not as the sound passes along it, which matters only for geometry moving during a connection's flight of a few tens of milliseconds.
 
 A full static solve is the same loop with an infinite period.
+
+With several source–listener pairs, one dispatch walks all of a frame's pairs, one thread row per pair, each row with its own pools, ring and random sequence, so the outputs are those of walking the pairs one by one, bit for bit; a pair's walk alone left the GPU mostly idle while its longest rays finished (notebook part 56).
 Cut into updates with the same random numbers, the persistent estimate equals the full solve to rounding (section 11), which is the strongest check that stopping, resuming, the ring and the compaction lose and duplicate nothing.
 
 A transmitted branch is queued as a ray of its own when its parent stops in an update, so it starts at most one update late.

@@ -2658,3 +2658,56 @@ The full tier passes.
 
 So the population at 6 ms is below 23,000, the denoiser's trained range and the showcase's default: the 64-wide denoiser was not retrained, the showcase not rebuilt, and no new clips were rendered.
 The target, 100,000 rays in about 6 ms, needs the tracer at 100,000 rays (14.66 ms, part 54) to take about 3.7 ms beside the audio's 2.3: four times faster, which neither the hardware path (part 52), the state machine (part 54) nor the audio's fixed cost can give; the audio's whole cost is 2.3 ms against the 8.7 ms the tracer would have to lose.
+
+## 56. The station: where the tracer's time goes, and every pair walked in one dispatch
+
+**Where the time goes.**
+Part 55 put the station at 5.75 ms of tracer per update at 4,000 rays per source, but that run raised the population's maximum to 100,000, which sized every dispatch for 100,000 rays; live, the maximum is the population.
+Measured as the live station runs (`MeasurePathLiveBudget` on its take at 18–22 s, two sources and one listener, so two pairs; `iterationCap=16`, `edgeSlice=4`, the denoiser on; 15 rounds of 8 updates; GPU 0/0 → 0 before and after every run):
+
+| Population per source | Tracer, ms | Audio, ms | In flight per pair |
+|---|---|---|---|
+| 4,000 | 3.40 [3.07–3.77] | 3.40 [3.23–3.77] | 2,741 |
+| 8,000 | 4.10 [3.81–4.50] | 3.59 [3.37–4.02] | 6,235 |
+
+A new measurement switch, `stages=1`, fences the tracer's update after each of its stages (`MethodTransport.StageHook`) and logs each stage's time; every stage's time includes one empty fence's round trip, 0.17 ms.
+At 4,000 rays per source, medians per call (calls per update in brackets):
+
+| Stage | ms |
+|---|---|
+| walk (2) | 1.63 (1.91 at 8,000) |
+| source and listener media, clearance (2) | 0.24 |
+| edge weights, copy and scan (2) | 0.32 |
+| sort and population control (2) | 0.23 |
+| begin, ring, expand (2 each) | 0.19–0.20 |
+| clear (1), upload (1) | 0.32, 0.25 |
+| empty fence | 0.17 |
+
+Net of the fence, the walks are about 2.9 ms of the update and everything else together about 1 ms.
+A pair's walk is short and its time is set by its longest rays: the GPU sat mostly idle while pair 0's last rays finished, and only then started pair 1.
+
+**What changed.**
+The pairs of a frame are now walked in one dispatch, thread row y walking pair y (`MethodTransport.MergedWalk`, on by default; `PathMethod.compute`, `MethodCommon.hlsl`, `MethodPath.hlsl`).
+Before the walk, every pair's media, clearance and edge distribution are built and its pools begun, so the buffers they fill are now per pair: the edge distribution ([pair][edge], `MethodEdgeAt`), the clearance and media ([pair][3], `PathEndsAt`), and a new buffer of each pair's source and listener objects (`PathPairObjects`).
+The walk's constants are pair 0's, and a thread offsets every per-pair index by its row: its pools, its live and overflow counts, its cohort counts, its ring slots, its direct arrival, and its random seed (pair 0's plus the row, which is what the separate dispatches used).
+After the walk, each pair's population control, sort, ring and expansion run as before.
+The work profile writes per-dispatch words, so with it on the pairs are walked one by one; a single pair is one row and walks as before.
+
+**Exact.**
+The histograms are integer sums and every ray carries its own random sequence, so each thread does what it did in its pair's own dispatch and writes only its pair's buffers.
+`PathMergedWalkIsExact` (new, in the quick tier) renders twelve updates of four pairs (two sources, two listeners, the aperture room with its ground, transmission and diffraction) with the merged walk and pair by pair, once with the sources at rest and once with one moving (the Doppler walk), and compares SHA-256 hashes of every update's histograms, rate channels, contribution counts and paths: identical (85C888BD… at rest, 8B152CEE… moving).
+For one pair, the walk's index arithmetic changed and Metal compiled the long loop differently, as in parts 24, 40, 44 and 49: `MeasurePathHistogramHash` gives every counter and every bin's contribution count of HEAD's walk, full solve and persistent rays, at rest and moving; about half the energy cells differ in their last bits, by at most 2.2 × 10⁻⁸ of the largest cell for the full solve and 1.4 × 10⁻⁷ for persistent rays (1.5 × 10⁻⁹ of the total), with totals equal to 3 × 10⁻⁹.
+Each version gives the same hash on every run.
+
+**Faster** (same settings, the two walks interleaved in one process, GPU 0/0 → 0 before and after both runs):
+
+| Population per source | Pair by pair, tracer ms | Merged, tracer ms | Audio, ms |
+|---|---|---|---|
+| 4,000 | 3.37 [3.07–3.80] | 2.66 [2.38–3.00] | 3.39 |
+| 8,000 | 4.10 [3.81–4.41] | 3.33 [3.08–3.72] | 3.60 |
+
+The merged walk of both pairs takes 2.70 ms (stages, fence included) where the two walks took 3.68.
+The station at 8,000 rays per source now takes 3.33 + 3.60 ms, and at 4,000, 2.66 + 3.39.
+
+**Not part of this change: edge slicing for several pairs.**
+With the edge distribution per pair, `pathEdgeSliceUpdates` could refresh several pairs' distributions by slices, as it does for one; it would change the station's outputs (unbiased, but not the same numbers), so it is measured separately.

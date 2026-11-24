@@ -234,6 +234,13 @@ RWStructuredBuffer<float> MethodEdgeCdf;   // per edge, then its running sum (En
 #ifndef METHOD_EDGE_CDF_READ
 #define METHOD_EDGE_CDF_READ MethodEdgeCdf
 #endif
+// The merged walk (MethodTransport.MergedWalk, README part 56) walks every pair of a frame in one dispatch, thread row y
+// pair y. The per-pair constants are set for pair 0 and a walk thread offsets each by its pair, PathPairIndex (0 in every
+// other kernel and when the pairs are walked one by one). MethodPairSlot is the solve's pair: each pair's edge distribution
+// is its own, [pair][edge].
+static uint PathPairIndex = 0;
+uint MethodPairSlot;
+uint MethodEdgeAt(uint edge) { return (MethodPairSlot + PathPairIndex) * MethodEdgeCount + edge; }
 static const float MethodEdgeHidden = .1;
 float EnergyEdgeSpan(float3 a, float3 u, float extent, float3 x, out float z0, out float r)
 {
@@ -247,7 +254,7 @@ void EnergyEdgeScan(uint thread)
 {
     uint n = MethodEdgeCount, per = (n + 255) / 256, first = thread * per, last = min(n, first + per);
     float sum = 0;
-    [loop] for (uint i = first; i < last; i++) sum += MethodEdgeCdf[i];
+    [loop] for (uint i = first; i < last; i++) sum += MethodEdgeCdf[MethodEdgeAt(i)];
     EnergyScanParts[thread] = sum;
     GroupMemoryBarrierWithGroupSync();
     if (thread == 0)
@@ -257,14 +264,14 @@ void EnergyEdgeScan(uint thread)
     }
     GroupMemoryBarrierWithGroupSync();
     float run = EnergyScanParts[thread];
-    [loop] for (uint k = first; k < last; k++) { run += MethodEdgeCdf[k]; MethodEdgeCdf[k] = run; }
+    [loop] for (uint k = first; k < last; k++) { run += MethodEdgeCdf[MethodEdgeAt(k)]; MethodEdgeCdf[MethodEdgeAt(k)] = run; }
 }
 uint EnergySampleEdge(float u, out float probability)
 {
-    float total = METHOD_EDGE_CDF_READ[MethodEdgeCount - 1], target = u * total;
+    float total = METHOD_EDGE_CDF_READ[MethodEdgeAt(MethodEdgeCount - 1)], target = u * total;
     uint lo = 0, hi = MethodEdgeCount - 1;
-    [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (METHOD_EDGE_CDF_READ[mid] > target) hi = mid; else lo = mid + 1; }
-    probability = (METHOD_EDGE_CDF_READ[lo] - (lo > 0 ? METHOD_EDGE_CDF_READ[lo - 1] : 0)) / total;
+    [loop] while (lo < hi) { uint mid = (lo + hi) / 2; if (METHOD_EDGE_CDF_READ[MethodEdgeAt(mid)] > target) hi = mid; else lo = mid + 1; }
+    probability = (METHOD_EDGE_CDF_READ[MethodEdgeAt(lo)] - (lo > 0 ? METHOD_EDGE_CDF_READ[MethodEdgeAt(lo - 1)] : 0)) / total;
     return lo;
 }
 float EnergyDirectivity(MethodAnchor v, float3 w) { return v.kind == 1 ? max(0, dot(w, v.normal)) : 1; }

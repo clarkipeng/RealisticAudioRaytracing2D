@@ -46,14 +46,15 @@ StructuredBuffer<uint> PathClearanceRead;
 #include "../../Shaders/Transport.hlsl"
 #include "../../Shaders/MethodCommon.hlsl"
 #include "../../Shaders/MethodPath.hlsl"
+// A walk's thread row is its pair (the merged walk, MethodCommon.hlsl; one row when the pairs are walked one by one).
 
-[numthreads(64,1,1)] void TracePath3D(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePath3DBvh(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePath3DDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePath3DBvhDoppler(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePath3DWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePath3DBvhWalk(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
-[numthreads(64,1,1)] void TracePath3DBvhProfile(uint3 id:SV_DispatchThreadID) { TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3D(uint3 id:SV_DispatchThreadID) { PathPairIndex = id.y; TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DBvh(uint3 id:SV_DispatchThreadID) { PathPairIndex = id.y; TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DDoppler(uint3 id:SV_DispatchThreadID) { PathPairIndex = id.y; TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DBvhDoppler(uint3 id:SV_DispatchThreadID) { PathPairIndex = id.y; TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DWalk(uint3 id:SV_DispatchThreadID) { PathPairIndex = id.y; TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DBvhWalk(uint3 id:SV_DispatchThreadID) { PathPairIndex = id.y; TracePath(id.x); }
+[numthreads(64,1,1)] void TracePath3DBvhProfile(uint3 id:SV_DispatchThreadID) { PathPairIndex = id.y; TracePath(id.x); }
 [numthreads(64,1,1)] void PathTraceBenchKernel(uint3 id:SV_DispatchThreadID) { PathTraceBench(id.x + MethodRayOffset); }
 [numthreads(64,1,1)] void PathEdgeWeights3D(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }
 [numthreads(64,1,1)] void PathEdgeWeights3DBvh(uint3 id:SV_DispatchThreadID) { PathEdgeWeights(id.x); }

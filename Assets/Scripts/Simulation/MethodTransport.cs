@@ -59,7 +59,7 @@ internal sealed class MethodTransport : IDisposable
     readonly int clearanceKernel = -1, mediaKernel = -1;
     // Path: queued specular-chain connections of one chunk of rays (MethodPath.hlsl PathConnect).
     // Requests are about 0.5 per ray in a closed specular room; overflow is counted (counter 9).
-    readonly ComputeBuffer clearance, mirrorCdf;
+    readonly ComputeBuffer clearance, mirrorCdf, pairObjects;
     // Persistent rays (settings.pathPersistent, MethodPath.hlsl "Persistent rays"): per pair two pools of
     // PersistentCapacity rays (read one, write the survivors to the other) and their counts; the update
     // period PathStep = responseStepSamples / sample rate. Flushes empty the pools (scene cuts).
@@ -254,7 +254,8 @@ internal sealed class MethodTransport : IDisposable
             arrivals = new ComputeBuffer(solves, ArrivalStride);   // one per solve: the exact direct arrival
             arrivalCounts = new ComputeBuffer(Math.Max(1, solves), 4);
             paths = new ComputeBuffer(audio ? Math.Max(1, checked(Frames * PathsPerFrame)) : 1, RayTransport.PathStride);
-            edgeCdf = new ComputeBuffer(Math.Max(1, EdgeCount), 4); edgeCdf.SetData(new float[Math.Max(1, EdgeCount)]);
+            // Each pair's edge distribution, [pair][edge] (MethodCommon.hlsl MethodEdgeAt), so that every pair's is built before the merged walk.
+            edgeCdf = new ComputeBuffer(Math.Max(1, Pairs * EdgeCount), 4); edgeCdf.SetData(new float[Math.Max(1, Pairs * EdgeCount)]);
             // Path: mirrors of the RD edge connection are drawn in proportion to their area (local
             // coordinates: rigid motion keeps the area), so that a large wall or floor, where a mirror
             // reflection is likely to exist, is not drawn as rarely as one of thousands of small triangles.
@@ -270,7 +271,10 @@ internal sealed class MethodTransport : IDisposable
             countCells = checked(Frames * Pairs * TimeBins.Count);
             rateCells = checked(Frames * Pairs * RateMoments * TimeBins.Count);
             ringCells = Directions * Bands * TimeBins.Count;
-            clearance = new ComputeBuffer(3, 4); // the listener's clearance, the source's and the listener's media (MethodPath.hlsl PathClearance)
+            clearance = new ComputeBuffer(3 * Pairs, 4); // per pair the listener's clearance, the source's and the listener's media (MethodPath.hlsl PathClearance)
+            var ends = new uint[2 * Pairs];   // per pair its source's and listener's objects (MethodPath.hlsl PathPairObjects)
+            for (int pair = 0; pair < Pairs; pair++) { ends[2 * pair] = (uint)scene.sources[pair / scene.listeners.Length].objectIndex; ends[2 * pair + 1] = (uint)scene.listeners[pair % scene.listeners.Length]; }
+            pairObjects = new ComputeBuffer(Pairs, 8); pairObjects.SetData(ends);
             // Persistent pools, sized for the rays expected in flight: a cohort of age t keeps at most the fraction
             // S(t) = min(1, T0 / t) of its rays (survival in time; all of them without it), plus a quarter for
             // transmitted branches and one cohort of margin. Overflow is counted (counter 9) and asserted absent by the checks.
@@ -349,6 +353,7 @@ internal sealed class MethodTransport : IDisposable
                 shader.SetBuffer(kernel, "PathPrimitivePlane", primitivePlanes); shader.SetBuffer(kernel, "PathPlaneEdgeRanges", planeEdgeRangeBuffer); shader.SetBuffer(kernel, "PathPlaneEdgeIndices", planeEdgeIndexBuffer);
                 shader.SetBuffer(kernel, "MethodEdgeCdf", edgeCdf); shader.SetBuffer(kernel, "MethodEdgeCdfRead", edgeCdf); shader.SetBuffer(kernel, "PathCounts", counts);
                 shader.SetBuffer(kernel, "PathClearanceOut", clearance); shader.SetBuffer(kernel, "PathClearanceRead", clearance); shader.SetBuffer(kernel, "PathMirrorCdf", mirrorCdf);
+                shader.SetBuffer(kernel, "PathPairObjects", pairObjects);
                 shader.SetBuffer(kernel, "PathEdgeWeight", edgeWeights); shader.SetBuffer(kernel, "PathCohortCount", cohortCounts);
                 shader.SetBuffer(kernel, "PathSortBuckets", sortBuckets); shader.SetBuffer(kernel, "PathSortEntry", sortEntries);
                 shader.SetBuffer(kernel, "PathRays", pathRays); shader.SetBuffer(kernel, "PathLive", pathLive);
@@ -433,6 +438,7 @@ internal sealed class MethodTransport : IDisposable
         shader.SetInt("MethodState", frame * scene.objects.Length);
         shader.SetInt("MethodSourceObject", scene.sources[pair / scene.listeners.Length].objectIndex);
         shader.SetInt("MethodListenerObject", scene.listeners[pair % scene.listeners.Length]);
+        shader.SetInt("MethodPairSlot", pair);
         shader.SetInt("MethodCellBase", solve * Directions * Bands * TimeBins.Count);
         shader.SetInt("PathCountBase", solve * TimeBins.Count);
         shader.SetInt("MethodCountIndex", solve);
@@ -458,6 +464,7 @@ internal sealed class MethodTransport : IDisposable
     {
         shader.Dispatch(clearanceKernel, 1, 1, 1); // the listener's clearance for the beam kernel (once per solve)
         shader.Dispatch(mediaKernel, 1, 1, 1);     // the source's and the listener's media
+        StageHook?.Invoke("ends");
         if (EdgeCount == 0 || settings.diffractionFactor <= 0 || settings.pathWalkDiffraction) return; // (walk diffraction draws no edges from it)
         if (!persistent)
         {
@@ -465,8 +472,8 @@ internal sealed class MethodTransport : IDisposable
             shader.Dispatch(edgeScanKernel, 1, 1, 1);
             return;
         }
-        // A refresh every pathEdgeSliceUpdates updates: in between, the distribution built last stays (one pair only:
-        // the distribution's buffer is shared by the pairs). Its weights only steer the sampling, which divides by
+        // A refresh every pathEdgeSliceUpdates updates: in between, the distribution built last stays (one pair only: the
+        // distributions are per pair since README part 56, but slicing several would change their outputs). Its weights only steer the sampling, which divides by
         // the same distribution, so any refresh rate is unbiased.
         if (!all && Pairs == 1 && settings.pathEdgeSliceUpdates > 1 && ++edgeSkipped < settings.pathEdgeSliceUpdates) return;
         edgeSkipped = 0;
@@ -477,6 +484,7 @@ internal sealed class MethodTransport : IDisposable
         edgeCursor[pair] = all || first + count >= EdgeCount ? 0 : first + count;
         shader.Dispatch(edgeCopyKernel, (EdgeCount + 63) / 64, 1, 1);
         shader.Dispatch(edgeScanKernel, 1, 1, 1);
+        StageHook?.Invoke("edges");
     }
 
     // One chunk of rays.
@@ -492,27 +500,56 @@ internal sealed class MethodTransport : IDisposable
     void PersistentUpdate(int pair, bool flush)
     {
         long start = Stopwatch.GetTimestamp();
+        PersistentBegin(pair, flush);
+        PersistentWalk(1);
+        PersistentEnd(pair);
+        if (Profile) { Fence(); lastWalkSeconds = TakeRender.Elapsed(start); }
+    }
+    // The merged walk (README part 56): every pair of the frame in one dispatch, thread row y pair y (MethodCommon.hlsl). A
+    // pair's walk is short, its time set by its longest rays, so walking the pairs one after the other left the GPU mostly
+    // idle; in one dispatch their rays run side by side. Each thread does what it did in its pair's own dispatch, and every
+    // buffer the walk writes is the pair's own, so the outputs are the same bit for bit (PathMergedWalkIsExact).
+    // (Not with the work profile, whose per-thread words are per dispatch.)
+    public bool MergedWalk = true;
+    bool Merged => persistent && Pairs > 1 && MergedWalk && !(WorkProfile && traceProfile >= 0);
+    // A pair's constants for the persistent kernels (its pools, cohort counts, sort buckets and ring).
+    void SetPersistentPair(int pair)
+    {
         int p = parity[pair]; // (population control: always 0, the control writes the rays back)
         shader.SetInt("PathCohortBase", pair * Math.Max(1, cohorts));
         shader.SetInt("PathSortBase", pair * SortStride); shader.SetInt("PathSortEntryBase", pair * PersistentCapacity);
         shader.SetInt("PathReadBase", (pair * 2 + p) * PersistentCapacity); shader.SetInt("PathWriteBase", (pair * 2 + 1 - p) * PersistentCapacity);
         shader.SetInt("PathReadCount", pair * 2 + p); shader.SetInt("PathWriteCount", pair * 2 + 1 - p); shader.SetInt("PathOverflowCount", 2 * Pairs + pair); shader.SetInt("PathRingFar", 3 * Pairs + pair);
-        shader.SetInt("PathFlush", flush ? 1 : 0);
-        shader.Dispatch(beginKernel, 1, 1, 1);
         shader.SetInt("PathRingSlots", RingSlots); shader.SetInt("PathRingCells", ringCells);
         shader.SetInt("PathRingBase", outputCount / 2 + pair * RingSlots * ringCells); shader.SetInt("PathRingCountBase", countCells + pair * RingSlots * TimeBins.Count);
         shader.SetInt("PathRingSlot", ringSlot[pair]);
         shader.SetInt("PathRateRingBase", RateBase + rateCells + pair * RingSlots * RateMoments * TimeBins.Count);
+    }
+    void PersistentBegin(int pair, bool flush)
+    {
+        SetPersistentPair(pair);
+        shader.SetInt("PathFlush", flush ? 1 : 0);
+        shader.Dispatch(beginKernel, 1, 1, 1);
+        shader.SetInt("PathFlush", 0);
+        StageHook?.Invoke("begin");
         if (flush) Ring(1, (long)RingSlots * ringCells);
+    }
+    // The walk of `rows` pairs from the pair whose constants are set (rows > 1: the merged walk, from pair 0).
+    void PersistentWalk(int rows)
+    {
         shader.SetInt("MethodRayCount", NewRays);
         shader.SetFloat("PathCohortTarget", NewRays); shader.SetFloat("PathLaunchScale", Rays / (float)NewRays);
         long threads = (long)PersistentCapacity + NewRays;
         for (long first = 0; first < threads; first += 65535L * 64)
         {
             shader.SetInt("MethodRayOffset", (int)first);
-            shader.Dispatch(traceKernel, (int)((Math.Min(65535L * 64, threads - first) + 63) / 64), 1, 1);
+            shader.Dispatch(traceKernel, (int)((Math.Min(65535L * 64, threads - first) + 63) / 64), rows, 1);
         }
-        shader.SetInt("PathFlush", 0);
+        StageHook?.Invoke("walk");
+    }
+    void PersistentEnd(int pair)
+    {
+        int p = parity[pair];
         if (population)
         {
             shader.SetVector("PathSortLow", sortLow); shader.SetVector("PathSortScale", sortScale);
@@ -526,11 +563,12 @@ internal sealed class MethodTransport : IDisposable
                 }
             }
         }
+        StageHook?.Invoke("sort");
         Ring(0, ringCells);
+        StageHook?.Invoke("ring");
         ringSlot[pair] = (ringSlot[pair] + 1) % RingSlots;
         if (!population) parity[pair] = 1 - p;
         persistentUpdates++;
-        if (Profile) { Fence(); lastWalkSeconds = TakeRender.Elapsed(start); }
     }
     double lastWalkSeconds;
     void Ring(int mode, long cells)
@@ -726,6 +764,9 @@ internal sealed class MethodTransport : IDisposable
     // ProfileFlags (MethodPath.hlsl): bit 0 skips the histogram writes; it changes the result.
     public bool Profile;
     public int ProfileFlags;
+    // Stage timing (measurement only, MeasurePathLiveBudget stages=1): called after each stage of an audio dispatch with its
+    // name; the caller fences and attributes the time since the previous call to it.
+    internal Action<string> StageHook;
     public readonly double[] PhaseSeconds = new double[4];
 
     // Measurement: trace every ray of one solve and read the outputs back.
@@ -796,6 +837,42 @@ internal sealed class MethodTransport : IDisposable
         output.GetData(Rates, 0, 2 * RateBase, Rates.Length);
         PhaseSeconds[3] += TakeRender.Elapsed(read);
     }
+    // The merged walk offsets pair 0's pools and ring slot by the pair, so every pair must be at the same parity and slot
+    // (they are: the pairs of a frame are always updated together).
+    bool MergedReady()
+    {
+        for (int pair = 1; pair < Pairs; pair++) if (parity[pair] != parity[0] || ringSlot[pair] != ringSlot[0]) return false;
+        return true;
+    }
+    // One frame of every pair with the merged walk: each pair's edge distribution and begin, one walk, each pair's end.
+    void DispatchMergedFrame(int frame)
+    {
+        int Seed(int pair) => unchecked(settings.seed + SeedOffset + (int)(pathSolves * Pairs + frame * Pairs + pair));
+        bool flush = (flushMask >> Math.Min(frame, 63) & 1) != 0;
+        long start = Stopwatch.GetTimestamp();
+        for (int pair = 0; pair < Pairs; pair++)
+        {
+            SetSolve(frame, pair);
+            shader.SetInt("RaySeed", Seed(pair));
+            DispatchEdgeDistribution(pair, flush);
+            PersistentBegin(pair, flush);
+        }
+        SetSolve(frame, 0);
+        shader.SetInt("RaySeed", Seed(0)); // (a walk thread adds its pair, MethodPath.hlsl TracePath)
+        SetPersistentPair(0);
+        PersistentWalk(Pairs);
+        for (int pair = 0; pair < Pairs; pair++)
+        {
+            SetSolve(frame, pair);
+            SetPersistentPair(pair);
+            PersistentEnd(pair);
+            shader.Dispatch(expandKernel, (frequencyBins + 63) / 64, 1, 1);
+            StageHook?.Invoke("expand");
+        }
+        if (Profile) { Fence(); PhaseSeconds[1] += TakeRender.Elapsed(start); }
+        MergedFrames++;
+    }
+    internal long MergedFrames; // frames dispatched with the merged walk (checks)
     // Audio: every pair of `frames` uploaded frames. The outputs stay on the GPU for
     // GpuAudio; with CPU copies (readback) they arrive asynchronously (TryComplete).
     public void DispatchAudio(int frames, int bvhNodeCount, bool asynchronous)
@@ -813,7 +890,10 @@ internal sealed class MethodTransport : IDisposable
         traceBegin ??= Marker(true); traceEnd ??= Marker(false);
         Graphics.ExecuteCommandBuffer(traceBegin);
         Clear();
+        StageHook?.Invoke("clear");
         for (int frame = 0; frame < frames; frame++)
+        {
+            if (Merged && MergedReady()) { DispatchMergedFrame(frame); continue; }
             for (int pair = 0; pair < Pairs; pair++)
             {
                 SetSolve(frame, pair);
@@ -827,6 +907,7 @@ internal sealed class MethodTransport : IDisposable
                     PersistentUpdate(pair, flush);
                     if (Profile) PhaseSeconds[1] += lastWalkSeconds;
                     shader.Dispatch(expandKernel, (frequencyBins + 63) / 64, 1, 1);
+                    StageHook?.Invoke("expand");
                     continue;
                 }
                 for (int first = 0; first < Rays; first += ChunkRays)
@@ -837,6 +918,7 @@ internal sealed class MethodTransport : IDisposable
                 }
                 shader.Dispatch(expandKernel, (frequencyBins + 63) / 64, 1, 1);
             }
+        }
         pathSolves += frames;
         flushMask = 0;
         Graphics.ExecuteCommandBuffer(traceEnd);
@@ -916,6 +998,7 @@ internal sealed class MethodTransport : IDisposable
     // Audio readback (CPU reference): the frames' histograms, and the histogram buffer and its layout on the GPU
     // (GpuAudio.Path): uints per frame of `output`, and the counts [frame][pair][bin].
     public uint[] Late => late;
+    internal uint[] LateRates => lateRates;
     public ComputeBuffer LateBuffer => output;
     internal int PathUintsPerFrame => ReadbackUintsPerFrame;
     internal ComputeBuffer CountsBuffer => counts;
@@ -988,7 +1071,7 @@ internal sealed class MethodTransport : IDisposable
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose();
         counts?.Dispose();
-        arrivals?.Dispose(); arrivalCounts?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); primitivePlanes?.Dispose(); planeEdgeRangeBuffer?.Dispose(); planeEdgeIndexBuffer?.Dispose(); mirrorCdf?.Dispose();
+        arrivals?.Dispose(); arrivalCounts?.Dispose(); paths?.Dispose(); edgeCdf?.Dispose(); clearance?.Dispose(); pairObjects?.Dispose(); primitivePlanes?.Dispose(); planeEdgeRangeBuffer?.Dispose(); planeEdgeIndexBuffer?.Dispose(); mirrorCdf?.Dispose();
         pathRays?.Dispose(); pathLive?.Dispose(); edgeWeights?.Dispose(); cohortCounts?.Dispose(); sortBuckets?.Dispose(); sortEntries?.Dispose();
     }
 }

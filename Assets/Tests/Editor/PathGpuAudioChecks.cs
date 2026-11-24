@@ -149,7 +149,8 @@ public partial class TakeChecks
     // budget (ms: the auto-budget, PathPopulationBudget, on the update's tracer and audio time, N within 4,000 and maximum, default 23,000),
     // load (a round: from it on every walk segment is traced twice, ProfileFlags bit 15, a slower GPU), profile (1: after the
     // rounds, the work profile of 16 updates, MethodTransport.WorkProfile), merged (0: the GPU queries descend the instance tree,
-    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles); default "base:".
+    // not StaticTraceTree's), inline (0: the merged tree's leaves index the primitives instead of storing their triangles), stages (1: a fence after each
+    // stage of the tracer's update, PATH_STAGE lines with each stage's time), mergedWalk (0: the pairs walked one by one, MethodTransport.MergedWalk); default "base:".
     // All variants live in one process and are measured interleaved, in rounds of 8 updates each
     // (ACOUSTIC_PATH_BUDGET_ROUNDS, default 25), after a horizon of warm-up updates each, so drift from other work on
     // the machine falls on every variant alike. Reported: median and the 10th-90th percentile range per phase, and the
@@ -160,7 +161,8 @@ public partial class TakeChecks
         public string name; public GpuAudio gpu; public TransportSolver solver; public AcousticTake.State[] state; public long cursor;
         public readonly System.Collections.Generic.List<double>[] times = {new(), new(), new()};
         public readonly System.Collections.Generic.List<int> populations = new();
-        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle, profile, merged = true, inline = true;
+        public PathPopulationBudget budget; public int flags, loadRound = -1, kernelSkip, spectralLimit = -1; public bool fftSingle, profile, merged = true, inline = true, stages, mergedWalk = true;
+        public readonly System.Collections.Generic.SortedDictionary<string, System.Collections.Generic.List<double>> stageTimes = new();
     }
     [Test, Category("QualityMeasurement"), Timeout(int.MaxValue)]
     public void MeasurePathLiveBudget()
@@ -219,13 +221,15 @@ public partial class TakeChecks
                         case "maximum": maximum = value; break;
                         case "merged": v.merged = value != 0; break;
                         case "inline": v.inline = value != 0; break;
+                        case "stages": v.stages = value != 0; break;
+                        case "mergedWalk": v.mergedWalk = value != 0; break;
                         default: throw new ArgumentException("Unknown budget option " + p[0]);
                     }
                 }
                 if (budget > 0) { settings.pathPopulationMaximum = maximum; v.budget = new PathPopulationBudget(budget, settings.pathPopulation, 4000, maximum); }
                 v.gpu = new GpuAudio(scene, rate, settings, TakeRender.Signal.FromTake(take, clips), 1, transported: true);
                 v.solver = new TransportSolver(scene, take.Geometry, settings, shader, 1, rate, false, methodAudio: true);
-                v.solver.Method.ProfileFlags = v.flags;
+                v.solver.Method.ProfileFlags = v.flags; v.solver.Method.MergedWalk = v.mergedWalk;
                 v.solver.TraceTreeEnabled = v.merged; v.solver.TraceTreeInline = v.inline;
                 if (other)
                 {
@@ -246,7 +250,18 @@ public partial class TakeChecks
                 take.Evaluate(Math.Min((long)(windowStart * rate) + sample % (long)(windowLength * rate), take.Metadata.durationSamples), v.state);
                 Fence();
                 var w = Stopwatch.StartNew();
-                v.solver.BeginSolve(v.state, 1, false); Fence();
+                if (v.stages)
+                {
+                    // stages=1: a fence after each stage of the tracer's update (MethodTransport.StageHook), the time since the
+                    // previous one attributed to it; "fence" is an empty fence's round trip, which every stage's time includes.
+                    double mark = 0;
+                    void Add(string name, double ms) { if (round < 0) return; if (!v.stageTimes.TryGetValue(name, out var list)) v.stageTimes[name] = list = new(); list.Add(ms); }
+                    v.solver.Method.StageHook = name => { Fence(); double now = w.Elapsed.TotalMilliseconds; Add(name, now - mark); mark = now; };
+                    v.solver.BeginSolve(v.state, 1, false); Fence();
+                    Add("tail", w.Elapsed.TotalMilliseconds - mark);
+                    var f = Stopwatch.StartNew(); Fence(); Add("fence", f.Elapsed.TotalMilliseconds);
+                }
+                else { v.solver.BeginSolve(v.state, 1, false); Fence(); }
                 double t = w.Elapsed.TotalMilliseconds; w.Restart();
                 v.gpu.SetResponse(sample, sample == 0, v.solver.RayBuffer, 0, scene, v.state, late: v.solver.Late(0));
                 v.gpu.QueueRender(sample, step); double c = w.Elapsed.TotalMilliseconds;
@@ -295,6 +310,12 @@ public partial class TakeChecks
                 UnityEngine.Debug.Log($"PATH_BUDGET {v.name}: tracer {Stat(v.times[0])} ms, audio {Stat(v.times[1])} ms, CPU calls {Stat(v.times[2])} ms; " +
                                       $"{v.times[0].Count} updates, population {n[n.Length / 2]} [{n[n.Length / 10]}-{n[n.Length * 9 / 10]}], in flight {v.solver.Method.RaysInFlight()}, trace-tree rebuilds {v.solver.TraceTreeRebuilds}, overflowed {v.solver.Method.RaysOverflowed()}, load {loadBefore} -> {loadAfter}");
             }
+            foreach (var v in variants)
+                foreach (var stage in v.stageTimes)
+                {
+                    var x = stage.Value.ToArray(); Array.Sort(x); double sum = 0; foreach (double y in x) sum += y;
+                    UnityEngine.Debug.Log(FormattableString.Invariant($"PATH_STAGE {v.name} {stage.Key}: {x.Length / v.times[0].Count} per update, median {x[x.Length / 2]:F3} ms, mean {sum / x.Length:F3} ms, per update {sum / v.times[0].Count:F3} ms"));
+                }
             if (!string.IsNullOrEmpty(tracePath)) File.WriteAllText(tracePath, trace.ToString());
             UnityEngine.Debug.Log($"PATH_BUDGET impulse groups per partition (count:partitions): {variants[0].gpu.PathPartitionGroups}");
         }

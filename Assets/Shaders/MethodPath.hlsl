@@ -85,6 +85,12 @@ RWStructuredBuffer<uint> PathClearanceOut;
 #ifndef PATH_CLEARANCE_READ
 #define PATH_CLEARANCE_READ PathClearanceOut   // (the Doppler walks read a read-only view of it: PathMethod.compute)
 #endif
+// The pair's ends (MethodCommon.hlsl "merged walk"): PathClearanceOut holds three words per pair; the walk reads the source and
+// listener objects from PathPairObjects [pair] (source, listener), the other kernels from MethodSourceObject and MethodListenerObject.
+StructuredBuffer<uint2> PathPairObjects;
+uint PathEndsAt(uint word) { return 3 * (MethodPairSlot + PathPairIndex) + word; }
+uint PathSourceObject() { return PathPairObjects[MethodPairSlot + PathPairIndex].x; }
+uint PathListenerObject() { return PathPairObjects[MethodPairSlot + PathPairIndex].y; }
 StructuredBuffer<float> PathMirrorCdf; // cumulative primitive areas (RD mirrors drawn by area)
 groupshared uint PathClearanceMin;
 void PathClearance(uint thread)
@@ -96,7 +102,7 @@ void PathClearance(uint thread)
     uint hit; float distance; float3 normal;
     if (NearestHit(MethodState, L, d, 1e4, false, hit, distance, normal)) InterlockedMin(PathClearanceMin, asuint(distance));
     GroupMemoryBarrierWithGroupSync();
-    if (thread == 0) PathClearanceOut[0] = PathClearanceMin;
+    if (thread == 0) PathClearanceOut[PathEndsAt(0)] = PathClearanceMin;
 }
 // The source's and the listener's media, once per solve after PathClearance (README part 47), in PathClearanceOut[1] and [2]:
 // the walk reads the listener's there instead of every thread locating both ends itself, two point-location queries per thread
@@ -104,7 +110,7 @@ void PathClearance(uint thread)
 // build MediumAt's loop.)
 void PathEndsMedia(uint thread)
 {
-    if (thread < 2) PathClearanceOut[1 + thread] = MediumAt(MethodState, States[MethodState + (thread == 0 ? MethodSourceObject : MethodListenerObject)].position.xyz, false);
+    if (thread < 2) PathClearanceOut[PathEndsAt(1 + thread)] = MediumAt(MethodState, States[MethodState + (thread == 0 ? MethodSourceObject : MethodListenerObject)].position.xyz, false);
 }
 float PathSurvival(float time) { return PathSurvivalSeconds > 0 ? min(1, PathSurvivalSeconds / max(time, 1e-6)) : 1; }
 RWStructuredBuffer<uint> PathCounts; // contributions per [solve][bin]
@@ -168,20 +174,20 @@ void PathDeposit(float3 from, float4 low, float4 high, float time, uint key, uin
     if (bin >= PathBins) { MethodCount(CounterNonFinite); return; }
     if (MethodHeadFrame != 0)
     {
-        float4 head = States[MethodState + MethodListenerObject].rotation;
+        float4 head = States[MethodState + PathListenerObject()].rotation;
         from = Rotate(float4(-head.xyz, head.w), from);
     }
     float norm = length(from);
     float3 u = norm > 0 ? from / norm : float3(0, 0, 1);
     uint slot = (PathRingSlot + ahead) % max(PathRingSlots, 1u);
-    uint cellBase = PathPersistent != 0 ? PathRingBase + slot * PathRingCells : MethodCellBase;
-    InterlockedAdd(PathCounts[(PathPersistent != 0 ? PathRingCountBase + slot * PathBins : PathCountBase) + bin], 1u);
+    uint cellBase = PathPersistent != 0 ? PathRingBase + (PathPairIndex * PathRingSlots + slot) * PathRingCells : MethodCellBase;
+    InterlockedAdd(PathCounts[(PathPersistent != 0 ? PathRingCountBase + (PathPairIndex * PathRingSlots + slot) * PathBins : PathCountBase) + bin], 1u);
 #if PATH_DOPPLER
     {
         // (The delay moment covers every contribution, moving or not, so that a bin's mean delay is over all its energy;
         // the rate moments of a contribution at rest are zero.)
         float energy = dot(low + high, 1);
-        uint rates = (PathPersistent != 0 ? PathRateRingBase + slot * 3 * PathBins : PathRateSolveBase) + bin;
+        uint rates = (PathPersistent != 0 ? PathRateRingBase + (PathPairIndex * PathRingSlots + slot) * 3 * PathBins : PathRateSolveBase) + bin;
         float fine = PathBin0 * PathFineBins, start = bin < PathFineBins ? bin * PathBin0 : fine * pow(1 + PathRatio, (float)(bin - PathFineBins));
         if (rate != 0)
         {
@@ -247,7 +253,7 @@ void PathEvent(inout PathChain c, bool transmitted)
 // so weights a few updates old only steer a little less well.
 RWStructuredBuffer<float> PathEdgeWeight; // persistent: [pair][edge]
 uint PathEdgeOffset, PathEdgeWeightBase;
-void PathEdgeCopy(uint edge) { if (edge < MethodEdgeCount) MethodEdgeCdf[edge] = PathEdgeWeight[PathEdgeWeightBase + edge]; }
+void PathEdgeCopy(uint edge) { if (edge < MethodEdgeCount) MethodEdgeCdf[MethodEdgeAt(edge)] = PathEdgeWeight[PathEdgeWeightBase + edge]; }
 void PathEdgeWeights(uint index)
 {
     uint edge = index + PathEdgeOffset;
@@ -266,7 +272,7 @@ void PathEdgeWeights(uint index)
         [loop] for (uint i = 0; i < 2 && !seen; i++) seen = Visible(MethodState, x, i == 0 ? nearest : mid, false);
         weight *= seen ? 1 : MethodEdgeHidden;
     }
-    if (PathPersistent != 0) PathEdgeWeight[PathEdgeWeightBase + edge] = weight; else MethodEdgeCdf[edge] = weight;
+    if (PathPersistent != 0) PathEdgeWeight[PathEdgeWeightBase + edge] = weight; else MethodEdgeCdf[MethodEdgeAt(edge)] = weight;
 }
 
 // Straight connection of a non-delta vertex to the listener (through transmitting walls).
@@ -397,15 +403,15 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
     // the mean). Same estimator, lower variance.
     uint edge, edge2;
     float uSource = RandomRay(rng);
-    bool distribution = METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
+    bool distribution = METHOD_EDGE_CDF_READ[MethodEdgeAt(max(MethodEdgeCount, 1u) - 1)] > 0;
     if (v.kind == 0 && distribution) edge = EnergySampleEdge(uSource, pick);
     else if (v.kind == 1 && distribution)
     {
         float pickCdf, pickLocal;
         if (uSource < .5) edge = EnergySampleEdge(2 * uSource, pickCdf);
         else edge = MethodPickEdge(v.primitive, rng, pickLocal);
-        float total = METHOD_EDGE_CDF_READ[MethodEdgeCount - 1];
-        pickCdf = (METHOD_EDGE_CDF_READ[edge] - (edge > 0 ? METHOD_EDGE_CDF_READ[edge - 1] : 0)) / total;
+        float total = METHOD_EDGE_CDF_READ[MethodEdgeAt(MethodEdgeCount - 1)];
+        pickCdf = (METHOD_EDGE_CDF_READ[MethodEdgeAt(edge)] - (edge > 0 ? METHOD_EDGE_CDF_READ[MethodEdgeAt(edge - 1)] : 0)) / total;
         uint2 local = v.primitive == 0xffffffff ? uint2(0, 0) : EdgeRanges[v.primitive];
         pickLocal = (local.y > 0 ? .5 : 1) / MethodEdgeCount;
         [loop] for (uint i = 0; i < local.y; i++) if (EdgeIndices[local.x + i] == edge) pickLocal += .5 / local.y;
@@ -492,7 +498,7 @@ bool PathEdgeConnection(MethodAnchor v, float4 inLow, float4 inHigh, float3 L, i
 void PathDirectArrival(float3 S, float3 L, float4 low, float4 high, float scale, float time, float total)
 {
     float c = SpeedOfSound;
-    float3 vS = Velocity(MethodState + MethodSourceObject), vL = Velocity(MethodState + MethodListenerObject);
+    float3 vS = Velocity(MethodState + PathSourceObject()), vL = Velocity(MethodState + PathListenerObject());
     float3 departure = total > 0 ? (L - S) / total : float3(0, 0, 1);
     float a = c * c - dot(vS, vS), b = total * dot(vS, departure);
     float retarded = a > 0 ? (b + sqrt(max(0, b * b + a * total * total))) / a : total / c;
@@ -507,8 +513,8 @@ void PathDirectArrival(float3 S, float3 L, float4 low, float4 high, float scale,
     result.family = EnergyFamilyDirect;
     result.length = total;
     if (!(result.delay >= 0 && result.delay <= MethodHorizon && ratio > 0) || !(dot(result.low + result.high, 1) > 0)) return;
-    MethodArrivals[MethodArrivalBase] = result;
-    MethodArrivalCounts[MethodCountIndex] = 1;
+    MethodArrivals[MethodArrivalBase + PathPairIndex] = result;
+    MethodArrivalCounts[MethodCountIndex + PathPairIndex] = 1;
 }
 
 // Persistent rays (docs/benchmarks/path-denoise-2026-11-12, part 17): the rays are the sound in flight.
@@ -691,10 +697,10 @@ void PathTraceBench(uint index)
 void PathKeep(PathRay r)
 {
     uint slot;
-    InterlockedAdd(PathLive[PathWriteCount], 1u, slot);
-    if (slot < PathCapacity) PathRays[PathWriteBase + slot] = r;
-    else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount], 1u); }
-    if (PathPopulation != 0 && slot < PathCapacity) InterlockedAdd(PathCohortCount[PathCohortBase + PathCohortOf(r.direction.w)], 1u);
+    InterlockedAdd(PathLive[PathWriteCount + 2 * PathPairIndex], 1u, slot);
+    if (slot < PathCapacity) PathRays[PathWriteBase + 2 * PathPairIndex * PathCapacity + slot] = r;
+    else { MethodCount(CounterOverflow); InterlockedAdd(PathLive[PathOverflowCount + PathPairIndex], 1u); }
+    if (PathPopulation != 0 && slot < PathCapacity) InterlockedAdd(PathCohortCount[PathCohortBase + PathPairIndex * PathCohorts + PathCohortOf(r.direction.w)], 1u);
 }
 
 // PartitionExit for the walk, where overlapping solids are one: the crossing ends at the partition's far
@@ -1009,7 +1015,7 @@ void TracePath(uint index)
     bool resumed = false;
     if (PathPersistent != 0)
     {
-        uint thread = MethodRayOffset + index, live = min(PathLive[PathReadCount], PathCapacity);
+        uint thread = MethodRayOffset + index, live = min(PathLive[PathReadCount + 2 * PathPairIndex], PathCapacity);
         if (thread < live) { resumed = true; slot = thread; }
         else if (thread - live < MethodRayCount) ray = thread - live;
         else return;
@@ -1020,14 +1026,14 @@ void TracePath(uint index)
         ray = MethodRayOffset + index;
     }
     MethodCount(resumed ? CounterResumed : CounterRays);
-    float3 S = States[MethodState + MethodSourceObject].position.xyz, L = States[MethodState + MethodListenerObject].position.xyz;
-    uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay(RaySeed * 0xc2b2ae35u + 0x2545f491u));
+    float3 S = States[MethodState + PathSourceObject()].position.xyz, L = States[MethodState + PathListenerObject()].position.xyz;
+    uint rng = HashRay(ray * 0x9e3779b9u ^ HashRay((RaySeed + PathPairIndex) * 0xc2b2ae35u + 0x2545f491u));
     MethodAnchor v;
     v.position = S; v.normal = 0; v.previous = S; v.kind = 0; v.edge = 0; v.primitive = 0xffffffff; v.time = 0;
     // The listener's medium, located once per solve (PathEndsMedia); a resumed ray carries its own medium, so only a new ray
     // locates the source. (Reading the source's medium from the buffer too made the compiler fail to build the static walk's
     // connection loop, "can't unroll loops marked with loop attribute", as in part 17.)
-    bool airListener = PATH_CLEARANCE_READ[2] == AirMedium;
+    bool airListener = PATH_CLEARANCE_READ[PathEndsAt(2)] == AirMedium;
     PROFILE_KIND(7);
     v.medium = AirMedium;
     if (!resumed) v.medium = MediumAt(MethodState, S, false); // (not ?:, whose sides are both evaluated in this dialect)
@@ -1053,7 +1059,7 @@ void TracePath(uint index)
     // walk's vertex v and the connections' anchor c theirs up to and including the incoming leg and their point's
     // velocity; vL the listener's.
 #if PATH_DOPPLER
-    float3 vL = Velocity(MethodState + MethodListenerObject), vVelocity = Velocity(MethodState + MethodSourceObject), cVelocity = vVelocity;
+    float3 vL = Velocity(MethodState + PathListenerObject()), vVelocity = Velocity(MethodState + PathSourceObject()), cVelocity = vVelocity;
     float rho = 0, vRate = 0, cRate = 0, pendingRate = 0, branchRate = 0;
 #endif
     float3 pendingFrom = 0;
@@ -1076,7 +1082,7 @@ void TracePath(uint index)
     bool scored = false, suspending = false, offSurface = false;
     if (resumed)
     {
-        PathRay r = PathRays[PathReadBase + slot];
+        PathRay r = PathRays[PathReadBase + 2 * PathPairIndex * PathCapacity + slot];
         p = r.position.xyz; tau = r.position.w; d = r.direction.xyz; age = r.direction.w; target = age + PathStep;
         [unroll] for (uint kr = 0; kr < MethodBands; kr++)
         {
@@ -1107,7 +1113,7 @@ void TracePath(uint index)
             // The ring is deep enough for any connection in the scene (MethodTransport.RingSlots); one heard later
             // still is counted (PathLive[PathRingFar]) and asserted absent by the checks.
             float aheadUpdates = PathPersistent != 0 ? max(0, ceil((pendingTime - target) / PathStep)) : 0;
-            if (aheadUpdates > (float)PathRingSlots - 1 && pendingTime <= MethodHorizon) InterlockedAdd(PathLive[PathRingFar], 1u); // (later than the horizon: dropped)
+            if (aheadUpdates > (float)PathRingSlots - 1 && pendingTime <= MethodHorizon) InterlockedAdd(PathLive[PathRingFar + PathPairIndex], 1u); // (later than the horizon: dropped)
             uint ahead = (uint)min(aheadUpdates, (float)PathRingSlots - 1);
             // (This update's rays reach path time `target`; its own time is half a period before, PathStep later per slot ahead.)
 #if PATH_DOPPLER
@@ -1192,7 +1198,7 @@ void TracePath(uint index)
         if (!travelling)
         {
             if (++events >= MethodMaxEvents) { MethodCount(CounterEventCap); break; }
-            bool edgeRays = edges && v.kind == 0 && METHOD_EDGE_CDF_READ[max(MethodEdgeCount, 1u) - 1] > 0;
+            bool edgeRays = edges && v.kind == 0 && METHOD_EDGE_CDF_READ[MethodEdgeAt(max(MethodEdgeCount, 1u) - 1)] > 0;
 #if PATH_WALK_EDGE
             edgeRays = false; // (walk diffraction: no edge rays from the source)
 #endif
@@ -1301,7 +1307,7 @@ void TracePath(uint index)
             float3 offset = L - p - d * along;
             float rho2 = dot(offset, offset), lc = chain.travelled + along;
             float lu = sqrt(max(lc * lc + rho2, RayEpsilon * RayEpsilon));
-            float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PATH_CLEARANCE_READ[0]);
+            float lambda0 = SpeedOfSound / MethodBandHz(0), w20 = lambda0 * lu / RayPi, clearance = asfloat(PATH_CLEARANCE_READ[PathEndsAt(0)]);
             // A point of the segment nearest the listener, kept 4 RayEpsilon (perpendicular) off the walls at both
             // ends, so that the visibility test cannot start inside a wall's tolerance and see through it.
             float startInset = max(0, 4 * RayEpsilon / max(abs(dot(d, plane.xyz)), 1e-3) - sinceStart);
