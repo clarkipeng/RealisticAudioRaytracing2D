@@ -2491,3 +2491,47 @@ The first run of the new build stopped before the Church's walk began (part 45's
 
 **Where 100,000 rays stand.** Parts 47–49 made the tracer 1.9 times faster at 100,000 rays (24.65 → 13.0 ms) and 2 times at 11,000; the target of 100,000 within about 6 ms of GPU needs the tracer at about 3.5 ms there, 3.7 times faster again, with the audio and denoiser's 2.5 ms unchanged.
 The profile says where that is: the walk realises a quarter or less of its own traversal's rate (SIMD utilisation about 30%, a large kernel at low occupancy), and its traversal runs at a tenth or less of the hardware's. Both are addressed by the one-query-site stage machine above, which is the next step.
+
+## 52. Hardware ray tracing: the walk in waves, exact, and not faster yet
+
+**What was built** (`Native/AcousticRT/AcousticRT.mm`, `HardwareQueries.cs`; `MethodPath.hlsl` "Waves", `Geometry.hlsl` "Waves"; `settings.pathQueries`).
+- **A native Metal plugin.** One primitive acceleration structure per object, in its own frame, built once; an instance structure over them whose transforms and masks a Metal kernel writes from the walk's own poses, rebuilt before each update's walk, so a moving door or a train costs no CPU work and no refit of its mesh.
+  A second Metal kernel answers query records with Metal's intersector: closest or any hit against the scene, or against one object's mesh alone (point location's probe).
+  It is the only Metal code; the walk stays in Unity's HLSL.
+- **The walk in waves.** The first wave starts every ray; each ray runs its loop until a query has no answer yet, records it and stops; the plugin answers all of a wave's records together; the next wave runs the rays whose queries were answered.
+  A ray's state between waves is its loop state at the start of the iteration it stopped in (608 bytes) and the tape of that iteration's answers, so the next wave replays the iteration with one more answer.
+  The replay makes the same queries in the same order, so the walk is the megakernel's query for query; deposits and counters are made only past the answers an earlier wave consumed.
+  After the update's waves, the megakernel itself finishes the rays still going (`PathWaveResume`), from their stored state, with that iteration's queries answered again in software.
+- **The switch.** `pathQueries`: `Software` (the megakernel, the reference and the default), `Hardware` (waves answered by the plugin, `Software` where Metal ray tracing is unavailable), `WavesSoftware` (waves answered by the software tree: a check of the waves).
+
+**Interop, as found.**
+- `EndCurrentCommandEncoder` does not end the compute encoder Unity's dispatches use, and work encoded on Unity's command buffer after `CommitCurrentCommandBuffer` never ran.
+  Unity also waits only for its own command buffers: a readback of a buffer the plugin wrote returned before the plugin's work had run.
+  So the plugin commits Unity's command buffer, encodes on a command buffer of its own on Unity's queue, and signals a Metal event that Unity's next command buffer, still empty, waits for first.
+- A native pointer taken before a buffer's first upload, or of a buffer Unity uploads to, can be stale; the plugin reads the poses from a copy a kernel writes.
+- Unity's shader translation lost two consecutive scalar writes into a buffer's header that a dispatch then read as its indirect arguments (the waves' rays vanished); the arguments now live in an indirect-arguments buffer of their own.
+  An array in a struct indexed inside a `[loop]`, and a tape plus a second tree traversal in one kernel, made the compiler fail ("can't unroll loops"); the band arrays stay locals and the megakernel does the finishing.
+
+**Checks** (`PathWaveChecks.cs`, in the full tier).
+- `HardwareQueriesAgreeWithTheSoftwareTree`: 65,536 random rays in each of four scenes (the aperture room, the porch with a screen, a rotated room, a rotated closed solid with its single-object probes; closest hits to 1 km, any-hit segments, origins in and out of surfaces): no ray disagrees in hit or primitive, the largest distance difference is 4.6 × 10⁻⁵ m.
+- `WaveWalkIsTheMegakernelQueryForQuery`: the aperture room with transmitting walls (branches, partitions) and diffraction, persistent rays, the same seed every update, with and without population control.
+  Waves answered in software against the megakernel: sum of |differences| at most 1.8 × 10⁻⁸ of the total (one wave and the megakernel's finishing: 0); answered by Metal: 5 × 10⁻⁷ to 3 × 10⁻⁶.
+- The wave suite (full solves, four seeds) scores as part 49 to two decimals (level 3.38 dB overall, 1.81 in view, 4.91 in shadow, 1.95 in closed rooms; EDT 195%, T30 70%); its histograms differ from part 49's by at most 1.3 × 10⁻⁸ of the total (the shoeboxes bit for bit).
+  The rest of the full tier passes.
+
+**Time per update in the Church** (`MeasurePathLiveBudget`, `iterationCap=16` as the showcase runs it, one variant per process, 8 rounds; the machine shared with other work, so absolute times run about a third above part 49's):
+
+| Rays in flight | megakernel | waves, hardware answers |
+|---:|---|---|
+| 11,000 | 4.5 ms | 6.6 (1 wave) / 7.2 (4) / 18.4 (64) |
+| 100,000 | 15.3–15.7 ms | 17.4 (2) / 21.3 (4) / 21.2 (8) / 22.9 (16) |
+
+**Why it is not faster.**
+- **Traversal is about half of the megakernel at 100,000 rays, not most of it.** Tracing every walk segment twice adds 4.1 ms to its 15.3 ms (walk segments are half of the node visits, so all traversal is about 8 ms); skipping every histogram write saves nothing (15.33 against 15.34 ms); skipping the next-event and edge connections saves 2.6 ms.
+- **A wave costs per ray what a megakernel query costs, traversal included.** From 2 to 4 waves at 100,000 rays, 87,000 more rays stopped and resumed cost 3.9 ms, 45 ns each: each loads and stores its 608-byte state and replays its iteration from the start for every answer, which doubles the walk's own work per query that the hardware's traversal was meant to free.
+- **The tail is latency.** Each wave in the tail costs about 0.2 ms (a fenced profile: the plugin's command buffer between Unity's, the wave and the bookkeeping), against about 25 µs per iteration of the megakernel's longest chain, so the tail belongs in the megakernel.
+- Metal's intersector itself is cheap here: the 63 intersections of an update at 11,000 rays cost about 0.4 ms together.
+
+**What would make it pay.**
+The walk's own work per query has to fall below the traversal it replaces: one query site per loop iteration, so that a ray stops right after its query with only the state that query's continuation needs (part 51's step 1), instead of replaying an iteration from a full state.
+Until then `Hardware` stays a switch and `Software` the default.

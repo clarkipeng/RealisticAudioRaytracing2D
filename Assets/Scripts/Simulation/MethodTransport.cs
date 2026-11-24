@@ -72,6 +72,20 @@ internal sealed class MethodTransport : IDisposable
     // PATH_DOPPLER kernels only, dispatched while anything in the dispatched states moves and, with persistent rays, for
     // a horizon after (the rays in flight still carry the rates of what moved). A static scene runs the walk without them.
     readonly int traceStatic = -1, traceDoppler = -1, traceProfile = -1, benchKernel = -1;
+    // The wave walk (settings.pathQueries, README part 52; MethodPath.hlsl "Waves"): the persistent walk in waves, its queries
+    // answered between waves by Metal's intersector (HardwareQueries) or in software (PathWaveTraceKernel), then the rays still
+    // going finished in software. PathWave holds the waves' header, lists, query records and walk states (WaveLayout below).
+    public readonly bool Waves, HardwareWaves;
+    internal readonly int[] VolumeOwners;
+    internal int WaveQueryCapacity => waveSlots; // query records one wave holds // the closed objects (point location probes them one by one)
+    readonly int waveStatic = -1, waveDoppler = -1, waveTraceKernel = -1, waveArgsKernel = -1, cohortCountKernel = -1;
+    readonly ComputeBuffer waveBuffer, answers, stateBuffer, waveArguments;
+    readonly HardwareQueries hardware;
+    // Waves per update before the finishing walk takes the rest (measurement knob; the finishing walk keeps any count exact).
+    public int WaveCount = 64;
+    public const int WaveHeader = 32, WaveStateUints = 152, WaveTape = 8;
+    readonly int waveSlots, waveListBase, waveQueryBase, wavePosesBase, waveStateBase, waveSlotUints;
+    bool waveBound;
     bool moving, doppler;
     long dopplerUntil = -1;
     public bool Doppler => doppler;
@@ -170,7 +184,18 @@ internal sealed class MethodTransport : IDisposable
         if (persistent) { beginKernel = shader.FindKernel("PathPersistentBeginKernel"); ringKernel = shader.FindKernel("PathRingKernel"); edgeCopyKernel = shader.FindKernel("PathEdgeCopyKernel"); }
         traceStatic = traceKernel; traceDoppler = walk ? traceKernel : shader.FindKernel("TracePath3D" + suffix + "Doppler");
         if (settings.useBvh && !walk) { traceProfile = shader.FindKernel("TracePath3DBvhProfile"); benchKernel = shader.FindKernel("PathTraceBenchKernel"); }
-        if (population) { sortCountKernel = shader.FindKernel("PathSortCountKernel"); sortScanKernel = shader.FindKernel("PathSortScanKernel"); sortScatterKernel = shader.FindKernel("PathSortScatterKernel"); }
+        Waves = persistent && settings.useBvh && !walk && (settings.pathQueries == TakeRender.PathQueries.WavesSoftware ||
+                                                          (settings.pathQueries == TakeRender.PathQueries.Hardware && HardwareQueries.Available));
+        HardwareWaves = Waves && settings.pathQueries == TakeRender.PathQueries.Hardware;
+        if (Waves)
+        {
+            waveStatic = shader.FindKernel("TracePathWave"); waveDoppler = shader.FindKernel("TracePathWaveDoppler");
+            waveTraceKernel = shader.FindKernel("PathWaveTraceKernel"); waveArgsKernel = shader.FindKernel("PathWaveArgsKernel");
+            foreach (int kernel in new[] {waveStatic, waveDoppler, waveTraceKernel, waveArgsKernel})
+                if (!shader.IsSupported(kernel)) throw new NotSupportedException("The wave walk's kernels are unavailable on this GPU.");
+        }
+        stateBuffer = states;
+        if (population) { cohortCountKernel = shader.FindKernel("PathCohortCountKernel"); sortCountKernel = shader.FindKernel("PathSortCountKernel"); sortScanKernel = shader.FindKernel("PathSortScanKernel"); sortScatterKernel = shader.FindKernel("PathSortScatterKernel"); }
         if (audio) expandKernel = shader.FindKernel("PathExpandDirect");
         foreach (int kernel in new[] {traceKernel, clearKernel, expandKernel, edgeWeightKernel, edgeScanKernel, beginKernel, ringKernel, edgeCopyKernel, sortCountKernel, sortScanKernel, sortScatterKernel})
             if (kernel >= 0 && !shader.IsSupported(kernel)) throw new NotSupportedException("Method kernels are unavailable on this GPU.");
@@ -195,6 +220,7 @@ internal sealed class MethodTransport : IDisposable
                 }
             materials = new ComputeBuffer(bands.Length, 32); materials.SetData(bands);
             var volumeData = RayTransport.Volumes(scene, geometry, bands, Bands);
+            VolumeOwners = Array.ConvertAll(volumeData, v => (int)v.owner);
             volumes = new ComputeBuffer(Math.Max(1, volumeData.Length), 48);
             if (volumeData.Length > 0) volumes.SetData(volumeData);
             // Diffracting edges only: a wedge whose index pi/angle is an integer is
@@ -315,6 +341,20 @@ internal sealed class MethodTransport : IDisposable
                 sortBuckets.SetData(initial);
             }
             sortEntries = new ComputeBuffer(population ? Pairs * PersistentCapacity : 1, 8);
+            if (!Waves) waveBuffer = new ComputeBuffer(4, 4, ComputeBufferType.Raw);
+            if (Waves)
+            {
+                // WaveLayout (uints): the header; the two active lists and the finish list (a uint4 entry per first-wave thread
+                // each); a query record (3 uint4) per thread; a record per thread of its walk state and tape (2 uints an answer).
+                waveSlots = PersistentCapacity + Math.Max(Rays, maximumNewRays);
+                waveListBase = WaveHeader; waveQueryBase = waveListBase + 3 * 4 * waveSlots; wavePosesBase = waveQueryBase + 12 * waveSlots;
+                waveStateBase = wavePosesBase + 20 * Math.Max(1, scene.objects.Length);
+                waveSlotUints = WaveStateUints + 2 * WaveTape;
+                waveBuffer = new ComputeBuffer(checked(waveStateBase + waveSlots * waveSlotUints), 4, ComputeBufferType.Raw);
+                answers = new ComputeBuffer(waveSlots, 16);
+                waveArguments = new ComputeBuffer(9, 4, ComputeBufferType.IndirectArguments);
+                if (HardwareWaves) hardware = new HardwareQueries(geometry, scene.objects.Length);
+            }
             flushMask = persistent ? 1UL : 0; // the first update empties the pools and the ring (buffers start undefined)
             counts = new ComputeBuffer(countCells, 4);
             Counts = new uint[countCells];
@@ -333,7 +373,8 @@ internal sealed class MethodTransport : IDisposable
             if (traceProfile >= 0) kernels.AddRange(new[] {traceProfile, benchKernel});
             if (expandKernel >= 0) kernels.Add(expandKernel);
             if (persistent) kernels.AddRange(new[] {beginKernel, ringKernel, edgeCopyKernel});
-            if (population) kernels.AddRange(new[] {sortCountKernel, sortScanKernel, sortScatterKernel});
+            if (population) kernels.AddRange(new[] {cohortCountKernel, sortCountKernel, sortScanKernel, sortScatterKernel});
+            if (Waves) kernels.AddRange(new[] {waveStatic, waveDoppler, waveTraceKernel, waveArgsKernel});
             bind = () =>
             {
             foreach (int kernel in kernels)
@@ -352,6 +393,14 @@ internal sealed class MethodTransport : IDisposable
                 shader.SetBuffer(kernel, "PathEdgeWeight", edgeWeights); shader.SetBuffer(kernel, "PathCohortCount", cohortCounts);
                 shader.SetBuffer(kernel, "PathSortBuckets", sortBuckets); shader.SetBuffer(kernel, "PathSortEntry", sortEntries);
                 shader.SetBuffer(kernel, "PathRays", pathRays); shader.SetBuffer(kernel, "PathLive", pathLive);
+                if (Waves) { shader.SetBuffer(kernel, "PathWave", waveBuffer); shader.SetBuffer(kernel, "PathAnswers", answers); shader.SetBuffer(kernel, "PathAnswersOut", answers); shader.SetBuffer(kernel, "PathWaveArguments", waveArguments); }
+                shader.SetBuffer(kernel, "PathWaveRead", waveBuffer); // (the megakernel reads the waves' state when it finishes them; a placeholder without waves)
+            }
+            if (Waves)
+            {
+                shader.SetInt("PathWaveQueryBase", waveQueryBase); shader.SetInt("PathWaveTapeCapacity", WaveTape);
+                shader.SetInt("PathWaveListBase", waveListBase); shader.SetInt("PathWaveListCapacity", waveSlots);
+                shader.SetInt("PathWaveResume", 0); shader.SetInt("PathWaveStateBase", waveStateBase); shader.SetInt("PathWavePosesBase", wavePosesBase); shader.SetInt("PathWaveSlotUints", waveSlotUints); shader.SetInt("PathWaveFirst", 0);
             }
             shader.SetInt("PrimitiveCount", geometry.Length);
             shader.SetInt("PairCount", Pairs);
@@ -507,16 +556,18 @@ internal sealed class MethodTransport : IDisposable
         shader.SetInt("MethodRayCount", NewRays);
         shader.SetFloat("PathCohortTarget", NewRays); shader.SetFloat("PathLaunchScale", Rays / (float)NewRays);
         long threads = (long)PersistentCapacity + NewRays;
-        for (long first = 0; first < threads; first += 65535L * 64)
-        {
-            shader.SetInt("MethodRayOffset", (int)first);
-            shader.Dispatch(traceKernel, (int)((Math.Min(65535L * 64, threads - first) + 63) / 64), 1, 1);
-        }
+        if (Waves && !(WorkProfile && traceProfile >= 0)) WaveWalk(threads);
+        else
+            for (long first = 0; first < threads; first += 65535L * 64)
+            {
+                shader.SetInt("MethodRayOffset", (int)first);
+                shader.Dispatch(traceKernel, (int)((Math.Min(65535L * 64, threads - first) + 63) / 64), 1, 1);
+            }
         shader.SetInt("PathFlush", 0);
         if (population)
         {
             shader.SetVector("PathSortLow", sortLow); shader.SetVector("PathSortScale", sortScale);
-            foreach (int kernel in new[] {sortCountKernel, -1, sortScatterKernel})
+            foreach (int kernel in new[] {cohortCountKernel, sortCountKernel, -1, sortScatterKernel})
             {
                 if (kernel < 0) { shader.Dispatch(sortScanKernel, 1, 1, 1); continue; }
                 for (long first = 0; first < PersistentCapacity; first += 65535L * 64)
@@ -533,6 +584,98 @@ internal sealed class MethodTransport : IDisposable
         if (Profile) { Fence(); lastWalkSeconds = TakeRender.Elapsed(start); }
     }
     double lastWalkSeconds;
+    // The update's walk in waves (README part 52): the first wave starts every ray; each further wave answers the queries the last
+    // one recorded (Metal's intersector or PathWaveTraceKernel) and runs the rays that recorded them; then the finishing walk.
+    public double WaveIssueSeconds; // measurement: CPU time spent issuing the waves (no fence)
+    // Measurement: with WavePhases, a fence after every step and its time added here: the first wave, the intersections, the
+    // later waves, the bookkeeping, the finishing walk (the fences themselves add to each).
+    public bool WavePhases;
+    public readonly double[] WavePhaseSeconds = new double[5];
+    void WavePhase(int phase, ref long since) { if (!WavePhases) return; Fence(); long now = Stopwatch.GetTimestamp(); WavePhaseSeconds[phase] += (now - since) / (double)Stopwatch.Frequency; since = now; }
+    void WaveWalk(long threads)
+    {
+        long issued = Stopwatch.GetTimestamp(), since = issued;
+        bool movingWalk = traceKernel == traceDoppler && traceDoppler != traceStatic;
+        int wave = movingWalk ? waveDoppler : waveStatic;
+        HardwareBuild();
+        WaveArgs(0);
+        WavePhase(3, ref since);
+        shader.SetInt("PathWaveFirst", 1);
+        for (long first = 0; first < threads; first += 65535L * 64)
+        {
+            shader.SetInt("MethodRayOffset", (int)first);
+            shader.Dispatch(wave, (int)((Math.Min(65535L * 64, threads - first) + 63) / 64), 1, 1);
+        }
+        shader.SetInt("PathWaveFirst", 0); shader.SetInt("MethodRayOffset", 0);
+        WavePhase(0, ref since);
+        WaveArgs(1);
+        WavePhase(3, ref since);
+        for (int w = 1; w < WaveCount; w++)
+        {
+            if (hardware != null) hardware.Intersect(0);
+            else shader.DispatchIndirect(waveTraceKernel, waveArguments, 0);
+            WavePhase(1, ref since);
+            shader.DispatchIndirect(wave, waveArguments, 4 * 3);
+            WavePhase(2, ref since);
+            WaveArgs(1);
+            WavePhase(3, ref since);
+        }
+        WaveArgs(2);
+        shader.SetInt("PathWaveResume", 1); // the megakernel finishes the rays still going
+        shader.DispatchIndirect(traceKernel, waveArguments, 4 * 6);
+        shader.SetInt("PathWaveResume", 0);
+        WavePhase(4, ref since);
+        WaveIssueSeconds += TakeRender.Elapsed(issued);
+    }
+    // Check (HardwareQueriesAgreeWithTheSoftwareTree): query records (12 uints each, MethodPath.hlsl "Waves") answered by Metal's
+    // intersector or by the software tree, at the latest dispatched state of frame 0; per record the primitive and the distance's bits.
+    internal uint[] AnswerQueries(uint[] records, bool hardwareAnswers)
+    {
+        int total = records.Length / 12;
+        if (total > waveSlots)
+        {
+            var all = new uint[2 * total];
+            for (int first = 0; first < total; first += waveSlots)
+            {
+                int count = Math.Min(waveSlots, total - first);
+                var part = new uint[12 * count]; Array.Copy(records, 12 * first, part, 0, part.Length);
+                Array.Copy(AnswerQueries(part, hardwareAnswers), 0, all, 2 * first, 2 * count);
+            }
+            return all;
+        }
+        int n = total;
+        if (!Waves || (hardwareAnswers && hardware == null)) throw new InvalidOperationException("No wave walk to answer these queries.");
+        bind(); SetSolve(0, 0);
+        var header = new uint[WaveHeader]; header[7] = (uint)n;
+        waveBuffer.SetData(header, 0, 0, WaveHeader); waveBuffer.SetData(records, 0, waveQueryBase, records.Length);
+        waveArguments.SetData(new uint[] {(uint)((n + 63) / 64), 1, 1, 0, 0, 0, 0, 0, 0});
+        if (hardwareAnswers)
+        {
+            var stale = new uint[4 * n]; for (int i = 0; i < stale.Length; i++) stale[i] = 0xdeadbeef; // (an answer not written shows)
+            answers.SetData(stale, 0, 0, stale.Length);
+            waveBound = false; HardwareBuild(); hardware.Intersect(0); // (bound again: SetData may replace a buffer)
+            // A readback waits only for Unity's own work on the buffer: a kernel of Unity's that binds the answers (and answers no
+            // query) runs after the plugin's work (its command buffer waits for it), and the readback waits for that kernel.
+            WaveArgs(0); shader.Dispatch(waveTraceKernel, 1, 1, 1);
+        }
+        else shader.DispatchIndirect(waveTraceKernel, waveArguments, 0);
+        var result = new uint[4 * n]; answers.GetData(result, 0, 0, 4 * n);
+        if (hardwareAnswers) HardwareQueries.ThrowIfFailed();
+        var pairs = new uint[2 * n];
+        for (int i = 0; i < n; i++) { pairs[2 * i] = result[4 * i]; pairs[2 * i + 1] = result[4 * i + 1]; }
+        return pairs;
+    }
+    void WaveArgs(int mode) { shader.SetInt("PathWaveArgsMode", mode); shader.Dispatch(waveArgsKernel, mode == 3 ? (scene.objects.Length + 63) / 64 : 1, 1, 1); }
+    // The solve's poses copied into PathWave (the plugin's view of them), then the instance structure built from them.
+    void HardwareBuild()
+    {
+        if (hardware == null) return;
+        if (!waveBound) { hardware.Bind(waveBuffer, waveQueryBase, 7, waveArguments, wavePosesBase, answers); waveBound = true; }
+        WaveArgs(3);
+        hardware.Build(0);
+    }
+    // Measurement: the waves' header after the latest update (MethodPath.hlsl "Waves": waves run, rays stopped, queries, rays finished).
+    public uint[] ReadWaveHeader() { var h = new uint[WaveHeader]; if (Waves) waveBuffer.GetData(h, 0, 0, WaveHeader); return h; }
     void Ring(int mode, long cells)
     {
         shader.SetInt("PathRingMode", mode);
@@ -985,6 +1128,7 @@ internal sealed class MethodTransport : IDisposable
     public void Dispose()
     {
         if (pending) { if (!pathsDone) pathRequest.WaitForCompletion(); if (!lateDone) lateRequest.WaitForCompletion(); if (!ratesDone) rateRequest.WaitForCompletion(); if (!countsDone) countRequest.WaitForCompletion(); pending = false; }
+        hardware?.Dispose(); waveBuffer?.Dispose(); answers?.Dispose(); waveArguments?.Dispose();
         materials?.Dispose(); edgeBuffer?.Dispose(); edgeRanges?.Dispose(); edgeIndices?.Dispose(); volumes?.Dispose();
         output?.Dispose(); stats?.Dispose();
         counts?.Dispose();

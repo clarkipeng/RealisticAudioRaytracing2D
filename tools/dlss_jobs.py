@@ -35,7 +35,7 @@ RUNNER = ROOT / '.context/gpu-audio/runner'
 UNITY = Path('/Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity')
 SOLID_PYTHON = ROOT / '.context/solid-python/bin/python'
 GIB = 1024 ** 3
-SYNCED = ['Assets/Scripts', 'Assets/Shaders', 'Assets/Resources/Acoustics', 'Assets/Tests/Editor', 'Assets/Editor', 'tools']
+SYNCED = ['Assets/Scripts', 'Assets/Shaders', 'Assets/Resources/Acoustics', 'Assets/Tests/Editor', 'Assets/Editor', 'Assets/Plugins', 'tools']
 PRESETS = [f'Assets/Materials/Church {name}.asset' for name in ('stone', 'wood', 'glass', 'ground')]
 
 

@@ -273,8 +273,8 @@ bool TraceMesh(uint root, State pose, uint stateOffset, float3 origin, float3 di
 }
 #endif
 // Shared any-hit / closest-hit traversal. Each median-split level needs at most 32 stack entries.
-bool TraceScene(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
-                bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
+bool TraceSceneSoftware(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
+                        bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
 {
     hit = 0xffffffff; distance = maximum; normal = 0;
     PROFILE_QUERY();
@@ -308,6 +308,82 @@ bool TraceScene(uint stateOffset, float3 origin, float3 direction, float minimum
     }
 #endif
     return hit != 0xffffffff;
+}
+// The world-space normal of a primitive at its object's pose (IntersectPrimitive's), for answers that carry no normal.
+float3 PrimitiveNormal(uint stateOffset, uint id)
+{
+    Primitive p = Primitives[id];
+    State state = States[stateOffset + p.indices.x];
+    float3 a = PastPoint(state, p.a.xyz, 0), b = PastPoint(state, p.b.xyz, 0), c = PastPoint(state, p.c.xyz, 0);
+    return normalize(cross(b - a, c - a));
+}
+// The scene's closed objects, sorted by owner: their box in their own frame (w: orientation sign; volume), their primitives
+// (ids.x first, ids.y count), owner (ids.z) and medium (ids.w). (Transport.hlsl's point location uses them.)
+struct Volume
+{
+    float4 minimum, maximum;
+    uint4 ids;
+};
+StructuredBuffer<Volume> Volumes;
+uint VolumeCount;
+// A closed object's primitives (first, count), or none.
+uint2 WaveObjectPrimitives(uint owner)
+{
+    uint lo = 0, hi = VolumeCount;
+    [loop] while (lo < hi) { uint mid = lo + (hi - lo) / 2; if (Volumes[mid].ids.z < owner) lo = mid + 1; else hi = mid; }
+    return lo < VolumeCount && Volumes[lo].ids.z == owner ? Volumes[lo].ids.xy : uint2(0, 0);
+}
+// Waves (README part 52; MethodPath.hlsl "Waves"): in the wave walk every scene query is answered from the walk's tape of answers,
+// or, if its answer is not there yet, recorded for the next wave (the walk then yields: PathWaveYielded). The tape holds the
+// answers of the current iteration of the walk's loop, so an iteration that yielded is replayed from its start with one more
+// answer each wave; the replay makes the same queries in the same order (the walk is deterministic given its state and the
+// answers), so the walk is the megakernel's, query for query. Side effects (deposits, counters) are made only past the
+// answers a previous wave already consumed (PathFresh). Answers come from Metal's intersector (Native/AcousticRT) or from
+// PathWaveTrace (software).
+RWByteAddressBuffer PathWave;          // (uints) MethodTransport.WaveLayout
+ByteAddressBuffer PathWaveRead;        // (the same, read by the megakernel finishing the waves: MethodPath.hlsl PathWaveResume): header, two active lists, the finish list, query records, walk states
+StructuredBuffer<uint4> PathAnswers;   // per query record: the primitive (0xffffffff: none), the distance's bits
+uint PathWaveQueryBase, PathWaveTapeCapacity;
+#ifdef PATH_WAVE
+static bool WaveYield = false, WaveFinish = false;
+static uint WaveTapeIndex = 0, WaveStored = 0, WaveNewBase = 0, WaveNewCount = 0, WaveTapeBase = 0;
+static int WaveExecuted = -1;          // side effects up to this query index were made by an earlier wave
+static uint4 WaveRecord0 = 0, WaveRecord1 = 0, WaveRecord2 = 0; // the query the walk yielded on
+bool PathFresh() { return !WaveYield && (int)WaveTapeIndex > WaveExecuted; }
+bool PathWaveYielded() { return WaveYield; }
+uint2 WaveTape(uint k) { return PathWave.Load2(4 * (WaveTapeBase + 2 * k)); }
+// The answer to the walk's next query, from the tape; if it is not there yet, the walk records the query and yields.
+bool WaveAnswer(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool anyHit, uint object, uint meshRoot,
+                out uint hit, out float distance, out float3 normal)
+{
+    hit = 0xffffffff; distance = maximum; normal = 0;
+    if (WaveYield) return true; // (past a missing answer: no hit, and nothing is recorded)
+    uint k = WaveTapeIndex++;
+    uint2 answer;
+    if (k < WaveStored) answer = WaveTape(k);
+    else if (k - WaveStored < WaveNewCount) answer = PathAnswers[WaveNewBase + k - WaveStored].xy;
+    else
+    {
+        WaveYield = true;
+        WaveFinish = k >= PathWaveTapeCapacity; // (the tape is full: the finishing walk takes the ray)
+        WaveRecord0 = uint4(asuint(origin), asuint(minimum)); WaveRecord1 = uint4(asuint(direction), asuint(maximum));
+        WaveRecord2 = uint4(anyHit ? 1u : 0u, object, meshRoot, 0);
+        return true;
+    }
+    hit = answer.x; distance = asfloat(answer.y);
+    if (hit == 0xffffffff) distance = maximum;
+    else normal = PrimitiveNormal(stateOffset, hit);
+    return true;
+}
+#endif
+bool TraceScene(uint stateOffset, float3 origin, float3 direction, float minimum, float maximum, bool is2D,
+                bool anyHit, uint ignoredOwner, out uint hit, out float distance, out float3 normal)
+{
+#ifdef PATH_WAVE
+    WaveAnswer(stateOffset, origin, direction, minimum, maximum, anyHit, 0, 0, hit, distance, normal); // (the walk ignores no owner)
+    return hit != 0xffffffff;
+#endif
+    return TraceSceneSoftware(stateOffset, origin, direction, minimum, maximum, is2D, anyHit, ignoredOwner, hit, distance, normal);
 }
 bool NearestHit(uint stateOffset, float3 origin, float3 direction, float limit, bool is2D, out uint hit,
                 out float distance, out float3 normal)

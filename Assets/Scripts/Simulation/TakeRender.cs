@@ -22,6 +22,11 @@ public static partial class TakeRender
     // before the hybrid, pressure and energy methods were removed (Git history); settings saved with one of those
     // load as Path (OnAfterDeserialize).
     public enum Method { Path = 3 }
+    // How the path method's persistent walk asks its scene queries (README part 52): Software, the walk in one kernel with the
+    // software tree (the reference); Hardware, the walk in waves with Metal's intersector answering between them
+    // (Native/AcousticRT; Software where it is unavailable); WavesSoftware, the walk in waves answered by the software tree (a check
+    // of the waves against the reference).
+    public enum PathQueries { Software, Hardware, WavesSoftware }
     [Serializable] public sealed class Settings : ISerializationCallbackReceiver
     {
         public int responseStepSamples = 512;
@@ -90,6 +95,8 @@ public static partial class TakeRender
         [Min(0),Tooltip("Path method, persistent rays: past this many loop iterations of a ray within one update, each further reflection survives with probability pathIterationSurvival and the survivors are reweighted (unbiased). It bounds the update's long serial chains (rays caught between close surfaces), which set the update's time. Zero: off.")]
         public int pathIterationCap;
         [Range(.05f,1)] public float pathIterationSurvival=.75f;
+        [Tooltip("Path method, persistent rays: how the walk asks its scene queries (TakeRender.PathQueries). Hardware runs the walk in waves answered by Metal's ray-tracing hardware; Software is the reference, one kernel with the software tree.")]
+        public PathQueries pathQueries;
         [Min(1),Tooltip("Path method, persistent rays, one source-listener pair: refresh the edge-ray distribution (a slice of 2,048 edge weights, then the distribution) every this many updates; in between the last one stays. Unbiased at any value: the weights only steer the sampling.")]
         public int pathEdgeSliceUpdates=1;
         [Tooltip("Path method: room modes below the Schroeder frequency, crossed over with the histogram (RoomModes.cs): a bank exported by tools/room_modes.py, as a path or relative to StreamingAssets, with an optional sidecar <bank>.json naming the geometry and object poses it was baked for. Applied while both ends are in the bank's air and its objects at their baked poses. Empty: off.")]
