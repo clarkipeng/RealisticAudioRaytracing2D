@@ -34,12 +34,14 @@ public partial class TakeChecks
         using var denoiser = new PathDenoiser(shader, weights, header, starts);
         Assert.That(f.Length, Is.EqualTo(at + (updates - denoiser.K + 1) * cells), "fixture layout");
         var output = new float[cells];
-        double worst = 0;
+        // outputHash: FNV-1a of every output's bits, logged; a kernel change meant to be exact must keep it.
+        double worst = 0; ulong outputHash = 14695981039346656037UL;
         for (int u = 0; u < updates; u++)
         {
             denoiser.Push(f.Skip(histograms + u * cells).Take(cells).ToArray(), f.Skip(counts + u * bins).Take(bins).ToArray());
             if (u < denoiser.K - 1) continue;
             denoiser.Output.GetData(output);
+            foreach (var v in output) { outputHash ^= (ulong)BitConverter.SingleToInt32Bits(v) & 0xffffffffUL; outputHash *= 1099511628211UL; }
             int expected = at + (u - denoiser.K + 1) * cells;
             double peak = 0;
             for (int i = 0; i < cells; i++) peak = Math.Max(peak, f[expected + i]);
@@ -51,7 +53,7 @@ public partial class TakeChecks
                 Assert.That(error, Is.LessThan(2e-3), $"update {u}, cell {i / bins} bin {i % bins}: kernel {output[i]:G6}, model {e:G6}");
             }
         }
-        UnityEngine.Debug.Log($"Denoiser kernel against the model: worst relative error {worst:G3} over {updates - denoiser.K + 1} updates of {bins} bins");
+        UnityEngine.Debug.Log($"Denoiser kernel against the model: worst relative error {worst:G3} over {updates - denoiser.K + 1} updates of {bins} bins; output bits hash {outputHash:X16}");
     }
 
     // GPU time per update at the Church's bin count (6 s horizon) and a generated scene's (2 s): the update

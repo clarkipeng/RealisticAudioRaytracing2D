@@ -196,8 +196,16 @@ void Convolve(uint3 id : SV_DispatchThreadID)
     {
         int at = (int)k + ((int)t - half) * (int)Dilation;
         if (at < 0 || at >= (int)Bins) continue;
-        uint w = WeightBase + (o * InChannels) * Taps + t;
-        for (uint i = 0; i < InChannels; i++) s += Weights[w + i * Taps] * Input[i * Bins + at];
+        uint w = WeightBase + (o * InChannels) * Taps + t, i = 0;
+        // Sixteen inputs' loads issued before their sixteen sums, which stay in the input order: the same result,
+        // with the loads' latency overlapped instead of paid once per input.
+        for (; i + 16 <= InChannels; i += 16)
+        {
+            float a[16], b[16];
+            [unroll] for (uint j = 0; j < 16; j++) { a[j] = Weights[w + (i + j) * Taps]; b[j] = Input[(i + j) * Bins + at]; }
+            [unroll] for (uint j2 = 0; j2 < 16; j2++) s += a[j2] * b[j2];
+        }
+        for (; i < InChannels; i++) s += Weights[w + i * Taps] * Input[i * Bins + at];
     }
     Output[o * Bins + k] = Gelu ? .5 * s * (1 + Erf(s * .70710678)) : s;
 }

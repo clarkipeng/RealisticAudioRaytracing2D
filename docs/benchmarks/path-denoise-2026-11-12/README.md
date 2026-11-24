@@ -2604,3 +2604,57 @@ It is kept as `hardware-waves.patch` beside this file (part 52's code; it applie
 The walk is part 49's again, compiled with FXC: `MeasurePathHistogramHash` gives every counter and every bin's contribution count of part 52's megakernel, energies within 0.6–1.8 × 10⁻⁸ of the total; the wave suite scores as part 52 to two decimals, its histograms within 1.3 × 10⁻⁸ of part 52's (the shoeboxes bit for bit), part 52's own distance from part 49.
 `WarmPathKernels` (compile every walk kernel in a light process before a heavy measurement) moved to `PathDopplerChecks.cs`; `MeasurePathHistogramHash` keeps its moving source, its counters and its knobs (`ACOUSTIC_PATH_HASH_EVENTS`, `_POPULATION`, `_FLAGS`).
 The full tier passes.
+
+## 55. The audio's fixed cost: profiled; the denoiser's convolutions twice as fast, bit for bit
+
+**Where the audio's time goes** (`MeasurePathLiveBudget` in the Church at 23,000 rays, `iterationCap=16`, one variant per process, 15 rounds of 8 updates, GPU at most 20% busy before each run; the audio's time runs from the response's dispatch to the readback's completion, so it includes one fence's round trip, about 0.2 ms).
+
+| Variant | Audio, ms | GPU % before / after |
+|---|---|---|
+| denoiser on (part 54) | 2.61 [2.43–3.21] | 0/0 → 0 |
+| denoiser off | 1.86–1.90 | 0/0 → 0 |
+| denoiser on, path kernels built once and left (`kernels=0`, a bound) | 2.27 [2.12–2.88] | 0/0 → 0 |
+| denoiser on, no late convolution (`convolution=0`, a bound) | 2.34 [2.21–2.69] | 0/0 → 0 |
+| denoiser on, neither | 1.98 [1.88–2.36] | 0/0 → 0 |
+| floor: no denoiser, path kernels or late convolution | 1.28 [1.18–1.67] | 0/0 → 0 |
+
+So the denoiser took about 0.73 ms, the path kernels about 0.34, the late convolution about 0.27, and the floor 1.28: the fence and readback, the direct sound's compare, groups and filters, and four spectral hops of 256 samples (each an input FFT per path group, the sum and the inverse FFT, for the current filter and for the old one it crossfades from), the PCM writes, and 0.11 ms of CPU calls.
+Profiling bounds of the floor, measured with temporary switches not kept: skipping the spectral work of the update's last three hops saves 0.30 ms (0.10 per hop), skipping the old filter's pass in all four hops 0.11 ms, skipping the last three late blocks 0.03 ms.
+
+**The denoiser's steps** (`MeasurePathDenoiserSteps`, the Church's 447 bins, a fence after each step, medians of 60 updates; each step includes the fence's round trip of about 0.10–0.12 ms, which the live update does not pay per step):
+
+| Step | Part 54, ms | Now, ms |
+|---|---:|---:|
+| ingest, scale, features, smooth, cell mean, normaliser | 0.140, 0.173, 0.124, 0.117, 0.126, 0.120 | 0.131, 0.159, 0.109, 0.107, 0.118, 0.107 |
+| convolution 0 (292 inputs) | 0.345 | 0.203 |
+| convolutions 1–7 (64 inputs) | 0.165–0.170 each | 0.124–0.130 each |
+| predict, totals, conserve | 0.118, 0.117, 0.116 | 0.104, 0.104, 0.103 |
+| sum | 2.66 | 2.13 |
+
+Net of the fence, the convolutions took about 0.58 ms of the denoiser's 0.73 and the other steps 0.00–0.06 each.
+
+**What changed** (`PathDenoise.compute`, `Convolve`).
+A convolution thread sums one output channel of one bin over its taps and inputs, one load pair and one multiply-add per input, and the next input's loads waited for nothing but were issued only after the previous sum: the kernel was bound by load latency, not by arithmetic.
+It now loads sixteen inputs' weights and values before their sixteen multiply-adds, which stay in the input order.
+The sums are the same operations in the same order, so the result is the same: the denoiser's output over the model fixture's five updates is bit-identical (`PathDenoiserKernelMatchesTheModel` now logs a hash of every output's bits: 003424EFBF73DFDB before and after; worst error against the Python model 1.75 × 10⁻⁵ both).
+- Eight inputs at a time gave conv0 0.212 ms; sixteen, 0.203.
+- Four output channels per thread (each input loaded once for all four, four independent sums, each in the same order, also bit-identical) gave the same conv0 (0.204) and slower later layers (0.131), so it was not kept.
+- The same reordering of loads in the scale step's reduction changed the output's bits (the compiler's arithmetic for the sum was not the same) and saved nothing measurable (0.157 against 0.159 ms), so it was not kept.
+
+The denoiser went from about 0.73 ms to 0.42–0.48 per update in the live budget (audio 2.25–2.36 ms with it, 1.88 without; GPU 0/0 → 0).
+The full tier passes.
+
+**What is left of the fixed cost, and not built.**
+- **Batching the spectral hops.** The four hops of an update share their filters, and a hop's input depends only on the source's samples, so the four hops' input FFTs, sums and inverse FFTs could each run as one dispatch over four blocks, with the same arithmetic per block (exact).
+  The bound above says that saves at most 0.30 ms; it needs four blocks' slots for the spectra, the head blends, the tile sums and the output blocks, and the per-block clocks the kernels read, in the audio path every method and scene shares.
+- **The old filter's pass** (0.11 ms) does real work while a crossfade runs; skipping it saved that much, so it ran in these updates.
+- **The fence and readback** (about 0.2 ms) are how the audio reaches the CPU each update; the live renderer pays them too.
+
+**The population at about 6 ms** (the auto-budget, `budget=6`, maximum raised to 100,000 for the measurement, the live settings: `iterationCap=16`, `edgeSlice=4`, the denoiser on; one variant per process; GPU 0/0 → 0 for every run).
+- **Church**, from 23,000: N settled at **12,500** [11,590–13,367] (40 rounds of 8 updates), tracer 3.63 [3.29–4.13] ms, audio 2.37 [1.96–2.76].
+  At fixed populations: 12,500 rays take 3.19 + 2.24 ms, 16,000 take 3.95 + 2.28, 23,000 take 4.85 + 2.33 (tracer + audio), so 6 ms lies at about 15,000 rays; the auto-budget stops on the first block whose median's interval holds the budget, approaching from above, and its blocks here include the updates right after each change of N.
+  Part 51's auto-budget settled at 15,900 (tracer 3.43, audio 2.47 ms); the difference lies within the tracer's spread at a fixed N (16,000 here: 3.51–5.32 ms, 10th–90th percentile).
+- **Station** (two sources, 18–22 s of its take): at the minimum of 4,000 rays per source an update takes 5.75 + 2.49 ms, so 6 ms is out of reach, as in part 51 (5.86 + 2.89).
+
+So the population at 6 ms is below 23,000, the denoiser's trained range and the showcase's default: the 64-wide denoiser was not retrained, the showcase not rebuilt, and no new clips were rendered.
+The target, 100,000 rays in about 6 ms, needs the tracer at 100,000 rays (14.66 ms, part 54) to take about 3.7 ms beside the audio's 2.3: four times faster, which neither the hardware path (part 52), the state machine (part 54) nor the audio's fixed cost can give; the audio's whole cost is 2.3 ms against the 8.7 ms the tracer would have to lose.

@@ -432,18 +432,20 @@ Measured on an Apple M5 (16 GB) under Unity 6.4 on Metal, GPU time per update, t
 | Phase | ms per update |
 |---|---:|
 | tracer: edge distribution, walk, population control and sort, histogram and ring | 3.0 (4.2 before notebook parts 47–49) |
-| audio: path kernels, convolution, echoes, direct path, PCM and readback | 1.45 |
-| denoiser | 0.64 |
-| total | about 5.1 |
+| audio: path kernels (0.34), late convolution (0.27), direct path, four spectral hops, PCM and readback | 1.9 |
+| denoiser | 0.45 (0.73 before notebook part 55) |
+| total | about 5.4 |
 
 Each phase includes one fence's round trip (about 0.2 ms).
-At 100,000 rays in flight the tracer takes 13.0 ms (21.8 ms before notebook parts 47–49).
+The denoiser's eight convolutions are most of its time; each thread issues sixteen inputs' loads before their multiply-adds, in the same order, so its output is bit for bit what it was (notebook part 55).
+Of the audio's floor, the four spectral hops' FFTs, sums and inverse FFTs take about 0.4 ms (0.1 per hop, the current and the old filter's passes together).
+At 100,000 rays in flight the tracer takes 13.0–14.7 ms (21.8 ms before notebook parts 47–49).
 Per thread and update the walk makes 3.4 scene queries (walk segments 46% of them, next-event and edge connections 19%, beam visibility 9%, transmissions 18%) and 172 node visits, at a SIMD utilisation of about 30% (notebook part 46's work profile); it realises 12–26 M queries per second against 83–124 M/s for its traversal alone in a kernel that does nothing else.
 The histogram and ring writes cost nothing measurable; the audio side and the denoiser do not depend on N.
 Memory: 160 bytes per ray in flight, and the ring of future histograms (44 MB in the Church, whose meadow makes the ring 262 slots deep).
 
 In the live showcase (release player, 60 Hz, windowed smoke runs of a scripted walk), the Church at 23,000 rays had no underrun in four runs, frame GPU time 10.6 ms median, the scene's own rendering included (8.9 ms at 11,000; notebook part 51).
-With the auto-budget at 6 ms per update for the tracer, the audio and the denoiser together, the Church settles at about 16,000 rays (tracer 3.4 ms, audio with the denoiser 2.5 ms).
+With the auto-budget at 6 ms per update for the tracer, the audio and the denoiser together, the Church settles at 12,500–16,000 rays (fixed populations put 6 ms at about 15,000: tracer about 3.7 ms, audio with the denoiser 2.3 ms; notebook parts 51 and 55).
 The train station runs two sources at 4,000 rays each.
 One update of both sources costs about 11 ms there at 8,000 rays each (tracer 6.5 ms, audio and denoiser 4.2–4.6 ms), which the GPU could sustain, but the live renderer keeps one batch in flight and its readback is quantised to frames: near the passing train a two-update batch takes longer than two frames, delivery falls below the device's rate and the queue drains (notebook part 45).
 So 6,000 and 8,000 rays per source both underran in some runs, and the station stays at 4,000.
