@@ -72,7 +72,8 @@ public partial class TakeChecks
 
     // The live renderer with the path method on GPU audio, as the playable Church runs it: persistent rays, the
     // denoiser, observations that end inside a partition (the reverb reads its input half a partition ahead),
-    // GPU-only batches (no CPU readback of the method), and the denoiser switched mid-way.
+    // GPU-only batches (no CPU readback of the method), and the denoiser switched mid-way; the kernel warm-up
+    // (TakeRender.Live.WarmUp) run between Prepare and the first observation changes nothing.
     [Test, Category("GPU"), Category("Methods")]
     public void LivePathRendersOnTheGpuWithTheDenoiser()
     {
@@ -89,24 +90,35 @@ public partial class TakeChecks
         settings.transport = TakeRender.Transport.Raytraced; settings.synthesis = TakeRender.Synthesis.Spectral; settings.listenerOutput = TakeRender.ListenerOutput.Binaural;
         settings.audioBackend = TakeRender.AudioBackend.Gpu; settings.pathPersistent = true; settings.pathPopulation = 8192; settings.pathDenoise = true;
         settings.responseStepSamples = size; settings.fftSize = size; settings.spectralHop = size / 4; settings.transitionSamples = size / 4; settings.maximumResponsesPerBatch = 2;
-        var queue = new AudioManager.PcmQueue(16384, rate, null, 2); queue.Publish(0, null, lead);
         var clip = new float[331]; for (int n = 0; n < clip.Length; n++) clip[n] = .2f * Mathf.Sin(n * .37f);
-        using var live = new TakeRender.Live(scene, geometry, new[] {clip}, rate, settings, queue, lead, 0, shader);
-        Assert.That(live.HasPathDenoiser, "pathDenoise loads the bundled denoiser");
-        live.Prepare(state); live.Append(new AcousticTake.VoiceEvent {gain = 1, loop = true});
-        var output = new float[2 * 8192]; long consumed = 0;
-        for (long to = 300; to <= 6000; to += 300)
+        var start = (AcousticTake.State[])state.Clone();
+        float[] Render(bool warm)
         {
-            state[1].position.x = 3 + to * 1e-4f;
-            live.Observe(to - 300, to, state, state);
-            live.Pump(true);
-            if (to == 3000) live.PathDenoising = false;
-            int frames = (int)Math.Min(live.Cursor + lead - consumed, 1024);
-            if (frames > 0) { var block = new float[2 * frames]; queue.Consume(block, 2); Array.Copy(block, 0, output, 2 * (int)consumed % output.Length, Math.Min(block.Length, output.Length - 2 * (int)consumed % output.Length)); consumed += frames; }
+            Array.Copy(start, state, state.Length);
+            var queue = new AudioManager.PcmQueue(16384, rate, null, 2); queue.Publish(0, null, lead);
+            using var live = new TakeRender.Live(scene, geometry, new[] {clip}, rate, settings, queue, lead, 0, shader);
+            Assert.That(live.HasPathDenoiser, "pathDenoise loads the bundled denoiser");
+            live.Prepare(state);
+            if (warm) TakeRender.Live.WarmUp(scene, geometry, new[] {clip}, rate, settings, 0, shader, state, false);
+            live.Append(new AcousticTake.VoiceEvent {gain = 1, loop = true});
+            var output = new float[2 * 8192]; long consumed = 0;
+            for (long to = 300; to <= 6000; to += 300)
+            {
+                state[1].position.x = 3 + to * 1e-4f;
+                live.Observe(to - 300, to, state, state);
+                live.Pump(true);
+                if (to == 3000) live.PathDenoising = false;
+                int frames = (int)Math.Min(live.Cursor + lead - consumed, 1024);
+                if (frames > 0) { var block = new float[2 * frames]; queue.Consume(block, 2); Array.Copy(block, 0, output, 2 * (int)consumed % output.Length, Math.Min(block.Length, output.Length - 2 * (int)consumed % output.Length)); consumed += frames; }
+            }
+            TestContext.WriteLine($"live path on GPU audio{(warm ? " after a kernel warm-up" : "")}: cursor {live.Cursor}, {live.GpuDiagnostics.readbacks} readbacks");
+            Assert.That(live.Cursor, Is.GreaterThanOrEqualTo(5000), "the renderer keeps up with the observations");
+            return output;
         }
-        double energy = 0; foreach (float v in output) { Assert.That(float.IsFinite(v)); energy += v * v; }
-        TestContext.WriteLine($"live path on GPU audio: cursor {live.Cursor}, {live.GpuDiagnostics.readbacks} readbacks, output energy {energy:G3}");
-        Assert.That(live.Cursor, Is.GreaterThanOrEqualTo(5000), "the renderer keeps up with the observations");
+        var plain = Render(false);
+        double energy = 0; foreach (float v in plain) { Assert.That(float.IsFinite(v)); energy += v * v; }
+        TestContext.WriteLine($"output energy {energy:G3}");
+        Assert.That(Render(true), Is.EqualTo(plain), "the kernel warm-up leaves the live render bit-identical");
         Assert.That(energy, Is.GreaterThan(1e-4), "audible");
     }
 

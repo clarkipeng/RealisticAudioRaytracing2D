@@ -302,6 +302,7 @@ public class RayTraceManager : MonoBehaviour
             }
             if(takeWriter!=null) RecordingStarted?.Invoke(takePath);
             CaptureTakeState(0);liveDirect?.Prepare(takeState);
+            if(liveDirect!=null)TakeRender.Live.WarmUp(scene,geometry,pcm,sampleRate,directSettings,monitorListener,directShader,takeState,liveDirect.ResponseApplied!=null);
             liveDiagnostics.preparationSeconds=TakeRender.Elapsed(preparationStart);
             takeClockOrigin=ClockSeconds;
             simulationOrigin=simulation!=null?simulation.Tick:0;

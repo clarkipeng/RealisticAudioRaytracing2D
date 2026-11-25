@@ -90,6 +90,20 @@ public static partial class TakeRender
             gpuAudio.SetResponse(0,true,solver.RayBuffer,0,scene,state,late:solver.Late(0));
             gpuAudio.CompletePreparation();solver.CompleteAfterGpuAudio();prepared=!bursts;
         }
+        // D3D12 builds a kernel's pipeline on its first dispatch, which took 15.6 s for the path kernels on a cold
+        // driver cache, while the output clock ran on and the take stopped. A throwaway renderer of the same scene and
+        // settings runs every live kernel over `updates` updates of the first pose, before the clock starts; it leaves
+        // the live renderer's state untouched. `diagnostics` selects the readback path the live renderer will use.
+        public static void WarmUp(AcousticTake.Scene scene,AcousticTake.Primitive[] geometry,float[][] pcm,int rate,Settings settings,
+            int listener,ComputeShader shader,AcousticTake.State[] state,bool diagnostics,int updates=16)
+        {
+            var streams=new SourceStream[scene.sources.Length];   // streamed sources read silence
+            for(int i=0;i<streams.Length;i++)if(scene.sources[i].streamed){streams[i]=new SourceStream(1);streams[i].Finish();}
+            using var warm=new Live(scene,geometry,pcm,rate,settings,null,0,listener,shader,streams);
+            if(diagnostics)warm.ResponseApplied=(_,_,_)=>{};
+            warm.Prepare(state);warm.Observe(0,(long)updates*settings.responseStepSamples,state,state);warm.Pump(true);
+            if(warm.Cursor<(long)updates*settings.responseStepSamples)throw new InvalidOperationException("Kernel warm-up did not render.");
+        }
         public void Append(AcousticTake.VoiceEvent e) { AudioSourcePlane.ValidateEvent(scene,e); signals[e.sourceIndex].Append(e); }
         public void Observe(long from,long to,AcousticTake.State[] left,AcousticTake.State[] right,Action<long,float[],int> output=null)
         {
