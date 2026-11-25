@@ -33,34 +33,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 import dlss_jobs as dj  # noqa: E402
+import heavy_guard as hg  # noqa: E402
 import method_runs as mr  # noqa: E402
 
 WORK = ROOT / '.context/path-live'
-APP = ROOT / 'Builds/LiveShowcase/LiveShowcase.app'
-DEVELOPMENT_APP = ROOT / 'Builds/LiveShowcaseDevelopment/LiveShowcase.app'
-OLD_APP = ROOT / 'Builds/ChurchLive'   # the Church-only app this replaces; removed by the next build (disk space)
-# The scenes and their visual content. dlss_jobs syncs only code, shaders, tests and tools into the runner, so the
-# player build and the stills would otherwise use the runner's older copies of these.
-CONTENT = ['Assets/Scenes', 'Assets/Materials', 'Assets/Prefabs', 'Assets/External', 'Assets/Audio']
+# A build is a folder: on the Mac it holds LiveShowcase.app, on the PC LiveShowcase.exe and its data, on the Windows
+# drive (a player loading from \\wsl$ would read its data slowly).
+BUILDS = hg.WORKTREE_WORK / 'Builds' if hg.WSL else ROOT / 'Builds'
+PLAYER = 'LiveShowcase.exe' if hg.WSL else 'LiveShowcase.app'
 
 
-def sync_content():
-    """Mirror CONTENT into the runner: copy new or changed files, remove files deleted here."""
-    for folder in CONTENT:
-        for source in (ROOT / folder).rglob('*'):
-            target = dj.RUNNER / source.relative_to(ROOT)
-            if source.is_file() and (not target.exists() or source.read_bytes() != target.read_bytes()):
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target)
-        for target in sorted((dj.RUNNER / folder).rglob('*'), reverse=True):
-            if not (ROOT / target.relative_to(dj.RUNNER)).exists():
-                shutil.rmtree(target) if target.is_dir() else target.unlink()
+def player_folder(development):
+    return BUILDS / ('LiveShowcaseDevelopment' if development else 'LiveShowcase')
+
+
+def player_binary(development):
+    app = player_folder(development) / PLAYER
+    return app if hg.WSL else next((app / 'Contents/MacOS').iterdir())
 
 
 def launch(name, arguments):
     """A guarded batch editor run in the runner, its scenes and content synced first."""
     mr.LOGS = WORK / 'logs'; mr.LOGS.mkdir(parents=True, exist_ok=True)
-    sync_content()
     return mr.launch(name, arguments)
 
 
@@ -89,20 +83,17 @@ def author():
 
 
 def build(development=False):
-    app = DEVELOPMENT_APP if development else APP
-    staged = WORK / 'build' / app.name
-    shutil.rmtree(WORK / 'build', ignore_errors=True)
+    folder = player_folder(development)
+    staging = BUILDS / 'staging'
+    shutil.rmtree(staging, ignore_errors=True)
+    staged = staging / PLAYER
     logs, resources = launch('build', ['-quit', '-executeMethod', 'PathLiveBuild.Build', '-pathLiveOutput', str(staged),
                                        *(['-pathLiveDevelopment'] if development else [])])
     if resources['exitCode'] != 0 or not staged.exists():
         raise SystemExit(f'build failed: see {logs}/unity.log')
-    if app.exists():
-        shutil.rmtree(app)
-    app.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(staged, app, symlinks=True)
-    shutil.rmtree(WORK / 'build')
-    shutil.rmtree(OLD_APP, ignore_errors=True)
-    print(f'built {app}')
+    shutil.rmtree(folder, ignore_errors=True)
+    staging.rename(folder)
+    print(f'built {folder / PLAYER}')
 
 
 def front_app():
@@ -114,14 +105,16 @@ def front_app():
 
 
 def smoke(extra=(), windowed=False, scenes=(), shots=False, development=False, capture=False):
-    app = DEVELOPMENT_APP if development else APP
+    app = player_folder(development) / PLAYER
     out = WORK / time.strftime(('capture' if capture else 'smoke') + '-%Y%m%d-%H%M%S')
     out.mkdir(parents=True)
-    binary = next((app / 'Contents/MacOS').iterdir())
+    binary = player_binary(development)
     # -batchmode: no window, so the run never takes the screen's focus; the player still draws the scene every frame
     # (smoke.json reports camera renders per frame) and still plays its audio callbacks (callbacks, underruns).
     size = ['1920', '1080'] if capture else ['1280', '720']
-    command = [str(binary), '-batchmode', '-pathLiveSmoke', str(out), '-screen-width', size[0], '-screen-height', size[1],
+    # -force-d3d12: a Windows player in -batchmode otherwise starts on Direct3D 11, which a D3D12-only build has no
+    # compute kernels for.
+    command = [str(binary), '-batchmode', *(['-force-d3d12'] if hg.WSL else []), '-pathLiveSmoke', str(out), '-screen-width', size[0], '-screen-height', size[1],
                *(['-screen-fullscreen', '0', '-pathLiveCapture', '-pathLiveCaptureFps', '60'] if capture else []),
                '-logFile', str(out / 'player.log'), '-liveTrace', str(out / 'pipeline.csv'),
                *(['-pathLiveScenes', ','.join(scenes)] if scenes else []), *(['-pathLiveShots'] if shots else []), *extra]
@@ -216,6 +209,7 @@ def stalls(path):
 
 
 if __name__ == '__main__':
+    hg.gpu_gate()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('command', choices=['build', 'smoke', 'capture', 'video', 'stills', 'author'])
     p.add_argument('player', nargs='*', help='smoke: extra player arguments (after --); stills: scene names')
