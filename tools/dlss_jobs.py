@@ -31,12 +31,18 @@ import dlss_scenes as ds  # noqa: E402
 import heavy_guard as hg  # noqa: E402
 
 DATA = ROOT / '.context/audio-dlss-data'
-RUNNER = ROOT / '.context/gpu-audio/runner'
-UNITY = Path('/Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity')
+# On the PC (WSL) Unity is the Windows editor, and its runner sits on the Windows drive (a \\wsl$ project imports slowly).
+RUNNER = hg.WORKTREE_WORK / 'runner' if hg.WSL else ROOT / '.context/gpu-audio/runner'
+UNITY = (Path('/mnt/c/Program Files/Unity/Hub/Editor/6000.4.1f1/Editor/Unity.exe') if hg.WSL else
+         Path('/Applications/Unity/Hub/Editor/6000.4.1f1/Unity.app/Contents/MacOS/Unity'))
+GRAPHICS = '-force-d3d12' if hg.WSL else '-force-metal'
+# The path walk's megakernel takes FXC (D3D) or Metal's compiler past Unity's default 10-minute timeout per variant;
+# every Unity this process launches inherits the longer one.
+os.environ.setdefault('UNITY_SHADER_COMPILER_TASK_TIMEOUT_MINUTES', '60')
 SOLID_PYTHON = ROOT / '.context/solid-python/bin/python'
 GIB = 1024 ** 3
 SYNCED = ['Assets/Scripts', 'Assets/Shaders', 'Assets/Resources/Acoustics', 'Assets/Tests/Editor', 'Assets/Editor', 'tools']
-PRESETS = [f'Assets/Materials/Church {name}.asset' for name in ('stone', 'wood', 'glass', 'ground')]
+RUNNER_OWN = ['Library', 'Temp', 'Logs', 'UserSettings', 'obj', 'Builds', '.context', '.git', '.vs']   # never mirrored
 
 
 def sha256(path):
@@ -53,6 +59,9 @@ MIN_BATTERY_PERCENT = int(os.environ.get('HEAVY_MIN_BATTERY', 40))
 
 def on_mains():
     """True when heavy work may run: on AC power, or on battery above MIN_BATTERY_PERCENT."""
+    if hg.WSL:
+        snap = hg.windows().snapshot()
+        return bool(snap['ac']) or snap['charge'] >= MIN_BATTERY_PERCENT
     out = subprocess.run(['pmset', '-g', 'batt'], capture_output=True, text=True).stdout
     if 'AC Power' in out:
         return True
@@ -130,11 +139,11 @@ class Worker:
 
     def _run(self):
         watch = hg.SystemWatch()
-        env = dict(self.env or os.environ, **{hg.HELD_ENV: '1'})
-        process = subprocess.Popen(self.command, env=env, start_new_session=True)
-        awake = subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
+        command, env = hg.host_command(self.command, dict(self.env or os.environ, **{hg.HELD_ENV: '1'}))
+        process = subprocess.Popen(command, env=env, start_new_session=True)
+        awake = keep_awake(process)
         started, suspended = time.monotonic(), False
-        jobs = hg.ProcessTree(process.pid)
+        jobs = hg.job_tree(process, command)
         previous = {s: signal.signal(s, self._interrupt) for s in [signal.SIGINT, signal.SIGTERM]}
         try:
             last_power, polls = 0.0, 0
@@ -155,20 +164,20 @@ class Worker:
                     mains = on_mains()
                     if not mains and not suspended:
                         jobs.signal(signal.SIGSTOP)
-                        awake.terminate()   # Let the Mac sleep while the worker waits for AC power.
+                        awake and awake.terminate()   # Let the Mac sleep while the worker waits for AC power.
                         suspended, paused_at = True, time.monotonic()
                         self.log(f'suspended worker: battery below {MIN_BATTERY_PERCENT}% at {time.strftime("%H:%M:%S")}')
                     elif mains and suspended:
                         jobs.signal(signal.SIGCONT)
-                        awake = subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
+                        awake = keep_awake(process)
                         suspended = False
                         self.paused_seconds += time.monotonic() - paused_at
                         self.log(f'resumed worker at {time.strftime("%H:%M:%S")}')
-                time.sleep(hg.ProcessTree.POLL_SECONDS)
+                time.sleep(jobs.POLL_SECONDS)
         finally:
             jobs.kill(grace=30)   # every spawned process, incl. own-group/reparented helpers
             process.wait()
-            awake.wait(timeout=10)
+            awake and awake.wait(timeout=10)
             for s, h in previous.items():
                 signal.signal(s, h)
         return dict(exitCode=process.returncode, wallSeconds=time.monotonic() - started,
@@ -181,28 +190,39 @@ class Worker:
         raise KeyboardInterrupt
 
 
+def keep_awake(process):
+    """Keep the Mac from sleeping while `process` runs (caffeinate); the PC does not sleep on AC."""
+    return None if hg.WSL else subprocess.Popen(['caffeinate', '-i', '-w', str(process.pid)])
+
+
 # ---------------------------------------------------------------- Unity runner
 
 def sync_runner(runner):
-    """Copy runtime, shader, test and tool sources into the isolated runner."""
-    if runner.resolve() == ROOT or (runner / 'Temp/UnityLockfile').exists():
-        raise RuntimeError('Use a closed, isolated Unity runner; never the working editor.')
-    files = {}
-    for folder in SYNCED:
-        for source in (ROOT / folder).rglob('*'):
-            if not source.is_file() or '__pycache__' in source.parts:
-                continue
-            target = runner / source.relative_to(ROOT)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if not target.exists() or source.read_bytes() != target.read_bytes():
-                shutil.copy2(source, target)
-            if source.suffix != '.meta':
-                files[str(source.relative_to(ROOT))] = sha256(source)
-    for preset in PRESETS:   # Material presets are read, never synced: they must already match.
-        if sha256(ROOT / preset) != sha256(runner / preset):
-            raise RuntimeError(f'Runner material preset differs: {preset}')
-        files[preset] = sha256(ROOT / preset)
-    return files
+    """Mirror the project into the isolated runner (everything but Unity's caches, builds and .context; files deleted
+    here are deleted there), clear a lockfile no running editor holds, and return the provenance: the hashes of the
+    code, shaders, tests and tools the run uses."""
+    if runner.resolve() == ROOT:
+        raise RuntimeError('Use an isolated Unity runner; never the working editor.')
+    lock = runner / 'Temp/UnityLockfile'
+    if lock.exists():
+        if hg.WSL:
+            native = subprocess.run(['wslpath', '-w', str(runner)], capture_output=True, text=True).stdout.strip()
+            held = any(row[4] for row in hg.windows().snapshot(native)['p'])
+        else:
+            held = str(runner) in subprocess.run(['ps', '-A', '-o', 'command='], capture_output=True, text=True).stdout
+        if held:
+            raise RuntimeError('The runner is open in a running editor.')
+        lock.unlink()
+    seed = hg.WINDOWS_WORK / 'runner/Library'
+    if hg.WSL and runner != seed.parent and not (runner / 'Library').exists() and seed.exists():
+        # A new worktree's runner starts from the main runner's caches: its shaders took FXC 36 minutes cold.
+        (runner / 'Library').parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['cp', '-a', str(seed), str(runner / 'Library')], check=True)
+    runner.mkdir(parents=True, exist_ok=True)
+    subprocess.run(['rsync', '-a', '--delete', *[f'--exclude=/{d}/' for d in RUNNER_OWN], '--exclude=__pycache__/',
+                    f'{ROOT}/', f'{runner}/'], check=True)
+    return {str(f.relative_to(ROOT)): sha256(f) for folder in SYNCED for f in sorted((ROOT / folder).rglob('*'))
+            if f.is_file() and f.suffix != '.meta' and '__pycache__' not in f.parts}
 
 
 def run_test(name, filter_, work_fraction, runner=RUNNER, unity=UNITY):
@@ -210,7 +230,7 @@ def run_test(name, filter_, work_fraction, runner=RUNNER, unity=UNITY):
     out = DATA / 'logs' / time.strftime(f'{name}-%Y%m%d-%H%M%S')
     out.mkdir(parents=True)
     (out / 'provenance.json').write_text(json.dumps(dict(files=sync_runner(runner)), indent=1) + '\n')
-    command = ['nice', '-n', '19', str(unity), '-batchmode', '-force-metal', '-disable-audio', '-job-worker-count', '1',
+    command = ['nice', '-n', '19', str(unity), '-batchmode', GRAPHICS, '-disable-audio', '-job-worker-count', '1',
                '-projectPath', str(runner), '-runTests', '-testPlatform', 'EditMode', '-testFilter', filter_,
                '-testResults', str(out / 'tests.xml'), '-logFile', str(out / 'unity.log')]
     env = dict(os.environ, ACOUSTIC_TEST_WORK_FRACTION=str(work_fraction), ACOUSTIC_SOLID_PYTHON=str(SOLID_PYTHON))
@@ -330,4 +350,5 @@ def main():
 
 
 if __name__ == '__main__':
+    hg.gpu_gate()
     main()

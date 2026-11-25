@@ -1,4 +1,6 @@
-"""Machine-wide guard for heavy Unity/GPU jobs on a shared 16 GB Mac.
+"""Machine-wide guard for heavy Unity/GPU jobs on a shared machine: the 16 GB Mac, or the gaming PC
+through WSL, where the jobs are Windows processes (Unity.exe, the players) watched through one
+persistent PowerShell session (see "Windows, from WSL" below).
 
 Any project can wrap a command with it (standard library only):
 
@@ -26,15 +28,19 @@ import time
 from pathlib import Path
 
 GIB = 1024 ** 3
-LOCK_PATH = Path.home() / '.cache' / 'heavy-jobs.lock'   # shared by every project on this Mac
+WSL = 'microsoft' in os.uname().release.lower()
+# Shared by every project on the machine; on the PC, /tmp/unity.lock is the lab's Unity slot.
+LOCK_PATH = Path('/tmp/unity.lock') if WSL else Path.home() / '.cache' / 'heavy-jobs.lock'
 HELD_ENV = 'HEAVY_JOB_LOCK_HELD'          # set for children of a lock holder
-MIN_START_LEVEL = 25                     # kern.memorystatus_level: percent of memory available
-MIN_RUN_LEVEL = 12
+# Percent of memory available: kern.memorystatus_level on the Mac; on the PC the commit headroom over its 32 GB of
+# physical memory (see memory_level), where 12% is about 3.8 GB, 1.7 times the largest job's footprint (2.24 GiB, the showcase build), and 6% about 2 GB.
+MIN_START_LEVEL = 12 if WSL else 25
+MIN_RUN_LEVEL = 6 if WSL else 12
 NORMAL, WARNING, CRITICAL = 1, 2, 4      # kern.memorystatus_vm_pressure_level
 MAX_SWAP_GROWTH = 4 * GIB
 WORK_FRACTION = .5                       # default pacing: work half the time, idle half
 
-_libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
+_libproc = None if WSL else ctypes.CDLL('/usr/lib/libproc.dylib')
 
 
 class _Usage(ctypes.Structure):
@@ -44,8 +50,19 @@ class _Usage(ctypes.Structure):
         'resident_size', 'phys_footprint', 'proc_start_abstime', 'proc_exit_abstime')]
 
 
+def _proc_stat(pid):
+    """Fields of /proc/<pid>/stat after the command name (Linux), or None if the process is gone."""
+    try:
+        return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+
+
 def footprint(pid):
-    """Physical footprint in bytes, including GPU memory; 0 if the process is gone."""
+    """Physical footprint in bytes (on the Mac including GPU memory; in WSL the resident set); 0 if the process is gone."""
+    if WSL:
+        stat = _proc_stat(pid)
+        return int(stat[21]) * os.sysconf('SC_PAGE_SIZE') if stat else 0
     usage = _Usage()
     return usage.phys_footprint if _libproc.proc_pid_rusage(pid, 0, ctypes.byref(usage)) == 0 else 0
 
@@ -66,8 +83,146 @@ def tree_footprint(pid):
 
 def start_time(pid):
     """Kernel start time of `pid`, or None if it is gone (guards against PID reuse)."""
+    if WSL:
+        stat = _proc_stat(pid)
+        return int(stat[19]) if stat else None
     usage = _Usage()
     return usage.proc_start_abstime if _libproc.proc_pid_rusage(pid, 0, ctypes.byref(usage)) == 0 else None
+
+
+# ---------------------------------------------------------------- Windows, from WSL
+# On the PC the jobs are Windows processes: WSL sees only the interop proxy, so a job's tree is found by a marker
+# in its command line (its -logFile, unique per run), its footprint is the Windows commit (PrivatePageCount), and
+# pausing is NtSuspendProcess. One persistent PowerShell answers every query (~0.25 s each; a fresh one takes 4 s).
+
+WINDOWS_WORK = Path('/mnt/c/Users/clark/aw/audio-raytracing')   # the Windows drive: Unity's runner, builds
+# Each worktree gets its own runner and builds there, so parallel worktrees never re-import each other's code; the
+# main worktree (audio-raytracing) keeps the top level, whose runner seeds a new one's Library (dlss_jobs.sync_runner).
+_WORKTREE = Path(__file__).resolve().parents[1].name
+WORKTREE_WORK = WINDOWS_WORK if _WORKTREE == 'audio-raytracing' else WINDOWS_WORK / 'worktrees' / _WORKTREE
+_POWERSHELL = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+_SERVER = r"""
+Add-Type -Namespace Nt -Name P -MemberDefinition '[DllImport("ntdll.dll")] public static extern int NtSuspendProcess(IntPtr h); [DllImport("ntdll.dll")] public static extern int NtResumeProcess(IntPtr h);'
+while ($true) {
+  $line = [Console]::In.ReadLine(); if ($line -eq $null) { break }
+  $verb, $arg = $line -split ' ', 2
+  try {
+    if ($verb -eq 'snap') {
+      $os = Get-CimInstance Win32_OperatingSystem
+      $m = $os.FreeVirtualMemory; $t = $os.TotalVisibleMemorySize
+      $b = @(Get-CimInstance Win32_Battery)[0]
+      $all = Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name,PrivatePageCount,CommandLine,CreationDate
+      $p = @($all | % { ,@($_.ProcessId, $_.ParentProcessId, [int64]$_.PrivatePageCount, $_.CreationDate.Ticks, [int]($arg -and $_.CommandLine -and $_.CommandLine.Contains($arg))) })
+      $u = @($all | ? { $_.Name -eq 'Unity.exe' } | % { $_.ProcessId })
+      $r = @{commit=$m; total=$t; ac=$(if ($b) { [int]($b.BatteryStatus -ne 1) } else { 1 }); charge=$(if ($b) { $b.EstimatedChargeRemaining } else { 100 }); p=$p; unity=$u}
+    } else {
+      foreach ($id in ($arg -split ',')) { try {   # a process may exit between the lookup and the action
+        $h = Get-Process -Id ([int]$id) -ErrorAction Stop
+        if ($verb -eq 'kill') { Stop-Process -Id $h.Id -Force -ErrorAction SilentlyContinue }
+        elseif ($verb -eq 'lower') { $h.PriorityClass = 'BelowNormal' }
+        elseif ($verb -eq 'suspend') { [void][Nt.P]::NtSuspendProcess($h.Handle) }
+        elseif ($verb -eq 'resume') { [void][Nt.P]::NtResumeProcess($h.Handle) }
+      } catch {} }
+      $r = @{ok=1}
+    }
+  } catch { $r = @{error="$_"} }
+  [Console]::Out.WriteLine(($r | ConvertTo-Json -Compress -Depth 4)); [Console]::Out.Flush()
+}
+"""
+
+
+class _Windows:
+    def __init__(self):
+        script = WINDOWS_WORK / 'heavy_guard.ps1'
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(_SERVER)
+        windows_script = subprocess.run(['wslpath', '-w', str(script)], capture_output=True, text=True, check=True).stdout.strip()
+        self.process = subprocess.Popen([_POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+                                         '-File', windows_script], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        text=True, bufsize=1, start_new_session=True)
+
+    def ask(self, verb, argument=''):
+        import json
+        self.process.stdin.write(f'{verb} {argument}\n')
+        self.process.stdin.flush()
+        reply = json.loads(self.process.stdout.readline())
+        if 'error' in reply:
+            raise RuntimeError(f'PowerShell {verb}: {reply["error"]}')
+        return reply
+
+    def snapshot(self, marker=''):
+        """Available MB, total bytes, AC power, every process as (pid, ppid, commit bytes, start ticks, marked),
+        the PIDs of every Unity.exe."""
+        return self.ask('snap', marker)
+
+
+_windows = None
+
+
+def windows():
+    global _windows
+    if _windows is None or _windows.process.poll() is not None:
+        _windows = _Windows()
+    return _windows
+
+
+class WindowsTree:
+    """The Windows processes of one job: those whose command line contains `marker`, and their descendants."""
+    POLL_SECONDS = 2.0
+
+    def __init__(self, marker):
+        self.marker, self.seen, self.last = marker, {}, {}
+
+    def footprint(self):
+        rows = {pid: (parent, used, started, marked) for pid, parent, used, started, marked in windows().snapshot(self.marker)['p']}
+        members = {pid for pid, row in rows.items() if row[3]}
+        frontier = set(members)
+        while frontier:
+            frontier = {pid for pid, row in rows.items() if row[0] in frontier and pid not in members}
+            members |= frontier
+        new = [pid for pid in members if pid not in self.seen]
+        for pid in new:
+            self.seen[pid] = rows[pid][2]
+        if new:
+            windows().ask('lower', ','.join(map(str, new)))   # below-normal priority, Windows' nice
+        self.last = {pid: row[2] for pid, row in rows.items()}
+        return sum(rows[pid][1] for pid in self.alive())
+
+    def alive(self):
+        return [pid for pid, started in self.seen.items() if self.last.get(pid) == started]
+
+    def signal(self, number):
+        verb = {signal.SIGSTOP: 'suspend', signal.SIGCONT: 'resume'}.get(number, 'kill')
+        if self.alive():
+            windows().ask(verb, ','.join(map(str, self.alive())))
+
+    def kill(self, grace=10):
+        self.footprint()   # pick up helpers started since the last poll
+        self.signal(signal.SIGCONT)
+        self.signal(signal.SIGKILL)
+
+
+def job_tree(process, command):
+    """The processes of a job started as `process` from `command`: on the PC its Windows processes (matched by the
+    command's -logFile), on the Mac its process tree."""
+    if WSL and '-logFile' in command:
+        return WindowsTree(command[command.index('-logFile') + 1])
+    return ProcessTree(process.pid)
+
+
+def host_command(command, env):
+    """`command` and `env` for this machine: on the PC, POSIX paths become Windows paths (wslpath -w) and the
+    environment's ACOUSTIC_, HEAVY_ and UNITY_ variables are passed through to Windows (WSLENV). Elsewhere, unchanged."""
+    if WSL and command[:2] == ['nice', '-n']:   # Windows' nice is the below-normal priority WindowsTree sets
+        command = command[3:]
+    if not WSL or not command[0].endswith('.exe'):
+        return command, env
+    def native(a):   # Unity's options start with '-', so an argument starting with '/' is a path
+        if a.startswith('/'):
+            return subprocess.run(['wslpath', '-w', a], capture_output=True, text=True, check=True).stdout.strip()
+        return a
+    passed = [k for k in env if k.startswith(('ACOUSTIC_', 'HEAVY_', 'UNITY_'))]
+    return [command[0]] + [native(a) for a in command[1:]], dict(env, WSLENV=':'.join(filter(None, [env.get('WSLENV', '')] + passed)))
 
 
 class ProcessTree:
@@ -105,26 +260,62 @@ class ProcessTree:
 
 
 def memory_level():
+    if WSL:   # Windows pages rather than fails while commit lasts, and the WSL VM keeps physical memory near full,
+        snap = windows().snapshot()   # so the level is commit headroom (KB) over physical memory (KB)
+        return min(100, int(100 * snap['commit'] / snap['total']))
     return int(subprocess.run(['sysctl', '-n', 'kern.memorystatus_level'],
                               capture_output=True, text=True).stdout)
 
 
 def memory_pressure():
+    if WSL:   # Windows has no pressure level; almost no commit headroom is critical
+        return CRITICAL if memory_level() < 3 else NORMAL
     return int(subprocess.run(['sysctl', '-n', 'kern.memorystatus_vm_pressure_level'],
                               capture_output=True, text=True).stdout)
 
 
 def swap_used():
+    if WSL:   # the page file's growth is not tracked on Windows
+        return 0
     text = subprocess.run(['sysctl', '-n', 'vm.swapusage'], capture_output=True, text=True).stdout
     value, unit = re.search(r'used = ([\d.]+)([MG])', text).groups()
     return int(float(value) * (GIB if unit == 'G' else 1024 ** 2))
+
+
+CRITICAL_REASON = 'Windows commit headroom is critical (under 3%)' if WSL else 'memory pressure is critical'
+QUIET_ENV = 'HEAVY_QUIET'   # set for GPU timing measurements: they start only on a quiet GPU
+GATE, GATED_ENV = Path.home() / '.agentworld/bin/gpu', 'HEAVY_GPU_GATED'
+
+
+def gpu_gate():
+    """On the PC, rerun this command under the lab's GPU gate (~/.agentworld/bin/gpu): alone for a timing run
+    (HEAVY_QUIET), else beside other jobs at a Unity editor's size. Call it first in a tool's main."""
+    if not WSL or os.environ.get(GATED_ENV) or not GATE.exists() or {'-h', '--help'} & set(sys.argv):
+        return
+    os.environ[GATED_ENV] = '1'
+    size = ['--alone'] if os.environ.get(QUIET_ENV) else ['--vram', '2G', '--ram', '4G']
+    os.execv(str(GATE), [str(GATE), *size, sys.executable, *sys.argv])
+
+
+def gpu_busy():
+    """Why the PC's GPU is not quiet enough to time on (another Unity running, or the GPU over 10% busy), else None.
+    Other agents' Unity jobs do not take the lab's lock, so a measurement waits for them to finish."""
+    if others := windows().snapshot()['unity']:
+        return f'another Unity is running (PID {", ".join(map(str, others))})'
+    smi = subprocess.run(['/usr/lib/wsl/lib/nvidia-smi', '--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'],
+                         capture_output=True, text=True).stdout.strip()
+    if smi.isdigit() and int(smi) > 10:
+        return f'the GPU is {smi}% busy'
+    return None
 
 
 def start_problem():
     """Reason a heavy job should not start yet, else None. Warning pressure is this
     machine's everyday state, so starting needs non-critical pressure and free memory."""
     if memory_pressure() >= CRITICAL:
-        return 'macOS memory pressure is critical'
+        return CRITICAL_REASON
+    if WSL and os.environ.get(QUIET_ENV) and (busy := gpu_busy()):
+        return busy
     level = memory_level()
     if level < MIN_START_LEVEL:
         return f'system memory available {level}% < {MIN_START_LEVEL}%'
@@ -139,7 +330,7 @@ class SystemWatch:
 
     def problem(self):
         if memory_pressure() >= CRITICAL:
-            return 'macOS memory pressure is critical'
+            return CRITICAL_REASON
         level = memory_level()
         if level < MIN_RUN_LEVEL:
             return f'system memory available fell to {level}%'
@@ -186,9 +377,9 @@ class HeavyLock:
                 self.log(f'waiting for another heavy job ({LOCK_PATH})')
                 fcntl.flock(self.file, fcntl.LOCK_EX)
             if start_problem() is None:
+                self.log(f'holding {LOCK_PATH}: starting')
                 break
-            fcntl.flock(self.file, fcntl.LOCK_UN)   # memory went away while queued; let others try
-            self.file.close()
+            self._release()   # memory went away while queued; let others try
         os.environ[HELD_ENV] = '1'
         return self
 
@@ -197,12 +388,15 @@ class HeavyLock:
             self.log(f'waiting to start: {reason}; close other apps or wait')
             time.sleep(self.poll)
 
+    def _release(self):
+        fcntl.flock(self.file, fcntl.LOCK_UN)
+        self.file.close()
+        self.file = None
+
     def __exit__(self, *exc):
         if self.file is not None:
             os.environ.pop(HELD_ENV, None)
-            fcntl.flock(self.file, fcntl.LOCK_UN)
-            self.file.close()
-            self.file = None
+            self._release()
         return False
 
 

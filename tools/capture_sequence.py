@@ -35,7 +35,7 @@ def main():
     nice = shutil.which('nice')
     if not nice:
         parser.error('This capture launcher requires POSIX nice and ps.')
-    command = [nice, '-n', '19', args.unity, '-batchmode', '-quit', '-force-metal', '-disable-audio',
+    command = [nice, '-n', '19', args.unity, '-batchmode', '-quit', '-force-d3d12' if args.unity.endswith('.exe') else '-force-metal', '-disable-audio',
                '-job-worker-count', '1', '-projectPath', str(args.project.resolve()), '-executeMethod',
                'ChurchPresentationCapture.CaptureSequence', '-sequenceOutput', str(output),
                '-sequenceFirstFrame', str(args.first_frame), '-sequenceEndFrame', str(args.end_frame if args.end_frame is not None else 2147483647),

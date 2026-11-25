@@ -40,32 +40,12 @@ BANDS = [125., 250., 500., 1000., 2000., 4000., 8000., 16000.]
 GT_GRID = 15.625
 
 
-def clear_stale_lock():
-    lock = dj.RUNNER / 'Temp/UnityLockfile'
-    if lock.exists():
-        processes = subprocess.run(['ps', '-A', '-o', 'command='], capture_output=True, text=True).stdout
-        if str(dj.RUNNER) not in processes:
-            lock.unlink()
-
-
-def prune_runner():
-    """Remove runner sources that were deleted from the repository (sync only copies)."""
-    for folder in [f for f in dj.SYNCED if f.startswith('Assets/')]:
-        for target in (dj.RUNNER / folder).rglob('*'):
-            if target.is_file() and not (ROOT / target.relative_to(dj.RUNNER)).exists():
-                source = target.with_suffix('') if target.suffix == '.meta' else target
-                if not (ROOT / source.relative_to(dj.RUNNER)).exists():
-                    target.unlink()
-
-
 def launch(name, arguments, env=None, work_fraction=hg.WORK_FRACTION):
     logs = LOGS / time.strftime(f'{name}-%Y%m%d-%H%M%S')
     logs.mkdir(parents=True)
     dj.wait_for_mains()
-    clear_stale_lock()
-    prune_runner()
     (logs / 'provenance.json').write_text(json.dumps(dict(files=dj.sync_runner(dj.RUNNER)), indent=1) + '\n')
-    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '--burst-disable-compilation', '-force-metal', '-disable-audio', '-job-worker-count', '1',
+    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '--burst-disable-compilation', dj.GRAPHICS, '-disable-audio', '-job-worker-count', '1',
                '-projectPath', str(dj.RUNNER)] + arguments + ['-logFile', str(logs / 'unity.log')]
     environment = dict(os.environ, ACOUSTIC_TEST_WORK_FRACTION=str(work_fraction),
                        ACOUSTIC_SOLID_PYTHON=str(dj.SOLID_PYTHON), **(env or {}))
@@ -397,4 +377,5 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    hg.gpu_gate()
     main()

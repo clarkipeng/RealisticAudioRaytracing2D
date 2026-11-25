@@ -39,31 +39,13 @@ SLOW = [(r'TakeChecks\.(?!Methods|PathMethod|PathDetection)[A-L]', 'Slow'),
 TIERS = {'quick': QUICK, 'full': QUICK + SLOW}
 
 
-def clear_stale_lock():
-    lock = dj.RUNNER / 'Temp/UnityLockfile'
-    if lock.exists() and str(dj.RUNNER) not in subprocess.run(['ps', '-A', '-o', 'command='],
-                                                              capture_output=True, text=True).stdout:
-        lock.unlink()
-
-
-def prune_runner():
-    """Remove runner copies of sources deleted from the repository (sync only copies)."""
-    for folder in [f for f in dj.SYNCED if f.startswith('Assets/')]:
-        for target in list((dj.RUNNER / folder).rglob('*')):
-            source = ROOT / target.relative_to(dj.RUNNER)
-            if target.is_file() and not source.exists() and not source.with_suffix('').exists():
-                target.unlink()
-
-
 def run(test_filter, category=None, work_fraction=hg.WORK_FRACTION, env=None):
     logs = LOGS / time.strftime('%Y%m%d-%H%M%S')
     logs.mkdir(parents=True)
     dj.wait_for_mains()
-    clear_stale_lock()
-    prune_runner()
     dj.sync_runner(dj.RUNNER)
     results = logs / 'tests.xml'
-    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '--burst-disable-compilation', '-force-metal', '-disable-audio',
+    command = ['nice', '-n', '19', str(dj.UNITY), '-batchmode', '--burst-disable-compilation', dj.GRAPHICS, '-disable-audio',
                '-job-worker-count', '1', '-projectPath', str(dj.RUNNER), '-runTests', '-testPlatform', 'EditMode',
                '-testFilter', test_filter, '-testResults', str(results), '-logFile', str(logs / 'unity.log')]
     if category:
@@ -115,4 +97,5 @@ def main():
 
 
 if __name__ == '__main__':
+    hg.gpu_gate()
     main()
