@@ -290,7 +290,7 @@ GATE, GATED_ENV = Path.home() / '.agentworld/bin/gpu', 'HEAVY_GPU_GATED'
 def gpu_gate():
     """On the PC, rerun this command under the lab's GPU gate (~/.agentworld/bin/gpu): alone for a timing run
     (HEAVY_QUIET), else beside other jobs at a Unity editor's size. Call it first in a tool's main."""
-    if not WSL or os.environ.get(GATED_ENV) or not GATE.exists() or {'-h', '--help'} & set(sys.argv):
+    if not WSL or os.environ.get(GATED_ENV) or os.environ.get('AGENTWORLD_GPU_JOB') or not GATE.exists() or {'-h', '--help'} & set(sys.argv):
         return
     os.environ[GATED_ENV] = '1'
     size = ['--alone'] if os.environ.get(QUIET_ENV) else ['--vram', '2G', '--ram', '4G']
